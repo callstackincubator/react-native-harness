@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "../interaction-engine"
+    },
+    {
+      "path": "../config"
+    },
+    {
+      "path": "../bridge"
+    },
+    {
+      "path": "./tsconfig.lib.json"
+    }
+  ]
+}

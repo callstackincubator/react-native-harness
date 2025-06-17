@@ -1,0 +1,28 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compileOnSave": false,
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/playground"
+    },
+    {
+      "path": "./packages/runtime"
+    },
+    {
+      "path": "./packages/bridge"
+    },
+    {
+      "path": "./packages/config"
+    },
+    {
+      "path": "./packages/metro"
+    },
+    {
+      "path": "./packages/cli"
+    },
+    {
+      "path": "./packages/interaction-engine"
+    }
+  ]
+}

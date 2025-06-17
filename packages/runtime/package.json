@@ -1,0 +1,39 @@
+{
+  "name": "@react-native-harness/runtime",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "react": "~18.3.1",
+    "react-native": "~0.76.3"
+  },
+  "dependencies": {
+    "@react-native-harness/bridge": "workspace:*",
+    "chai": "^5.2.0",
+    "chai-as-promised": "^8.0.1",
+    "event-target-shim": "^6.0.2",
+    "react-native-url-polyfill": "^2.0.0",
+    "sinon": "^21.0.0",
+    "sinon-chai": "^4.0.0",
+    "util": "^0.12.5",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@react-native-harness/interaction-engine": "workspace:*",
+    "@types/chai": "^5.2.2",
+    "@types/chai-as-promised": "^8.0.2",
+    "@types/sinon": "^17.0.4",
+    "@types/sinon-chai": "^4.0.0"
+  }
+}

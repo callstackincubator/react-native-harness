@@ -1,0 +1,32 @@
+{
+  "name": "react-native-harness",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "react-native-harness": "./dist/index.js"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@react-native-harness/bridge": "workspace:*",
+    "@react-native-harness/config": "workspace:*",
+    "@react-native-harness/interaction-engine": "workspace:*",
+    "@react-native-harness/tools": "workspace:*",
+    "glob": "^11.0.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "18.16.9"
+  }
+}
