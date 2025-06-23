@@ -70,7 +70,23 @@ export const getBridgeServer = async ({
             handler(message);
           });
         },
-        serialize: JSON.stringify,
+        serialize: (data) => {
+          if (data.e) {
+            // Serialize error by hand (include message, stack and cause).
+            return JSON.stringify({
+              ...data,
+              e: {
+                ...data.e,
+                name: data.e.name,
+                message: data.e.message,
+                stack: data.e.stack,
+                cause: data.e.cause,
+              }
+            })
+          }
+
+          return JSON.stringify(data);
+        },
         deserialize: JSON.parse,
       });
     });

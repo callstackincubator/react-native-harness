@@ -11,6 +11,7 @@ export const TestRunnerConfigSchema = z.object({
   platform: PlatformSchema,
   deviceId: z.string().min(1, 'Device ID is required'),
   bundleId: z.string().min(1, 'Bundle ID is required'),
+  withUI: z.boolean().default(true),
 });
 
 export const ConfigSchema = z.object({

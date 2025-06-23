@@ -1,4 +1,4 @@
-import { getAppiumInteractionEngine } from '@react-native-harness/interaction-engine';
+import { getInteractionEngine } from '@react-native-harness/interaction-engine';
 import { TestRunnerConfig } from '@react-native-harness/config';
 import { type PlatformAdapter } from '../platform-adapter.js';
 import { runSimulator } from './simulator.js';
@@ -10,7 +10,7 @@ const iosPlatformAdapter: PlatformAdapter = {
   name: 'ios',
   getEnvironment: async (runner: TestRunnerConfig) => {
     const metroPromise = runMetro();
-    const interactionEnginePromise = getAppiumInteractionEngine(runner);
+    const interactionEnginePromise = getInteractionEngine(runner);
 
     await runSimulator(runner.deviceId);
 

@@ -1,5 +1,5 @@
 import { Browser } from 'webdriverio';
-import { ElementRef } from '../types.js';
+import { ElementRef } from '../../types.js';
 
 export const isDisplayed = async (session: Browser, elementRef: ElementRef) => {
   return session.isElementDisplayed(elementRef.id);

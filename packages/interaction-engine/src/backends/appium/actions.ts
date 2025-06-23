@@ -1,5 +1,5 @@
 import { Browser } from 'webdriverio';
-import { Action, QueryExecutor } from '../types.js';
+import { Action, QueryExecutor } from '../../types.js';
 
 export type ActionFactoryContext = {
   session: Browser;

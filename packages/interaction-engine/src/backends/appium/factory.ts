@@ -1,12 +1,13 @@
 import { remote } from 'webdriverio';
-import { InteractionEngine } from '../types.js';
+import { InteractionEngine } from '../../types.js';
 import { TestRunnerConfig } from '@react-native-harness/config';
+import { UIBackendFactory } from '../types.js';
 import { createAppiumInteractionEngine } from './engine.js';
 import { runAppiumServer } from './server.js';
 
 const APPIUM_PORT = 4723;
 
-export const getAppiumInteractionEngine = async (
+const getAppiumInteractionEngine = async (
   runner: TestRunnerConfig,
 ): Promise<InteractionEngine> => {
   const capabilities = {
@@ -28,4 +29,9 @@ export const getAppiumInteractionEngine = async (
   await runAppiumServer({ port: APPIUM_PORT });
   const driver = await remote(wdOpts);
   return createAppiumInteractionEngine(driver);
+};
+
+export const appiumBackend: UIBackendFactory = {
+  getInteractionEngine: getAppiumInteractionEngine,
+  getName: () => 'appium',
 };

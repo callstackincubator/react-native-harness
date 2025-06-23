@@ -1,3 +1,2 @@
-export { getAppiumInteractionEngine } from './appium/index.js';
-
+export { getInteractionEngine } from './factory.js';
 export type * from './types.js';

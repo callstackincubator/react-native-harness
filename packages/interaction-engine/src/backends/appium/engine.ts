@@ -7,7 +7,7 @@ import {
   QueryOptions,
   ElementRef,
   MatcherType,
-} from '../types.js';
+} from '../../types.js';
 import { getActions } from './actions.js';
 import * as matchers from './matchers.js';
 import { getInteractionEngineQueryError } from './errors.js';
@@ -89,9 +89,8 @@ export const createAppiumInteractionEngine = (
   ) => {
     const matcherFn =
       matchers[
-        `is${
-          matcher.charAt(0).toUpperCase() + matcher.slice(1)
-        }` as keyof typeof matchers
+      `is${matcher.charAt(0).toUpperCase() + matcher.slice(1)
+      }` as keyof typeof matchers
       ];
 
     if (!matcherFn) {

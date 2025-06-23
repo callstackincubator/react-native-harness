@@ -1,5 +1,5 @@
 import { type ChildProcess } from 'node:child_process';
-import { getAppiumInteractionEngine } from '@react-native-harness/interaction-engine';
+import { getInteractionEngine } from '@react-native-harness/interaction-engine';
 import { TestRunnerConfig } from '@react-native-harness/config';
 
 import { type PlatformAdapter } from '../platform-adapter.js';
@@ -26,7 +26,7 @@ const androidPlatformAdapter: PlatformAdapter = {
       emulator = await runEmulator(runner.deviceId);
     }
 
-    const interactionEnginePromise = getAppiumInteractionEngine(runner);
+    const interactionEnginePromise = getInteractionEngine(runner);
 
     const deviceId = await getEmulatorDeviceId(runner.deviceId);
 
