@@ -1,0 +1,14 @@
+{
+    "targets": {
+        "start": {
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "react-native-harness:build"
+            ],
+            "options": {
+                "command": "node ../../packages/cli/dist/index.js",
+                "cwd": "apps/playground"
+            }
+        }
+    }
+}

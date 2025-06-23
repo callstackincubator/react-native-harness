@@ -3,12 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "dependencies": {
+    "react-native-harness": "workspace:*",
     "@react-native-harness/metro": "workspace:*",
     "@react-native-harness/runtime": "workspace:*",
     "react-native": "*"
   },
   "devDependencies": {
-    "@babel/plugin-transform-class-static-block": "^7.27.1",
-    "react-native-harness": "workspace:*"
+    "@babel/plugin-transform-class-static-block": "^7.27.1"
   }
 }
