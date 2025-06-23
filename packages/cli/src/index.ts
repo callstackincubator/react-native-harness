@@ -1,213 +1,40 @@
 #!/usr/bin/env node
 
-import {
-  getBridgeServer,
-  type BridgeServer,
-} from '@react-native-harness/bridge/server';
-import {
-  Config,
-  getConfig,
-  TestRunnerConfig,
-  ConfigValidationError,
-  ConfigNotFoundError,
-  ConfigLoadError
-} from '@react-native-harness/config';
-import type { SuiteResult } from '@react-native-harness/bridge';
-import { getPlatformAdapter } from './platforms/platform-registry.js';
-import { Glob } from 'glob';
-import { defaultReporter } from './reporters/default-reporter.js';
-import { intro, outro, spinner } from '@react-native-harness/tools';
-import { type Environment } from './platforms/platform-adapter.js';
+import { Command } from 'commander';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { testCommand, handleError } from './commands/test.js';
 
-type TestRunContext = {
-  config: Config;
-  runner: TestRunnerConfig;
-  bridge?: BridgeServer;
-  environment?: Environment;
-  testFiles: string[];
-  results: SuiteResult[];
-};
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJsonPath = join(__dirname, '../package.json');
+const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
 
-const setupEnvironment = async (
-  context: TestRunContext
-): Promise<void> => {
-  const startSpinner = spinner();
-  const platform = context.runner.platform;
+const program = new Command();
 
-  startSpinner.start(`Starting "${context.runner.name}" (${platform}) runner`);
+program
+  .name('react-native-harness')
+  .description('React Native Test Harness - A comprehensive testing framework for React Native applications')
+  .version(packageJson.version);
 
-  const platformAdapter = await getPlatformAdapter(platform);
-  const serverBridge = await getBridgeServer({
-    port: 3001,
+program
+  .command('test')
+  .description('Run tests using the specified runner')
+  .argument('[runner]', 'test runner name (uses defaultRunner from config if not specified)')
+  .argument('[pattern]', 'glob pattern to match test files (uses config.include if not specified)')
+  .action(async (runner, pattern) => {
+    try {
+      await testCommand(runner, pattern);
+    } catch (error) {
+      handleError(error);
+      process.exit(1);
+    }
   });
-
-  context.bridge = serverBridge;
-
-  const readyPromise = new Promise<void>((resolve) =>
-    serverBridge.once('ready', resolve)
-  );
-
-  context.environment = await platformAdapter.getEnvironment(context.runner);
-  await readyPromise;
-
-  if (!context.environment) {
-    throw new Error('Failed to initialize environment');
-  }
-
-  serverBridge.rpc.functions.executeAction =
-    context.environment.interactionEngine.executeAction;
-  serverBridge.rpc.functions.executeQuery =
-    context.environment.interactionEngine.executeQuery;
-  serverBridge.rpc.functions.executeMatcher =
-    context.environment.interactionEngine.executeMatcher;
-
-  startSpinner.stop(`"${context.runner.name}" (${platform}) runner started`);
-};
-
-const findTestFiles = async (
-  context: TestRunContext
-): Promise<void> => {
-  const discoverSpinner = spinner();
-  discoverSpinner.start('Discovering tests');
-
-  const glob = new Glob(context.config.include, {
-    cwd: process.cwd(),
-  });
-  context.testFiles = await glob.walk();
-  discoverSpinner.stop(`Found ${context.testFiles.length} test files`);
-};
-
-const runTests = async (context: TestRunContext): Promise<void> => {
-  const runSpinner = spinner();
-  runSpinner.start('Running tests');
-
-  let shouldRestart = false;
-
-  if (!context.bridge || !context.environment) {
-    throw new Error('Bridge or environment not initialized');
-  }
-
-  for (const testFile of context.testFiles) {
-    if (shouldRestart) {
-      runSpinner.message(`Restarting environment for next test file`);
-      await new Promise<void>((resolve) => {
-        context.bridge!.once('ready', resolve);
-        context.environment!.restart();
-      });
-    }
-
-    runSpinner.message(`Running tests in ${testFile}`);
-    const client = context.bridge.rpc.clients.at(-1);
-    if (!client) {
-      throw new Error('No RPC client available');
-    }
-
-    const result = await client.runTests(testFile);
-    if (result.error) {
-      throw new Error(String(result.error));
-    }
-
-    context.results.push(...result.suites);
-    shouldRestart = true;
-  }
-
-  runSpinner.stop(`Completed running all tests`);
-};
-
-const cleanUp = async (context: TestRunContext): Promise<void> => {
-  if (context.bridge) {
-    context.bridge.ws.close();
-  }
-  if (context.environment) {
-    await context.environment.dispose();
-  }
-};
-
-const handleError = (error: unknown): void => {
-  if (error instanceof ConfigValidationError) {
-    console.error(`\n❌ Configuration Error`);
-    console.error(`\nFile: ${error.filePath}`);
-    console.error(`\nValidation errors:`);
-    error.validationErrors.forEach(err => {
-      console.error(`  • ${err}`);
-    });
-    console.error(`\nPlease fix the configuration errors and try again.`);
-  } else if (error instanceof ConfigNotFoundError) {
-    console.error(`\n❌ Configuration Not Found`);
-    console.error(`\nCould not find 'rn-harness.config' in '${error.searchPath}' or any parent directories.`);
-    console.error(`\nSupported file extensions: .js, .mjs, .cjs, .json`);
-    console.error(`\nPlease create a configuration file or run from a directory that contains one.`);
-  } else if (error instanceof ConfigLoadError) {
-    console.error(`\n❌ Configuration Load Error`);
-    console.error(`\nFile: ${error.filePath}`);
-    console.error(`Error: ${error.message}`);
-    if (error.cause) {
-      console.error(`\nCause: ${error.cause.message}`);
-    }
-    console.error(`\nPlease check your configuration file syntax and try again.`);
-  } else {
-    console.error(`\n❌ Unexpected Error`);
-    console.error(error);
-  }
-};
-
-const main = async (argv: string[]): Promise<void> => {
-  intro('React Native Test Harness');
-
-  let config: Config;
-  try {
-    config = await getConfig(process.cwd());
-    config.reporter = defaultReporter;
-  } catch (error) {
-    handleError(error);
-    process.exit(1);
-  }
-
-  const runnerName = argv[2] ?? config.defaultRunner;
-
-  if (!runnerName) {
-    console.error('\n❌ No runner specified');
-    console.error('\nPlease specify a runner name or set a defaultRunner in your config.');
-    process.exit(1);
-  }
-
-  const runner = config.runners.find((r) => r.name === runnerName);
-
-  if (!runner) {
-    console.error(`\n❌ Runner "${runnerName}" not found`);
-    console.error('\nAvailable runners:');
-    config.runners.forEach(r => {
-      console.error(`  • ${r.name} (${r.platform})`);
-    });
-    process.exit(1);
-  }
-
-  const context: TestRunContext = {
-    config,
-    runner,
-    testFiles: [],
-    results: [],
-  };
-
-  try {
-    await setupEnvironment(context);
-    await findTestFiles(context);
-    await runTests(context);
-
-    config.reporter?.report(context.results);
-    outro('Test run completed successfully');
-
-    await cleanUp(context);
-    process.exit(0);
-  } catch (error) {
-    await cleanUp(context);
-    handleError(error);
-    process.exit(1);
-  }
-};
 
 process.on('uncaughtException', (error) => {
-  console.error(error);
+  handleError(error);
   process.exit(1);
 });
-void main(process.argv);
+
+program.parse();

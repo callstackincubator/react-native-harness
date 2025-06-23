@@ -23,6 +23,7 @@
     "@react-native-harness/config": "workspace:*",
     "@react-native-harness/interaction-engine": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
+    "commander": "^14.0.0",
     "glob": "^11.0.0",
     "tslib": "^2.3.0"
   },
