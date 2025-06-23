@@ -1,0 +1,153 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Specific app to test (leave empty for all apps)'
+        required: false
+        type: string
+      platform:
+        description: 'Platform to test'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+
+jobs:
+  discover-apps:
+    name: Discover Apps
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.set-apps.outputs.apps }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Discover apps
+        id: set-apps
+        run: |
+          # TODO: Implement app discovery logic
+          # For now, we'll use a static list based on current structure
+          if [ -n "${{ github.event.inputs.app }}" ]; then
+            apps='["${{ github.event.inputs.app }}"]'
+          else
+            apps='["playground"]'
+          fi
+          echo "apps=$apps" >> $GITHUB_OUTPUT
+          echo "Discovered apps: $apps"
+
+  e2e-android:
+    name: E2E Android - ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    needs: discover-apps
+    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: |
+          # TODO: Install project dependencies
+          echo "Installing dependencies for ${{ matrix.app }}"
+
+      - name: Setup Android environment
+        run: |
+          # TODO: Setup Android SDK, emulator, etc.
+          echo "Setting up Android environment for ${{ matrix.app }}"
+
+      - name: Run E2E tests
+        run: |
+          # TODO: Run E2E tests on Android
+          echo "Running E2E tests for ${{ matrix.app }} on Android"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-android-${{ matrix.app }}
+          path: test-results/
+          retention-days: 7
+
+  e2e-ios:
+    name: E2E iOS - ${{ matrix.app }}
+    runs-on: macos-latest
+    needs: discover-apps
+    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: |
+          # TODO: Install project dependencies
+          echo "Installing dependencies for ${{ matrix.app }}"
+
+      - name: Run E2E tests
+        run: |
+          # TODO: Run E2E tests on iOS
+          echo "Running E2E tests for ${{ matrix.app }} on iOS"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-ios-${{ matrix.app }}
+          path: test-results/
+          retention-days: 7
+
+  e2e-summary:
+    name: E2E Test Summary
+    runs-on: ubuntu-latest
+    needs: [e2e-android, e2e-ios]
+    if: always()
+    
+    steps:
+      - name: Check test results
+        run: |
+          # TODO: Aggregate and report test results
+          echo "E2E test summary:"
+          echo "Android tests: ${{ needs.e2e-android.result }}"
+          echo "iOS tests: ${{ needs.e2e-ios.result }}"
+          
+          if [[ "${{ needs.e2e-android.result }}" == "failure" || "${{ needs.e2e-ios.result }}" == "failure" ]]; then
+            echo "Some E2E tests failed"
+            exit 1
+          else
+            echo "All E2E tests passed"
+          fi
