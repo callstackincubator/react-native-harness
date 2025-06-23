@@ -2,7 +2,14 @@ import {
   getBridgeServer,
   type BridgeServer,
 } from '@react-native-harness/bridge/server';
-import { Config, getConfig, TestRunnerConfig } from '@react-native-harness/config';
+import {
+  Config,
+  getConfig,
+  TestRunnerConfig,
+  ConfigValidationError,
+  ConfigNotFoundError,
+  ConfigLoadError
+} from '@react-native-harness/config';
 import type { SuiteResult } from '@react-native-harness/bridge';
 import { getPlatformAdapter } from './platforms/platform-registry.js';
 import { Glob } from 'glob';
@@ -114,22 +121,63 @@ const cleanUp = async (context: TestRunContext): Promise<void> => {
   }
 };
 
+const handleError = (error: unknown): void => {
+  if (error instanceof ConfigValidationError) {
+    console.error(`\n❌ Configuration Error`);
+    console.error(`\nFile: ${error.filePath}`);
+    console.error(`\nValidation errors:`);
+    error.validationErrors.forEach(err => {
+      console.error(`  • ${err}`);
+    });
+    console.error(`\nPlease fix the configuration errors and try again.`);
+  } else if (error instanceof ConfigNotFoundError) {
+    console.error(`\n❌ Configuration Not Found`);
+    console.error(`\nCould not find 'rn-harness.config' in '${error.searchPath}' or any parent directories.`);
+    console.error(`\nSupported file extensions: .js, .mjs, .cjs, .json`);
+    console.error(`\nPlease create a configuration file or run from a directory that contains one.`);
+  } else if (error instanceof ConfigLoadError) {
+    console.error(`\n❌ Configuration Load Error`);
+    console.error(`\nFile: ${error.filePath}`);
+    console.error(`Error: ${error.message}`);
+    if (error.cause) {
+      console.error(`\nCause: ${error.cause.message}`);
+    }
+    console.error(`\nPlease check your configuration file syntax and try again.`);
+  } else {
+    console.error(`\n❌ Unexpected Error`);
+    console.error(error);
+  }
+};
+
 const main = async (argv: string[]): Promise<void> => {
   intro('React Native Test Harness');
 
-  const config = await getConfig(process.cwd());
-  config.reporter = defaultReporter;
+  let config: Config;
+  try {
+    config = await getConfig(process.cwd());
+    config.reporter = defaultReporter;
+  } catch (error) {
+    handleError(error);
+    process.exit(1);
+  }
 
   const runnerName = argv[2] ?? config.defaultRunner;
 
   if (!runnerName) {
-    throw new Error('No runner specified');
+    console.error('\n❌ No runner specified');
+    console.error('\nPlease specify a runner name or set a defaultRunner in your config.');
+    process.exit(1);
   }
 
   const runner = config.runners.find((r) => r.name === runnerName);
 
   if (!runner) {
-    throw new Error(`Runner "${runnerName}" not found`);
+    console.error(`\n❌ Runner "${runnerName}" not found`);
+    console.error('\nAvailable runners:');
+    config.runners.forEach(r => {
+      console.error(`  • ${r.name} (${r.platform})`);
+    });
+    process.exit(1);
   }
 
   const context: TestRunContext = {
@@ -151,7 +199,7 @@ const main = async (argv: string[]): Promise<void> => {
     process.exit(0);
   } catch (error) {
     await cleanUp(context);
-    console.error(error);
+    handleError(error);
     process.exit(1);
   }
 };
