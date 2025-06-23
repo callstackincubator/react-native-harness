@@ -1,4 +1,4 @@
-import { Config } from '@react-native-harness/config';
+import { TestRunnerConfig } from '@react-native-harness/config';
 import { InteractionEngine } from '@react-native-harness/interaction-engine';
 
 export type Environment = {
@@ -9,5 +9,5 @@ export type Environment = {
 
 export type PlatformAdapter = {
   name: string;
-  getEnvironment: (config: Config) => Promise<Environment>;
+  getEnvironment: (runner: TestRunnerConfig) => Promise<Environment>;
 };

@@ -1,6 +1,6 @@
 import { type ChildProcess } from 'node:child_process';
 import { getAppiumInteractionEngine } from '@react-native-harness/interaction-engine';
-import { assertNativeRunner, Config } from '@react-native-harness/config';
+import { TestRunnerConfig } from '@react-native-harness/config';
 
 import { type PlatformAdapter } from '../platform-adapter.js';
 import {
@@ -16,21 +16,19 @@ import { runMetro } from '../../bundlers/metro.js';
 
 const androidPlatformAdapter: PlatformAdapter = {
   name: 'android',
-  getEnvironment: async (config: Config) => {
-    assertNativeRunner(config);
-
+  getEnvironment: async (runner: TestRunnerConfig) => {
     let emulator: ChildProcess | null = null;
-    const emulatorStatus = await getEmulatorStatus(config.runner.deviceId);
+    const emulatorStatus = await getEmulatorStatus(runner.deviceId);
 
     const metroPromise = runMetro();
 
     if (emulatorStatus === 'stopped') {
-      emulator = await runEmulator(config.runner.deviceId);
+      emulator = await runEmulator(runner.deviceId);
     }
 
-    const interactionEnginePromise = getAppiumInteractionEngine(config);
+    const interactionEnginePromise = getAppiumInteractionEngine(runner);
 
-    const deviceId = await getEmulatorDeviceId(config.runner.deviceId);
+    const deviceId = await getEmulatorDeviceId(runner.deviceId);
 
     if (!deviceId) {
       throw new Error('Emulator not found');
@@ -42,7 +40,7 @@ const androidPlatformAdapter: PlatformAdapter = {
       reversePort(3001),
     ]);
 
-    const isInstalled = await isAppInstalled(deviceId, config.runner.bundleId);
+    const isInstalled = await isAppInstalled(deviceId, runner.bundleId);
 
     if (!isInstalled) {
       await buildAndroidApp();
@@ -50,13 +48,13 @@ const androidPlatformAdapter: PlatformAdapter = {
     }
 
     const metro = await metroPromise;
-    await runApp(deviceId, config.runner.bundleId);
+    await runApp(deviceId, runner.bundleId);
 
     const interactionEngine = await interactionEnginePromise;
 
     return {
       restart: async () => {
-        await runApp(config.runner.deviceId, config.runner.bundleId);
+        await runApp(runner.deviceId, runner.bundleId);
       },
       dispose: async () => {
         if (emulator) {
@@ -65,7 +63,7 @@ const androidPlatformAdapter: PlatformAdapter = {
 
         await interactionEngine.close();
         metro.kill();
-        await killApp(deviceId, config.runner.bundleId);
+        await killApp(deviceId, runner.bundleId);
       },
       interactionEngine,
     };

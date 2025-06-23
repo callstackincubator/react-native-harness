@@ -1,5 +1,5 @@
 import { getAppiumInteractionEngine } from '@react-native-harness/interaction-engine';
-import { assertNativeRunner, Config } from '@react-native-harness/config';
+import { TestRunnerConfig } from '@react-native-harness/config';
 import { type PlatformAdapter } from '../platform-adapter.js';
 import { runSimulator } from './simulator.js';
 import { buildIOSApp, isAppInstalled, runApp, killApp } from './build.js';
@@ -8,36 +8,35 @@ import { runMetro } from '../../bundlers/metro.js';
 
 const iosPlatformAdapter: PlatformAdapter = {
   name: 'ios',
-  getEnvironment: async (config: Config) => {
-    assertNativeRunner(config);
+  getEnvironment: async (runner: TestRunnerConfig) => {
     const metroPromise = runMetro();
-    const interactionEnginePromise = getAppiumInteractionEngine(config);
+    const interactionEnginePromise = getAppiumInteractionEngine(runner);
 
-    await runSimulator(config.runner.deviceId);
+    await runSimulator(runner.deviceId);
 
     const isInstalled = await isAppInstalled(
-      config.runner.deviceId,
-      config.runner.bundleId
+      runner.deviceId,
+      runner.bundleId
     );
 
     const metro = await metroPromise;
 
     if (!isInstalled) {
-      await buildIOSApp(config.runner.deviceId);
+      await buildIOSApp(runner.deviceId);
     } else {
-      await runApp(config.runner.deviceId, config.runner.bundleId);
+      await runApp(runner.deviceId, runner.bundleId);
     }
 
     const interactionEngine = await interactionEnginePromise;
 
     return {
       restart: async () => {
-        await runApp(config.runner.deviceId, config.runner.bundleId);
+        await runApp(runner.deviceId, runner.bundleId);
       },
       dispose: async () => {
         await interactionEngine.close();
         await killWithAwait(metro);
-        await killApp(config.runner.deviceId, config.runner.bundleId);
+        await killApp(runner.deviceId, runner.bundleId);
       },
       interactionEngine,
     };

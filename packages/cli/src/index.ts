@@ -2,7 +2,7 @@ import {
   getBridgeServer,
   type BridgeServer,
 } from '@react-native-harness/bridge/server';
-import { Config, getConfig } from '@react-native-harness/config';
+import { Config, getConfig, TestRunnerConfig } from '@react-native-harness/config';
 import type { SuiteResult } from '@react-native-harness/bridge';
 import { getPlatformAdapter } from './platforms/platform-registry.js';
 import { Glob } from 'glob';
@@ -11,6 +11,8 @@ import { intro, outro, spinner } from '@react-native-harness/tools';
 import { type Environment } from './platforms/platform-adapter.js';
 
 type TestRunContext = {
+  config: Config;
+  runner: TestRunnerConfig;
   bridge?: BridgeServer;
   environment?: Environment;
   testFiles: string[];
@@ -18,13 +20,12 @@ type TestRunContext = {
 };
 
 const setupEnvironment = async (
-  config: Config,
   context: TestRunContext
 ): Promise<void> => {
   const startSpinner = spinner();
-  const platform = config.runner.platform;
+  const platform = context.runner.platform;
 
-  startSpinner.start(`Starting "${platform}" environment`);
+  startSpinner.start(`Starting "${context.runner.name}" (${platform}) runner`);
 
   const platformAdapter = await getPlatformAdapter(platform);
   const serverBridge = await getBridgeServer({
@@ -37,7 +38,7 @@ const setupEnvironment = async (
     serverBridge.once('ready', resolve)
   );
 
-  context.environment = await platformAdapter.getEnvironment(config);
+  context.environment = await platformAdapter.getEnvironment(context.runner);
   await readyPromise;
 
   if (!context.environment) {
@@ -51,17 +52,16 @@ const setupEnvironment = async (
   serverBridge.rpc.functions.executeMatcher =
     context.environment.interactionEngine.executeMatcher;
 
-  startSpinner.stop(`"${platform}" environment started successfully`);
+  startSpinner.stop(`"${context.runner.name}" (${platform}) runner started`);
 };
 
 const findTestFiles = async (
-  config: Config,
   context: TestRunContext
 ): Promise<void> => {
   const discoverSpinner = spinner();
   discoverSpinner.start('Discovering tests');
 
-  const glob = new Glob(config.include, {
+  const glob = new Glob(context.config.include, {
     cwd: process.cwd(),
   });
   context.testFiles = await glob.walk();
@@ -114,20 +114,34 @@ const cleanUp = async (context: TestRunContext): Promise<void> => {
   }
 };
 
-const main = async (): Promise<void> => {
+const main = async (argv: string[]): Promise<void> => {
   intro('React Native Test Harness');
 
   const config = await getConfig(process.cwd());
   config.reporter = defaultReporter;
 
+  const runnerName = argv[2] ?? config.defaultRunner;
+
+  if (!runnerName) {
+    throw new Error('No runner specified');
+  }
+
+  const runner = config.runners.find((r) => r.name === runnerName);
+
+  if (!runner) {
+    throw new Error(`Runner "${runnerName}" not found`);
+  }
+
   const context: TestRunContext = {
+    config,
+    runner,
     testFiles: [],
     results: [],
   };
 
   try {
-    await setupEnvironment(config, context);
-    await findTestFiles(config, context);
+    await setupEnvironment(context);
+    await findTestFiles(context);
     await runTests(context);
 
     config.reporter?.report(context.results);
@@ -142,4 +156,8 @@ const main = async (): Promise<void> => {
   }
 };
 
-void main();
+process.on('uncaughtException', (error) => {
+  console.error(error);
+  process.exit(1);
+});
+void main(process.argv);
