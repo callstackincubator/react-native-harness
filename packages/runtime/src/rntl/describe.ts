@@ -95,11 +95,8 @@ export const describe = Object.assign(
     const suite = createSuite(name);
     const previousSuite = getCurrentSuite();
 
-    // Only mark suites as skipped when ran after .only is called
-    suite.status =
-      getHasFocusedTests() && previousSuite !== getRootSuite()
-        ? 'skipped'
-        : 'active';
+    // Mark suites as skipped when ran after .only is called
+    suite.status = getHasFocusedTests() ? 'skipped' : 'active';
     setCurrentSuite(suite);
 
     try {
@@ -225,9 +222,11 @@ export const test = Object.assign(
       // Mark the suite as having focused tests
       currentSuite._hasFocused = true;
 
-      // Mark all existing tests in this suite as skipped
+      // Mark all existing tests in this suite as skipped, but preserve todo status
       for (const test of currentSuite.tests) {
-        test.status = 'skipped';
+        if (test.status !== 'todo') {
+          test.status = 'skipped';
+        }
       }
 
       // Add the new focused test
@@ -242,7 +241,7 @@ export const test = Object.assign(
       if (!currentSuite) {
         throw new Error('test.todo() must be called within a describe() block');
       }
-      currentSuite.tests.push(createTest(name, () => {}, 'todo'));
+      currentSuite.tests.push(createTest(name, () => { }, 'todo'));
     },
   }
 );
