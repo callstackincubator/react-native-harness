@@ -1,4 +1,4 @@
-import { spawn } from '@react-native-harness/tools';
+import { spawnAndForget } from '@react-native-harness/tools';
 import * as net from 'node:net';
 
 export type RunAppiumServerOptions = {
@@ -7,9 +7,7 @@ export type RunAppiumServerOptions = {
 };
 
 export const runAppiumServer = async (options: RunAppiumServerOptions) => {
-  spawn('appium', ['--port', options.port.toString()], {
-    ignoreErrors: true,
-  });
+  spawnAndForget('appium', ['--port', options.port.toString()]);
 
   await waitForServer({
     port: options.port,

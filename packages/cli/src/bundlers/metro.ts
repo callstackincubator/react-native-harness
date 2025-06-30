@@ -8,7 +8,6 @@ export const runMetro = async (): Promise<ChildProcess> => {
       ...process.env,
       RN_HARNESS: 'true',
     },
-    ignoreErrors: true,
   });
   const nodeChildProcess = await metro.nodeChildProcess;
 
@@ -38,7 +37,7 @@ export const waitForMetro = async (
           return;
         }
       }
-    } catch {}
+    } catch { }
 
     if (attempts < maxRetries) {
       await new Promise((resolve) => setTimeout(resolve, retryDelay));

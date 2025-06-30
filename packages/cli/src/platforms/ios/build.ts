@@ -1,4 +1,4 @@
-import { spawn } from '@react-native-harness/tools';
+import { spawn, spawnAndForget } from '@react-native-harness/tools';
 import { reloadApp } from '../../bundlers/metro.js';
 
 export const listDevices = async (): Promise<any> => {
@@ -33,8 +33,9 @@ export const installPods = async (): Promise<void> => {
 };
 
 export const listApps = async (udid: string): Promise<string[]> => {
-  const { stdout } = await spawn('xcrun', ['simctl', 'listapps', udid]);
-  return stdout.split('\n').map((line) => line.trim());
+  const { stdout: plistOutput } = await spawn('xcrun', ['simctl', 'listapps', udid]);
+  const { stdout: jsonOutput } = await spawn('plutil', ['-convert', 'json', '-o', '-', '-'], { stdin: { string: plistOutput } });
+  return Object.keys(JSON.parse(jsonOutput));
 };
 
 export const isAppInstalled = async (
@@ -66,7 +67,7 @@ export const runApp = async (
   simulatorName: string,
   appName: string
 ): Promise<void> => {
-  await spawn('xcrun', ['simctl', 'terminate', simulatorName, appName]);
+  await killApp(simulatorName, appName);
   await spawn('xcrun', ['simctl', 'launch', simulatorName, appName]);
 };
 
@@ -74,5 +75,5 @@ export const killApp = async (
   simulatorName: string,
   appName: string
 ): Promise<void> => {
-  await spawn('xcrun', ['simctl', 'terminate', simulatorName, appName]);
+  await spawnAndForget('xcrun', ['simctl', 'terminate', simulatorName, appName]);
 };

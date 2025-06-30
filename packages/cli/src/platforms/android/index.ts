@@ -56,13 +56,14 @@ const androidPlatformAdapter: PlatformAdapter = {
         await runApp(runner.deviceId, runner.bundleId);
       },
       dispose: async () => {
+        await killApp(deviceId, runner.bundleId);
+
         if (emulator) {
           await killWithAwait(emulator);
         }
 
         await interactionEngine.close();
-        metro.kill();
-        await killApp(deviceId, runner.bundleId);
+        await killWithAwait(metro);
       },
       interactionEngine,
     };

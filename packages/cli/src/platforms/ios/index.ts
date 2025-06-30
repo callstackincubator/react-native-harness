@@ -1,7 +1,7 @@
 import { getInteractionEngine } from '@react-native-harness/interaction-engine';
 import { TestRunnerConfig } from '@react-native-harness/config';
 import { type PlatformAdapter } from '../platform-adapter.js';
-import { runSimulator } from './simulator.js';
+import { getSimulatorStatus, runSimulator, stopSimulator } from './simulator.js';
 import { isAppInstalled, runApp, killApp } from './build.js';
 import { killWithAwait } from '../../process.js';
 import { runMetro } from '../../bundlers/metro.js';
@@ -10,10 +10,15 @@ import { AppNotInstalledError } from '../../errors/appNotInstalledError.js';
 const iosPlatformAdapter: PlatformAdapter = {
   name: 'ios',
   getEnvironment: async (runner: TestRunnerConfig) => {
+    let shouldStopSimulator = false;
+    const simulatorStatus = await getSimulatorStatus(runner.deviceId);
     const metroPromise = runMetro();
     const interactionEnginePromise = getInteractionEngine(runner);
 
-    await runSimulator(runner.deviceId);
+    if (simulatorStatus === 'stopped') {
+      await runSimulator(runner.deviceId);
+      shouldStopSimulator = true;
+    }
 
     const isInstalled = await isAppInstalled(
       runner.deviceId,
@@ -33,9 +38,12 @@ const iosPlatformAdapter: PlatformAdapter = {
         await runApp(runner.deviceId, runner.bundleId);
       },
       dispose: async () => {
+        await killApp(runner.deviceId, runner.bundleId);
+        if (shouldStopSimulator) {
+          await stopSimulator(runner.deviceId);
+        }
         await interactionEngine.close();
         await killWithAwait(metro);
-        await killApp(runner.deviceId, runner.bundleId);
       },
       interactionEngine,
     };

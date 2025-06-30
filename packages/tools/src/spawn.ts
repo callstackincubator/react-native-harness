@@ -2,7 +2,7 @@ import type { Options, Subprocess } from 'nano-spawn';
 import nanoSpawn, { SubprocessError } from 'nano-spawn';
 import logger from './logger.js';
 
-export type SpawnOptions = Options & { ignoreErrors?: boolean };
+export type SpawnOptions = Options;
 
 export const spawn = (
   file: string,
@@ -19,14 +19,16 @@ export const spawn = (
   logger.debug(`Running: ${file}`, ...(args ?? []));
   const childProcess = nanoSpawn(file, args, { ...defaultOptions, ...options });
 
-  if (options?.ignoreErrors) {
-    childProcess.catch(() => {
-      // We don't care about the error here.
-    });
-  }
-
   setupChildProcessCleanup(childProcess);
   return childProcess;
+};
+
+export const spawnAndForget = async (file: string, args?: readonly string[], options?: SpawnOptions): Promise<void> => {
+  try {
+    await spawn(file, args, options);
+  } catch {
+    // We don't care about the error here.
+  }
 };
 
 export { Subprocess, SubprocessError };
