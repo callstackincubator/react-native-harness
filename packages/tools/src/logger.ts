@@ -56,7 +56,7 @@ const isVerbose = () => {
   return !isInteractive() || verbose;
 };
 
-export default {
+export const logger = {
   success,
   info,
   warn,

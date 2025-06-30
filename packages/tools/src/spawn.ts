@@ -1,6 +1,6 @@
 import type { Options, Subprocess } from 'nano-spawn';
 import nanoSpawn, { SubprocessError } from 'nano-spawn';
-import logger from './logger.js';
+import { logger } from './logger.js';
 
 export type SpawnOptions = Options;
 
@@ -9,7 +9,7 @@ export const spawn = (
   args?: readonly string[],
   options?: SpawnOptions
 ): Subprocess => {
-  const defaultStream = logger.isVerbose() ? 'inherit' : 'pipe';
+  const defaultStream = 'pipe';
   const defaultOptions: Options = {
     stdin: defaultStream,
     stdout: defaultStream,

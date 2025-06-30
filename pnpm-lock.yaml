@@ -175,6 +175,9 @@ importers:
       '@react-native-harness/interaction-engine':
         specifier: workspace:*
         version: link:../interaction-engine
+      '@react-native-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
       birpc:
         specifier: ^2.4.0
         version: 2.4.0

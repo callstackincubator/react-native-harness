@@ -14,9 +14,10 @@ import type { SuiteResult } from '@react-native-harness/bridge';
 import { getPlatformAdapter } from '../platforms/platform-registry.js';
 import { Glob } from 'glob';
 import { defaultReporter } from '../reporters/default-reporter.js';
-import { intro, outro, spinner } from '@react-native-harness/tools';
+import { intro, logger, outro, spinner } from '@react-native-harness/tools';
 import { type Environment } from '../platforms/platform-adapter.js';
 import { AppNotInstalledError } from '../errors/appNotInstalledError.js';
+import { BridgeTimeoutError } from '../errors/bridgeTimeoutError.js';
 
 type TestRunContext = {
     config: Config;
@@ -42,12 +43,22 @@ const setupEnvironment = async (
 
     context.bridge = serverBridge;
 
-    const readyPromise = new Promise<void>((resolve) =>
-        serverBridge.once('ready', resolve)
-    );
+    const readyPromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject(new BridgeTimeoutError(context.config.bridgeTimeout, context.runner.name, platform));
+        }, context.config.bridgeTimeout);
+
+        serverBridge.once('ready', () => {
+            clearTimeout(timeout);
+            resolve();
+        });
+    });
 
     context.environment = await platformAdapter.getEnvironment(context.runner);
+
+    logger.debug('Waiting for bridge to be ready');
     await readyPromise;
+    logger.debug('Bridge is ready');
 
     if (!context.environment) {
         throw new Error('Failed to initialize environment');
@@ -158,6 +169,20 @@ export const handleError = (error: unknown): void => {
             console.error(`  • Or build manually: ./gradlew assembleDebug && adb install android/app/build/outputs/apk/debug/app-debug.apk`);
         }
         console.error(`\nPlease install the app and try running the tests again.`);
+    } else if (error instanceof BridgeTimeoutError) {
+        console.error(`\n❌ Bridge Connection Timeout`);
+        console.error(`\nThe bridge connection timed out after ${error.timeout}ms while waiting for the "${error.runnerName}" (${error.platform}) runner to be ready.`);
+        console.error(`\nThis usually indicates that:`);
+        console.error(`  • The React Native app failed to load or connect to the bridge`);
+        console.error(`  • The app crashed during startup`);
+        console.error(`  • Network connectivity issues between the app and the test harness`);
+        console.error(`  • The app is taking longer than expected to initialize`);
+        console.error(`\nTo resolve this issue:`);
+        console.error(`  • Check that the app is properly installed and can start normally`);
+        console.error(`  • Verify that the app has the React Native Harness runtime integrated`);
+        console.error(`  • Check device/emulator logs for any startup errors`);
+        console.error(`  • Ensure the test harness bridge port (3001) is not blocked`);
+        console.error(`\nIf the app needs more time to start, consider increasing the timeout in the configuration.`);
     } else {
         console.error(`\n❌ Unexpected Error`);
         console.error(error);

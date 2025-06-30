@@ -1,5 +1,6 @@
 import { WebSocketServer, type WebSocket } from 'ws';
 import { type BirpcGroup, createBirpcGroup } from 'birpc';
+import { logger } from '@react-native-harness/tools';
 import { EventEmitter } from 'node:events';
 import type { BridgeServerFunctions, BridgeClientFunctions } from './shared.js';
 
@@ -36,7 +37,7 @@ export const getBridgeServer = async ({
   port,
 }: BridgeServerOptions): Promise<BridgeServer> => {
   const wss = await new Promise<WebSocketServer>((resolve) => {
-    const server = new WebSocketServer({ port }, () => {
+    const server = new WebSocketServer({ port, host: '0.0.0.0' }, () => {
       resolve(server);
     });
   });
@@ -56,7 +57,10 @@ export const getBridgeServer = async ({
   );
 
   wss.on('connection', (ws: WebSocket) => {
+    logger.debug('Client connected to the bridge');
     ws.on('close', () => {
+      logger.debug('Client disconnected from the bridge');
+
       // TODO: Remove channel when connection is closed.
       clients.delete(ws);
     });

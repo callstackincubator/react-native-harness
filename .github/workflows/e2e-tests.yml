@@ -30,12 +30,11 @@ jobs:
       - name: Discover apps
         id: set-apps
         run: |
-          # TODO: Implement app discovery logic
-          # For now, we'll use a static list based on current structure
           if [ -n "${{ github.event.inputs.app }}" ]; then
             apps='["${{ github.event.inputs.app }}"]'
           else
-            apps='["playground"]'
+            # Dynamically discover apps in the /apps directory
+            apps=$(find apps -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | jq -R . | jq -sc .)
           fi
           echo "apps=$apps" >> $GITHUB_OUTPUT
           echo "Discovered apps: $apps"
@@ -51,8 +50,21 @@ jobs:
         app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
     
     steps:
+      - name: Delete unnecessary tools
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          android: false # Don't remove Android tools
+          tool-cache: true # Remove image tool cache - rm -rf "$AGENT_TOOLSDIRECTORY"
+          docker-images: false # Takes 16s, enable if needed in the future
+          large-packages: false # includes google-cloud-sdk and it's slow
+
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -60,33 +72,59 @@ jobs:
           node-version: '18'
           cache: 'pnpm'
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: latest
-
       - name: Install dependencies
         run: |
-          # TODO: Install project dependencies
-          echo "Installing dependencies for ${{ matrix.app }}"
+          pnpm install
 
-      - name: Setup Android environment
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Restore APK from cache
+        id: cache-apk-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: apps/${{ matrix.app }}/android/app/build/outputs/apk/debug/app-debug.apk
+          key: apk-${{ matrix.app }}
+
+      - name: Build Android app
+        if: steps.cache-apk-restore.outputs.cache-hit != 'true'
+        working-directory: apps/${{ matrix.app }}
         run: |
-          # TODO: Setup Android SDK, emulator, etc.
-          echo "Setting up Android environment for ${{ matrix.app }}"
+          pnpm nx run @react-native-harness/${{ matrix.app }}:build-android --tasks=assembleDebug
+
+      - name: Save APK to cache
+        if: steps.cache-apk-restore.outputs.cache-hit != 'true' && success()
+        uses: actions/cache/save@v4
+        with:
+          path: apps/${{ matrix.app }}/android/app/build/outputs/apk/debug/app-debug.apk
+          key: apk-${{ matrix.app }}
+
+      - name: Enable KVM group perms
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls /dev/kvm
 
       - name: Run E2E tests
-        run: |
-          # TODO: Run E2E tests on Android
-          echo "Running E2E tests for ${{ matrix.app }} on Android"
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
+        uses: reactivecircus/android-emulator-runner@v2
         with:
-          name: e2e-results-android-${{ matrix.app }}
-          path: test-results/
-          retention-days: 7
+          working-directory: apps/${{ matrix.app }}/android
+          api-level: 35
+          arch: x86_64
+          profile: pixel_7
+          disk-size: 1G
+          heap-size: 1G
+          force-avd-creation: false
+          avd-name: Pixel_8_API_35
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb install -r "./app/build/outputs/apk/debug/app-debug.apk"
+            pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test android-native"
 
   e2e-ios:
     name: E2E iOS - ${{ matrix.app }}
@@ -102,52 +140,79 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'pnpm'
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: latest
-
       - name: Install dependencies
         run: |
-          # TODO: Install project dependencies
-          echo "Installing dependencies for ${{ matrix.app }}"
+          pnpm install
+
+      - name: Get build products directory
+        id: get-build-dir
+        working-directory: apps/${{ matrix.app }}/ios
+        run: |
+          BUILD_DIR=$(xcodebuild -showBuildSettings -workspace Playground.xcworkspace -scheme Playground -configuration Debug -sdk iphonesimulator -destination "platform=iOS Simulator,name=iPhone 16 Pro" 2>/dev/null | grep -w BUILT_PRODUCTS_DIR | awk '{print $3}')
+          echo "build_dir=$BUILD_DIR" >> $GITHUB_OUTPUT
+          echo "Build products directory: $BUILD_DIR"
+
+      - name: Restore app from cache
+        id: cache-app-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.get-build-dir.outputs.build_dir }}/Playground.app
+          key: ios-app-${{ matrix.app }}
+
+      - name: CocoaPods cache
+        if: steps.cache-app-restore.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ./apps/${{ matrix.app }}/ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: ${{ matrix.app }}-${{ runner.os }}-pods-${{ hashFiles('./apps/${{ matrix.app }}/ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ matrix.app }}-${{ runner.os }}-pods-
+
+      - name: Install CocoaPods
+        if: steps.cache-app-restore.outputs.cache-hit != 'true'
+        working-directory: apps/${{ matrix.app }}/ios
+        run: |
+          pod install
+
+      - name: Build iOS app
+        if: steps.cache-app-restore.outputs.cache-hit != 'true'
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          pnpm react-native build-ios
+  
+      - name: Save app to cache
+        if: steps.cache-app-restore.outputs.cache-hit != 'true' && success()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.get-build-dir.outputs.build_dir }}/Playground.app
+          key: ios-app-${{ matrix.app }}
+
+      - uses: futureware-tech/simulator-action@v4
+        with:
+          model: 'iPhone 16 Pro'
+          os: iOS
+          os_version: 18.2
+          wait_for_boot: true
+          erase_before_boot: false
+
+      - name: Install app
+        run: |
+          xcrun simctl install booted ${{ steps.get-build-dir.outputs.build_dir }}/Playground.app
 
       - name: Run E2E tests
         run: |
-          # TODO: Run E2E tests on iOS
-          echo "Running E2E tests for ${{ matrix.app }} on iOS"
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-results-ios-${{ matrix.app }}
-          path: test-results/
-          retention-days: 7
-
-  e2e-summary:
-    name: E2E Test Summary
-    runs-on: ubuntu-latest
-    needs: [e2e-android, e2e-ios]
-    if: always()
-    
-    steps:
-      - name: Check test results
-        run: |
-          # TODO: Aggregate and report test results
-          echo "E2E test summary:"
-          echo "Android tests: ${{ needs.e2e-android.result }}"
-          echo "iOS tests: ${{ needs.e2e-ios.result }}"
-          
-          if [[ "${{ needs.e2e-android.result }}" == "failure" || "${{ needs.e2e-ios.result }}" == "failure" ]]; then
-            echo "Some E2E tests failed"
-            exit 1
-          else
-            echo "All E2E tests passed"
-          fi
+          pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test ios-native"

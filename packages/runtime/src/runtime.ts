@@ -3,6 +3,9 @@ import { collectTests } from './rntl/describe.js';
 import { fetchModule, executeModule } from './module.js';
 import { runSuite } from './runner.js';
 import { state } from './state.js';
+import { Platform } from 'react-native';
+
+const clientUrl = Platform.OS === 'ios' ? 'ws://localhost:3001' : 'ws://10.0.2.2:3001';
 
 const consumeTestModule = async (fileName: string) => {
   const moduleJs = await fetchModule(fileName);
@@ -11,7 +14,7 @@ const consumeTestModule = async (fileName: string) => {
 };
 
 export const getClient = () =>
-  getBridgeClient('http://localhost:3001', {
+  getBridgeClient(clientUrl, {
     runTests: async (path: string) => {
       if (state.getState().status === 'running') {
         throw new Error('Already running tests');

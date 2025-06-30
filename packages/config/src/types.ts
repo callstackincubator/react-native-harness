@@ -27,6 +27,7 @@ export const ConfigSchema = z.object({
   runners: z.array(TestRunnerConfigSchema).min(1, 'At least one runner is required'),
   defaultRunner: z.string().optional(),
   reporter: ReporterSchema.optional(),
+  bridgeTimeout: z.number().min(1000, 'Bridge timeout must be at least 1 second').default(60000),
 }).refine(
   (config) => {
     if (config.defaultRunner) {

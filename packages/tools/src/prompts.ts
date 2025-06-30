@@ -1,6 +1,6 @@
 import * as clack from '@clack/prompts';
 import { isInteractive } from './isInteractive.js';
-import logger from './logger.js';
+import { logger } from './logger.js';
 
 export const intro = (title?: string) => clack.intro(title);
 
