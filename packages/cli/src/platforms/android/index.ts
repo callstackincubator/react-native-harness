@@ -10,9 +10,10 @@ import {
   isAppInstalled,
   getEmulatorStatus,
 } from './emulator.js';
-import { buildAndroidApp, runApp, killApp, installApp } from './build.js';
+import { runApp, killApp } from './build.js';
 import { killWithAwait } from '../../process.js';
 import { runMetro } from '../../bundlers/metro.js';
+import { AppNotInstalledError } from '../../errors/appNotInstalledError.js';
 
 const androidPlatformAdapter: PlatformAdapter = {
   name: 'android',
@@ -43,13 +44,11 @@ const androidPlatformAdapter: PlatformAdapter = {
     const isInstalled = await isAppInstalled(deviceId, runner.bundleId);
 
     if (!isInstalled) {
-      await buildAndroidApp();
-      await installApp(deviceId);
+      throw new AppNotInstalledError(runner.deviceId, runner.bundleId, 'android');
     }
 
     const metro = await metroPromise;
     await runApp(deviceId, runner.bundleId);
-
     const interactionEngine = await interactionEnginePromise;
 
     return {

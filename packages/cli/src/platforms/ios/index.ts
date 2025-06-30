@@ -2,9 +2,10 @@ import { getInteractionEngine } from '@react-native-harness/interaction-engine';
 import { TestRunnerConfig } from '@react-native-harness/config';
 import { type PlatformAdapter } from '../platform-adapter.js';
 import { runSimulator } from './simulator.js';
-import { buildIOSApp, isAppInstalled, runApp, killApp } from './build.js';
+import { isAppInstalled, runApp, killApp } from './build.js';
 import { killWithAwait } from '../../process.js';
 import { runMetro } from '../../bundlers/metro.js';
+import { AppNotInstalledError } from '../../errors/appNotInstalledError.js';
 
 const iosPlatformAdapter: PlatformAdapter = {
   name: 'ios',
@@ -19,14 +20,12 @@ const iosPlatformAdapter: PlatformAdapter = {
       runner.bundleId
     );
 
-    const metro = await metroPromise;
-
     if (!isInstalled) {
-      await buildIOSApp(runner.deviceId);
-    } else {
-      await runApp(runner.deviceId, runner.bundleId);
+      throw new AppNotInstalledError(runner.deviceId, runner.bundleId, 'ios');
     }
 
+    const metro = await metroPromise;
+    await runApp(runner.deviceId, runner.bundleId);
     const interactionEngine = await interactionEnginePromise;
 
     return {

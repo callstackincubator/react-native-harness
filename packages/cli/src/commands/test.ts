@@ -16,6 +16,7 @@ import { Glob } from 'glob';
 import { defaultReporter } from '../reporters/default-reporter.js';
 import { intro, outro, spinner } from '@react-native-harness/tools';
 import { type Environment } from '../platforms/platform-adapter.js';
+import { AppNotInstalledError } from '../errors/appNotInstalledError.js';
 
 type TestRunContext = {
     config: Config;
@@ -145,6 +146,18 @@ export const handleError = (error: unknown): void => {
             console.error(`\nCause: ${error.cause.message}`);
         }
         console.error(`\nPlease check your configuration file syntax and try again.`);
+    } else if (error instanceof AppNotInstalledError) {
+        console.error(`\n❌ App Not Installed`);
+        console.error(`\nThe app "${error.bundleId}" is not installed on ${error.platform === 'ios' ? 'simulator' : 'emulator'} "${error.deviceName}".`);
+        console.error(`\nTo resolve this issue:`);
+        if (error.platform === 'ios') {
+            console.error(`  • Build and install the app: npx react-native run-ios --simulator="${error.deviceName}"`);
+            console.error(`  • Or install from Xcode: Open ios/*.xcworkspace and run the project`);
+        } else {
+            console.error(`  • Build and install the app: npx react-native run-android`);
+            console.error(`  • Or build manually: ./gradlew assembleDebug && adb install android/app/build/outputs/apk/debug/app-debug.apk`);
+        }
+        console.error(`\nPlease install the app and try running the tests again.`);
     } else {
         console.error(`\n❌ Unexpected Error`);
         console.error(error);
