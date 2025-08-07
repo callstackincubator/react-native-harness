@@ -2,13 +2,13 @@ type TestFn = () => void | Promise<void>;
 
 export type TestStatus = 'active' | 'skipped' | 'todo';
 
-export interface TestCase {
+export type TestCase = {
   name: string;
   fn: TestFn;
   status: TestStatus;
-}
+};
 
-export interface TestSuite {
+export type TestSuite = {
   name: string;
   tests: TestCase[];
   suites: TestSuite[];
@@ -18,63 +18,58 @@ export interface TestSuite {
   afterEach: TestFn[];
   status?: TestStatus;
   _hasFocused?: boolean;
-}
+};
 
-// Internal state for the collection API
-// This allows access in tests
-interface InternalCollection {
+type TestContext = {
   rootSuite: TestSuite;
   currentSuite: TestSuite | null;
   hasFocusedTests: boolean;
-}
+};
 
-// Extend globalThis to include our collection interface
-interface ExtendedGlobalThis {
-  __INTERNAL_COLLECTION__?: InternalCollection;
-}
+let currentContext: TestContext | null = null;
 
-const clearState = (): void => {
+const clearState = (): TestContext => {
   const rootSuite = createSuite('root');
-  (globalThis as ExtendedGlobalThis).__INTERNAL_COLLECTION__ = {
+  return {
     rootSuite,
     currentSuite: rootSuite,
     hasFocusedTests: false,
   };
 };
 
-const getCurrentSuite = (): TestSuite | null =>
-  (globalThis as ExtendedGlobalThis).__INTERNAL_COLLECTION__?.currentSuite ??
-  null;
+const getCurrentSuite = (): TestSuite | null => {
+  if (!currentContext) {
+    throw new Error('Test context not initialized. Call collectTests() first.');
+  }
+  return currentContext.currentSuite;
+};
 
 const getRootSuite = (): TestSuite => {
-  const internalCollection = (globalThis as ExtendedGlobalThis)
-    .__INTERNAL_COLLECTION__;
-  if (!internalCollection) {
-    throw new Error('Internal collection not initialized');
+  if (!currentContext) {
+    throw new Error('Test context not initialized. Call collectTests() first.');
   }
-  return internalCollection.rootSuite;
+  return currentContext.rootSuite;
 };
 
 const setCurrentSuite = (suite: TestSuite | null): void => {
-  const internalCollection = (globalThis as ExtendedGlobalThis)
-    .__INTERNAL_COLLECTION__;
-  if (internalCollection) {
-    internalCollection.currentSuite = suite;
+  if (!currentContext) {
+    throw new Error('Test context not initialized. Call collectTests() first.');
   }
+  currentContext.currentSuite = suite;
 };
 
 const getHasFocusedTests = (): boolean => {
-  const internalCollection = (globalThis as ExtendedGlobalThis)
-    .__INTERNAL_COLLECTION__;
-  return internalCollection?.hasFocusedTests || false;
+  if (!currentContext) {
+    throw new Error('Test context not initialized. Call collectTests() first.');
+  }
+  return currentContext.hasFocusedTests;
 };
 
 const setHasFocusedTests = (value: boolean): void => {
-  const internalCollection = (globalThis as ExtendedGlobalThis)
-    .__INTERNAL_COLLECTION__;
-  if (internalCollection) {
-    internalCollection.hasFocusedTests = value;
+  if (!currentContext) {
+    throw new Error('Test context not initialized. Call collectTests() first.');
   }
+  currentContext.hasFocusedTests = value;
 };
 
 function createSuite(name: string, status: TestStatus = 'active'): TestSuite {
@@ -241,7 +236,7 @@ export const test = Object.assign(
       if (!currentSuite) {
         throw new Error('test.todo() must be called within a describe() block');
       }
-      currentSuite.tests.push(createTest(name, () => { }, 'todo'));
+      currentSuite.tests.push(createTest(name, () => {}, 'todo'));
     },
   }
 );
@@ -281,8 +276,14 @@ export function afterEach(fn: TestFn) {
 }
 
 export const collectTests = (fn: () => void): TestSuite => {
-  clearState();
+  // Initialize context for this test collection
+  currentContext = clearState();
 
-  fn();
-  return getRootSuite();
+  try {
+    fn();
+    return getRootSuite();
+  } finally {
+    // Clean up context to prevent state leakage
+    currentContext = null;
+  }
 };
