@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import * as harnessRuntime from '../rntl/describe.js';
-import { TestError, TestErrorCode } from '../rntl/errors.js';
+import * as harnessRuntime from '../collector/functions.js';
+import { TestError } from '../collector/errors.js';
 
 const noop = () => {
   // Noop
@@ -81,7 +81,7 @@ describe('error handling', () => {
       });
     } catch (error) {
       expect(error).toBeInstanceOf(TestError);
-      expect((error as TestError).code).toBe(TestErrorCode.DUPLICATE_TEST_NAME);
+      expect((error as TestError).code).toBe('DUPLICATE_TEST_NAME');
       expect((error as TestError).context).toEqual({
         name: 'test1',
         suiteName: 'Test Suite',

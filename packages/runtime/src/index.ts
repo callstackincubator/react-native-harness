@@ -15,6 +15,6 @@ export {
   afterAll,
   beforeEach,
   afterEach,
-} from './rntl/describe.js';
+} from './collector/functions.js';
 export { UI } from './ui/UI.js';
 export { getEntryComponent } from './getEntryComponent.js';

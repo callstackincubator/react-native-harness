@@ -1,12 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import * as harnessRuntime from '../rntl/describe.js';
+import * as harnessRuntime from '../collector/functions.js';
+
+const noop = () => {
+  // Noop
+};
 
 describe('test case recognition', () => {
   it('should collect basic test cases using it()', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Sample Suite', () => {
-        harnessRuntime.it('test 1', () => {});
-        harnessRuntime.it('test 2', () => {});
+        harnessRuntime.it('test 1', noop);
+        harnessRuntime.it('test 2', noop);
       });
     });
 
@@ -23,8 +27,8 @@ describe('test case recognition', () => {
   it('should collect basic test cases using test()', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Sample Suite', () => {
-        harnessRuntime.test('test 1', () => {});
-        harnessRuntime.test('test 2', () => {});
+        harnessRuntime.test('test 1', noop);
+        harnessRuntime.test('test 2', noop);
       });
     });
 
@@ -51,11 +55,11 @@ describe('test case recognition', () => {
 
   it('should collect tests at root level', () => {
     const suite = harnessRuntime.collectTests(() => {
-      harnessRuntime.it('root test 1', () => {});
-      harnessRuntime.test('root test 2', () => {});
+      harnessRuntime.it('root test 1', noop);
+      harnessRuntime.test('root test 2', noop);
 
       harnessRuntime.describe('Suite with tests', () => {
-        harnessRuntime.it('suite test', () => {});
+        harnessRuntime.it('suite test', noop);
       });
     });
 
@@ -74,11 +78,11 @@ describe('test case recognition', () => {
 
   it('should collect tests with modifiers at root level', () => {
     const suite = harnessRuntime.collectTests(() => {
-      harnessRuntime.it('regular root test', () => {});
-      harnessRuntime.test.skip('skipped root test', () => {});
+      harnessRuntime.it('regular root test', noop);
+      harnessRuntime.test.skip('skipped root test', noop);
       harnessRuntime.it.todo('todo root test');
-      harnessRuntime.test.only('focused root test', () => {});
-      harnessRuntime.it('another root test', () => {});
+      harnessRuntime.test.only('focused root test', noop);
+      harnessRuntime.it('another root test', noop);
     });
 
     // Root suite should have all the tests with correct statuses
@@ -101,10 +105,10 @@ describe('suite recognition', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Outer Suite', () => {
         harnessRuntime.describe('Inner Suite 1', () => {
-          harnessRuntime.it('test 1', () => {});
+          harnessRuntime.it('test 1', noop);
         });
         harnessRuntime.describe('Inner Suite 2', () => {
-          harnessRuntime.it('test 2', () => {});
+          harnessRuntime.it('test 2', noop);
         });
       });
     });
@@ -122,10 +126,10 @@ describe('suite recognition', () => {
   it('should collect multiple top-level describe blocks', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Suite 1', () => {
-        harnessRuntime.it('test 1', () => {});
+        harnessRuntime.it('test 1', noop);
       });
       harnessRuntime.describe('Suite 2', () => {
-        harnessRuntime.it('test 2', () => {});
+        harnessRuntime.it('test 2', noop);
       });
     });
 
@@ -139,7 +143,7 @@ describe('suite recognition', () => {
       harnessRuntime.describe('Level 1', () => {
         harnessRuntime.describe('Level 2', () => {
           harnessRuntime.describe('Level 3', () => {
-            harnessRuntime.it('deep test', () => {});
+            harnessRuntime.it('deep test', noop);
           });
         });
       });
@@ -160,9 +164,9 @@ describe('skip modifier recognition', () => {
   it('should mark skipped tests with test.skip()', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Skip Suite', () => {
-        harnessRuntime.it('active test', () => {});
-        harnessRuntime.test.skip('skipped test', () => {});
-        harnessRuntime.it.skip('another skipped test', () => {});
+        harnessRuntime.it('active test', noop);
+        harnessRuntime.test.skip('skipped test', noop);
+        harnessRuntime.it.skip('another skipped test', noop);
       });
     });
 
@@ -176,10 +180,10 @@ describe('skip modifier recognition', () => {
   it('should mark skipped suites with describe.skip()', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Active Suite', () => {
-        harnessRuntime.it('active test', () => {});
+        harnessRuntime.it('active test', noop);
       });
       harnessRuntime.describe.skip('Skipped Suite', () => {
-        harnessRuntime.it('test in skipped suite', () => {});
+        harnessRuntime.it('test in skipped suite', noop);
       });
     });
 
@@ -192,7 +196,7 @@ describe('skip modifier recognition', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe.skip('Outer Skipped', () => {
         harnessRuntime.describe('Inner Suite', () => {
-          harnessRuntime.it('test', () => {});
+          harnessRuntime.it('test', noop);
         });
       });
     });
@@ -207,9 +211,9 @@ describe('only modifier recognition', () => {
   it('should mark only tests and skip others with test.only()', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Only Suite', () => {
-        harnessRuntime.it('regular test 1', () => {});
-        harnessRuntime.test.only('focused test', () => {});
-        harnessRuntime.it('regular test 2', () => {});
+        harnessRuntime.it('regular test 1', noop);
+        harnessRuntime.test.only('focused test', noop);
+        harnessRuntime.it('regular test 2', noop);
       });
     });
 
@@ -224,9 +228,9 @@ describe('only modifier recognition', () => {
   it('should handle multiple test.only() calls', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Multiple Only Suite', () => {
-        harnessRuntime.it('regular test', () => {});
-        harnessRuntime.test.only('focused test 1', () => {});
-        harnessRuntime.test.only('focused test 2', () => {});
+        harnessRuntime.it('regular test', noop);
+        harnessRuntime.test.only('focused test 1', noop);
+        harnessRuntime.test.only('focused test 2', noop);
       });
     });
 
@@ -239,13 +243,13 @@ describe('only modifier recognition', () => {
   it('should mark only suites and skip others with describe.only()', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Regular Suite 1', () => {
-        harnessRuntime.it('test 1', () => {});
+        harnessRuntime.it('test 1', noop);
       });
       harnessRuntime.describe.only('Focused Suite', () => {
-        harnessRuntime.it('focused test', () => {});
+        harnessRuntime.it('focused test', noop);
       });
       harnessRuntime.describe('Regular Suite 2', () => {
-        harnessRuntime.it('test 2', () => {});
+        harnessRuntime.it('test 2', noop);
       });
     });
 
@@ -260,10 +264,10 @@ describe('only modifier recognition', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Outer Suite', () => {
         harnessRuntime.describe('Regular Inner', () => {
-          harnessRuntime.it('test 1', () => {});
+          harnessRuntime.it('test 1', noop);
         });
         harnessRuntime.describe.only('Focused Inner', () => {
-          harnessRuntime.it('focused test', () => {});
+          harnessRuntime.it('focused test', noop);
         });
       });
     });
@@ -280,7 +284,7 @@ describe('todo test recognition', () => {
   it('should mark todo tests with test.todo()', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Todo Suite', () => {
-        harnessRuntime.it('regular test', () => {});
+        harnessRuntime.it('regular test', noop);
         harnessRuntime.test.todo('todo test');
         harnessRuntime.it.todo('another todo test');
       });
@@ -317,7 +321,7 @@ describe('hook recognition', () => {
         harnessRuntime.beforeAll(async () => {
           // async setup
         });
-        harnessRuntime.it('test', () => {});
+        harnessRuntime.it('test', noop);
       });
     });
 
@@ -333,7 +337,7 @@ describe('hook recognition', () => {
         harnessRuntime.afterAll(() => {
           // cleanup
         });
-        harnessRuntime.it('test', () => {});
+        harnessRuntime.it('test', noop);
       });
     });
 
@@ -351,7 +355,7 @@ describe('hook recognition', () => {
         harnessRuntime.beforeEach(async () => {
           // async setup each
         });
-        harnessRuntime.it('test', () => {});
+        harnessRuntime.it('test', noop);
       });
     });
 
@@ -367,7 +371,7 @@ describe('hook recognition', () => {
         harnessRuntime.afterEach(() => {
           // cleanup each
         });
-        harnessRuntime.it('test', () => {});
+        harnessRuntime.it('test', noop);
       });
     });
 
@@ -379,11 +383,11 @@ describe('hook recognition', () => {
   it('should collect all types of hooks together', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('All Hooks Suite', () => {
-        harnessRuntime.beforeAll(() => {});
-        harnessRuntime.afterAll(() => {});
-        harnessRuntime.beforeEach(() => {});
-        harnessRuntime.afterEach(() => {});
-        harnessRuntime.it('test', () => {});
+        harnessRuntime.beforeAll(noop);
+        harnessRuntime.afterAll(noop);
+        harnessRuntime.beforeEach(noop);
+        harnessRuntime.afterEach(noop);
+        harnessRuntime.it('test', noop);
       });
     });
 
@@ -410,7 +414,7 @@ describe('hook recognition', () => {
       });
 
       harnessRuntime.describe('Test Suite', () => {
-        harnessRuntime.it('test', () => {});
+        harnessRuntime.it('test', noop);
       });
     });
 
@@ -443,7 +447,7 @@ describe('hook recognition', () => {
         harnessRuntime.beforeEach(() => {
           // suite setup each
         });
-        harnessRuntime.it('test', () => {});
+        harnessRuntime.it('test', noop);
       });
     });
 
@@ -462,26 +466,26 @@ describe('complex scenarios', () => {
   it('should handle mix of tests, suites, hooks, and modifiers', () => {
     const suite = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Complex Suite', () => {
-        harnessRuntime.beforeAll(() => {});
-        harnessRuntime.beforeEach(() => {});
+        harnessRuntime.beforeAll(noop);
+        harnessRuntime.beforeEach(noop);
 
-        harnessRuntime.it('regular test', () => {});
-        harnessRuntime.test.skip('skipped test', () => {});
+        harnessRuntime.it('regular test', noop);
+        harnessRuntime.test.skip('skipped test', noop);
         harnessRuntime.test.todo('todo test');
 
         harnessRuntime.describe.skip('Skipped Inner Suite', () => {
-          harnessRuntime.it('inner test', () => {});
+          harnessRuntime.it('inner test', noop);
         });
 
         harnessRuntime.describe('Regular Inner Suite', () => {
-          harnessRuntime.beforeEach(() => {});
-          harnessRuntime.it('inner test 1', () => {});
-          harnessRuntime.test.only('focused inner test', () => {});
-          harnessRuntime.it('inner test 2', () => {});
-          harnessRuntime.afterEach(() => {});
+          harnessRuntime.beforeEach(noop);
+          harnessRuntime.it('inner test 1', noop);
+          harnessRuntime.test.only('focused inner test', noop);
+          harnessRuntime.it('inner test 2', noop);
+          harnessRuntime.afterEach(noop);
         });
 
-        harnessRuntime.afterAll(() => {});
+        harnessRuntime.afterAll(noop);
       });
     });
 
@@ -514,13 +518,13 @@ describe('complex scenarios', () => {
   it('should clear state between collectTests calls', () => {
     const suite1 = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Suite 1', () => {
-        harnessRuntime.it('test 1', () => {});
+        harnessRuntime.it('test 1', noop);
       });
     });
 
     const suite2 = harnessRuntime.collectTests(() => {
       harnessRuntime.describe('Suite 2', () => {
-        harnessRuntime.it('test 2', () => {});
+        harnessRuntime.it('test 2', noop);
       });
     });
 
