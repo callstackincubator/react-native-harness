@@ -1,6 +1,37 @@
+import { TestError, TestErrorCode } from './errors.js';
+
 type TestFn = () => void | Promise<void>;
 
 export type TestStatus = 'active' | 'skipped' | 'todo';
+
+const validateTestName = (name: string, functionName: string): void => {
+  if (!name || typeof name !== 'string' || name.trim() === '') {
+    throw new TestError(TestErrorCode.INVALID_TEST_NAME, functionName, {
+      name,
+    });
+  }
+};
+
+const validateTestFunction = (fn: TestFn, functionName: string): void => {
+  if (typeof fn !== 'function') {
+    throw new TestError(TestErrorCode.INVALID_FUNCTION, functionName, {
+      functionType: typeof fn,
+    });
+  }
+};
+
+const validateUniqueTestName = (
+  suite: TestSuite,
+  name: string,
+  functionName: string
+): void => {
+  if (suite.tests.some((test) => test.name === name)) {
+    throw new TestError(TestErrorCode.DUPLICATE_TEST_NAME, functionName, {
+      name,
+      suiteName: suite.name,
+    });
+  }
+};
 
 export type TestCase = {
   name: string;
@@ -39,35 +70,47 @@ const clearState = (): TestContext => {
 
 const getCurrentSuite = (): TestSuite | null => {
   if (!currentContext) {
-    throw new Error('Test context not initialized. Call collectTests() first.');
+    throw new TestError(
+      TestErrorCode.CONTEXT_NOT_INITIALIZED,
+      'getCurrentSuite'
+    );
   }
   return currentContext.currentSuite;
 };
 
 const getRootSuite = (): TestSuite => {
   if (!currentContext) {
-    throw new Error('Test context not initialized. Call collectTests() first.');
+    throw new TestError(TestErrorCode.CONTEXT_NOT_INITIALIZED, 'getRootSuite');
   }
   return currentContext.rootSuite;
 };
 
 const setCurrentSuite = (suite: TestSuite | null): void => {
   if (!currentContext) {
-    throw new Error('Test context not initialized. Call collectTests() first.');
+    throw new TestError(
+      TestErrorCode.CONTEXT_NOT_INITIALIZED,
+      'setCurrentSuite'
+    );
   }
   currentContext.currentSuite = suite;
 };
 
 const getHasFocusedTests = (): boolean => {
   if (!currentContext) {
-    throw new Error('Test context not initialized. Call collectTests() first.');
+    throw new TestError(
+      TestErrorCode.CONTEXT_NOT_INITIALIZED,
+      'getHasFocusedTests'
+    );
   }
   return currentContext.hasFocusedTests;
 };
 
 const setHasFocusedTests = (value: boolean): void => {
   if (!currentContext) {
-    throw new Error('Test context not initialized. Call collectTests() first.');
+    throw new TestError(
+      TestErrorCode.CONTEXT_NOT_INITIALIZED,
+      'setHasFocusedTests'
+    );
   }
   currentContext.hasFocusedTests = value;
 };
@@ -87,6 +130,9 @@ function createSuite(name: string, status: TestStatus = 'active'): TestSuite {
 
 export const describe = Object.assign(
   (name: string, fn: () => void) => {
+    validateTestName(name, 'describe');
+    validateTestFunction(fn, 'describe');
+
     const suite = createSuite(name);
     const previousSuite = getCurrentSuite();
 
@@ -115,6 +161,9 @@ export const describe = Object.assign(
   },
   {
     skip: (name: string, fn: () => void) => {
+      validateTestName(name, 'describe.skip');
+      validateTestFunction(fn, 'describe.skip');
+
       const suite = createSuite(name, 'skipped');
       const previousSuite = getCurrentSuite();
       setCurrentSuite(suite);
@@ -133,6 +182,9 @@ export const describe = Object.assign(
       }
     },
     only: (name: string, fn: () => void) => {
+      validateTestName(name, 'describe.only');
+      validateTestFunction(fn, 'describe.only');
+
       // Mark that we have focused tests in the test run
       setHasFocusedTests(true);
 
@@ -144,17 +196,26 @@ export const describe = Object.assign(
       if (previousSuite) {
         previousSuite._hasFocused = true;
 
-        // Skip sibling suites
-        for (const s of previousSuite.suites) {
-          s.status = 'skipped';
+        // Only skip sibling suites if this is the first focused suite at this level
+        // This allows multiple describe.only() calls to coexist
+        const hasOtherFocusedSiblings = previousSuite.suites.some(
+          (s) => s._hasFocused
+        );
+        if (!hasOtherFocusedSiblings) {
+          for (const s of previousSuite.suites) {
+            s.status = 'skipped';
+          }
         }
 
         previousSuite.status = 'active';
       } else {
-        // If this is at the root level, mark all existing suites as skipped
+        // If this is at the root level, only skip existing suites if no focused suites exist
         const rootSuite = getRootSuite();
-        for (const s of rootSuite.suites) {
-          s.status = 'skipped';
+        const hasFocusedSuites = rootSuite.suites.some((s) => s._hasFocused);
+        if (!hasFocusedSuites) {
+          for (const s of rootSuite.suites) {
+            s.status = 'skipped';
+          }
         }
       }
 
@@ -190,53 +251,82 @@ function createTest(
 
 export const test = Object.assign(
   (name: string, fn: TestFn) => {
+    validateTestName(name, 'test');
+    validateTestFunction(fn, 'test');
+
     const currentSuite = getCurrentSuite();
     if (!currentSuite) {
-      throw new Error('test() must be called within a describe() block');
+      throw new TestError(TestErrorCode.OUTSIDE_DESCRIBE_BLOCK, 'test');
     }
 
-    // If running tests directly, don't apply the hasFocusedTests check
-    // Tests only get skipped by `.only` in the same test suite
+    validateUniqueTestName(currentSuite, name, 'test');
+
+    // If the suite has focused tests, regular tests should be skipped
+    // This ensures only focused tests run when .only is used
     const status = currentSuite._hasFocused ? 'skipped' : 'active';
     currentSuite.tests.push(createTest(name, fn, status));
   },
   {
     skip: (name: string, fn: TestFn) => {
+      validateTestName(name, 'test.skip');
+      validateTestFunction(fn, 'test.skip');
+
       const currentSuite = getCurrentSuite();
       if (!currentSuite) {
-        throw new Error('test.skip() must be called within a describe() block');
+        throw new TestError(TestErrorCode.OUTSIDE_DESCRIBE_BLOCK, 'test.skip');
       }
+
+      validateUniqueTestName(currentSuite, name, 'test.skip');
       currentSuite.tests.push(createTest(name, fn, 'skipped'));
     },
     only: (name: string, fn: TestFn) => {
+      validateTestName(name, 'test.only');
+      validateTestFunction(fn, 'test.only');
+
       const currentSuite = getCurrentSuite();
       if (!currentSuite) {
-        throw new Error('test.only() must be called within a describe() block');
+        throw new TestError(TestErrorCode.OUTSIDE_DESCRIBE_BLOCK, 'test.only');
+      }
+
+      validateUniqueTestName(currentSuite, name, 'test.only');
+
+      // If this is the first focused test, mark all existing non-todo tests as skipped
+      if (!currentSuite._hasFocused) {
+        for (const test of currentSuite.tests) {
+          if (test.status !== 'todo') {
+            test.status = 'skipped';
+          }
+        }
       }
 
       // Mark the suite as having focused tests
       currentSuite._hasFocused = true;
 
-      // Mark all existing tests in this suite as skipped, but preserve todo status
-      for (const test of currentSuite.tests) {
-        if (test.status !== 'todo') {
-          test.status = 'skipped';
-        }
-      }
-
-      // Add the new focused test
+      // Add the new focused test (always active)
       const newTest = createTest(name, fn, 'active');
       currentSuite.tests.push(newTest);
 
-      // All subsequent tests in this suite will be skipped
+      // All subsequent non-focused tests in this suite will be skipped
       // This happens automatically because of the _hasFocused flag
     },
     todo: (name: string) => {
+      validateTestName(name, 'test.todo');
+
       const currentSuite = getCurrentSuite();
       if (!currentSuite) {
-        throw new Error('test.todo() must be called within a describe() block');
+        throw new TestError(TestErrorCode.OUTSIDE_DESCRIBE_BLOCK, 'test.todo');
       }
-      currentSuite.tests.push(createTest(name, () => {}, 'todo'));
+
+      validateUniqueTestName(currentSuite, name, 'test.todo');
+      currentSuite.tests.push(
+        createTest(
+          name,
+          () => {
+            // Empty function for todo tests
+          },
+          'todo'
+        )
+      );
     },
   }
 );
@@ -244,33 +334,41 @@ export const test = Object.assign(
 export const it = test;
 
 export function beforeAll(fn: TestFn) {
+  validateTestFunction(fn, 'beforeAll');
+
   const currentSuite = getCurrentSuite();
   if (!currentSuite) {
-    throw new Error('beforeAll() must be called within a describe() block');
+    throw new TestError(TestErrorCode.OUTSIDE_DESCRIBE_BLOCK, 'beforeAll');
   }
   currentSuite.beforeAll.push(fn);
 }
 
 export function afterAll(fn: TestFn) {
+  validateTestFunction(fn, 'afterAll');
+
   const currentSuite = getCurrentSuite();
   if (!currentSuite) {
-    throw new Error('afterAll() must be called within a describe() block');
+    throw new TestError(TestErrorCode.OUTSIDE_DESCRIBE_BLOCK, 'afterAll');
   }
   currentSuite.afterAll.push(fn);
 }
 
 export function beforeEach(fn: TestFn) {
+  validateTestFunction(fn, 'beforeEach');
+
   const currentSuite = getCurrentSuite();
   if (!currentSuite) {
-    throw new Error('beforeEach() must be called within a describe() block');
+    throw new TestError(TestErrorCode.OUTSIDE_DESCRIBE_BLOCK, 'beforeEach');
   }
   currentSuite.beforeEach.push(fn);
 }
 
 export function afterEach(fn: TestFn) {
+  validateTestFunction(fn, 'afterEach');
+
   const currentSuite = getCurrentSuite();
   if (!currentSuite) {
-    throw new Error('afterEach() must be called within a describe() block');
+    throw new TestError(TestErrorCode.OUTSIDE_DESCRIBE_BLOCK, 'afterEach');
   }
   currentSuite.afterEach.push(fn);
 }
