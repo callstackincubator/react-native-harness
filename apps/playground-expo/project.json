@@ -1,0 +1,16 @@
+{
+    "targets": {
+        "start": {
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "react-native-harness:build",
+                "@react-native-harness/metro:build",
+                "@react-native-harness/runtime:build"
+            ],
+            "options": {
+                "command": "node ../../packages/cli/dist/index.js",
+                "cwd": "apps/playground-expo"
+            }
+        }
+    }
+}

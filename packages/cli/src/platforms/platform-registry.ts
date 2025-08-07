@@ -1,10 +1,12 @@
 import { PlatformAdapter } from './platform-adapter.js';
 import androidPlatformAdapter from './android/index.js';
 import iosPlatformAdapter from './ios/index.js';
+import webPlatformAdapter from './web/index.js';
 
 const platformAdapters = {
   android: androidPlatformAdapter,
   ios: iosPlatformAdapter,
+  web: webPlatformAdapter,
 };
 
 export const getPlatformAdapter = async (

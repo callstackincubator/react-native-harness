@@ -5,7 +5,7 @@ import { runSuite } from './runner.js';
 import { state } from './state.js';
 import { Platform } from 'react-native';
 
-const clientUrl = Platform.OS === 'ios' ? 'ws://localhost:3001' : 'ws://10.0.2.2:3001';
+const clientUrl = Platform.OS === 'android' ? 'ws://10.0.2.2:3001' : 'ws://localhost:3001';
 
 const consumeTestModule = async (fileName: string) => {
   const moduleJs = await fetchModule(fileName);

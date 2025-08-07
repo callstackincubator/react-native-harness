@@ -1,59 +1,99 @@
-// import path from 'path';
-// import { runWebpack } from '../../bundlers/webpack.js';
-// import { PlatformAdapter } from '../platform-adapter.js';
-// import { killWithAwait } from '../../process.js';
-// import { Browser, firefox, Page } from 'playwright';
-// import { Config } from '@react-native-harness/config';
+import { TestRunnerConfig, WebTestRunnerConfig, assertWebRunnerConfig } from '@react-native-harness/config';
+import { logger } from '@react-native-harness/tools';
+import { getInteractionEngine } from '@react-native-harness/interaction-engine';
+import { Browser, chromium, firefox, Page, webkit } from 'playwright';
+import { PlatformAdapter } from '../platform-adapter.js';
+import { runMetro } from '../../bundlers/metro.js';
 
-// const runBrowser = async (
-//   url: string
-// ): Promise<{ browser: Browser; page: Page }> => {
-//   const browser = await firefox.launch({
-//     headless: false,
-//     devtools: false,
-//     args: [
-//       '--no-sandbox',
-//       '--disable-setuid-sandbox',
-//       '--disable-dev-shm-usage',
-//       '--disable-web-security',
-//       '--allow-insecure-localhost',
-//       '--ignore-certificate-errors',
-//     ],
-//     ignoreDefaultArgs: ['--disable-extensions'],
-//   });
+const runBrowser = async (
+  url: string,
+  browserType: WebTestRunnerConfig['browser']
+): Promise<{ browser: Browser; page: Page }> => {
+  // For now, we're only supporting Firefox, but this will be expanded
+  // to support other browsers based on the config
+  let browser: Browser;
+  
+  switch (browserType) {
+    case 'firefox':
+      browser = await firefox.launch({
+        headless: false,
+        devtools: false,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-web-security',
+          '--allow-insecure-localhost',
+          '--ignore-certificate-errors',
+        ],
+        ignoreDefaultArgs: ['--disable-extensions'],
+      });
+      break;
+    case 'chrome':
+      browser = await chromium.launch({
+        headless: false,
+        devtools: false,
+      });
+      break;
+    case 'safari':
+      browser = await webkit.launch({
+        headless: false,
+        devtools: false,
+      });
+      break;
+    default:
+      throw new Error(`Unsupported browser type: ${browserType}`);
+  }
 
-//   const context = await browser.newContext({
-//     bypassCSP: true,
-//     ignoreHTTPSErrors: true,
-//   });
+  const context = await browser.newContext({
+    bypassCSP: true,
+    ignoreHTTPSErrors: true,
+  });
 
-//   const page = await context.newPage();
+  const page = await context.newPage();
 
-//   await page.setViewportSize({ width: 1280, height: 720 });
+  await page.setViewportSize({ width: 1280, height: 720 });
 
-//   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-//   return { browser, page };
-// };
+  return { browser, page };
+};
 
-// export const webPlatformAdapter: PlatformAdapter = {
-//   name: 'web',
-//   getEnvironment: async (_config: Config) => {
-//     const webpackConfigPath = path.resolve(process.cwd(), 'webpack.config.js');
-//     const webpack = await runWebpack(webpackConfigPath);
+export const webPlatformAdapter: PlatformAdapter = {
+  name: 'web',
+  getEnvironment: async (runner: TestRunnerConfig) => {
+    assertWebRunnerConfig(runner);
+    
+    logger.debug('Starting web environment');
+    
+    const interactionEnginePromise = getInteractionEngine(runner);
 
-//     const { browser, page } = await runBrowser('http://localhost:8081');
+    logger.debug('Running metro');
+    const metro = await runMetro(true);
+    logger.debug('Metro running');
 
-//     return {
-//       restart: async () => {
-//         await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
-//       },
-//       dispose: async () => {
-//         await browser.close();
-//         await killWithAwait(webpack);
-//       },
-//     };
-//   },
-// };
+    logger.debug(`Running browser: ${runner.browser}`);
+    const { browser, page } = await runBrowser('http://localhost:8081', runner.browser);
+    logger.debug('Browser running');
+    
+    logger.debug('Waiting for interaction engine to start');
+    const interactionEngine = await interactionEnginePromise;
+    logger.debug('Interaction engine started');
 
-// export default webPlatformAdapter;
+    return {
+      restart: async () => {
+        logger.debug('Reloading page');
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
+      },
+      dispose: async () => {
+        logger.debug('Closing browser');
+        await browser.close();
+        await interactionEngine.close();
+        metro.kill();
+      },
+      interactionEngine,
+    };
+  },
+};
+
+export default webPlatformAdapter;

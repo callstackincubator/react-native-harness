@@ -1,6 +1,6 @@
 import { type ChildProcess } from 'node:child_process';
 import { getInteractionEngine } from '@react-native-harness/interaction-engine';
-import { TestRunnerConfig } from '@react-native-harness/config';
+import { assertNativeRunnerConfig, TestRunnerConfig } from '@react-native-harness/config';
 import { logger } from '@react-native-harness/tools';
 
 import { type PlatformAdapter } from '../platform-adapter.js';
@@ -18,7 +18,9 @@ import { AppNotInstalledError } from '../../errors/appNotInstalledError.js';
 
 const androidPlatformAdapter: PlatformAdapter = {
   name: 'android',
-  getEnvironment: async (runner: TestRunnerConfig) => {
+  getEnvironment: async (runner: TestRunnerConfig) => { 
+    assertNativeRunnerConfig(runner);
+
     let emulator: ChildProcess | null = null;
     const emulatorStatus = await getEmulatorStatus(runner.deviceId);
     logger.debug(`Emulator status: ${emulatorStatus}`);

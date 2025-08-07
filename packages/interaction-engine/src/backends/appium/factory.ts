@@ -1,6 +1,6 @@
 import { remote } from 'webdriverio';
 import { InteractionEngine } from '../../types.js';
-import { TestRunnerConfig } from '@react-native-harness/config';
+import { assertNativeRunnerConfig, TestRunnerConfig } from '@react-native-harness/config';
 import { UIBackendFactory } from '../types.js';
 import { createAppiumInteractionEngine } from './engine.js';
 import { runAppiumServer } from './server.js';
@@ -10,6 +10,8 @@ const APPIUM_PORT = 4723;
 const getAppiumInteractionEngine = async (
   runner: TestRunnerConfig,
 ): Promise<InteractionEngine> => {
+  assertNativeRunnerConfig(runner);
+
   const capabilities = {
     // TODO: Function?
     platformName: runner.platform === 'ios' ? 'iOS' : 'Android',

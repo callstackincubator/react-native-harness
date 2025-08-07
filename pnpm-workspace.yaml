@@ -2,10 +2,13 @@ packages:
   - packages/*
   - apps/*
 onlyBuiltDependencies:
+  - '@apollo/protobufjs'
   - '@swc/core'
   - appium
   - edgedriver
+  - electron
   - esbuild
   - geckodriver
   - nx
   - sharp
+  - sqlite3

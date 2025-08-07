@@ -1,5 +1,5 @@
 import { getInteractionEngine } from '@react-native-harness/interaction-engine';
-import { TestRunnerConfig } from '@react-native-harness/config';
+import { assertNativeRunnerConfig, TestRunnerConfig } from '@react-native-harness/config';
 import { type PlatformAdapter } from '../platform-adapter.js';
 import { getSimulatorStatus, runSimulator, stopSimulator } from './simulator.js';
 import { isAppInstalled, runApp, killApp } from './build.js';
@@ -10,6 +10,8 @@ import { AppNotInstalledError } from '../../errors/appNotInstalledError.js';
 const iosPlatformAdapter: PlatformAdapter = {
   name: 'ios',
   getEnvironment: async (runner: TestRunnerConfig) => {
+    assertNativeRunnerConfig(runner);
+
     let shouldStopSimulator = false;
     const simulatorStatus = await getSimulatorStatus(runner.deviceId);
     const metroPromise = runMetro();

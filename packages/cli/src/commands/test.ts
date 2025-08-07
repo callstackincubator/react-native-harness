@@ -18,6 +18,7 @@ import { intro, logger, outro, spinner } from '@react-native-harness/tools';
 import { type Environment } from '../platforms/platform-adapter.js';
 import { AppNotInstalledError } from '../errors/appNotInstalledError.js';
 import { BridgeTimeoutError } from '../errors/bridgeTimeoutError.js';
+import { promptConfirm } from '@react-native-harness/tools';
 
 type TestRunContext = {
     config: Config;
@@ -116,7 +117,10 @@ const runTests = async (context: TestRunContext): Promise<void> => {
 
         const result = await client.runTests(testFile);
         if (result.error) {
-            throw new Error(String(result.error));
+            await promptConfirm({
+                message: 'An error occurred. Do you want to continue?',
+            });
+            throw new Error(JSON.stringify(result.error));
         }
 
         context.results.push(...result.suites);

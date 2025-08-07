@@ -1,11 +1,12 @@
 import { type ChildProcess } from 'node:child_process';
-import { getReactNativeCliPath, getTimeoutSignal, spawn } from '@react-native-harness/tools';
+import { getReactNativeCliPath, getExpoCliPath, getTimeoutSignal, spawn } from '@react-native-harness/tools';
 
-export const runMetro = async (): Promise<ChildProcess> => {
-  const metro = spawn('node', [getReactNativeCliPath(), 'start'], {
+export const runMetro = async (isExpo = false): Promise<ChildProcess> => {
+  const metro = spawn('node', [isExpo ? getExpoCliPath() : getReactNativeCliPath(), 'start'], {
     env: {
       ...process.env,
       RN_HARNESS: 'true',
+      ...(isExpo && { EXPO_NO_METRO_WORKSPACE_ROOT: 'true' }),
     },
   });
   const nodeChildProcess = await metro.nodeChildProcess;

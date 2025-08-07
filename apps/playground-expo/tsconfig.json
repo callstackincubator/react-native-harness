@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "../../packages/metro"
+    },
+    {
+      "path": "../../packages/cli"
+    },
+    {
+      "path": "../../packages/runtime"
+    },
+    {
+      "path": "./tsconfig.app.json"
+    }
+  ]
+}
