@@ -16,10 +16,13 @@ const monorepoRoot = path.resolve(projectRoot, '../..');
  */
 const customConfig = {
   cacheVersion: '@react-native-harness/playground',
+  resolver: {
+    unstable_enablePackageExports: true,
+  },
 };
 
 module.exports = withNxMetro(
-  mergeConfig(withRnHarness(defaultConfig), customConfig),
+  withRnHarness(mergeConfig(defaultConfig, customConfig)),
   {
     watchFolders: [monorepoRoot],
     nodeModulesPaths: [

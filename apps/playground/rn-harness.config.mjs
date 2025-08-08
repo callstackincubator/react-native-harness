@@ -1,5 +1,5 @@
 const config = {
-  include: './withUI.test.tsx',
+  include: ['./*.harness.ts'],
 
   runners: [
     {

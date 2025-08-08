@@ -1,1 +1,1 @@
-export { mock, requireActual } from '../mock.js';
+export { mock, requireActual, clearMocks } from '../mock.js';
