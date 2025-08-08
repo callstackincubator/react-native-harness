@@ -1,11 +1,18 @@
 import { getInteractionEngine } from '@react-native-harness/interaction-engine';
-import { assertNativeRunnerConfig, TestRunnerConfig } from '@react-native-harness/config';
+import {
+  assertNativeRunnerConfig,
+  TestRunnerConfig,
+} from '@react-native-harness/config';
 import { type PlatformAdapter } from '../platform-adapter.js';
-import { getSimulatorStatus, runSimulator, stopSimulator } from './simulator.js';
+import {
+  getSimulatorStatus,
+  runSimulator,
+  stopSimulator,
+} from './simulator.js';
 import { isAppInstalled, runApp, killApp } from './build.js';
 import { killWithAwait } from '../../process.js';
 import { runMetro } from '../../bundlers/metro.js';
-import { AppNotInstalledError } from '../../errors/appNotInstalledError.js';
+import { AppNotInstalledError } from '../../errors/errors.js';
 
 const iosPlatformAdapter: PlatformAdapter = {
   name: 'ios',
@@ -22,10 +29,7 @@ const iosPlatformAdapter: PlatformAdapter = {
       shouldStopSimulator = true;
     }
 
-    const isInstalled = await isAppInstalled(
-      runner.deviceId,
-      runner.bundleId
-    );
+    const isInstalled = await isAppInstalled(runner.deviceId, runner.bundleId);
 
     if (!isInstalled) {
       throw new AppNotInstalledError(runner.deviceId, runner.bundleId, 'ios');

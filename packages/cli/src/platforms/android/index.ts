@@ -1,6 +1,9 @@
 import { type ChildProcess } from 'node:child_process';
 import { getInteractionEngine } from '@react-native-harness/interaction-engine';
-import { assertNativeRunnerConfig, TestRunnerConfig } from '@react-native-harness/config';
+import {
+  assertNativeRunnerConfig,
+  TestRunnerConfig,
+} from '@react-native-harness/config';
 import { logger } from '@react-native-harness/tools';
 
 import { type PlatformAdapter } from '../platform-adapter.js';
@@ -14,11 +17,11 @@ import {
 import { runApp, killApp } from './build.js';
 import { killWithAwait } from '../../process.js';
 import { runMetro } from '../../bundlers/metro.js';
-import { AppNotInstalledError } from '../../errors/appNotInstalledError.js';
+import { AppNotInstalledError } from '../../errors/errors.js';
 
 const androidPlatformAdapter: PlatformAdapter = {
   name: 'android',
-  getEnvironment: async (runner: TestRunnerConfig) => { 
+  getEnvironment: async (runner: TestRunnerConfig) => {
     assertNativeRunnerConfig(runner);
 
     let emulator: ChildProcess | null = null;
@@ -52,7 +55,11 @@ const androidPlatformAdapter: PlatformAdapter = {
     logger.debug(`App is installed: ${isInstalled}`);
 
     if (!isInstalled) {
-      throw new AppNotInstalledError(runner.deviceId, runner.bundleId, 'android');
+      throw new AppNotInstalledError(
+        runner.deviceId,
+        runner.bundleId,
+        'android'
+      );
     }
 
     logger.debug('Waiting for Metro to start');
