@@ -12,7 +12,8 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    }
+    },
+    "./moduleSystem": "./assets/moduleSystem.flow.js"
   },
   "peerDependencies": {
     "react": "~18.3.1",
@@ -20,7 +21,6 @@
   },
   "dependencies": {
     "@react-native-harness/bridge": "workspace:*",
-    "@react-native-harness/tools": "workspace:*",
     "chai": "^5.2.0",
     "chai-as-promised": "^8.0.1",
     "event-target-shim": "^6.0.2",

@@ -8,14 +8,17 @@ export const withRnHarness = (
     return config;
   }
 
+  require('metro-config/src/defaults/defaults').moduleSystem = require.resolve(
+    '@react-native-harness/runtime/moduleSystem',
+    { paths: [process.cwd()] }
+  );
+
   return mergeConfig(config, {
     serializer: {
-      getPolyfills: (polyfillOptions) => {
-        return [
-          ...(config.serializer?.getPolyfills?.(polyfillOptions) ?? []),
-          // require.resolve('./init.js'),
-        ];
-      },
+      getPolyfills: (...args) => [
+        ...(config.serializer?.getPolyfills?.(...args) ?? []),
+        require.resolve('../assets/init.js'),
+      ],
     },
   });
 };

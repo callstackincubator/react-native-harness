@@ -16,5 +16,6 @@ export {
   beforeEach,
   afterEach,
 } from './collector/functions.js';
+export { mock, requireActual } from './rntl/mock.js';
 export { UI } from './ui/UI.js';
 export { getEntryComponent } from './getEntryComponent.js';

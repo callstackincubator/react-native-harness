@@ -13,9 +13,6 @@
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "references": [
     {
-      "path": "../tools/tsconfig.lib.json"
-    },
-    {
       "path": "../bridge/tsconfig.lib.json"
     },
     {
