@@ -1,51 +1,62 @@
-import {View, Text, Image, StyleSheet, ActivityIndicator, StatusBar, Platform, LogBox} from 'react-native';
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  ActivityIndicator,
+  StatusBar,
+  Platform,
+} from 'react-native';
 import { ComponentType, memo, ReactNode, useEffect } from 'react';
 import { useStore } from 'zustand/react';
 import { state } from '../state.js';
-
-LogBox.ignoreAllLogs(true);
+import { LOGO_IMAGE } from '../constants.js';
 
 export type ComponentHarnessOptions = {
   wrapper: ComponentType<{ children: ReactNode }>;
-}
+};
 
 export type ComponentHarnessProps = {
   element: ReactNode;
   options: ComponentHarnessOptions;
-}
+};
 
-const ComponentHarness = memo(function ComponentHarness({ element, options }: ComponentHarnessProps) {
+const ComponentHarness = memo(function ComponentHarness({
+  element,
+  options,
+}: ComponentHarnessProps) {
   const Wrapper = options.wrapper ?? View;
 
   return (
-    <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}>
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
       <Wrapper>{element}</Wrapper>
     </View>
   );
 });
 
 export const UI = () => {
-  const {componentHarness, status, bootstrap} = useStore(state);
+  const { componentHarness, status, bootstrap } = useStore(state);
 
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
 
   if (componentHarness) {
-    return <ComponentHarness element={componentHarness.node} options={componentHarness.options as ComponentHarnessOptions} />;
+    return (
+      <ComponentHarness
+        element={componentHarness.node}
+        options={componentHarness.options as ComponentHarnessOptions}
+      />
+    );
   }
 
   return (
     <View style={styles.container}>
       <View style={styles.contentContainer}>
         <View style={styles.logoContainer}>
-          <Image
-            style={styles.logo} 
-          />
+          <Image style={styles.logo} source={LOGO_IMAGE} />
         </View>
-        <Text style={styles.title}>
-          React Native Harness
-        </Text>
+        <Text style={styles.title}>React Native Harness</Text>
 
         {status === 'idle' ? (
           <View style={styles.statusIndicator}>
@@ -54,7 +65,11 @@ export const UI = () => {
           </View>
         ) : status === 'loading' ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#3b82f6" style={styles.loadingSpinner} />
+            <ActivityIndicator
+              size="small"
+              color="#3b82f6"
+              style={styles.loadingSpinner}
+            />
             <Text style={styles.loadingText}>Loading...</Text>
           </View>
         ) : (
@@ -110,7 +125,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 1,
     marginBottom: 8,
-
   },
   subtitle: {
     fontSize: 16,
@@ -138,7 +152,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#22d3ee',
     marginRight: 8,
     shadowColor: '#22d3ee',
-    shadowOffset: {width: 0, height: 0},
+    shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 4,
   },
