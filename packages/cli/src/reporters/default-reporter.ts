@@ -1,17 +1,15 @@
-import chalk from 'chalk';
+import { color, spinner } from '@react-native-harness/tools';
 import type { SuiteResult, TestResult } from '@react-native-harness/bridge';
 import { Reporter } from '@react-native-harness/config';
 
 export const defaultReporter: Reporter = {
   report: async (results) => {
-    console.log('\n📋 Test Results:');
-    console.log(chalk.gray('━'.repeat(40)));
+    const resultsSpinner = spinner();
+    resultsSpinner.start('Test Results');
 
     for (const suite of results) {
-      console.log(formatSuiteResult(suite));
+      resultsSpinner.message(formatSuiteResult(suite));
     }
-
-    console.log(chalk.gray('━'.repeat(40)));
 
     // Summary
     let totalPassed = 0,
@@ -29,32 +27,33 @@ export const defaultReporter: Reporter = {
       totalDuration += suite.duration || 0;
     }
 
-    console.log(
-      `\n📊 Summary: ${chalk.green(`${totalPassed} passed`)}, ${chalk.red(
-        `${totalFailed} failed`
-      )}, ${chalk.yellow(`${totalSkipped} skipped`)}, ${chalk.blue(
-        `${totalTodo} todo`
-      )}`
-    );
-    console.log(`⏱️  Total time: ${formatDuration(totalDuration)}`);
+    const summaryText = [
+      color.green(`${totalPassed} passed`),
+      color.red(`${totalFailed} failed`),
+      color.yellow(`${totalSkipped} skipped`),
+      color.blue(`${totalTodo} todo`),
+    ].join(', ');
+
+    resultsSpinner.message(`Summary: ${summaryText}`);
+    resultsSpinner.message(`Total time: ${formatDuration(totalDuration)}`);
   },
 };
 
 const formatDuration = (duration?: number): string => {
-  if (!duration) return '';
-  return chalk.gray(` (${duration}ms)`);
+  if (duration == null) return '';
+  return color.dim(` (${duration}ms)`);
 };
 
 const getStatusIcon = (status: string): string => {
   switch (status) {
     case 'passed':
-      return chalk.green('✓');
+      return color.green('✓');
     case 'failed':
-      return chalk.red('✗');
+      return color.red('✗');
     case 'skipped':
-      return chalk.yellow('○');
+      return color.yellow('○');
     case 'todo':
-      return chalk.blue('◐');
+      return color.blue('◐');
     default:
       return '?';
   }
@@ -62,7 +61,7 @@ const getStatusIcon = (status: string): string => {
 
 const formatTestResult = (test: TestResult, indent = ''): string => {
   const icon = getStatusIcon(test.status);
-  const name = test.status === 'failed' ? chalk.red(test.name) : test.name;
+  const name = test.status === 'failed' ? color.red(test.name) : test.name;
   const duration = formatDuration(test.duration);
 
   let result = `${indent}${icon} ${name}${duration}`;
@@ -72,7 +71,7 @@ const formatTestResult = (test: TestResult, indent = ''): string => {
     result +=
       '\n' +
       errorLines
-        .map((line: string) => `${indent}  ${chalk.red(line)}`)
+        .map((line: string) => `${indent}  ${color.red(line)}`)
         .join('\n');
   }
 
@@ -82,7 +81,7 @@ const formatTestResult = (test: TestResult, indent = ''): string => {
 const formatSuiteResult = (suite: SuiteResult, indent = ''): string => {
   const icon = getStatusIcon(suite.status);
   const name =
-    suite.status === 'failed' ? chalk.red(suite.name) : chalk.bold(suite.name);
+    suite.status === 'failed' ? color.red(suite.name) : color.bold(suite.name);
   const duration = formatDuration(suite.duration);
 
   let result = `${indent}${icon} ${name}${duration}`;
@@ -92,7 +91,7 @@ const formatSuiteResult = (suite: SuiteResult, indent = ''): string => {
     result +=
       '\n' +
       errorLines
-        .map((line: string) => `${indent}  ${chalk.red(line)}`)
+        .map((line: string) => `${indent}  ${color.red(line)}`)
         .join('\n');
   }
 

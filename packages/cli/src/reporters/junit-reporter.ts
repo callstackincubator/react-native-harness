@@ -1,159 +1,176 @@
-import { Reporter } from "@react-native-harness/config";
+import { Reporter } from '@react-native-harness/config';
 import type { SuiteResult, TestResult } from '@react-native-harness/bridge';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
 export const junitReporter: Reporter = {
-    report: async (results) => {
-        const xml = generateJUnitXML(results);
+  report: async (results) => {
+    const xml = generateJUnitXML(results);
 
-        // Write to junit.xml file
-        const outputPath = join(process.cwd(), 'junit.xml');
-        writeFileSync(outputPath, xml, 'utf8');
+    // Write to junit.xml file
+    const outputPath = join(process.cwd(), 'junit.xml');
+    writeFileSync(outputPath, xml, 'utf8');
 
-        console.log(`📄 JUnit report written to: ${outputPath}`);
-    }
+    console.log(`📄 JUnit report written to: ${outputPath}`);
+  },
 };
 
 const generateJUnitXML = (results: SuiteResult[]): string => {
-    const { totalTests, totalFailures, totalSkipped, totalTime } = calculateTotals(results);
+  const { totalTests, totalFailures, totalSkipped, totalTime } =
+    calculateTotals(results);
 
-    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-    xml += `<testsuites tests="${totalTests}" failures="${totalFailures}" skipped="${totalSkipped}" time="${totalTime / 1000}">\n`;
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xml += `<testsuites tests="${totalTests}" failures="${totalFailures}" skipped="${totalSkipped}" time="${
+    totalTime / 1000
+  }">\n`;
 
-    for (const suite of results) {
-        xml += generateTestSuiteXML(suite, '  ');
-    }
+  for (const suite of results) {
+    xml += generateTestSuiteXML(suite, '  ');
+  }
 
-    xml += '</testsuites>\n';
+  xml += '</testsuites>\n';
 
-    return xml;
+  return xml;
 };
 
 const generateTestSuiteXML = (suite: SuiteResult, indent: string): string => {
-    const { tests, failures, skipped, time } = getSuiteStats(suite);
+  const { tests, failures, skipped, time } = getSuiteStats(suite);
 
-    let xml = `${indent}<testsuite name="${escapeXML(suite.name)}" tests="${tests}" failures="${failures}" skipped="${skipped}" time="${time / 1000}"`;
+  let xml = `${indent}<testsuite name="${escapeXML(
+    suite.name
+  )}" tests="${tests}" failures="${failures}" skipped="${skipped}" time="${
+    time / 1000
+  }"`;
 
-    if (suite.error) {
-        xml += ` errors="1"`;
+  if (suite.error) {
+    xml += ` errors="1"`;
+  }
+
+  xml += '>\n';
+
+  // Add suite-level error if present
+  if (suite.error) {
+    xml += `${indent}  <error message="${escapeXML(
+      suite.error.message || 'Suite failed'
+    )}"`;
+    if (suite.error.name) {
+      xml += ` type="${escapeXML(suite.error.name)}"`;
     }
-
-    xml += '>\n';
-
-    // Add suite-level error if present
-    if (suite.error) {
-        xml += `${indent}  <error message="${escapeXML(suite.error.message || 'Suite failed')}"`;
-        if (suite.error.name) {
-            xml += ` type="${escapeXML(suite.error.name)}"`;
-        }
-        xml += '>';
-        if (suite.error.stack) {
-            xml += escapeXML(suite.error.stack);
-        }
-        xml += '</error>\n';
+    xml += '>';
+    if (suite.error.stack) {
+      xml += escapeXML(suite.error.stack);
     }
+    xml += '</error>\n';
+  }
 
-    // Add individual test cases
-    for (const test of suite.tests) {
-        xml += generateTestCaseXML(test, indent + '  ');
-    }
+  // Add individual test cases
+  for (const test of suite.tests) {
+    xml += generateTestCaseXML(test, indent + '  ');
+  }
 
-    // Add nested suites
-    for (const nestedSuite of suite.suites) {
-        xml += generateTestSuiteXML(nestedSuite, indent + '  ');
-    }
+  // Add nested suites
+  for (const nestedSuite of suite.suites) {
+    xml += generateTestSuiteXML(nestedSuite, indent + '  ');
+  }
 
-    xml += `${indent}</testsuite>\n`;
+  xml += `${indent}</testsuite>\n`;
 
-    return xml;
+  return xml;
 };
 
 const generateTestCaseXML = (test: TestResult, indent: string): string => {
-    const time = (test.duration || 0) / 1000;
-    let xml = `${indent}<testcase name="${escapeXML(test.name)}" time="${time}"`;
+  const time = (test.duration || 0) / 1000;
+  let xml = `${indent}<testcase name="${escapeXML(test.name)}" time="${time}"`;
 
-    if (test.status === 'passed') {
-        xml += '/>\n';
-    } else {
-        xml += '>\n';
+  if (test.status === 'passed') {
+    xml += '/>\n';
+  } else {
+    xml += '>\n';
 
-        switch (test.status) {
-            case 'failed':
-                xml += `${indent}  <failure message="${escapeXML(test.error?.message || 'Test failed')}"`;
-                if (test.error?.name) {
-                    xml += ` type="${escapeXML(test.error.name)}"`;
-                }
-                xml += '>';
-                if (test.error?.stack) {
-                    xml += escapeXML(test.error.stack);
-                }
-                xml += '</failure>\n';
-                break;
-            case 'skipped':
-                xml += `${indent}  <skipped/>\n`;
-                break;
-            case 'todo':
-                xml += `${indent}  <skipped message="TODO: Test not implemented"/>\n`;
-                break;
+    switch (test.status) {
+      case 'failed':
+        xml += `${indent}  <failure message="${escapeXML(
+          test.error?.message || 'Test failed'
+        )}"`;
+        if (test.error?.name) {
+          xml += ` type="${escapeXML(test.error.name)}"`;
         }
-
-        xml += `${indent}</testcase>\n`;
+        xml += '>';
+        if (test.error?.stack) {
+          xml += escapeXML(test.error.stack);
+        }
+        xml += '</failure>\n';
+        break;
+      case 'skipped':
+        xml += `${indent}  <skipped/>\n`;
+        break;
+      case 'todo':
+        xml += `${indent}  <skipped message="TODO: Test not implemented"/>\n`;
+        break;
     }
 
-    return xml;
+    xml += `${indent}</testcase>\n`;
+  }
+
+  return xml;
 };
 
-const calculateTotals = (results: SuiteResult[]): {
-    totalTests: number;
-    totalFailures: number;
-    totalSkipped: number;
-    totalTime: number;
+const calculateTotals = (
+  results: SuiteResult[]
+): {
+  totalTests: number;
+  totalFailures: number;
+  totalSkipped: number;
+  totalTime: number;
 } => {
-    let totalTests = 0;
-    let totalFailures = 0;
-    let totalSkipped = 0;
-    let totalTime = 0;
+  let totalTests = 0;
+  let totalFailures = 0;
+  let totalSkipped = 0;
+  let totalTime = 0;
 
-    for (const suite of results) {
-        const stats = getSuiteStats(suite);
-        totalTests += stats.tests;
-        totalFailures += stats.failures;
-        totalSkipped += stats.skipped;
-        totalTime += stats.time;
-    }
+  for (const suite of results) {
+    const stats = getSuiteStats(suite);
+    totalTests += stats.tests;
+    totalFailures += stats.failures;
+    totalSkipped += stats.skipped;
+    totalTime += stats.time;
+  }
 
-    return { totalTests, totalFailures, totalSkipped, totalTime };
+  return { totalTests, totalFailures, totalSkipped, totalTime };
 };
 
-const getSuiteStats = (suite: SuiteResult): {
-    tests: number;
-    failures: number;
-    skipped: number;
-    time: number;
+const getSuiteStats = (
+  suite: SuiteResult
+): {
+  tests: number;
+  failures: number;
+  skipped: number;
+  time: number;
 } => {
-    let tests = suite.tests.length;
-    let failures = suite.tests.filter(t => t.status === 'failed').length;
-    let skipped = suite.tests.filter(t => t.status === 'skipped' || t.status === 'todo').length;
-    let time = suite.duration || 0;
+  let tests = suite.tests.length;
+  let failures = suite.tests.filter((t) => t.status === 'failed').length;
+  let skipped = suite.tests.filter(
+    (t) => t.status === 'skipped' || t.status === 'todo'
+  ).length;
+  let time = suite.duration || 0;
 
-    // Add stats from nested suites
-    for (const nestedSuite of suite.suites) {
-        const nestedStats = getSuiteStats(nestedSuite);
-        tests += nestedStats.tests;
-        failures += nestedStats.failures;
-        skipped += nestedStats.skipped;
-        time += nestedStats.time;
-    }
+  // Add stats from nested suites
+  for (const nestedSuite of suite.suites) {
+    const nestedStats = getSuiteStats(nestedSuite);
+    tests += nestedStats.tests;
+    failures += nestedStats.failures;
+    skipped += nestedStats.skipped;
+    time += nestedStats.time;
+  }
 
-    return { tests, failures, skipped, time };
+  return { tests, failures, skipped, time };
 };
 
 const escapeXML = (str: string): string => {
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 };
