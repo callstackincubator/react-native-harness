@@ -7,6 +7,35 @@ async function runHooks(hooks: (() => void | Promise<void>)[]): Promise<void> {
   }
 }
 
+function collectInheritedHooks(
+  suite: TestSuite,
+  hookType: 'beforeEach' | 'afterEach'
+): (() => void | Promise<void>)[] {
+  const hooks: (() => void | Promise<void>)[] = [];
+  const suiteChain: TestSuite[] = [];
+
+  // Collect all suites from current to root
+  let currentSuite: TestSuite | undefined = suite;
+  while (currentSuite) {
+    suiteChain.push(currentSuite);
+    currentSuite = currentSuite.parent;
+  }
+
+  if (hookType === 'beforeEach') {
+    // For beforeEach: run parent hooks first (reverse the chain)
+    for (let i = suiteChain.length - 1; i >= 0; i--) {
+      hooks.push(...suiteChain[i].beforeEach);
+    }
+  } else {
+    // For afterEach: run child hooks first (use chain as-is)
+    for (const suiteInChain of suiteChain) {
+      hooks.push(...suiteInChain.afterEach);
+    }
+  }
+
+  return hooks;
+}
+
 async function runTest(test: TestCase, suite: TestSuite): Promise<TestResult> {
   const startTime = Date.now();
 
@@ -30,13 +59,15 @@ async function runTest(test: TestCase, suite: TestSuite): Promise<TestResult> {
     }
 
     // Run all beforeEach hooks from the current suite and its parents
-    await runHooks(suite.beforeEach);
+    const beforeEachHooks = collectInheritedHooks(suite, 'beforeEach');
+    await runHooks(beforeEachHooks);
 
     // Run the actual test
     await test.fn();
 
     // Run all afterEach hooks from the current suite and its parents
-    await runHooks(suite.afterEach);
+    const afterEachHooks = collectInheritedHooks(suite, 'afterEach');
+    await runHooks(afterEachHooks);
 
     const duration = Date.now() - startTime;
     console.log(`✓ ${test.name}`);

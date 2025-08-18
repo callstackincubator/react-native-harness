@@ -65,7 +65,10 @@ const convertRawTestCaseToTestCase = (
 
 const convertRawTestSuiteToTestSuite = (
   rawSuite: RawTestSuite,
-  parentContext: { hasFocusedChildren: boolean } = { hasFocusedChildren: false }
+  parentContext: { hasFocusedChildren: boolean } = {
+    hasFocusedChildren: false,
+  },
+  parentSuite?: TestSuite
 ): TestSuite => {
   // Validate duplicate test names within this suite
   const testNames = new Set<string>();
@@ -93,15 +96,12 @@ const convertRawTestSuiteToTestSuite = (
     convertRawTestCaseToTestCase(test, { hasFocusedTests })
   );
 
-  // Convert child suites
-  const suites = rawSuite.suites.map((suite) =>
-    convertRawTestSuiteToTestSuite(suite, { hasFocusedChildren })
-  );
-
-  return {
+  // Create the suite first so we can reference it when converting children
+  const suite: TestSuite = {
     name: rawSuite.name,
     tests,
-    suites,
+    suites: [],
+    parent: parentSuite,
     beforeAll: rawSuite.hooks.beforeAll,
     afterAll: rawSuite.hooks.afterAll,
     beforeEach: rawSuite.hooks.beforeEach,
@@ -109,6 +109,13 @@ const convertRawTestSuiteToTestSuite = (
     status: computeSuiteStatus(rawSuite, parentContext),
     _hasFocused: hasFocusedTests || hasFocusedChildren || rawSuite.options.only,
   };
+
+  // Convert child suites with this suite as their parent
+  suite.suites = rawSuite.suites.map((childSuite) =>
+    convertRawTestSuiteToTestSuite(childSuite, { hasFocusedChildren }, suite)
+  );
+
+  return suite;
 };
 
 export type TestCase = {
@@ -121,6 +128,7 @@ export type TestSuite = {
   name: string;
   tests: TestCase[];
   suites: TestSuite[];
+  parent?: TestSuite;
   beforeAll: TestFn[];
   afterAll: TestFn[];
   beforeEach: TestFn[];
