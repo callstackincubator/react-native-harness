@@ -3,6 +3,7 @@ export { userEvent } from './rntl/userEvent.js';
 export { screen } from './rntl/screen.js';
 export { expect } from './rntl/expect.js';
 export { fake } from './rntl/fn.js';
+export { fn, spyOn, spy, clearAllSpies, type Spy } from './rntl/spies.js';
 export {
   describe,
   test,
