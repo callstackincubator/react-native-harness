@@ -25,7 +25,13 @@
     "src/**/*.spec.jsx",
     "src/test-setup.ts"
   ],
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.jsx"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.js",
+    "src/**/*.jsx",
+    "react-native-harness.d.ts"
+  ],
   "references": [
     {
       "path": "../../packages/cli/tsconfig.lib.json"
