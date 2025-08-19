@@ -7,9 +7,6 @@
       "path": "../bridge"
     },
     {
-      "path": "../interaction-engine"
-    },
-    {
       "path": "./tsconfig.lib.json"
     },
     {

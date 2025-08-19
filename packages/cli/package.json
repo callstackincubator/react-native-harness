@@ -21,7 +21,6 @@
   "dependencies": {
     "@react-native-harness/bridge": "workspace:*",
     "@react-native-harness/config": "workspace:*",
-    "@react-native-harness/interaction-engine": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
     "commander": "^14.0.0",
     "glob": "^11.0.0",

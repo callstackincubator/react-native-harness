@@ -29,10 +29,6 @@ export type BridgeServer = {
   ) => void;
 };
 
-const notReadyYet = async () => {
-  throw new Error('Not ready yet');
-};
-
 export const getBridgeServer = async ({
   port,
 }: BridgeServerOptions): Promise<BridgeServer> => {
@@ -46,9 +42,6 @@ export const getBridgeServer = async ({
 
   const group = createBirpcGroup<BridgeClientFunctions, BridgeServerFunctions>(
     {
-      executeAction: notReadyYet,
-      executeQuery: notReadyYet,
-      executeMatcher: notReadyYet,
       reportReady: () => {
         emitter.emit('ready', '');
       },
@@ -85,8 +78,8 @@ export const getBridgeServer = async ({
                 message: data.e.message,
                 stack: data.e.stack,
                 cause: data.e.cause,
-              }
-            })
+              },
+            });
           }
 
           return JSON.stringify(data);

@@ -24,9 +24,6 @@
       "path": "../tools/tsconfig.lib.json"
     },
     {
-      "path": "../interaction-engine/tsconfig.lib.json"
-    },
-    {
       "path": "../config/tsconfig.lib.json"
     },
     {

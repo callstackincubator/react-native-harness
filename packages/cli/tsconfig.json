@@ -4,9 +4,6 @@
   "include": [],
   "references": [
     {
-      "path": "../interaction-engine"
-    },
-    {
       "path": "../config"
     },
     {

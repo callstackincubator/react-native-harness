@@ -1,5 +1,4 @@
 import { type ChildProcess } from 'node:child_process';
-import { getInteractionEngine } from '@react-native-harness/interaction-engine';
 import {
   assertNativeRunnerConfig,
   TestRunnerConfig,
@@ -35,7 +34,7 @@ const androidPlatformAdapter: PlatformAdapter = {
       emulator = await runEmulator(runner.deviceId);
     }
 
-    const interactionEnginePromise = getInteractionEngine(runner);
+
 
     const deviceId = await getEmulatorDeviceId(runner.deviceId);
     logger.debug(`Device ID: ${deviceId}`);
@@ -70,9 +69,7 @@ const androidPlatformAdapter: PlatformAdapter = {
     await runApp(deviceId, runner.bundleId);
     logger.debug('App running');
 
-    logger.debug('Waiting for interaction engine to start');
-    const interactionEngine = await interactionEnginePromise;
-    logger.debug('Interaction engine started');
+
 
     return {
       restart: async () => {
@@ -85,10 +82,9 @@ const androidPlatformAdapter: PlatformAdapter = {
           await killWithAwait(emulator);
         }
 
-        await interactionEngine.close();
+
         await killWithAwait(metro);
       },
-      interactionEngine,
     };
   },
 };

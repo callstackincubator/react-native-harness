@@ -32,7 +32,6 @@
     "zustand": "^5.0.5"
   },
   "devDependencies": {
-    "@react-native-harness/interaction-engine": "workspace:*",
     "@types/chai": "^5.2.2",
     "@types/sinon": "^17.0.4"
   }

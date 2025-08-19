@@ -1,9 +1,3 @@
-import {
-  ActionExecutor,
-  QueryExecutor,
-  MatcherExecutor,
-} from '@react-native-harness/interaction-engine';
-
 export type TestResultStatus = 'passed' | 'failed' | 'skipped' | 'todo';
 
 export interface TestResult {
@@ -28,7 +22,4 @@ export type BridgeClientFunctions = {
 
 export type BridgeServerFunctions = {
   reportReady: () => void;
-  executeAction: ActionExecutor;
-  executeQuery: QueryExecutor;
-  executeMatcher: MatcherExecutor;
 };

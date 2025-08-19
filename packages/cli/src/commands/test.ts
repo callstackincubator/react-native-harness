@@ -78,13 +78,6 @@ const setupEnvironment = async (context: TestRunContext): Promise<void> => {
     );
   }
 
-  serverBridge.rpc.functions.executeAction =
-    context.environment.interactionEngine.executeAction;
-  serverBridge.rpc.functions.executeQuery =
-    context.environment.interactionEngine.executeQuery;
-  serverBridge.rpc.functions.executeMatcher =
-    context.environment.interactionEngine.executeMatcher;
-
   startSpinner.stop(`"${context.runner.name}" (${platform}) runner started`);
 };
 

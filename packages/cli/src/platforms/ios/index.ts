@@ -1,4 +1,4 @@
-import { getInteractionEngine } from '@react-native-harness/interaction-engine';
+
 import {
   assertNativeRunnerConfig,
   TestRunnerConfig,
@@ -22,7 +22,7 @@ const iosPlatformAdapter: PlatformAdapter = {
     let shouldStopSimulator = false;
     const simulatorStatus = await getSimulatorStatus(runner.deviceId);
     const metroPromise = runMetro();
-    const interactionEnginePromise = getInteractionEngine(runner);
+
 
     if (simulatorStatus === 'stopped') {
       await runSimulator(runner.deviceId);
@@ -37,7 +37,7 @@ const iosPlatformAdapter: PlatformAdapter = {
 
     const metro = await metroPromise;
     await runApp(runner.deviceId, runner.bundleId);
-    const interactionEngine = await interactionEnginePromise;
+
 
     return {
       restart: async () => {
@@ -48,10 +48,9 @@ const iosPlatformAdapter: PlatformAdapter = {
         if (shouldStopSimulator) {
           await stopSimulator(runner.deviceId);
         }
-        await interactionEngine.close();
+
         await killWithAwait(metro);
       },
-      interactionEngine,
     };
   },
 };

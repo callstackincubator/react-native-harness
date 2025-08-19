@@ -1,6 +1,5 @@
 import { TestRunnerConfig, WebTestRunnerConfig, assertWebRunnerConfig } from '@react-native-harness/config';
 import { logger } from '@react-native-harness/tools';
-import { getInteractionEngine } from '@react-native-harness/interaction-engine';
 import { Browser, chromium, firefox, Page, webkit } from 'playwright';
 import { PlatformAdapter } from '../platform-adapter.js';
 import { runMetro } from '../../bundlers/metro.js';
@@ -66,7 +65,7 @@ export const webPlatformAdapter: PlatformAdapter = {
     
     logger.debug('Starting web environment');
     
-    const interactionEnginePromise = getInteractionEngine(runner);
+
 
     logger.debug('Running metro');
     const metro = await runMetro(true);
@@ -76,9 +75,7 @@ export const webPlatformAdapter: PlatformAdapter = {
     const { browser, page } = await runBrowser('http://localhost:8081', runner.browser);
     logger.debug('Browser running');
     
-    logger.debug('Waiting for interaction engine to start');
-    const interactionEngine = await interactionEnginePromise;
-    logger.debug('Interaction engine started');
+
 
     return {
       restart: async () => {
@@ -88,10 +85,9 @@ export const webPlatformAdapter: PlatformAdapter = {
       dispose: async () => {
         logger.debug('Closing browser');
         await browser.close();
-        await interactionEngine.close();
+
         metro.kill();
       },
-      interactionEngine,
     };
   },
 };
