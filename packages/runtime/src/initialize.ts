@@ -1,3 +1,12 @@
+import { EnvironmentError } from './errors.js';
+
+if (!global.RN_HARNESS) {
+  throw new EnvironmentError(
+    'runtime initialization',
+    'You are not in a test environment.'
+  );
+}
+
 // Polyfill for EventTarget
 const Shim = require('event-target-shim');
 globalThis.Event = Shim.Event;

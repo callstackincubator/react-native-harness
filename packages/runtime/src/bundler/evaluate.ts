@@ -1,4 +1,5 @@
-import { EnvironmentError, MalformedModuleError } from './errors.js';
+import { MalformedModuleError } from './errors.js';
+import { EnvironmentError } from '../errors.js';
 
 export const evaluateModule = (modulePath: string, moduleJs: string): void => {
   const __rMatch = moduleJs.match(/__r\((\d+)\)/);

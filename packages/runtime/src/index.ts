@@ -1,5 +1,9 @@
-if (global.RN_HARNESS) {
-  require('./initialize.js');
-}
+import './globals.d.ts';
 
-export * from './exports.js';
+require('./initialize.js');
+
+export { UI as ReactNativeHarness } from './ui/UI.js';
+export * from './spy/index.js';
+export * from './expect/index.js';
+export * from './collector/index.js';
+export * from './mocker/index.js';
