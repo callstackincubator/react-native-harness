@@ -26,6 +26,9 @@
     },
     {
       "path": "./apps/playground-expo"
+    },
+    {
+      "path": "./packages/babel-preset"
     }
   ]
 }

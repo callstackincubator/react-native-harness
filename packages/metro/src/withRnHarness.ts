@@ -14,6 +14,7 @@ export const withRnHarness = (
   );
 
   return mergeConfig(config, {
+    cacheVersion: 'react-native-harness',
     serializer: {
       getPolyfills: (...args) => [
         ...(config.serializer?.getPolyfills?.(...args) ?? []),

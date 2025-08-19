@@ -166,11 +166,8 @@ describe('React Native Harness Features Demo', () => {
     });
 
     it('should demonstrate the difference between mocked and original', () => {
-      // @ts-expect-error - require.resolveWeak is available in React Native environment
-      const moduleId = require.resolveWeak('react-native');
-
       // First, get the original module
-      const originalModule = requireActual(moduleId);
+      const originalModule = requireActual('react-native');
 
       // Create a mock that changes the Platform.OS
       const mockModuleFactory = () => ({
@@ -183,7 +180,7 @@ describe('React Native Harness Features Demo', () => {
       });
 
       // Apply the mock
-      mock(moduleId, mockModuleFactory);
+      mock('react-native', mockModuleFactory);
 
       // Now require the module - should return mocked version
       const mockedModule = require('react-native');
@@ -193,14 +190,12 @@ describe('React Native Harness Features Demo', () => {
       expect(mockedModule.Platform.Version).to.equal('999.0.0');
 
       // But requireActual should still return original
-      const actualModule = requireActual(moduleId);
+      const actualModule = requireActual('react-native');
       expect(actualModule.Platform.OS).to.not.equal('mocked-platform');
     });
 
     it('should mock specific functions while keeping others original', () => {
-      // @ts-expect-error - require.resolveWeak is available in React Native environment
-      const moduleId = require.resolveWeak('react-native');
-      const originalModule = requireActual(moduleId);
+      const originalModule = requireActual('react-native');
 
       // Create a mock that only changes specific functions
       const mockModuleFactory = () => ({
@@ -214,7 +209,7 @@ describe('React Native Harness Features Demo', () => {
       });
 
       // Apply the mock
-      mock(moduleId, mockModuleFactory);
+      mock('react-native', mockModuleFactory);
 
       // Test the mocked function
       const mockedModule = require('react-native');
@@ -229,16 +224,13 @@ describe('React Native Harness Features Demo', () => {
     });
 
     it('should clear mocks and restore original behavior', () => {
-      // @ts-expect-error - require.resolveWeak is available in React Native environment
-      const moduleId = require.resolveWeak('react-native');
-
       // Apply a mock
       const mockModuleFactory = () => ({
         name: 'temporary-mock',
         version: '0.0.0',
       });
 
-      mock(moduleId, mockModuleFactory);
+      mock('react-native', mockModuleFactory);
 
       // Verify mock is active
       const mockedModule = require('react-native');

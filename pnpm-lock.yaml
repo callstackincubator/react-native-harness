@@ -201,6 +201,9 @@ importers:
 
   apps/playground:
     dependencies:
+      '@react-native-harness/babel-preset':
+        specifier: workspace:*
+        version: link:../../packages/babel-preset
       '@react-native-harness/metro':
         specifier: workspace:*
         version: link:../../packages/metro
@@ -217,9 +220,6 @@ importers:
       '@babel/plugin-transform-class-static-block':
         specifier: ^7.27.1
         version: 7.27.1(@babel/core@7.27.4)
-      babel-plugin-transform-define:
-        specifier: ^2.1.4
-        version: 2.1.4
 
   apps/playground-expo:
     dependencies:
@@ -235,6 +235,18 @@ importers:
       react-native-harness:
         specifier: workspace:*
         version: link:../../packages/cli
+
+  packages/babel-preset:
+    devDependencies:
+      '@babel/core':
+        specifier: ^7.22.0
+        version: 7.27.4
+      '@babel/plugin-transform-class-static-block':
+        specifier: ^7.22.0
+        version: 7.27.1(@babel/core@7.27.4)
+      '@types/babel__core':
+        specifier: ^7.20.5
+        version: 7.20.5
 
   packages/bridge:
     dependencies:
@@ -3554,10 +3566,6 @@ packages:
 
   babel-plugin-syntax-hermes-parser@0.25.1:
     resolution: {integrity: sha512-IVNpGzboFLfXZUAwkLFcI/bnqVbwky0jP3eBno4HKtqvQJAHBLdgxiG6lQ4to0+Q/YCN3PO0od5NZwIKyY4REQ==}
-
-  babel-plugin-transform-define@2.1.4:
-    resolution: {integrity: sha512-NN9xFmyNvr4swPZkRWy+RZZoV0yHhPk/WoxpuIvcVkTyYf0xy/JTQeZVbVGX8hyJ0/NKKuxnt4BZz9No7BziVA==}
-    engines: {node: '>= 8.x.x'}
 
   babel-plugin-transform-flow-enums@0.0.2:
     resolution: {integrity: sha512-g4aaCrDDOsWjbm0PUUeVnkcVd6AKJsVc/MbnPhEotEpkeJQP6b8nzewohQi7+QS8UyPehOhGWn0nOwjvWpmMvQ==}
@@ -9037,9 +9045,6 @@ packages:
     resolution: {integrity: sha512-2lv/66T7e5yNyhAAC4NaKe5nVavzuGJQVVtRYLyQ2OI8tsJ61PMLlelehb0wi2Hx6+hT/OJUWZcw8MjlSRnxvw==}
     engines: {node: '>=14'}
 
-  traverse@0.6.6:
-    resolution: {integrity: sha512-kdf4JKs8lbARxWdp7RKdNzoJBhGUcIalSYibuGyHJbmk40pOysQ0+QPvlkCOICOivDWU2IJo2rkrxyTK2AH4fw==}
-
   tree-dump@1.0.3:
     resolution: {integrity: sha512-il+Cv80yVHFBwokQSfd4bldvr1Md951DpgAGfmhydt04L+YzHgubm2tQ7zueWDcGENKHq0ZvGFR/hjvNXilHEg==}
     engines: {node: '>=10.0'}
@@ -14316,11 +14321,6 @@ snapshots:
   babel-plugin-syntax-hermes-parser@0.25.1:
     dependencies:
       hermes-parser: 0.25.1
-
-  babel-plugin-transform-define@2.1.4:
-    dependencies:
-      lodash: 4.17.21
-      traverse: 0.6.6
 
   babel-plugin-transform-flow-enums@0.0.2(@babel/core@7.27.4):
     dependencies:
@@ -21033,8 +21033,6 @@ snapshots:
   tr46@4.1.1:
     dependencies:
       punycode: 2.3.1
-
-  traverse@0.6.6: {}
 
   tree-dump@1.0.3(tslib@2.8.1):
     dependencies:

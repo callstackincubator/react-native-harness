@@ -1,4 +1,4 @@
-import { ModuleFactory, ModuleId } from './types.js';
+import { ModuleFactory, ModuleId, Require } from './types.js';
 
 const mockRegistry = new Map<number, ModuleFactory>();
 const mockCache = new Map<number, unknown>();
@@ -35,17 +35,19 @@ export const getMockImplementation = (moduleId: number): unknown | null => {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const requireActual = <T = any>(moduleId: ModuleId): T =>
-  originalRequire(moduleId) as T;
+export const requireActual = <T = any>(moduleId: string): T =>
+  // babel plugin will transform 'moduleId' to a number
+  originalRequire(moduleId as unknown as ModuleId) as T;
 
-const mockRequire = (moduleId: ModuleId) => {
-  const mockedModule = getMockImplementation(moduleId);
+const mockRequire = (moduleId: string) => {
+  // babel plugin will transform 'moduleId' to a number
+  const mockedModule = getMockImplementation(moduleId as unknown as ModuleId);
 
   if (mockedModule) {
     return mockedModule;
   }
 
-  return originalRequire(moduleId);
+  return originalRequire(moduleId as unknown as ModuleId);
 };
 
 Object.setPrototypeOf(mockRequire, Object.getPrototypeOf(originalRequire));
@@ -53,4 +55,4 @@ Object.defineProperties(
   mockRequire,
   Object.getOwnPropertyDescriptors(originalRequire)
 );
-global.__r = mockRequire;
+global.__r = mockRequire as unknown as Require;

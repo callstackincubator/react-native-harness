@@ -37,6 +37,9 @@
       "path": "../../packages/cli/tsconfig.lib.json"
     },
     {
+      "path": "../../packages/babel-preset/tsconfig.lib.json"
+    },
+    {
       "path": "../../packages/metro/tsconfig.lib.json"
     },
     {

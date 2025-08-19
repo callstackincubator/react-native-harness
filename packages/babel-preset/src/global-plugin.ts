@@ -1,13 +1,12 @@
-import type { NodePath } from '@babel/traverse';
-import type { PluginObj, types as BabelTypes } from '@babel/core';
+import type { PluginObj, types as BabelTypes, NodePath } from '@babel/core';
 
-const rnHarnessOptimizerPlugin = ({
+const globalRnHarnessPlugin = ({
   types: t,
 }: typeof import('@babel/core')): PluginObj => {
   return {
-    name: 'react-native-harness-babel-plugin',
+    name: 'react-native-harness-global-plugin',
     visitor: {
-      // Replace global.RN_HARNESS with the configured value
+      // Replace global.RN_HARNESS with the configured value (only reads, not assignments)
       MemberExpression(path: NodePath<BabelTypes.MemberExpression>) {
         const { node } = path;
 
@@ -16,11 +15,17 @@ const rnHarnessOptimizerPlugin = ({
           t.isIdentifier(node.object, { name: 'global' }) &&
           t.isIdentifier(node.property, { name: 'RN_HARNESS' })
         ) {
-          const rnHarnessValue = process.env.RN_HARNESS;
-
-          if (typeof rnHarnessValue === 'boolean') {
-            path.replaceWith(t.booleanLiteral(rnHarnessValue));
+          // Only transform reads, not assignments
+          // Check if this member expression is the left side of an assignment
+          const parent = path.parent;
+          if (t.isAssignmentExpression(parent) && parent.left === node) {
+            // This is an assignment like: global.RN_HARNESS = value
+            // Skip transformation
+            return;
           }
+
+          const rnHarnessValue = !!process.env.RN_HARNESS;
+          path.replaceWith(t.booleanLiteral(rnHarnessValue));
         }
       },
 
@@ -40,4 +45,4 @@ const rnHarnessOptimizerPlugin = ({
   };
 };
 
-export default rnHarnessOptimizerPlugin;
+export default globalRnHarnessPlugin;

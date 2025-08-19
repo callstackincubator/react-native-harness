@@ -1,5 +1,5 @@
 {
-  "name": "@react-native-harness/metro",
+  "name": "@react-native-harness/babel-preset",
   "version": "0.0.1",
   "private": true,
   "type": "commonjs",
@@ -15,10 +15,13 @@
       "default": "./dist/index.js"
     }
   },
-  "dependencies": {
-    "tslib": "^2.3.0"
+  "peerDependencies": {
+    "@babel/core": "^7.22.0",
+    "@babel/plugin-transform-class-static-block": "^7.22.0"
   },
   "devDependencies": {
+    "@babel/core": "^7.22.0",
+    "@babel/plugin-transform-class-static-block": "^7.22.0",
     "@types/babel__core": "^7.20.5"
   }
 }
