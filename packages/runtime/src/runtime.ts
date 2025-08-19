@@ -1,6 +1,6 @@
 import { getBridgeClient } from '@react-native-harness/bridge/client';
 import { collectTests } from './collector/functions.js';
-import { fetchModule, executeModule } from './module.js';
+import { fetchModule, evaluateModule } from './bundler/index.js';
 import { runSuite } from './runner.js';
 import { state } from './state.js';
 import { Platform } from 'react-native';
@@ -10,7 +10,7 @@ const clientUrl =
 
 const consumeTestModule = async (fileName: string) => {
   const moduleJs = await fetchModule(fileName);
-  const testSuite = collectTests(() => executeModule(moduleJs));
+  const testSuite = collectTests(() => evaluateModule(fileName, moduleJs));
   return testSuite;
 };
 

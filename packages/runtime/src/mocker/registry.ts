@@ -1,12 +1,4 @@
-type ModuleId = number;
-type Require = {
-  (moduleId: number): unknown;
-};
-declare global {
-  var __r: Require;
-}
-
-export type ModuleFactory = () => unknown;
+import { ModuleFactory, ModuleId } from './types.js';
 
 const mockRegistry = new Map<number, ModuleFactory>();
 const mockCache = new Map<number, unknown>();
@@ -42,6 +34,7 @@ export const getMockImplementation = (moduleId: number): unknown | null => {
   return implementation;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const requireActual = <T = any>(moduleId: ModuleId): T =>
   originalRequire(moduleId) as T;
 

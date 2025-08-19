@@ -1,4 +1,4 @@
-import type { TestCase, TestSuite } from './collector/functions.js';
+import type { TestCase, TestSuite } from './collector/index.js';
 import type { TestResult, SuiteResult } from '@react-native-harness/bridge';
 
 async function runHooks(hooks: (() => void | Promise<void>)[]): Promise<void> {

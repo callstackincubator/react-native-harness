@@ -1,8 +1,6 @@
 import { TestError } from './errors.js';
-import { TestFn } from './types.js';
+import { TestFn, TestStatus, TestCase, TestSuite } from './types.js';
 import { validateTestName, validateTestFunction } from './validation.js';
-
-export type TestStatus = 'active' | 'skipped' | 'todo';
 
 type RawTestCase = {
   name: string;
@@ -116,25 +114,6 @@ const convertRawTestSuiteToTestSuite = (
   );
 
   return suite;
-};
-
-export type TestCase = {
-  name: string;
-  fn: TestFn;
-  status: TestStatus;
-};
-
-export type TestSuite = {
-  name: string;
-  tests: TestCase[];
-  suites: TestSuite[];
-  parent?: TestSuite;
-  beforeAll: TestFn[];
-  afterAll: TestFn[];
-  beforeEach: TestFn[];
-  afterEach: TestFn[];
-  status?: TestStatus;
-  _hasFocused?: boolean;
 };
 
 type TestContext = {

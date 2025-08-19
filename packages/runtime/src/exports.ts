@@ -1,18 +1,7 @@
-export { render, cleanup } from './rntl/render.js';
-export { userEvent } from './rntl/userEvent.js';
-export { screen } from './rntl/screen.js';
-export { expect } from './rntl/expect.js';
-export { fake } from './rntl/fn.js';
-export { fn, spyOn, spy, clearAllSpies, type Spy } from './rntl/spies.js';
-export {
-  describe,
-  test,
-  it,
-  beforeAll,
-  afterAll,
-  beforeEach,
-  afterEach,
-} from './collector/functions.js';
-export { mock, requireActual, clearMocks } from './rntl/mock.js';
 export { UI } from './ui/UI.js';
 export { getEntryComponent } from './getEntryComponent.js';
+
+export * from './spy/index.js';
+export * from './expect/index.js';
+export * from './collector/index.js';
+export * from './mocker/index.js';
