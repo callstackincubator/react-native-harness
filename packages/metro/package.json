@@ -13,9 +13,18 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./babel": {
+      "development": "./src/babel-plugin.ts",
+      "types": "./dist/babel-plugin.d.ts",
+      "import": "./dist/babel-plugin.js",
+      "default": "./dist/babel-plugin.js"
     }
   },
   "dependencies": {
     "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/babel__core": "^7.20.5"
   }
 }
