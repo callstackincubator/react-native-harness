@@ -1,25 +1,54 @@
-export type TestResultStatus = 'passed' | 'failed' | 'skipped' | 'todo';
+import type {
+  TestRunnerEvents,
+  TestSuiteResult,
+} from './shared/test-runner.js';
+import type { TestCollectorEvents } from './shared/test-collector.js';
 
-export interface TestResult {
-  name: string;
-  status: TestResultStatus;
-  error?: Error;
-  duration?: number;
-}
+export type {
+  TestCollectorEvents,
+  TestCollectionStartedEvent,
+  TestCollectionFinishedEvent,
+  TestSuite,
+  TestCase,
+  CollectionResult,
+} from './shared/test-collector.js';
+export type {
+  TestRunnerEvents,
+  TestRunnerFileStartedEvent,
+  TestRunnerFileFinishedEvent,
+  TestRunnerSuiteStartedEvent,
+  TestRunnerTestStartedEvent,
+  TestRunnerTestFinishedEvent,
+  TestRunnerSuiteFinishedEvent,
+  TestSuiteResult,
+  TestResult,
+  TestResultStatus,
+  SerializedError,
+} from './shared/test-runner.js';
 
-export interface SuiteResult {
-  name: string;
-  tests: TestResult[];
-  suites: SuiteResult[];
-  status: TestResultStatus;
-  error?: Error;
-  duration?: number;
-}
+export type DeviceDescriptor = {
+  platform: 'ios' | 'android';
+  manufacturer: string;
+  model: string;
+  osVersion: string;
+};
+
+export type BridgeEvents = TestCollectorEvents | TestRunnerEvents;
+
+export type BridgeEventsMap = {
+  [K in BridgeEvents['type']]: (
+    event: Extract<BridgeEvents, { type: K }>
+  ) => void;
+};
 
 export type BridgeClientFunctions = {
-  runTests: (path: string) => Promise<SuiteResult>;
+  runTests: (path: string) => Promise<TestSuiteResult>;
 };
 
 export type BridgeServerFunctions = {
-  reportReady: () => void;
+  reportReady: (device: DeviceDescriptor) => void;
+  emitEvent: <TEvent extends BridgeEvents>(
+    event: TEvent['type'],
+    data: TEvent
+  ) => void;
 };

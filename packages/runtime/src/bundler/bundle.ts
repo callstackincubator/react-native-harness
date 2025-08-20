@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { getDevServerUrl } from './dev-server.js';
+import { getDevServerUrl } from '../utils/dev-server.js';
 
 const getModuleUrl = (fileName: string): string => {
   const devServerUrl = getDevServerUrl();

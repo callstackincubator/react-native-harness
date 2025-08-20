@@ -1,22 +1,15 @@
-export type TestStatus = 'active' | 'skipped' | 'todo';
+import { EventEmitter } from '../utils/emitter.js';
+import {
+  TestCollectorEvents,
+  CollectionResult,
+} from '@react-native-harness/bridge';
 
 export type TestFn = () => void | Promise<void>;
 
-export type TestCase = {
-  name: string;
-  fn: TestFn;
-  status: TestStatus;
-};
+export type TestCollectorEventsEmitter = EventEmitter<TestCollectorEvents>;
 
-export type TestSuite = {
-  name: string;
-  tests: TestCase[];
-  suites: TestSuite[];
-  parent?: TestSuite;
-  beforeAll: TestFn[];
-  afterAll: TestFn[];
-  beforeEach: TestFn[];
-  afterEach: TestFn[];
-  status?: TestStatus;
-  _hasFocused?: boolean;
+export type TestCollector = {
+  events: TestCollectorEventsEmitter;
+  collect: (fn: () => void, testFilePath: string) => Promise<CollectionResult>;
+  dispose: () => void;
 };

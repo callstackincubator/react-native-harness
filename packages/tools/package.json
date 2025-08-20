@@ -16,7 +16,7 @@
     }
   },
   "dependencies": {
-    "@clack/prompts": "^0.11.0",
+    "@clack/prompts": "alpha",
     "nano-spawn": "^1.0.2",
     "picocolors": "^1.1.1",
     "tslib": "^2.3.0"

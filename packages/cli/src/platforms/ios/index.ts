@@ -1,4 +1,3 @@
-
 import {
   assertNativeRunnerConfig,
   TestRunnerConfig,
@@ -23,7 +22,6 @@ const iosPlatformAdapter: PlatformAdapter = {
     const simulatorStatus = await getSimulatorStatus(runner.deviceId);
     const metroPromise = runMetro();
 
-
     if (simulatorStatus === 'stopped') {
       await runSimulator(runner.deviceId);
       shouldStopSimulator = true;
@@ -37,7 +35,6 @@ const iosPlatformAdapter: PlatformAdapter = {
 
     const metro = await metroPromise;
     await runApp(runner.deviceId, runner.bundleId);
-
 
     return {
       restart: async () => {

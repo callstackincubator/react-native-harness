@@ -1,8 +1,6 @@
 import './globals.d.ts';
 
-require('./initialize.js');
-
-export { UI as ReactNativeHarness } from './ui/UI.js';
+export { UI as ReactNativeHarness } from './ui/index.js';
 export * from './spy/index.js';
 export * from './expect/index.js';
 export * from './collector/index.js';

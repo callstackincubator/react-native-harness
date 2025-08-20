@@ -1,5 +1,5 @@
 import { Reporter } from '@react-native-harness/config';
-import type { SuiteResult, TestResult } from '@react-native-harness/bridge';
+import type { TestSuiteResult, TestResult } from '@react-native-harness/bridge';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -15,7 +15,7 @@ export const junitReporter: Reporter = {
   },
 };
 
-const generateJUnitXML = (results: SuiteResult[]): string => {
+const generateJUnitXML = (results: TestSuiteResult[]): string => {
   const { totalTests, totalFailures, totalSkipped, totalTime } =
     calculateTotals(results);
 
@@ -33,7 +33,10 @@ const generateJUnitXML = (results: SuiteResult[]): string => {
   return xml;
 };
 
-const generateTestSuiteXML = (suite: SuiteResult, indent: string): string => {
+const generateTestSuiteXML = (
+  suite: TestSuiteResult,
+  indent: string
+): string => {
   const { tests, failures, skipped, time } = getSuiteStats(suite);
 
   let xml = `${indent}<testsuite name="${escapeXML(
@@ -116,7 +119,7 @@ const generateTestCaseXML = (test: TestResult, indent: string): string => {
 };
 
 const calculateTotals = (
-  results: SuiteResult[]
+  results: TestSuiteResult[]
 ): {
   totalTests: number;
   totalFailures: number;
@@ -140,7 +143,7 @@ const calculateTotals = (
 };
 
 const getSuiteStats = (
-  suite: SuiteResult
+  suite: TestSuiteResult
 ): {
   tests: number;
   failures: number;

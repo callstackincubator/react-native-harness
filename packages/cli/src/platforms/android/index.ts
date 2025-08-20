@@ -34,8 +34,6 @@ const androidPlatformAdapter: PlatformAdapter = {
       emulator = await runEmulator(runner.deviceId);
     }
 
-
-
     const deviceId = await getEmulatorDeviceId(runner.deviceId);
     logger.debug(`Device ID: ${deviceId}`);
 
@@ -69,8 +67,6 @@ const androidPlatformAdapter: PlatformAdapter = {
     await runApp(deviceId, runner.bundleId);
     logger.debug('App running');
 
-
-
     return {
       restart: async () => {
         await runApp(runner.deviceId, runner.bundleId);
@@ -81,7 +77,6 @@ const androidPlatformAdapter: PlatformAdapter = {
         if (emulator) {
           await killWithAwait(emulator);
         }
-
 
         await killWithAwait(metro);
       },

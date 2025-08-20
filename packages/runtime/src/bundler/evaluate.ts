@@ -1,7 +1,7 @@
 import { MalformedModuleError } from './errors.js';
 import { EnvironmentError } from '../errors.js';
 
-export const evaluateModule = (modulePath: string, moduleJs: string): void => {
+export const evaluateModule = (moduleJs: string, modulePath: string): void => {
   const __rMatch = moduleJs.match(/__r\((\d+)\)/);
 
   if (!__rMatch) {

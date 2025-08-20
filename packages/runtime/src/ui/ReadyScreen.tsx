@@ -7,48 +7,13 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
-import { ComponentType, memo, ReactNode, useEffect } from 'react';
-import { useStore } from 'zustand/react';
-import { state } from '../state.js';
 import { LOGO_IMAGE } from '../constants.js';
+import { useRunnerStatus } from './state.js';
 
-export type ComponentHarnessOptions = {
-  wrapper: ComponentType<{ children: ReactNode }>;
-};
+require('../initialize.js');
 
-export type ComponentHarnessProps = {
-  element: ReactNode;
-  options: ComponentHarnessOptions;
-};
-
-const ComponentHarness = memo(function ComponentHarness({
-  element,
-  options,
-}: ComponentHarnessProps) {
-  const Wrapper = options.wrapper ?? View;
-
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Wrapper>{element}</Wrapper>
-    </View>
-  );
-});
-
-export const UI = () => {
-  const { componentHarness, status, bootstrap } = useStore(state);
-
-  useEffect(() => {
-    void bootstrap();
-  }, [bootstrap]);
-
-  if (componentHarness) {
-    return (
-      <ComponentHarness
-        element={componentHarness.node}
-        options={componentHarness.options as ComponentHarnessOptions}
-      />
-    );
-  }
+export const ReadyScreen = () => {
+  const status = useRunnerStatus();
 
   return (
     <View style={styles.container}>
@@ -110,6 +75,7 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.3,
     shadowRadius: 30,
+    maxWidth: 350,
   },
   logoContainer: {
     marginBottom: 12,
@@ -183,5 +149,3 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 });
-
-export default UI;

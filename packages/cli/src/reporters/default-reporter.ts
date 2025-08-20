@@ -1,5 +1,5 @@
 import { color, spinner } from '@react-native-harness/tools';
-import type { SuiteResult, TestResult } from '@react-native-harness/bridge';
+import type { TestSuiteResult, TestResult } from '@react-native-harness/bridge';
 import { Reporter } from '@react-native-harness/config';
 
 export const defaultReporter: Reporter = {
@@ -78,7 +78,7 @@ const formatTestResult = (test: TestResult, indent = ''): string => {
   return result;
 };
 
-const formatSuiteResult = (suite: SuiteResult, indent = ''): string => {
+const formatSuiteResult = (suite: TestSuiteResult, indent = ''): string => {
   const icon = getStatusIcon(suite.status);
   const name =
     suite.status === 'failed' ? color.red(suite.name) : color.bold(suite.name);
@@ -111,7 +111,7 @@ const formatSuiteResult = (suite: SuiteResult, indent = ''): string => {
 };
 
 const getTestSummary = (
-  suite: SuiteResult
+  suite: TestSuiteResult
 ): { passed: number; failed: number; skipped: number; todo: number } => {
   let passed = 0,
     failed = 0,

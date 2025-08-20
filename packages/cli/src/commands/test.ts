@@ -7,22 +7,26 @@ import {
   getConfig,
   TestRunnerConfig,
 } from '@react-native-harness/config';
-import type { SuiteResult } from '@react-native-harness/bridge';
 import { getPlatformAdapter } from '../platforms/platform-registry.js';
 import { Glob } from 'glob';
 import { defaultReporter } from '../reporters/default-reporter.js';
-import { intro, logger, outro, spinner } from '@react-native-harness/tools';
+import {
+  intro,
+  logger,
+  outro,
+  spinner,
+  progress,
+} from '@react-native-harness/tools';
 import { type Environment } from '../platforms/platform-adapter.js';
 import { BridgeTimeoutError } from '../errors/errors.js';
-import { promptConfirm } from '@react-native-harness/tools';
 import { assert } from '../utils.js';
 import {
   EnvironmentInitializationError,
   NoRunnerSpecifiedError,
   RpcClientError,
   RunnerNotFoundError,
-  TestExecutionError,
 } from '../errors/errors.js';
+import { TestResult } from '@react-native-harness/bridge';
 
 type TestRunContext = {
   config: Config;
@@ -30,7 +34,7 @@ type TestRunContext = {
   bridge?: BridgeServer;
   environment?: Environment;
   testFiles?: string[];
-  results?: SuiteResult[];
+  results?: TestResult[];
 };
 
 const setupEnvironment = async (context: TestRunContext): Promise<void> => {
@@ -102,16 +106,17 @@ const runTests = async (context: TestRunContext): Promise<void> => {
   assert(environment != null, 'Environment not initialized');
   assert(testFiles != null, 'Test files not initialized');
 
-  const runSpinner = spinner();
+  let runSpinner = progress({ style: 'block' });
   runSpinner.start('Running tests');
 
   let shouldRestart = false;
 
   for (const testFile of testFiles) {
     if (shouldRestart) {
+      runSpinner = progress({ style: 'block' });
       runSpinner.message(`Restarting environment for next test file`);
 
-      await new Promise<void>((resolve) => {
+      await new Promise((resolve) => {
         bridge.once('ready', resolve);
         environment.restart();
       });
@@ -128,18 +133,9 @@ const runTests = async (context: TestRunContext): Promise<void> => {
     }
 
     const result = await client.runTests(testFile);
-    if (result.error) {
-      await promptConfirm({
-        message: 'An error occurred. Do you want to continue?',
-      });
-      throw new TestExecutionError(testFile, result.error);
-    }
-
     context.results = [...(context.results ?? []), ...result.suites];
     shouldRestart = true;
   }
-
-  runSpinner.stop(`Completed running all tests`);
 };
 
 const cleanUp = async (context: TestRunContext): Promise<void> => {

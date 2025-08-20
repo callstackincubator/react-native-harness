@@ -1,11 +1,5 @@
-import { EnvironmentError } from './errors.js';
-
-if (!global.RN_HARNESS) {
-  throw new EnvironmentError(
-    'runtime initialization',
-    'You are not in a test environment.'
-  );
-}
+import { getDeviceDescriptor } from './client/getDeviceDescriptor.js';
+import { getClient } from './client/index.js';
 
 // Polyfill for EventTarget
 const Shim = require('event-target-shim');
@@ -21,3 +15,8 @@ const HMRClient = require('react-native/Libraries/Utilities/HMRClient');
 HMRClient.setup = () => {
   // No setup = no HMR
 };
+
+// Initialize the client
+void getClient().then((client) =>
+  client.rpc.reportReady(getDeviceDescriptor())
+);

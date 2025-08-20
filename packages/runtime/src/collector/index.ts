@@ -6,7 +6,7 @@ export {
   afterAll,
   beforeEach,
   afterEach,
-  collectTests,
 } from './functions.js';
 export { TestError, type TestErrorCode } from './errors.js';
-export type { TestCase, TestSuite } from './types.js';
+export type { TestCollector, TestCollectorEventsEmitter } from './types.js';
+export { getTestCollector } from './factory.js';

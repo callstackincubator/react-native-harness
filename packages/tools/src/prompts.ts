@@ -120,6 +120,38 @@ export const spinner = (options?: clack.SpinnerOptions) => {
   };
 };
 
+export const progress = (options?: clack.ProgressOptions) => {
+  if (logger.isVerbose() || !isInteractive()) {
+    return {
+      start: (message?: string) => logger.log(formatStartMessage(message)),
+      advance: (_: number, message?: string) => {
+        logger.log(formatStartMessage(message));
+      },
+      stop: (message?: string, code = 0) => {
+        return code === 0 ? logger.log(message) : logger.error(message);
+      },
+      message: (message?: string) => logger.log(formatStartMessage(message)),
+    };
+  }
+
+  const clackProgress = clack.progress(options);
+
+  return {
+    start: (message?: string) => {
+      clackProgress.start(message);
+    },
+    advance: (value: number, message?: string) => {
+      clackProgress.advance(value, message);
+    },
+    stop: (message?: string, code = 0) => {
+      clackProgress.stop(message, code);
+    },
+    message: (message?: string) => {
+      clackProgress.message(message);
+    },
+  };
+};
+
 export const formatStartMessage = (
   text: string | undefined
 ): string | undefined => {

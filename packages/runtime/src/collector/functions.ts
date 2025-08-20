@@ -1,6 +1,13 @@
+import type {
+  TestCase,
+  TestSuite,
+  CollectionResult,
+} from '@react-native-harness/bridge';
+import type { TestFn } from './types.js';
 import { TestError } from './errors.js';
-import { TestFn, TestStatus, TestCase, TestSuite } from './types.js';
 import { validateTestName, validateTestFunction } from './validation.js';
+
+type TestStatus = 'active' | 'skipped' | 'todo';
 
 type RawTestCase = {
   name: string;
@@ -335,14 +342,34 @@ export function afterEach(fn: TestFn) {
   currentSuite.hooks.afterEach.push(fn);
 }
 
-export const collectTests = (fn: () => void): TestSuite => {
+/**
+ * Recursively counts the total number of tests that will actually be executed.
+ * Only counts active tests since skipped and todo tests are not executed.
+ */
+const countTests = (suite: TestSuite): number => {
+  let count = suite.tests.filter((test) => test.status === 'active').length;
+
+  for (const childSuite of suite.suites) {
+    count += countTests(childSuite);
+  }
+
+  return count;
+};
+
+export const collectTests = (fn: () => void): CollectionResult => {
   currentContext = clearState();
 
   try {
     fn();
 
     // Convert raw structure to final structure using computation phase
-    return convertRawTestSuiteToTestSuite(getRootSuite());
+    const testSuite = convertRawTestSuiteToTestSuite(getRootSuite());
+    const totalTests = countTests(testSuite);
+
+    return {
+      testSuite,
+      totalTests,
+    };
   } finally {
     currentContext = null;
   }

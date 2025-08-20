@@ -2,15 +2,20 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { type BirpcGroup, createBirpcGroup } from 'birpc';
 import { logger } from '@react-native-harness/tools';
 import { EventEmitter } from 'node:events';
-import type { BridgeServerFunctions, BridgeClientFunctions } from './shared.js';
+import type {
+  BridgeServerFunctions,
+  BridgeClientFunctions,
+  DeviceDescriptor,
+  BridgeEventsMap,
+} from './shared.js';
 
 export type BridgeServerOptions = {
   port: number;
 };
 
 export type BridgeServerEvents = {
-  ready: () => void;
-};
+  ready: (device: DeviceDescriptor) => void;
+} & BridgeEventsMap;
 
 export type BridgeServer = {
   ws: WebSocketServer;
@@ -42,8 +47,11 @@ export const getBridgeServer = async ({
 
   const group = createBirpcGroup<BridgeClientFunctions, BridgeServerFunctions>(
     {
-      reportReady: () => {
-        emitter.emit('ready', '');
+      reportReady: (device) => {
+        emitter.emit('ready', device);
+      },
+      emitEvent: (event, data) => {
+        emitter.emit(event, data);
       },
     } satisfies BridgeServerFunctions,
     []
