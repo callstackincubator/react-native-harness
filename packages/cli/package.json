@@ -1,7 +1,6 @@
 {
   "name": "react-native-harness",
-  "version": "0.0.1",
-  "private": true,
+  "version": "1.0.0-alpha.1",
   "type": "module",
   "bin": {
     "react-native-harness": "./bin.js"
