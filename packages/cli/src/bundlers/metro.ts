@@ -27,6 +27,16 @@ export const runMetro = async (isExpo = false): Promise<ChildProcess> => {
     }
   );
 
+  // Forward metro output to CLI output
+  metro.nodeChildProcess.then((childProcess) => {
+    if (childProcess.stdout) {
+      childProcess.stdout.pipe(process.stdout);
+    }
+    if (childProcess.stderr) {
+      childProcess.stderr.pipe(process.stderr);
+    }
+  });
+
   metro.catch((error) => {
     // This process is going to be killed by us, so we don't need to throw an error
     if (error instanceof SubprocessError && error.signalName === 'SIGTERM') {
