@@ -48,7 +48,7 @@ jobs:
       fail-fast: false
       matrix:
         app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
-    
+
     steps:
       - name: Delete unnecessary tools
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -69,7 +69,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '23'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -124,7 +124,7 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb install -r "./app/build/outputs/apk/debug/app-debug.apk"
-            pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test android-native"
+            pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test android"
 
   e2e-ios:
     name: E2E iOS - ${{ matrix.app }}
@@ -135,7 +135,7 @@ jobs:
       fail-fast: false
       matrix:
         app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -193,7 +193,7 @@ jobs:
         working-directory: apps/${{ matrix.app }}
         run: |
           pnpm react-native build-ios
-  
+
       - name: Save app to cache
         if: steps.cache-app-restore.outputs.cache-hit != 'true' && success()
         uses: actions/cache/save@v4
