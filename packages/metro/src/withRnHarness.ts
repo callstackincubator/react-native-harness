@@ -8,9 +8,14 @@ export const withRnHarness = (
     return config;
   }
 
+  const reactNativeMetroConfigPath = require.resolve(
+    '@react-native/metro-config',
+    { paths: [process.cwd()] }
+  );
+
   require('metro-config/src/defaults/defaults').moduleSystem = require.resolve(
     '@react-native-harness/runtime/moduleSystem',
-    { paths: [process.cwd()] }
+    { paths: [reactNativeMetroConfigPath] }
   );
 
   return mergeConfig(config, {
