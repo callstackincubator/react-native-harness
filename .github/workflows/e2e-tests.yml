@@ -121,7 +121,7 @@ jobs:
           force-avd-creation: false
           avd-name: Pixel_8_API_35
           disable-animations: true
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb install -r "./app/build/outputs/apk/debug/app-debug.apk"
             pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test android"
