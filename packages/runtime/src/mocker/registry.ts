@@ -5,9 +5,9 @@ const mockCache = new Map<number, unknown>();
 
 const originalRequire = global.__r;
 
-export const mock = (moduleId: ModuleId, factory: ModuleFactory): void => {
-  mockCache.delete(moduleId);
-  mockRegistry.set(moduleId, factory);
+export const mock = (moduleId: string, factory: ModuleFactory): void => {
+  mockCache.delete(moduleId as unknown as ModuleId);
+  mockRegistry.set(moduleId as unknown as ModuleId, factory);
 };
 
 export const clearMocks = (): void => {
