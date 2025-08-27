@@ -237,4 +237,4 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test ios-native"
+          pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test ios"
