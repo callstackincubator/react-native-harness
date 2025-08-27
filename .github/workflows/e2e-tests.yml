@@ -156,7 +156,8 @@ jobs:
       fail-fast: false
       matrix:
         app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
-
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.0.app/Contents/Developer
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
