@@ -227,7 +227,7 @@ jobs:
         with:
           model: 'iPhone 16 Pro'
           os: iOS
-          os_version: 18.2
+          os_version: 18.6
           wait_for_boot: true
           erase_before_boot: false
 
