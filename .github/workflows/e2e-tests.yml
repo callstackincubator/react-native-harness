@@ -136,8 +136,9 @@ jobs:
       - name: Run E2E tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
           working-directory: apps/${{ matrix.app }}/android
+          api-level: 35
+          arch: x86_64
           force-avd-creation: false
           avd-name: Pixel_8_API_35
           disable-animations: true
