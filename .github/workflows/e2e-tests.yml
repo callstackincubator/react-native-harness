@@ -176,6 +176,10 @@ jobs:
         run: |
           pnpm install
 
+      - name: React Native Doctor
+        run: |
+          pnpx react-native doctor
+
       - name: Get build products directory
         id: get-build-dir
         working-directory: apps/${{ matrix.app }}/ios
