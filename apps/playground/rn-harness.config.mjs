@@ -13,7 +13,7 @@ const config = {
       platform: 'ios',
       deviceId: 'iPhone 16 Pro',
       bundleId: 'org.reactjs.native.example.Playground',
-      systemVersion: '18.0',
+      systemVersion: '18.6',
     },
   ],
   defaultRunner: 'android',
