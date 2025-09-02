@@ -8,11 +8,19 @@ export const ReporterSchema = z.object({
 
 export const BrowserTypeSchema = z.enum(['chrome', 'firefox', 'safari']);
 
-export const NativeTestRunnerConfigSchema = z.object({
+export const AndroidTestRunnerConfigSchema = z.object({
   name: z.string().min(1, 'Runner name is required'),
-  platform: z.enum(['ios', 'android']),
+  platform: z.literal('android'),
   deviceId: z.string().min(1, 'Device ID is required'),
   bundleId: z.string().min(1, 'Bundle ID is required'),
+});
+
+export const iOSTestRunnerConfigSchema = z.object({
+  name: z.string().min(1, 'Runner name is required'),
+  platform: z.literal('ios'),
+  deviceId: z.string().min(1, 'Device ID is required'),
+  bundleId: z.string().min(1, 'Bundle ID is required'),
+  systemVersion: z.string().min(1, 'System version is required'),
 });
 
 export const WebTestRunnerConfigSchema = z.object({
@@ -22,7 +30,8 @@ export const WebTestRunnerConfigSchema = z.object({
 });
 
 export const TestRunnerConfigSchema = z.discriminatedUnion('platform', [
-  NativeTestRunnerConfigSchema,
+  AndroidTestRunnerConfigSchema,
+  iOSTestRunnerConfigSchema,
   WebTestRunnerConfigSchema,
 ]);
 
@@ -65,17 +74,24 @@ export const ConfigSchema = z
 export type Platform = z.infer<typeof PlatformSchema>;
 export type Reporter = z.infer<typeof ReporterSchema>;
 export type BrowserType = z.infer<typeof BrowserTypeSchema>;
-export type NativeTestRunnerConfig = z.infer<
-  typeof NativeTestRunnerConfigSchema
+export type AndroidTestRunnerConfig = z.infer<
+  typeof AndroidTestRunnerConfigSchema
 >;
+export type iOSTestRunnerConfig = z.infer<typeof iOSTestRunnerConfigSchema>;
 export type WebTestRunnerConfig = z.infer<typeof WebTestRunnerConfigSchema>;
 export type TestRunnerConfig = z.infer<typeof TestRunnerConfigSchema>;
 export type Config = z.infer<typeof ConfigSchema>;
 
-export function isNativeRunnerConfig(
+export function isIOSRunnerConfig(
   config: TestRunnerConfig
-): config is NativeTestRunnerConfig {
-  return config.platform === 'ios' || config.platform === 'android';
+): config is iOSTestRunnerConfig {
+  return config.platform === 'ios';
+}
+
+export function isAndroidRunnerConfig(
+  config: TestRunnerConfig
+): config is AndroidTestRunnerConfig {
+  return config.platform === 'android';
 }
 
 export function isWebRunnerConfig(
@@ -84,16 +100,25 @@ export function isWebRunnerConfig(
   return config.platform === 'web';
 }
 
-export function assertNativeRunnerConfig(
+export function assertAndroidRunnerConfig(
   config: TestRunnerConfig
-): asserts config is NativeTestRunnerConfig {
-  if (!isNativeRunnerConfig(config)) {
+): asserts config is AndroidTestRunnerConfig {
+  if (!isAndroidRunnerConfig(config)) {
     throw new Error(
-      `Expected native runner config but got platform: ${config.platform}`
+      `Expected Android runner config but got platform: ${config.platform}`
     );
   }
 }
 
+export function assertIOSRunnerConfig(
+  config: TestRunnerConfig
+): asserts config is iOSTestRunnerConfig {
+  if (!isIOSRunnerConfig(config)) {
+    throw new Error(
+      `Expected iOS runner config but got platform: ${config.platform}`
+    );
+  }
+}
 export function assertWebRunnerConfig(
   config: TestRunnerConfig
 ): asserts config is WebTestRunnerConfig {

@@ -1,21 +1,24 @@
 export { getConfig } from './reader.js';
-export type { 
-    Config, 
-    TestRunnerConfig, 
-    Platform, 
-    Reporter, 
-    BrowserType,
-    NativeTestRunnerConfig,
-    WebTestRunnerConfig
+export type {
+  Config,
+  TestRunnerConfig,
+  Platform,
+  Reporter,
+  BrowserType,
+  AndroidTestRunnerConfig,
+  iOSTestRunnerConfig,
+  WebTestRunnerConfig,
 } from './types.js';
 export {
-    ConfigValidationError,
-    ConfigNotFoundError,
-    ConfigLoadError
+  ConfigValidationError,
+  ConfigNotFoundError,
+  ConfigLoadError,
 } from './errors.js';
 export {
-    isNativeRunnerConfig,
-    isWebRunnerConfig,
-    assertNativeRunnerConfig,
-    assertWebRunnerConfig
+  isAndroidRunnerConfig,
+  isIOSRunnerConfig,
+  isWebRunnerConfig,
+  assertAndroidRunnerConfig,
+  assertIOSRunnerConfig,
+  assertWebRunnerConfig,
 } from './types.js';

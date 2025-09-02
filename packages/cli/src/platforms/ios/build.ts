@@ -11,17 +11,26 @@ export const listDevices = async (): Promise<any> => {
 };
 
 export const getDeviceByName = async (
-  simulatorName: string
+  simulatorName: string,
+  systemVersion: string
 ): Promise<any | null> => {
   const devices = await listDevices();
+  const expectedRuntimeId = `com.apple.CoreSimulator.SimRuntime.iOS-${systemVersion.replace(
+    /\./,
+    '-'
+  )}`;
 
-  for (const runtime in devices.devices) {
-    const runtimeDevices = devices.devices[runtime];
-    for (const device of runtimeDevices) {
-      if (device.name === simulatorName && device.isAvailable) {
-        return device;
-      }
-    }
+  const runtime = devices.devices[expectedRuntimeId];
+
+  if (!runtime) {
+    return null;
+  }
+
+  const runtimeDevices = devices.devices[runtime];
+  const device = runtimeDevices.find((d: any) => d.name === simulatorName);
+
+  if (device) {
+    return device;
   }
 
   return null;
@@ -42,35 +51,18 @@ export const listApps = async (udid: string): Promise<string[]> => {
 };
 
 export const isAppInstalled = async (
-  simulatorName: string,
+  udid: string,
   bundleId: string
 ): Promise<boolean> => {
-  const device = await getDeviceByName(simulatorName);
-
-  if (!device) {
-    throw new Error(`Simulator ${simulatorName} not found`);
-  }
-
-  const appList = await listApps(device.udid);
+  const appList = await listApps(udid);
   return appList.includes(bundleId);
 };
 
-export const runApp = async (
-  simulatorName: string,
-  appName: string
-): Promise<void> => {
-  await killApp(simulatorName, appName);
-  await spawn('xcrun', ['simctl', 'launch', simulatorName, appName]);
+export const runApp = async (udid: string, appName: string): Promise<void> => {
+  await killApp(udid, appName);
+  await spawn('xcrun', ['simctl', 'launch', udid, appName]);
 };
 
-export const killApp = async (
-  simulatorName: string,
-  appName: string
-): Promise<void> => {
-  await spawnAndForget('xcrun', [
-    'simctl',
-    'terminate',
-    simulatorName,
-    appName,
-  ]);
+export const killApp = async (udid: string, appName: string): Promise<void> => {
+  await spawnAndForget('xcrun', ['simctl', 'terminate', udid, appName]);
 };

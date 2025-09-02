@@ -1,9 +1,10 @@
 import {
-  assertNativeRunnerConfig,
+  assertIOSRunnerConfig,
   TestRunnerConfig,
 } from '@react-native-harness/config';
 import { type PlatformAdapter } from '../platform-adapter.js';
 import {
+  getSimulatorDeviceId,
   getSimulatorStatus,
   runSimulator,
   stopSimulator,
@@ -12,38 +13,48 @@ import { isAppInstalled, runApp, killApp } from './build.js';
 import { killWithAwait } from '../../process.js';
 import { runMetro } from '../../bundlers/metro.js';
 import { AppNotInstalledError } from '../../errors/errors.js';
+import { assert } from '../../utils.js';
 
 const iosPlatformAdapter: PlatformAdapter = {
   name: 'ios',
   getEnvironment: async (runner: TestRunnerConfig) => {
-    assertNativeRunnerConfig(runner);
+    assertIOSRunnerConfig(runner);
+    // TODO: system version is also important as there may be two emulators with the same name
+    // but different system versions
 
     let shouldStopSimulator = false;
-    const simulatorStatus = await getSimulatorStatus(runner.deviceId);
+    const udid = await getSimulatorDeviceId(
+      runner.deviceId,
+      runner.systemVersion
+    );
+
+    assert(!!udid, 'Simulator not found');
+
+    const simulatorStatus = await getSimulatorStatus(udid);
     const metroPromise = runMetro();
 
     if (simulatorStatus === 'stopped') {
-      await runSimulator(runner.deviceId);
+      await runSimulator(udid);
       shouldStopSimulator = true;
     }
 
-    const isInstalled = await isAppInstalled(runner.deviceId, runner.bundleId);
+    const isInstalled = await isAppInstalled(udid, runner.bundleId);
 
     if (!isInstalled) {
       throw new AppNotInstalledError(runner.deviceId, runner.bundleId, 'ios');
     }
 
     const metro = await metroPromise;
-    await runApp(runner.deviceId, runner.bundleId);
+    await runApp(udid, runner.bundleId);
 
     return {
       restart: async () => {
-        await runApp(runner.deviceId, runner.bundleId);
+        await runApp(udid, runner.bundleId);
       },
       dispose: async () => {
-        await killApp(runner.deviceId, runner.bundleId);
+        await killApp(udid, runner.bundleId);
         if (shouldStopSimulator) {
-          await stopSimulator(runner.deviceId);
+          await stopSimulator(udid);
         }
 
         await killWithAwait(metro);

@@ -1,6 +1,6 @@
 import { type ChildProcess } from 'node:child_process';
 import {
-  assertNativeRunnerConfig,
+  assertAndroidRunnerConfig,
   TestRunnerConfig,
 } from '@react-native-harness/config';
 import { logger } from '@react-native-harness/tools';
@@ -21,7 +21,7 @@ import { AppNotInstalledError } from '../../errors/errors.js';
 const androidPlatformAdapter: PlatformAdapter = {
   name: 'android',
   getEnvironment: async (runner: TestRunnerConfig) => {
-    assertNativeRunnerConfig(runner);
+    assertAndroidRunnerConfig(runner);
 
     let emulator: ChildProcess | null = null;
     const emulatorStatus = await getEmulatorStatus(runner.deviceId);

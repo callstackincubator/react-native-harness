@@ -3,7 +3,8 @@ import { spawn } from '@react-native-harness/tools';
 export type IOSSimulatorStatus = 'stopped' | 'loading' | 'running';
 
 export const getSimulatorDeviceId = async (
-  simulatorName: string
+  simulatorName: string,
+  systemVersion: string
 ): Promise<string | null> => {
   try {
     const { stdout } = await spawn('xcrun', [
@@ -13,19 +14,21 @@ export const getSimulatorDeviceId = async (
       '--json',
     ]);
     const devices = JSON.parse(stdout);
+    const expectedRuntimeId = `com.apple.CoreSimulator.SimRuntime.iOS-${systemVersion.replace(
+      /\./,
+      '-'
+    )}`;
 
-    // Find the device across all iOS versions
-    for (const runtime in devices.devices) {
-      if (runtime.includes('iOS')) {
-        const runtimeDevices = devices.devices[runtime];
-        const device = runtimeDevices.find(
-          (d: any) => d.name === simulatorName
-        );
+    const runtime = devices.devices[expectedRuntimeId];
 
-        if (device) {
-          return device.udid;
-        }
-      }
+    if (!runtime) {
+      return null;
+    }
+
+    const device = runtime.find((d: any) => d.name === simulatorName);
+
+    if (device) {
+      return device.udid;
     }
 
     return null;
@@ -73,7 +76,7 @@ export const getAvailableSimulators = async (): Promise<
 };
 
 export const getSimulatorStatus = async (
-  simulatorName: string
+  udid: string
 ): Promise<IOSSimulatorStatus> => {
   try {
     const { stdout } = await spawn('xcrun', [
@@ -87,9 +90,7 @@ export const getSimulatorStatus = async (
     for (const runtime in devices.devices) {
       if (runtime.includes('iOS')) {
         const runtimeDevices = devices.devices[runtime];
-        const device = runtimeDevices.find(
-          (d: any) => d.name === simulatorName
-        );
+        const device = runtimeDevices.find((d: any) => d.udid === udid);
 
         if (device) {
           switch (device.state) {
@@ -110,15 +111,9 @@ export const getSimulatorStatus = async (
   }
 };
 
-export const runSimulator = async (name: string): Promise<void> => {
-  const deviceId = await getSimulatorDeviceId(name);
-
-  if (!deviceId) {
-    throw new Error('Simulator not found');
-  }
-
+export const runSimulator = async (udid: string): Promise<void> => {
   try {
-    await spawn('xcrun', ['simctl', 'boot', deviceId]);
+    await spawn('xcrun', ['simctl', 'boot', udid]);
   } catch (bootError: any) {
     // Ignore if simulator is already booted
     if (
@@ -137,7 +132,7 @@ export const runSimulator = async (name: string): Promise<void> => {
   while (true) {
     attempts++;
 
-    const status = await getSimulatorStatus(name);
+    const status = await getSimulatorStatus(udid);
 
     if (status === 'running') {
       break;
@@ -151,19 +146,13 @@ export const runSimulator = async (name: string): Promise<void> => {
   }
 };
 
-export const stopSimulator = async (name: string): Promise<void> => {
-  const simulatorId = await getSimulatorDeviceId(name);
-
-  if (!simulatorId) {
-    return; // Already stopped
-  }
-
-  await stopSimulatorById(simulatorId);
+export const stopSimulator = async (udid: string): Promise<void> => {
+  await stopSimulatorById(udid);
 };
 
-const stopSimulatorById = async (simulatorId: string): Promise<void> => {
+const stopSimulatorById = async (udid: string): Promise<void> => {
   try {
-    await spawn('xcrun', ['simctl', 'shutdown', simulatorId]);
+    await spawn('xcrun', ['simctl', 'shutdown', udid]);
   } catch (shutdownError: any) {
     // Ignore if simulator is already shut down
     if (
