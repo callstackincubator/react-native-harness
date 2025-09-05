@@ -1,6 +1,6 @@
 {
   "name": "@react-native-harness/babel-preset",
-  "version": "1.0.0-alpha.1",
+  "version": "1.0.0-alpha.2",
   "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
