@@ -1,6 +1,6 @@
 {
   "name": "@react-native-harness/bridge",
-  "version": "1.0.0-alpha.2",
+  "version": "1.0.0-alpha.3",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -29,7 +29,6 @@
   "dependencies": {
     "@react-native-harness/tools": "workspace:*",
     "birpc": "^2.4.0",
-    "partysocket": "^1.1.4",
     "tslib": "^2.3.0",
     "ws": "^8.18.2"
   },

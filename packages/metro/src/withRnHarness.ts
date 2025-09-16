@@ -1,4 +1,5 @@
-import { mergeConfig, MetroConfig } from '@react-native/metro-config';
+import { MetroConfig } from '@react-native/metro-config';
+import { patchModuleSystem } from './moduleSystem';
 
 export const withRnHarness = (
   config: MetroConfig,
@@ -8,30 +9,22 @@ export const withRnHarness = (
     return config;
   }
 
-  const reactNativeMetroConfigPath = require.resolve(
-    '@react-native/metro-config',
-    { paths: [process.cwd()] }
-  );
+  patchModuleSystem();
 
-  const metroConfigPath = require.resolve(
-    'metro-config/src/defaults/defaults',
-    { paths: [reactNativeMetroConfigPath] }
-  );
-
-  const metroConfig = require(metroConfigPath);
-
-  metroConfig.moduleSystem = require.resolve(
-    '@react-native-harness/runtime/moduleSystem',
-    { paths: [process.cwd()] }
-  );
-
-  return mergeConfig(config, {
+  return {
+    ...config,
     cacheVersion: 'react-native-harness',
     serializer: {
+      ...config.serializer,
       getPolyfills: (...args) => [
         ...(config.serializer?.getPolyfills?.(...args) ?? []),
         require.resolve('../assets/init.js'),
       ],
     },
-  });
+    resolver: {
+      ...config.resolver,
+      // Unlock __tests__ directory
+      blockList: undefined,
+    },
+  };
 };

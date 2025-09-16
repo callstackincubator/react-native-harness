@@ -1,6 +1,6 @@
-import { WebSocket } from 'partysocket';
 import { BirpcReturn, createBirpc } from 'birpc';
 import type { BridgeClientFunctions, BridgeServerFunctions } from './shared.js';
+import { deserialize, serialize } from './serializer.js';
 
 export type BridgeClient = {
   rpc: BirpcReturn<BridgeServerFunctions, BridgeClientFunctions>;
@@ -24,8 +24,8 @@ const getBridgeClient = async (
               handler(event.data);
             });
           },
-          serialize: JSON.stringify,
-          deserialize: JSON.parse,
+          serialize,
+          deserialize,
         }
       );
 

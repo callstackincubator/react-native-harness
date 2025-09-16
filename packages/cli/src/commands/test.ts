@@ -35,6 +35,7 @@ type TestRunContext = {
   environment?: Environment;
   testFiles?: string[];
   results?: TestResult[];
+  projectRoot: string;
 };
 
 const setupEnvironment = async (context: TestRunContext): Promise<void> => {
@@ -94,7 +95,7 @@ const findTestFiles = async (
 
   const globPattern = pattern || context.config.include;
   const glob = new Glob(globPattern, {
-    cwd: process.cwd(),
+    cwd: context.projectRoot,
   });
   context.testFiles = await glob.walk();
   discoverSpinner.stop(`Found ${context.testFiles.length} test files`);
@@ -153,7 +154,7 @@ export const testCommand = async (
 ): Promise<void> => {
   intro('React Native Test Harness');
 
-  const config = await getConfig(process.cwd());
+  const { config, projectRoot } = await getConfig(process.cwd());
   config.reporter = defaultReporter;
 
   const selectedRunnerName = runnerName ?? config.defaultRunner;
@@ -173,6 +174,7 @@ export const testCommand = async (
     runner,
     testFiles: [],
     results: [],
+    projectRoot,
   };
 
   try {

@@ -8,7 +8,7 @@
     "emitDeclarationOnly": false,
     "forceConsistentCasingInFileNames": true,
     "types": ["node"],
-    "lib": ["ES2020", "DOM"]
+    "lib": ["ES2022", "DOM"]
   },
   "include": ["src/**/*.ts"],
   "references": [

@@ -14,3 +14,13 @@ export class MalformedModuleError extends Error {
     this.name = 'MalformedModuleError';
   }
 }
+
+export class BundlingFailedError extends Error {
+  constructor(
+    public readonly modulePath: string,
+    public readonly reason: string
+  ) {
+    super(`Bundling of ${modulePath} failed`);
+    this.name = 'BundlingFailedError';
+  }
+}

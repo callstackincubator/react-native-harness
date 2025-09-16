@@ -7,6 +7,7 @@ import { store } from '../ui/state.js';
 import { getTestRunner, TestRunner } from '../runner/index.js';
 import { getTestCollector, TestCollector } from '../collector/index.js';
 import { combineEventEmitters, EventEmitter } from '../utils/emitter.js';
+import { attachProgressLogger } from '../utils/progressLogger.js';
 import { getWSServer } from './getWSServer.js';
 import { fetchModule, evaluateModule } from '../bundler/index.js';
 
@@ -38,12 +39,18 @@ export const getClient = async () => {
         client.rpc.emitEvent(event.type, event);
       });
 
+      // Add console logging for progress information
+      attachProgressLogger(events, path);
+
       const moduleJs = await fetchModule(path);
       const collectionResult = await collector.collect(
         () => evaluateModule(moduleJs, path),
         path
       );
-      return await runner.run(collectionResult.testSuite, path);
+      const result = await runner.run(collectionResult.testSuite, path);
+      return result;
+    } catch (error) {
+      throw error;
     } finally {
       collector?.dispose();
       runner?.dispose();

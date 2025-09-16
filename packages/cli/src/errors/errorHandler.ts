@@ -12,6 +12,7 @@ import {
   RpcClientError,
   AppNotInstalledError,
   BridgeTimeoutError,
+  BundlingFailedError,
 } from './errors.js';
 
 export const handleError = (error: unknown): void => {
@@ -149,6 +150,17 @@ export const handleError = (error: unknown): void => {
       );
     }
     console.error(`\nPlease install the app and try running the tests again.`);
+  } else if (error instanceof BundlingFailedError) {
+    console.error(`\n❌ Test File Bundling Error`);
+    console.error(`\nFile: ${error.modulePath}`);
+    console.error(`\nError: ${error.reason}`);
+    console.error(`\nTroubleshooting steps:`);
+    console.error(`  • Check the test file syntax and imports`);
+    console.error(`  • Verify all imported modules exist and are accessible`);
+    console.error(`  • Ensure the Metro bundler configuration is correct`);
+    console.error(`  • Check for any circular dependencies in the test file`);
+    console.error(`  • Verify that all required packages are installed`);
+    console.error(`\nPlease fix the bundling issues and try again.`);
   } else if (error instanceof BridgeTimeoutError) {
     console.error(`\n❌ Bridge Connection Timeout`);
     console.error(

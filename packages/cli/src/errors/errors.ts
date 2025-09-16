@@ -107,3 +107,13 @@ export class AppNotInstalledError extends Error {
     this.name = 'AppNotInstalledError';
   }
 }
+
+export class BundlingFailedError extends Error {
+  constructor(
+    public readonly modulePath: string,
+    public readonly reason: string
+  ) {
+    super(`Bundling of ${modulePath} failed: ${reason}`);
+    this.name = 'BundlingFailedError';
+  }
+}
