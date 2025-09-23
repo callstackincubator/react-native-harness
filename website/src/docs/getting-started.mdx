@@ -1,14 +1,14 @@
+import { PackageManagerTabs } from '@theme';
+
 # Getting Started
 
 React Native Harness allows you to write Jest-style tests that run directly in your React Native app with full access to native modules. Let's get you set up in minutes.
 
 ## Installation
 
-Install the required packages as development dependencies:
+Install React Native Harness as a development dependency:
 
-<PackageManagerTabs
-  command="install -D @react-native-harness/metro @react-native-harness/babel-preset @react-native-harness/runtime react-native-harness"
-/>
+<PackageManagerTabs command="install react-native-harness" />
 
 ## Configuration
 
@@ -42,11 +42,11 @@ export default config;
 
 ### 2. Update Metro Configuration
 
-Add the React Native Harness Metro plugin to your `metro.config.js`:
+Update your `metro.config.js` so React Native Harness will be able to use it to bundle its tests:
 
 ```javascript
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
-const { withRnHarness } = require('@react-native-harness/metro');
+const { withRnHarness } = require('react-native-harness/metro');
 
 const defaultConfig = getDefaultConfig(__dirname);
 
@@ -59,21 +59,18 @@ module.exports = withRnHarness(mergeConfig(defaultConfig, customConfig));
 
 ### 3. Update Babel Configuration
 
-Add the React Native Harness preset to your `babel.config.js`:
+Add the required preset to `babel.config.js`. This is needed for module mocking and bundling speedup when running tests.
 
 ```javascript
 module.exports = {
-  presets: [
-    'module:@react-native/babel-preset',
-    '@react-native-harness/babel-preset',
-  ],
+  presets: ['module:@react-native/babel-preset', 'react-native-harness/babel'],
   // Your existing Babel config
 };
 ```
 
 ### 4. Update Your Entry Point
 
-Add a conditional entry point to your `index.js` or main entry file:
+Add a conditional entry point to your `index.js` or main entry file. This allows React Native Harness to take over the app when needed and run tests.
 
 ```javascript
 // index.js (or your main entry file)
@@ -83,16 +80,24 @@ AppRegistry.registerComponent(
   'YourAppName',
   () =>
     global.RN_HARNESS
-      ? require('@react-native-harness/runtime').ReactNativeHarness
+      ? require('react-native-harness').ReactNativeHarness
       : require('./App').default // Your normal app component
 );
 ```
 
-This conditional allows the same bundle to serve both your app and the test runtime. The Babel plugin will optimize this at build time, eliminating dead code branches.
+### 5. TypeScript Support (Optional)
+
+If you're using TypeScript, add a `react-native-harness.d.ts` file to your project root to get proper type definitions:
+
+```typescript
+/// <reference types="react-native-harness/types" />
+```
+
+This way, your app will know about the RN_HARNESS global and won't mark it as an error.
 
 ## Writing Your First Test
 
-Create a test file with the `.harness.js` or `.harness.ts` extension. Import testing utilities from `@react-native-harness/runtime` instead of Jest:
+Create a test file with a `.harness.js` or `.harness.ts` extension. Import testing utilities from `react-native-harness` instead of Jest:
 
 ```javascript
 // MyComponent.harness.js
@@ -102,7 +107,7 @@ import {
   expect,
   beforeEach,
   afterEach,
-} from '@react-native-harness/runtime';
+} from 'react-native-harness';
 import { NativeModules, Platform } from 'react-native';
 
 describe('My First Harness Test', () => {
@@ -134,41 +139,27 @@ describe('My First Harness Test', () => {
 
 ## Available Testing APIs
 
-React Native Harness provides Jest-compatible APIs through `@react-native-harness/runtime`:
+React Native Harness provides Jest-compatible APIs through `react-native-harness`:
 
 ### Test Structure
 
-- `describe(name, fn)` - Group related tests
-- `it(name, fn)` / `test(name, fn)` - Define individual tests
-- `it.skip()` / `test.skip()` - Skip tests
-- `it.only()` / `test.only()` - Run only specific tests
+Use `describe(name, fn)` to group related tests, `it(name, fn)` or `test(name, fn)` to define individual tests, `it.skip()` or `test.skip()` to skip tests, and `it.only()` or `test.only()` to run only specific tests.
 
 ### Lifecycle Hooks
 
-- `beforeAll(fn)` - Run once before all tests
-- `afterAll(fn)` - Run once after all tests
-- `beforeEach(fn)` - Run before each test
-- `afterEach(fn)` - Run after each test
+Control test execution with `beforeAll(fn)` to run once before all tests, `afterAll(fn)` to run once after all tests, `beforeEach(fn)` to run before each test, and `afterEach(fn)` to run after each test.
 
 ### Assertions
 
-- `expect(value)` - Create expectations with matchers like:
-  - `.toBe()`, `.toEqual()`, `.toBeTruthy()`, `.toBeFalsy()`
-  - `.toContain()`, `.toHaveLength()`, `.toMatch()`
-  - `.toBeInstanceOf()`, `.toHaveProperty()`
-  - And many more Jest-compatible matchers
+Create expectations using `expect(value)` with matchers like `.toBe()`, `.toEqual()`, `.toBeTruthy()`, `.toBeFalsy()`, `.toContain()`, `.toHaveLength()`, `.toMatch()`, `.toBeInstanceOf()`, `.toHaveProperty()`, and many more Jest-compatible matchers.
 
 ## Running Tests
 
 Use the React Native Harness CLI to run your tests:
 
-<PackageManagerTabs
-    command="react-native-harness test android"
-/>
+<PackageManagerTabs command="react-native-harness test android" />
 
-<PackageManagerTabs
-    command="react-native-harness test ios"
-/>
+<PackageManagerTabs command="react-native-harness test ios" />
 
 ## What's Next?
 

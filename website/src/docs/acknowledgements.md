@@ -4,7 +4,7 @@ React Native Harness stands on the shoulders of giants and wouldn't be possible 
 
 ## Inspiration
 
-The idea for React Native Harness was created by the influence of [XYZ approach] in their [ABC library]. Their innovative approach to [specific technique/concept] demonstrated that it was possible to bridge the gap between testing convenience and native environment execution, inspiring us to adapt these concepts for React Native development.
+The idea for React Native Harness came from seeing how Marc Rousavy set up testing in [Nitro Modules](https://github.com/mrousavy/nitro). In his example app, he defines a set of tests and runs them directly in the native environment, reporting results back. It was brilliant but not generic - you'd have to copy and adapt his approach for each project. We thought "what if we could take this concept and make it a proper test runner that everyone could use?" That's how React Native Harness was born - taking his core idea to the next level with a generic, reusable solution.
 
 ## Open Source Libraries
 
@@ -30,11 +30,13 @@ React Native Harness leverages a powerful set of open-source libraries to implem
 
 We extend our heartfelt gratitude to:
 
-- **The [ABC library] team** for pioneering the [XYZ approach] that inspired React Native Harness's architecture and proved that innovative testing approaches are not only possible but necessary.
+- **Marc Rousavy** for showing us how native module testing could actually work well. Their approach gave us the confidence that we could build something better for React Native testing.
 
-- **The Vitest team** for creating such excellent, modular testing utilities that allowed us to build upon proven, battle-tested foundations. Their commitment to performance and developer experience has been instrumental in making React Native Harness both powerful and familiar to use.
+- **Kræn Hansen** for jumping in early and helping shape what React Native Harness became. His ideas and feedback were crucial in getting the APIs and functionality right.
 
-- **The broader open-source community** for the countless libraries, tools, and ideas that make projects like React Native Harness possible.
+- **The Vitest team** for building such solid, modular testing tools that we could actually use as a foundation. Their focus on performance and developer experience made our job a lot easier.
+
+- **The broader open-source community** for all the libraries, tools, and ideas that make projects like this possible in the first place.
 
 React Native Harness is our contribution back to this amazing ecosystem. We hope it helps developers test their React Native applications more effectively and bridges the gap that has existed for too long in mobile development testing.
 
