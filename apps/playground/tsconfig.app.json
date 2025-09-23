@@ -34,16 +34,10 @@
   ],
   "references": [
     {
-      "path": "../../packages/cli/tsconfig.lib.json"
-    },
-    {
-      "path": "../../packages/babel-preset/tsconfig.lib.json"
-    },
-    {
-      "path": "../../packages/metro/tsconfig.lib.json"
-    },
-    {
       "path": "../../packages/runtime/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/react-native-harness/tsconfig.lib.json"
     }
   ]
 }

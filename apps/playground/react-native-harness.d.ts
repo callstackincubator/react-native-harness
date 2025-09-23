@@ -1,1 +1,1 @@
-/// <reference types="@react-native-harness/runtime/types" />
+/// <reference types="react-native-harness/types" />

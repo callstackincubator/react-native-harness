@@ -4,15 +4,6 @@
   "include": [],
   "references": [
     {
-      "path": "../../packages/cli"
-    },
-    {
-      "path": "../../packages/babel-preset"
-    },
-    {
-      "path": "../../packages/metro"
-    },
-    {
       "path": "../../packages/runtime"
     },
     {

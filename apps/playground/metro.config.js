@@ -1,7 +1,7 @@
 const { withNxMetro } = require('@nx/react-native');
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
 const path = require('path');
-const { withRnHarness } = require('@react-native-harness/metro');
+const { withRnHarness } = require('react-native-harness/metro');
 
 const defaultConfig = getDefaultConfig(__dirname);
 

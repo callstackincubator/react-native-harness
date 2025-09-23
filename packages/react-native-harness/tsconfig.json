@@ -1,0 +1,22 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "../babel-preset"
+    },
+    {
+      "path": "../metro"
+    },
+    {
+      "path": "../runtime"
+    },
+    {
+      "path": "../cli"
+    },
+    {
+      "path": "./tsconfig.lib.json"
+    }
+  ]
+}

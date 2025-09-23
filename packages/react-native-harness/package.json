@@ -1,0 +1,39 @@
+{
+  "name": "react-native-harness",
+  "version": "1.0.0-alpha.6",
+  "bin": {
+    "react-native-harness": "./bin.js"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./metro": {
+      "development": "./src/metro.ts",
+      "types": "./dist/metro.d.ts",
+      "import": "./dist/metro.js",
+      "default": "./dist/metro.js"
+    },
+    "./babel": {
+      "development": "./src/babel.ts",
+      "types": "./dist/babel.d.ts",
+      "import": "./dist/babel.js",
+      "default": "./dist/babel.js"
+    },
+    "./types": "./types/index.d.ts"
+  },
+  "dependencies": {
+    "@react-native-harness/runtime": "workspace:*",
+    "@react-native-harness/cli": "workspace:*",
+    "@react-native-harness/metro": "workspace:*",
+    "@react-native-harness/babel-preset": "workspace:*"
+  }
+}

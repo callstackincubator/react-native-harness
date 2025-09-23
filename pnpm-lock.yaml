@@ -185,7 +185,7 @@ importers:
         version: 0.76.9(@babel/core@7.27.4)(@babel/preset-env@7.27.2(@babel/core@7.27.4))(@react-native-community/cli@15.0.1(typescript@5.8.3))(@types/react@18.3.23)(encoding@0.1.13)(react@19.1.1)
       react-native-harness:
         specifier: workspace:*
-        version: link:../../packages/cli
+        version: link:../../packages/react-native-harness
     devDependencies:
       '@babel/plugin-transform-class-static-block':
         specifier: ^7.27.1
@@ -268,6 +268,21 @@ importers:
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
+
+  packages/react-native-harness:
+    dependencies:
+      '@react-native-harness/babel-preset':
+        specifier: workspace:*
+        version: link:../babel-preset
+      '@react-native-harness/cli':
+        specifier: workspace:*
+        version: link:../cli
+      '@react-native-harness/metro':
+        specifier: workspace:*
+        version: link:../metro
+      '@react-native-harness/runtime':
+        specifier: workspace:*
+        version: link:../runtime
 
   packages/runtime:
     dependencies:

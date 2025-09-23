@@ -10,7 +10,7 @@ import {
   beforeEach,
   afterEach,
   clearMocks,
-} from '@react-native-harness/runtime';
+} from 'react-native-harness';
 
 // Demo: React Native Harness Features Showcase
 // This test demonstrates all the features implemented in React Native Harness

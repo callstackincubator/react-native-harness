@@ -3,17 +3,17 @@ import type { PluginObj, types as BabelTypes, NodePath } from '@babel/core';
 const resolveWeakPlugin = ({
   types: t,
 }: typeof import('@babel/core')): PluginObj => {
-  // Track imports from @react-native-harness/runtime for require.resolveWeak transformation
+  // Track imports from react-native-harness for require.resolveWeak transformation
   const importedNames = new Set<string>();
 
   return {
     name: 'react-native-harness-resolve-weak-plugin',
     visitor: {
-      // Track imports from @react-native-harness/runtime
+      // Track imports from react-native-harness
       ImportDeclaration(path: NodePath<BabelTypes.ImportDeclaration>) {
         const { node } = path;
 
-        if (node.source.value === '@react-native-harness/runtime') {
+        if (node.source.value === 'react-native-harness') {
           // Track all imported names
           node.specifiers.forEach((spec) => {
             if (t.isImportSpecifier(spec) && t.isIdentifier(spec.imported)) {
@@ -31,7 +31,7 @@ const resolveWeakPlugin = ({
         if (t.isIdentifier(node.callee)) {
           const functionName = node.callee.name;
 
-          // Only transform if the function was imported from @react-native-harness/runtime
+          // Only transform if the function was imported from react-native-harness
           if (
             importedNames.has(functionName) &&
             (functionName === 'requireActual' || functionName === 'mock')
