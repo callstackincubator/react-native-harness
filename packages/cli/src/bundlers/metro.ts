@@ -1,27 +1,59 @@
 import { type ChildProcess } from 'node:child_process';
-import { getReactNativeCliPath, getTimeoutSignal, spawn } from '@react-native-harness/tools';
+import {
+  getReactNativeCliPath,
+  getExpoCliPath,
+  getTimeoutSignal,
+  spawn,
+  SubprocessError,
+} from '@react-native-harness/tools';
 
-export const runMetro = async (): Promise<ChildProcess> => {
-  const metro = spawn('node', [getReactNativeCliPath(), 'start'], {
-    env: {
-      ...process.env,
-      RN_HARNESS: 'true',
-    },
+const METRO_PORT = 8081;
+
+export const runMetro = async (isExpo = false): Promise<ChildProcess> => {
+  const metro = spawn(
+    'node',
+    [
+      isExpo ? getExpoCliPath() : getReactNativeCliPath(),
+      'start',
+      '--port',
+      METRO_PORT.toString(),
+    ],
+    {
+      env: {
+        ...process.env,
+        RN_HARNESS: 'true',
+        ...(isExpo && { EXPO_NO_METRO_WORKSPACE_ROOT: 'true' }),
+      },
+    }
+  );
+
+  // Forward metro output to CLI output
+  metro.nodeChildProcess.then((childProcess) => {
+    if (childProcess.stdout) {
+      childProcess.stdout.pipe(process.stdout);
+    }
+    if (childProcess.stderr) {
+      childProcess.stderr.pipe(process.stderr);
+    }
   });
-  const nodeChildProcess = await metro.nodeChildProcess;
 
-  nodeChildProcess.on('error', (error) => {
-    console.error('Metro process error:', error);
+  metro.catch((error) => {
+    // This process is going to be killed by us, so we don't need to throw an error
+    if (error instanceof SubprocessError && error.signalName === 'SIGTERM') {
+      return;
+    }
+
+    throw error;
   });
 
   await waitForMetro();
-  return nodeChildProcess;
+  return metro.nodeChildProcess;
 };
 
 export const waitForMetro = async (
-  port: number = 8081,
-  maxRetries: number = 10,
-  retryDelay: number = 1000
+  port = 8081,
+  maxRetries = 20,
+  retryDelay = 1000
 ): Promise<void> => {
   let attempts = 0;
 
@@ -40,7 +72,9 @@ export const waitForMetro = async (
           return;
         }
       }
-    } catch { }
+    } catch {
+      // Errors are expected here, we're just waiting for the process to be ready
+    }
 
     if (attempts < maxRetries) {
       await new Promise((resolve) => setTimeout(resolve, retryDelay));
@@ -50,6 +84,6 @@ export const waitForMetro = async (
   throw new Error(`Metro bundler is not ready after ${maxRetries} attempts`);
 };
 
-export const reloadApp = async (port: number = 8081): Promise<void> => {
-  await fetch(`http://localhost:${port}/reload`);
+export const reloadApp = async (): Promise<void> => {
+  await fetch(`http://localhost:${METRO_PORT}/reload`);
 };

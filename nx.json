@@ -74,5 +74,21 @@
     "test": {
       "dependsOn": ["^build"]
     }
+  },
+  "release": {
+    "versionPlans": true,
+    "projects": ["packages/*"],
+    "version": {
+      "preVersionCommand": "pnpm nx run-many -t build --projects=\"packages/*\""
+    },
+    "releaseTagPattern": "v{version}",
+    "git": {
+      "commitMessage": "chore: release v{version}"
+    },
+    "changelog": {
+      "workspaceChangelog": {
+        "createRelease": "github"
+      }
+    }
   }
 }

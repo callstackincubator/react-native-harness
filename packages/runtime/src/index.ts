@@ -1,20 +1,7 @@
-const Shim = require('event-target-shim');
-globalThis.Event = Shim.Event;
-globalThis.EventTarget = Shim.EventTarget;
+import './globals.d.ts';
 
-export { render, cleanup } from './rntl/render.js';
-export { userEvent } from './rntl/userEvent.js';
-export { screen } from './rntl/screen.js';
-export { expect } from './rntl/expect.js';
-export { fake } from './rntl/fn.js';
-export {
-  describe,
-  test,
-  it,
-  beforeAll,
-  afterAll,
-  beforeEach,
-  afterEach,
-} from './rntl/describe.js';
-export { UI } from './ui/UI.js';
-export { getEntryComponent } from './getEntryComponent.js';
+export { UI as ReactNativeHarness } from './ui/index.js';
+export * from './spy/index.js';
+export * from './expect/index.js';
+export * from './collector/index.js';
+export * from './mocker/index.js';

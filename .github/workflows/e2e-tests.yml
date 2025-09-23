@@ -48,7 +48,7 @@ jobs:
       fail-fast: false
       matrix:
         app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
-    
+
     steps:
       - name: Delete unnecessary tools
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -69,7 +69,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '23'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -109,10 +109,19 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           ls /dev/kvm
 
-      - name: Run E2E tests
+      - name: AVD cache
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-35-2
+
+      - name: Create AVD and generate snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          working-directory: apps/${{ matrix.app }}/android
           api-level: 35
           arch: x86_64
           profile: pixel_7
@@ -121,10 +130,22 @@ jobs:
           force-avd-creation: false
           avd-name: Pixel_8_API_35
           disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: echo "Generated AVD snapshot for caching."
+
+      - name: Run E2E tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          working-directory: apps/${{ matrix.app }}/android
+          api-level: 35
+          arch: x86_64
+          force-avd-creation: false
+          avd-name: Pixel_8_API_35
+          disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb install -r "./app/build/outputs/apk/debug/app-debug.apk"
-            pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test android-native"
+            pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test android"
 
   e2e-ios:
     name: E2E iOS - ${{ matrix.app }}
@@ -135,7 +156,8 @@ jobs:
       fail-fast: false
       matrix:
         app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
-    
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.0.app/Contents/Developer
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -192,8 +214,8 @@ jobs:
         if: steps.cache-app-restore.outputs.cache-hit != 'true'
         working-directory: apps/${{ matrix.app }}
         run: |
-          pnpm react-native build-ios
-  
+          pnpm react-native build-ios --verbose
+
       - name: Save app to cache
         if: steps.cache-app-restore.outputs.cache-hit != 'true' && success()
         uses: actions/cache/save@v4
@@ -205,7 +227,7 @@ jobs:
         with:
           model: 'iPhone 16 Pro'
           os: iOS
-          os_version: 18.2
+          os_version: 18.6
           wait_for_boot: true
           erase_before_boot: false
 
@@ -215,4 +237,4 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test ios-native"
+          pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test ios"

@@ -2,15 +2,21 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { type BirpcGroup, createBirpcGroup } from 'birpc';
 import { logger } from '@react-native-harness/tools';
 import { EventEmitter } from 'node:events';
-import type { BridgeServerFunctions, BridgeClientFunctions } from './shared.js';
+import type {
+  BridgeServerFunctions,
+  BridgeClientFunctions,
+  DeviceDescriptor,
+  BridgeEventsMap,
+} from './shared.js';
+import { deserialize, serialize } from './serializer.js';
 
 export type BridgeServerOptions = {
   port: number;
 };
 
 export type BridgeServerEvents = {
-  ready: () => void;
-};
+  ready: (device: DeviceDescriptor) => void;
+} & BridgeEventsMap;
 
 export type BridgeServer = {
   ws: WebSocketServer;
@@ -29,10 +35,6 @@ export type BridgeServer = {
   ) => void;
 };
 
-const notReadyYet = async () => {
-  throw new Error('Not ready yet');
-};
-
 export const getBridgeServer = async ({
   port,
 }: BridgeServerOptions): Promise<BridgeServer> => {
@@ -46,11 +48,11 @@ export const getBridgeServer = async ({
 
   const group = createBirpcGroup<BridgeClientFunctions, BridgeServerFunctions>(
     {
-      executeAction: notReadyYet,
-      executeQuery: notReadyYet,
-      executeMatcher: notReadyYet,
-      reportReady: () => {
-        emitter.emit('ready', '');
+      reportReady: (device) => {
+        emitter.emit('ready', device);
+      },
+      emitEvent: (event, data) => {
+        emitter.emit(event, data);
       },
     } satisfies BridgeServerFunctions,
     []
@@ -74,24 +76,8 @@ export const getBridgeServer = async ({
             handler(message);
           });
         },
-        serialize: (data) => {
-          if (data.e) {
-            // Serialize error by hand (include message, stack and cause).
-            return JSON.stringify({
-              ...data,
-              e: {
-                ...data.e,
-                name: data.e.name,
-                message: data.e.message,
-                stack: data.e.stack,
-                cause: data.e.cause,
-              }
-            })
-          }
-
-          return JSON.stringify(data);
-        },
-        deserialize: JSON.parse,
+        serialize,
+        deserialize,
       });
     });
   });

@@ -1,6 +1,8 @@
 import { type ChildProcess } from 'node:child_process';
-import { getInteractionEngine } from '@react-native-harness/interaction-engine';
-import { TestRunnerConfig } from '@react-native-harness/config';
+import {
+  assertAndroidRunnerConfig,
+  TestRunnerConfig,
+} from '@react-native-harness/config';
 import { logger } from '@react-native-harness/tools';
 
 import { type PlatformAdapter } from '../platform-adapter.js';
@@ -14,11 +16,13 @@ import {
 import { runApp, killApp } from './build.js';
 import { killWithAwait } from '../../process.js';
 import { runMetro } from '../../bundlers/metro.js';
-import { AppNotInstalledError } from '../../errors/appNotInstalledError.js';
+import { AppNotInstalledError } from '../../errors/errors.js';
 
 const androidPlatformAdapter: PlatformAdapter = {
   name: 'android',
   getEnvironment: async (runner: TestRunnerConfig) => {
+    assertAndroidRunnerConfig(runner);
+
     let emulator: ChildProcess | null = null;
     const emulatorStatus = await getEmulatorStatus(runner.deviceId);
     logger.debug(`Emulator status: ${emulatorStatus}`);
@@ -29,8 +33,6 @@ const androidPlatformAdapter: PlatformAdapter = {
       logger.debug(`Emulator ${runner.deviceId} is stopped, starting it`);
       emulator = await runEmulator(runner.deviceId);
     }
-
-    const interactionEnginePromise = getInteractionEngine(runner);
 
     const deviceId = await getEmulatorDeviceId(runner.deviceId);
     logger.debug(`Device ID: ${deviceId}`);
@@ -50,7 +52,11 @@ const androidPlatformAdapter: PlatformAdapter = {
     logger.debug(`App is installed: ${isInstalled}`);
 
     if (!isInstalled) {
-      throw new AppNotInstalledError(runner.deviceId, runner.bundleId, 'android');
+      throw new AppNotInstalledError(
+        runner.deviceId,
+        runner.bundleId,
+        'android'
+      );
     }
 
     logger.debug('Waiting for Metro to start');
@@ -60,10 +66,6 @@ const androidPlatformAdapter: PlatformAdapter = {
     logger.debug('Running app');
     await runApp(deviceId, runner.bundleId);
     logger.debug('App running');
-
-    logger.debug('Waiting for interaction engine to start');
-    const interactionEngine = await interactionEnginePromise;
-    logger.debug('Interaction engine started');
 
     return {
       restart: async () => {
@@ -76,10 +78,8 @@ const androidPlatformAdapter: PlatformAdapter = {
           await killWithAwait(emulator);
         }
 
-        await interactionEngine.close();
         await killWithAwait(metro);
       },
-      interactionEngine,
     };
   },
 };

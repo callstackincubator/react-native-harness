@@ -22,7 +22,10 @@
       "path": "./packages/cli"
     },
     {
-      "path": "./packages/interaction-engine"
+      "path": "./apps/playground-expo"
+    },
+    {
+      "path": "./packages/babel-preset"
     }
   ]
 }

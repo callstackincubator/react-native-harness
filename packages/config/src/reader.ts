@@ -1,5 +1,9 @@
 import { Config, ConfigSchema } from './types.js';
-import { ConfigValidationError, ConfigNotFoundError, ConfigLoadError } from './errors.js';
+import {
+  ConfigValidationError,
+  ConfigNotFoundError,
+  ConfigLoadError,
+} from './errors.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -24,7 +28,9 @@ const importUp = async (
 
       try {
         if (ext === '.mjs') {
-          rawConfig = await import(filePathWithExt).then((module) => module.default);
+          rawConfig = await import(filePathWithExt).then(
+            (module) => module.default
+          );
         } else {
           const require = createRequire(import.meta.url);
           rawConfig = require(filePathWithExt);
@@ -41,15 +47,13 @@ const importUp = async (
         return { config, filePathWithExt, configDir: dir };
       } catch (error) {
         if (error instanceof ZodError) {
-          const validationErrors = error.errors.map(err => {
-            const path = err.path.length > 0 ? ` at "${err.path.join('.')}"` : '';
+          const validationErrors = error.errors.map((err) => {
+            const path =
+              err.path.length > 0 ? ` at "${err.path.join('.')}"` : '';
             return `${err.message}${path}`;
           });
 
-          throw new ConfigValidationError(
-            filePathWithExt,
-            validationErrors
-          );
+          throw new ConfigValidationError(filePathWithExt, validationErrors);
         }
         throw error;
       }
@@ -64,10 +68,16 @@ const importUp = async (
   return importUp(parentDir, name);
 };
 
-export const getConfig = async (dir: string): Promise<Config> => {
-  const { config } = await importUp(dir, 'rn-harness.config');
+export const getConfig = async (
+  dir: string
+): Promise<{ config: Config; projectRoot: string }> => {
+  const { config, configDir } = await importUp(dir, 'rn-harness.config');
+
   return {
-    ...config,
-    reporter: config.reporter,
+    config: {
+      ...config,
+      reporter: config.reporter,
+    },
+    projectRoot: configDir,
   };
 };

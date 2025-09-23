@@ -1,5 +1,5 @@
 const config = {
-  include: './withUI.test.tsx',
+  include: ['./demo.harness.ts'],
 
   runners: [
     {
@@ -13,23 +13,11 @@ const config = {
       platform: 'ios',
       deviceId: 'iPhone 16 Pro',
       bundleId: 'org.reactjs.native.example.Playground',
-    },
-    {
-      name: 'android-native',
-      platform: 'android',
-      deviceId: 'Pixel_8_API_35',
-      bundleId: 'com.playground',
-      withUI: false,
-    },
-    {
-      name: 'ios-native',
-      platform: 'ios',
-      deviceId: 'iPhone 16 Pro',
-      bundleId: 'org.reactjs.native.example.Playground',
-      withUI: false,
+      systemVersion: '18.6',
     },
   ],
   defaultRunner: 'android',
+  bridgeTimeout: 120000,
 };
 
 export default config;

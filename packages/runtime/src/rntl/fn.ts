@@ -1,1 +1,0 @@
-export {fake} from 'sinon';

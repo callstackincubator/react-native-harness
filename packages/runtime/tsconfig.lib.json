@@ -14,9 +14,6 @@
   "references": [
     {
       "path": "../bridge/tsconfig.lib.json"
-    },
-    {
-      "path": "../interaction-engine/tsconfig.lib.json"
     }
   ],
   "exclude": [
