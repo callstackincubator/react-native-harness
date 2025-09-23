@@ -26,7 +26,7 @@ import {
   RpcClientError,
   RunnerNotFoundError,
 } from '../errors/errors.js';
-import { TestResult } from '@react-native-harness/bridge';
+import { TestSuiteResult } from '@react-native-harness/bridge';
 
 type TestRunContext = {
   config: Config;
@@ -34,7 +34,7 @@ type TestRunContext = {
   bridge?: BridgeServer;
   environment?: Environment;
   testFiles?: string[];
-  results?: TestResult[];
+  results?: TestSuiteResult[];
   projectRoot: string;
 };
 
@@ -148,6 +148,29 @@ const cleanUp = async (context: TestRunContext): Promise<void> => {
   }
 };
 
+const hasFailedTests = (results: TestSuiteResult[]): boolean => {
+  for (const suite of results) {
+    // Check if the suite itself failed
+    if (suite.status === 'failed') {
+      return true;
+    }
+
+    // Check individual tests in the suite
+    for (const test of suite.tests) {
+      if (test.status === 'failed') {
+        return true;
+      }
+    }
+
+    // Recursively check nested suites
+    if (suite.suites && hasFailedTests(suite.suites)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 export const testCommand = async (
   runnerName?: string,
   pattern?: string
@@ -184,8 +207,15 @@ export const testCommand = async (
 
     assert(context.results != null, 'Results not initialized');
     config.reporter?.report(context.results);
-    outro('Test run completed successfully');
   } finally {
     await cleanUp(context);
+  }
+
+  // Check if any tests failed and exit with appropriate code
+  if (hasFailedTests(context.results)) {
+    outro('Test run completed with failures');
+    process.exit(1);
+  } else {
+    outro('Test run completed successfully');
   }
 };
