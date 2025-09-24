@@ -106,4 +106,4 @@ describe('Camera Native Module', () => {
 
 Ready to close the testing gap? Let's get React Native Harness set up in your project and start testing native functionality the way it should be tested - directly and reliably.
 
-[Continue to Getting Started](/docs/getting-started)
+[Continue to Getting Started](/docs/introduction/getting-started)
