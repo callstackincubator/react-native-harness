@@ -171,34 +171,22 @@ importers:
 
   apps/playground:
     dependencies:
-      '@react-native-harness/babel-preset':
-        specifier: workspace:*
-        version: link:../../packages/babel-preset
-      '@react-native-harness/metro':
-        specifier: workspace:*
-        version: link:../../packages/metro
-      '@react-native-harness/runtime':
-        specifier: workspace:*
-        version: link:../../packages/runtime
       react-native:
         specifier: '*'
         version: 0.76.9(@babel/core@7.27.4)(@babel/preset-env@7.27.2(@babel/core@7.27.4))(@react-native-community/cli@15.0.1(typescript@5.8.3))(@types/react@18.3.23)(encoding@0.1.13)(react@19.1.1)
       react-native-harness:
         specifier: workspace:*
         version: link:../../packages/react-native-harness
-    devDependencies:
+
+  packages/babel-preset:
+    dependencies:
       '@babel/plugin-transform-class-static-block':
         specifier: ^7.27.1
         version: 7.27.1(@babel/core@7.27.4)
-
-  packages/babel-preset:
     devDependencies:
       '@babel/core':
         specifier: ^7.22.0
         version: 7.27.4
-      '@babel/plugin-transform-class-static-block':
-        specifier: ^7.22.0
-        version: 7.27.1(@babel/core@7.27.4)
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
@@ -252,6 +240,9 @@ importers:
 
   packages/config:
     dependencies:
+      '@react-native-harness/reporters':
+        specifier: workspace:*
+        version: link:../reporters
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
@@ -283,6 +274,16 @@ importers:
       '@react-native-harness/runtime':
         specifier: workspace:*
         version: link:../runtime
+
+  packages/reporters:
+    dependencies:
+      '@react-native-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
+    devDependencies:
+      '@react-native-harness/bridge':
+        specifier: workspace:*
+        version: link:../bridge
 
   packages/runtime:
     dependencies:

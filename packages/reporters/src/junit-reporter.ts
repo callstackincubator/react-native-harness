@@ -1,7 +1,7 @@
-import { Reporter } from '@react-native-harness/config';
 import type { TestSuiteResult, TestResult } from '@react-native-harness/bridge';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
+import { Reporter } from './reporter.js';
 
 export const junitReporter: Reporter = {
   report: async (results) => {

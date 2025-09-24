@@ -12,7 +12,10 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../reporters/tsconfig.lib.json"
+      "path": "../tools/tsconfig.lib.json"
+    },
+    {
+      "path": "../bridge/tsconfig.lib.json"
     }
   ]
 }

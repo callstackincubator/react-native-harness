@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { defaultReporter } from '@react-native-harness/reporters';
 
 export const PlatformSchema = z.enum(['ios', 'android', 'web']);
 
@@ -50,7 +51,7 @@ export const ConfigSchema = z
       .array(TestRunnerConfigSchema)
       .min(1, 'At least one runner is required'),
     defaultRunner: z.string().optional(),
-    reporter: ReporterSchema.optional(),
+    reporter: ReporterSchema.optional().default(defaultReporter),
     bridgeTimeout: z
       .number()
       .min(1000, 'Bridge timeout must be at least 1 second')
@@ -72,7 +73,6 @@ export const ConfigSchema = z
   );
 
 export type Platform = z.infer<typeof PlatformSchema>;
-export type Reporter = z.infer<typeof ReporterSchema>;
 export type BrowserType = z.infer<typeof BrowserTypeSchema>;
 export type AndroidTestRunnerConfig = z.infer<
   typeof AndroidTestRunnerConfigSchema

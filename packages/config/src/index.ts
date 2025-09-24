@@ -3,7 +3,6 @@ export type {
   Config,
   TestRunnerConfig,
   Platform,
-  Reporter,
   BrowserType,
   AndroidTestRunnerConfig,
   iOSTestRunnerConfig,

@@ -9,7 +9,6 @@ import {
 } from '@react-native-harness/config';
 import { getPlatformAdapter } from '../platforms/platform-registry.js';
 import { Glob } from 'glob';
-import { defaultReporter } from '../reporters/default-reporter.js';
 import {
   intro,
   logger,
@@ -178,8 +177,6 @@ export const testCommand = async (
   intro('React Native Test Harness');
 
   const { config, projectRoot } = await getConfig(process.cwd());
-  config.reporter = defaultReporter;
-
   const selectedRunnerName = runnerName ?? config.defaultRunner;
 
   if (!selectedRunnerName) {

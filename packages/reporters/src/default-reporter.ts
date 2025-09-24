@@ -1,6 +1,6 @@
 import { color, spinner } from '@react-native-harness/tools';
 import type { TestSuiteResult, TestResult } from '@react-native-harness/bridge';
-import { Reporter } from '@react-native-harness/config';
+import { Reporter } from './reporter.js';
 
 export const defaultReporter: Reporter = {
   report: async (results) => {

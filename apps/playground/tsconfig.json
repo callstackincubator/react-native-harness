@@ -4,9 +4,6 @@
   "include": [],
   "references": [
     {
-      "path": "../../packages/runtime"
-    },
-    {
       "path": "./tsconfig.app.json"
     }
   ]

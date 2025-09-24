@@ -1,0 +1,13 @@
+{
+  "name": "@react-native-harness/reporters",
+  "version": "1.0.0-alpha.6",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@react-native-harness/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "@react-native-harness/bridge": "workspace:*"
+  }
+}

@@ -34,9 +34,6 @@
   ],
   "references": [
     {
-      "path": "../../packages/runtime/tsconfig.lib.json"
-    },
-    {
       "path": "../../packages/react-native-harness/tsconfig.lib.json"
     }
   ]
