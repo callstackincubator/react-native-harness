@@ -1,4 +1,4 @@
-# Introduction
+# Why Do We Need Harness?
 
 React Native development has a testing problem. While JavaScript logic can be tested easily with Jest, testing native modules and platform-specific functionality has always been challenging. Let's understand why and how React Native Harness solves it.
 

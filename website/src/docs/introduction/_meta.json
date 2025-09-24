@@ -1,0 +1,17 @@
+[
+  {
+    "type": "file",
+    "name": "why-do-we-need-harness",
+    "label": "Why Do We Need Harness?"
+  },
+  {
+    "type": "file",
+    "name": "prior-art",
+    "label": "Prior Art"
+  },
+  {
+    "type": "file",
+    "name": "getting-started",
+    "label": "Getting Started"
+  }
+]

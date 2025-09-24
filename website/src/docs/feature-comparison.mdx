@@ -1,0 +1,69 @@
+# Feature Comparison
+
+When building React Native applications, it may not be immediately clear when to choose Jest, Maestro, or Harness for your testing needs. Each framework serves different purposes and excels in different scenarios. This feature comparison provides additional context across key testing dimensions to aid in your decision-making process.
+
+## Quick Summary
+
+| Framework   | Best For                                          | Key Strength                                        | Main Limitation                                 |
+| ----------- | ------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------- |
+| **Harness** | Native module testing with Jest-like syntax       | Real device execution + familiar APIs               | Beta stage, smaller ecosystem                   |
+| **Jest**    | Unit testing, component testing, JavaScript logic | Mature ecosystem, fast execution, excellent mocking | No native module access, Node.js only           |
+| **Maestro** | End-to-end UI testing across platforms            | Simple YAML syntax, cross-platform UI testing       | UI-dependent, limited mocking, indirect testing |
+
+## Detailed Feature Comparison
+
+### Speed & Performance
+
+| Framework   | Speed Ranking | Typical Execution Time | Key Performance Factor                |
+| ----------- | ------------- | ---------------------- | ------------------------------------- |
+| **Jest**    | Fastest       | Seconds to minutes     | No build required, runs in Node.js    |
+| **Harness** | Medium        | ~5-20 minutes total    | Requires app build + device execution |
+| **Maestro** | Slowest       | Variable, UI-dependent | UI automation overhead, complex flows |
+
+### Mocking
+
+| Framework   | Mocking Capability | Key Features                                      |
+| ----------- | ------------------ | ------------------------------------------------- |
+| **Jest**    | Comprehensive      | Automatic/manual mocking, extensive spy APIs      |
+| **Harness** | Native-focused     | Jest-compatible APIs + real native module mocking |
+| **Maestro** | Limited            | No built-in mocking, workarounds required         |
+
+### Execution Environment
+
+| Framework   | Environment  | Native Access       | Key Advantage                     |
+| ----------- | ------------ | ------------------- | --------------------------------- |
+| **Jest**    | Node.js      | Everything mocked   | Fast, isolated JavaScript testing |
+| **Harness** | Real devices | Full native modules | Production-like environment       |
+| **Maestro** | Real devices | Via UI interaction  | Real device capabilities          |
+
+## Use Case Recommendations
+
+### Choose **Harness** when:
+
+- ✅ You need to test native modules with real device access
+- ✅ You want Jest-like syntax but with native capabilities
+- ✅ Testing platform-specific functionality (camera, biometrics, etc.)
+- ✅ You're comfortable with beta software
+- ✅ Your team is familiar with Jest but needs native access
+
+### Choose **Jest** when:
+
+- ✅ Testing JavaScript/TypeScript business logic
+- ✅ Unit testing React Native components
+- ✅ You need mature tooling and extensive ecosystem
+- ✅ Fast feedback cycles are critical
+- ✅ Testing doesn't require real native modules
+
+### Choose **Maestro** when:
+
+- ✅ End-to-end UI testing is your primary need
+- ✅ Testing user journeys across platforms
+- ✅ You need simple, declarative test syntax
+- ✅ Testing integrations between multiple apps
+- ✅ Visual validation is important
+
+## Conclusion
+
+**Harness fills a unique gap** in the React Native testing ecosystem by combining Jest's familiar developer experience with real native environment execution. While Jest excels at JavaScript testing and Maestro dominates UI testing, Harness is the only solution that lets you test native modules directly with familiar APIs.
+
+Choose based on your primary testing needs, but consider that the most robust testing strategies often combine multiple approaches to ensure comprehensive coverage across all layers of your React Native application.

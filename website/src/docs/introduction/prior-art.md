@@ -1,4 +1,4 @@
-# Acknowledgements
+# Prior Art
 
 React Native Harness stands on the shoulders of giants and wouldn't be possible without the incredible work of the open-source community.
 

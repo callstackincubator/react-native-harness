@@ -1,0 +1,17 @@
+[
+  {
+    "type": "dir",
+    "name": "introduction",
+    "label": "Introduction"
+  },
+  {
+    "type": "dir",
+    "name": "guides",
+    "label": "Guides"
+  },
+  {
+    "type": "file",
+    "name": "feature-comparison",
+    "label": "Feature Comparison"
+  }
+]
