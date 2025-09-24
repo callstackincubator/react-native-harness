@@ -173,13 +173,31 @@ export const runSuite = async (
 
   if (hasFailedTests || hasFailedSuites) {
     status = 'failed';
-  } else if (
-    (testResults.every((result) => result.status === 'skipped') &&
-      suiteResults.every((result) => result.status === 'skipped') &&
-      testResults.length > 0) ||
-    suiteResults.length > 0
-  ) {
-    status = 'skipped';
+  } else {
+    // Check if all tests and suites are skipped (and there are some tests/suites to check)
+    const allTestsSkipped =
+      testResults.length > 0 &&
+      testResults.every((result) => result.status === 'skipped');
+    const allSuitesSkipped =
+      suiteResults.length > 0 &&
+      suiteResults.every((result) => result.status === 'skipped');
+    const hasAnyContent = testResults.length > 0 || suiteResults.length > 0;
+
+    if (
+      hasAnyContent &&
+      ((testResults.length > 0 &&
+        allTestsSkipped &&
+        suiteResults.length === 0) ||
+        (suiteResults.length > 0 &&
+          allSuitesSkipped &&
+          testResults.length === 0) ||
+        (testResults.length > 0 &&
+          suiteResults.length > 0 &&
+          allTestsSkipped &&
+          allSuitesSkipped))
+    ) {
+      status = 'skipped';
+    }
   }
 
   // Emit suite-finished event
