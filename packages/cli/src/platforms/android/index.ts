@@ -64,12 +64,12 @@ const androidPlatformAdapter: PlatformAdapter = {
     logger.debug('Metro started');
 
     logger.debug('Running app');
-    await runApp(deviceId, runner.bundleId);
+    await runApp(deviceId, runner.bundleId, runner.activityName);
     logger.debug('App running');
 
     return {
       restart: async () => {
-        await runApp(runner.deviceId, runner.bundleId);
+        await runApp(runner.deviceId, runner.bundleId, runner.activityName);
       },
       dispose: async () => {
         await killApp(deviceId, runner.bundleId);

@@ -14,6 +14,10 @@ export const AndroidTestRunnerConfigSchema = z.object({
   platform: z.literal('android'),
   deviceId: z.string().min(1, 'Device ID is required'),
   bundleId: z.string().min(1, 'Bundle ID is required'),
+  activityName: z
+    .string()
+    .min(1, 'Activity name is required')
+    .default('MainActivity'),
 });
 
 export const iOSTestRunnerConfigSchema = z.object({

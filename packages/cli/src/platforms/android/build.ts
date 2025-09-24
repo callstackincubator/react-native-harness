@@ -33,7 +33,8 @@ export const killApp = async (
 
 export const runApp = async (
   deviceId: string,
-  bundleId: string
+  bundleId: string,
+  activityName: string
 ): Promise<void> => {
   await killApp(deviceId, bundleId);
   await spawn('adb', [
@@ -43,6 +44,6 @@ export const runApp = async (
     'am',
     'start',
     '-n',
-    `${bundleId}/.MainActivity`,
+    `${bundleId}/${activityName}`,
   ]);
 };
