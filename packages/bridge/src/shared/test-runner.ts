@@ -1,9 +1,18 @@
+export type CodeFrame = {
+  content: string;
+  location?: {
+    row: number;
+    column: number;
+  };
+  fileName: string;
+};
+
 export type TestResultStatus = 'passed' | 'failed' | 'skipped' | 'todo';
 
 export type SerializedError = {
   name: string;
   message: string;
-  stack?: string;
+  codeFrame?: CodeFrame;
 };
 
 export type TestRunnerFileStartedEvent = {

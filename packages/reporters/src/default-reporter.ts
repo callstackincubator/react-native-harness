@@ -73,6 +73,10 @@ const formatTestResult = (test: TestResult, indent = ''): string => {
       errorLines
         .map((line: string) => `${indent}  ${color.red(line)}`)
         .join('\n');
+
+    if (test.error?.codeFrame) {
+      result += '\n' + test.error.codeFrame.content;
+    }
   }
 
   return result;

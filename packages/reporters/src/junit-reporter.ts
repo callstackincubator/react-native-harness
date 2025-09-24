@@ -60,8 +60,8 @@ const generateTestSuiteXML = (
       xml += ` type="${escapeXML(suite.error.name)}"`;
     }
     xml += '>';
-    if (suite.error.stack) {
-      xml += escapeXML(suite.error.stack);
+    if (suite.error.codeFrame) {
+      xml += escapeXML(suite.error.codeFrame.content);
     }
     xml += '</error>\n';
   }
@@ -99,8 +99,8 @@ const generateTestCaseXML = (test: TestResult, indent: string): string => {
           xml += ` type="${escapeXML(test.error.name)}"`;
         }
         xml += '>';
-        if (test.error?.stack) {
-          xml += escapeXML(test.error.stack);
+        if (test.error?.codeFrame) {
+          xml += escapeXML(test.error.codeFrame.content);
         }
         xml += '</failure>\n';
         break;

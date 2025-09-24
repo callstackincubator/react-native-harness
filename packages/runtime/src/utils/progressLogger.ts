@@ -62,8 +62,8 @@ export const attachProgressLogger = (
         console.log(`  ${testStatus} ${event.name} (${event.duration}ms)`);
         if (event.error) {
           console.log(`     Error: ${event.error.message}`);
-          if (event.error.stack) {
-            console.log(`     Stack: ${event.error.stack}`);
+          if (event.error.codeFrame) {
+            console.log(`     Code frame: ${event.error.codeFrame.content}`);
           }
         }
         break;

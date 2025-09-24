@@ -24,6 +24,7 @@ export type {
   TestResult,
   TestResultStatus,
   SerializedError,
+  CodeFrame,
 } from './shared/test-runner.js';
 
 export type DeviceDescriptor = {

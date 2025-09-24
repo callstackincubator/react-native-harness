@@ -12,11 +12,13 @@ LogBox.ignoreAllLogs(true);
 
 // Turn off HMR
 const HMRClient = require('react-native/Libraries/Utilities/HMRClient');
-HMRClient.setup = () => {
-  // No setup = no HMR
-};
 
-// Initialize the client
-void getClient().then((client) =>
-  client.rpc.reportReady(getDeviceDescriptor())
-);
+// Wait for HMRClient to be initialized
+setTimeout(() => {
+  HMRClient.disable();
+
+  // Initialize the React Native Harness
+  void getClient().then((client) =>
+    client.rpc.reportReady(getDeviceDescriptor())
+  );
+});

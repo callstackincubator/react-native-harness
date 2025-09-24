@@ -5,7 +5,7 @@ import type {
   TestSuiteResult,
 } from '@react-native-harness/bridge';
 import { runHooks } from './hooks.js';
-import { TestExecutionError } from './errors.js';
+import { getTestExecutionError } from './errors.js';
 import { TestRunnerContext } from './types.js';
 
 const runTest = async (
@@ -94,7 +94,7 @@ const runTest = async (
 
     return result;
   } catch (error) {
-    const testError = new TestExecutionError(
+    const testError = await getTestExecutionError(
       error,
       context.testFilePath,
       suite.name,
