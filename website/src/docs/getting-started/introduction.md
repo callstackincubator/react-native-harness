@@ -48,7 +48,7 @@ React Native Harness should be used when you want to test your native modules or
 - Testing UI components without native dependencies (use React Native Testing Library)
 - End-to-end user journey testing (use Maestro, Detox, or similar)
 
-For a detailed comparison of testing approaches and when to use each, see our [Feature Comparison](/docs/guides/feature-comparison).
+For a detailed comparison of testing approaches and when to use each, see our [Feature Comparison](/docs/feature-comparison).
 
 ## Getting Started
 
