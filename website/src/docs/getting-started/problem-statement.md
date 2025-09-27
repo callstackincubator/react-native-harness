@@ -1,4 +1,4 @@
-# Why Do We Need Harness?
+# Problem Statement
 
 React Native development has a testing problem. While JavaScript logic can be tested easily with Jest, testing native modules and platform-specific functionality has always been challenging. Let's understand why and how React Native Harness solves it.
 
@@ -8,11 +8,11 @@ Jest tests run in Node.js, which means they have no access to native modules or 
 
 ```javascript
 // This Jest test runs in Node.js - no native modules available
-describe('Camera Module', () => {
-  it('should get camera permissions', async () => {
+describe('Device Info Module', () => {
+  it('should get device model', async () => {
     // ❌ This fails - NativeModules doesn't exist in Node.js
-    const hasPermission = await NativeModules.Camera.checkPermissions();
-    expect(hasPermission).toBe(true);
+    const deviceModel = await NativeModules.DeviceInfo.getModel();
+    expect(typeof deviceModel).toBe('string');
   });
 });
 ```
@@ -25,9 +25,9 @@ E2E tools run in real environments with native access, but they require cumberso
 
 ```yaml
 # Maestro test - indirect and complex
-- tapOn: 'Enable Biometrics'
-- assertVisible: 'Biometric Prompt'
--  # Hope the system dialog appears correctly
+- tapOn: 'Show Device Info'
+- assertVisible: 'Device Model:'
+- assertVisible: 'iPhone'  # Hope this matches the test device
 ```
 
 **The challenges with E2E approaches:** These tools rely on UI automation instead of direct testing, have slow setup and execution times, require complex test scenarios for simple logic, and make it difficult to isolate what you're actually testing.
@@ -38,11 +38,12 @@ What we really want is to run the same test (or with minimal changes) directly o
 
 ```javascript
 // The same test, but running on an actual iOS/Android device
-describe('Camera Module', () => {
-  it('should get camera permissions', async () => {
+describe('Device Info Module', () => {
+  it('should get device model', async () => {
     // ✅ This works - real NativeModules on real device
-    const hasPermission = await NativeModules.Camera.checkPermissions();
-    expect(hasPermission).toBe(true);
+    const deviceModel = await NativeModules.DeviceInfo.getModel();
+    expect(typeof deviceModel).toBe('string');
+    expect(deviceModel.length).toBeGreaterThan(0);
   });
 });
 ```
@@ -51,11 +52,15 @@ We should not be forced to implement any UI. We should be able to write our test
 
 ## The Challenge: Getting JavaScript to Run on Devices
 
-JavaScript code needs to be bundled by Metro to run on real devices with the Hermes engine. This means we need to bundle test files using Metro to create device-compatible bundles, create a test runner that can load and execute test files on the device, and communicate results by sending test results back to the CLI running in Node.js.
+JavaScript code needs to be bundled by Metro to run on real devices with the Hermes engine. This means we need to:
+
+- Bundle test files using Metro to create device-compatible bundles
+- Create a test runner that can load and execute test files on the device
+- Communicate results by sending test results back to the CLI running in Node.js
 
 **This is exactly how React Native Harness works.**
 
-## How React Native Harness Works
+## How React Native Harness Solves These Problems
 
 ### 1. Bundle Test Files with Metro
 
@@ -65,7 +70,11 @@ Instead of bundling your normal app, it bundles a test runtime that can execute 
 
 ### 2. Run Tests on Real Devices
 
-The CLI installs this test bundle on your target iOS simulator or Android emulator. When the app launches, instead of your normal app UI, the Harness test runner takes control and loads your test files, executes them using familiar Jest-like APIs (`describe`, `it`, `expect`), and has full access to native modules because it's running in the real device environment.
+The CLI installs this test bundle on your target iOS simulator or Android emulator. When the app launches, instead of your normal app UI, the Harness test runner takes control and:
+
+- Loads your test files
+- Executes them using familiar Jest-like APIs (`describe`, `it`, `expect`)
+- Has full access to native modules because it's running in the real device environment
 
 ### 3. Communicate Results Back to CLI
 
@@ -81,29 +90,20 @@ This architecture gives you:
 
 **Practical Development**: No complex E2E setup, no UI automation, no brittle selectors. Just write tests that directly call the APIs you want to test.
 
-## Example: Testing Native Modules Made Simple
+## Real-World Impact
 
-```javascript
-// camera.harness.js - runs on real devices
-import { NativeModules } from 'react-native';
+Before React Native Harness, testing a simple device info call required:
 
-describe('Camera Native Module', () => {
-  it('should check camera permissions', async () => {
-    const hasPermission = await NativeModules.Camera.checkPermissions();
-    // This calls the real native module on the device
-    expect(typeof hasPermission).toBe('boolean');
-  });
+1. **With Jest**: Mock everything, test nothing real
+2. **With E2E tools**: Create UI to display info, automate interactions, parse visual results
+3. **Manual testing**: Run the app, add console logs, check output
 
-  it('should handle different permission states', async () => {
-    const status = await NativeModules.Camera.getPermissionStatus();
-    // Tests real device state, not mocked values
-    expect(['granted', 'denied', 'undetermined']).toContain(status);
-  });
-});
-```
+**With React Native Harness**: Write a simple test that calls the real API and asserts the result. Done.
 
-## Getting Started
+This fundamental shift from "testing around the problem" to "testing the actual problem" is what makes React Native Harness a game-changer for React Native development.
 
-Ready to close the testing gap? Let's get React Native Harness set up in your project and start testing native functionality the way it should be tested - directly and reliably.
+## Ready to Get Started?
 
-[Continue to Getting Started](/docs/introduction/getting-started)
+Now that you understand why React Native Harness exists and how it solves the native testing problem, let's get it set up in your project.
+
+[Continue to Quick Start](/docs/getting-started/quick-start)

@@ -1,6 +1,10 @@
 [
   {
-    "text": "Getting Started",
-    "link": "/docs/introduction/getting-started"
+    "text": "Introduction",
+    "link": "/docs/getting-started/introduction"
+  },
+  {
+    "text": "Quick Start",
+    "link": "/docs/getting-started/quick-start"
   }
 ]

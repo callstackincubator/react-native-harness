@@ -1,0 +1,22 @@
+[
+  {
+    "type": "file",
+    "name": "introduction",
+    "label": "Introduction"
+  },
+  {
+    "type": "file",
+    "name": "problem-statement",
+    "label": "Problem Statement"
+  },
+  {
+    "type": "file",
+    "name": "quick-start",
+    "label": "Quick Start"
+  },
+  {
+    "type": "file",
+    "name": "prior-art",
+    "label": "Prior Art"
+  }
+]
