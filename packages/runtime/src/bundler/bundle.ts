@@ -8,6 +8,7 @@ const getModuleUrl = (fileName: string): string => {
   const urlSearchParams = new URLSearchParams({
     modulesOnly: 'true',
     platform: Platform.OS,
+    'resolver.isHarness': 'true',
   });
 
   return `${devServerUrl}/${bundleName}?${urlSearchParams.toString()}`;
