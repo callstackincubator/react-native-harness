@@ -14,6 +14,9 @@
       "default": "./dist/index.js"
     }
   },
+  "peerDependencies": {
+    "@react-native-harness/runtime": "workspace:*"
+  },
   "dependencies": {
     "tslib": "^2.3.0"
   },

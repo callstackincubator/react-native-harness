@@ -40,7 +40,6 @@ export const patchModuleSystem = (): void => {
   const metroConfig = require(metroConfigPath);
 
   metroConfig.moduleSystem = require.resolve(
-    '@react-native-harness/runtime/moduleSystem',
-    { paths: [process.cwd()] }
+    '@react-native-harness/runtime/moduleSystem'
   );
 };
