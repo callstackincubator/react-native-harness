@@ -4,7 +4,7 @@ module.exports = function (api) {
   return {
     presets: [
       ['module:@react-native/babel-preset', { useTransformReactJSX: true }],
-      'react-native-harness/babel',
+      'react-native-harness/babel-preset',
     ],
   };
 };
