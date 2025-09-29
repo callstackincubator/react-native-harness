@@ -17,7 +17,7 @@ export const AndroidTestRunnerConfigSchema = z.object({
   activityName: z
     .string()
     .min(1, 'Activity name is required')
-    .default('MainActivity'),
+    .default('.MainActivity'),
 });
 
 export const iOSTestRunnerConfigSchema = z.object({
