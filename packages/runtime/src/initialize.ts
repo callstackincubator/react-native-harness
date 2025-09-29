@@ -11,7 +11,8 @@ const { LogBox } = require('react-native');
 LogBox.ignoreAllLogs(true);
 
 // Turn off HMR
-const HMRClient = require('react-native/Libraries/Utilities/HMRClient');
+const HMRClientModule = require('react-native/Libraries/Utilities/HMRClient');
+const HMRClient = 'default' in HMRClientModule ? HMRClientModule.default : HMRClientModule;
 
 // Wait for HMRClient to be initialized
 setTimeout(() => {
