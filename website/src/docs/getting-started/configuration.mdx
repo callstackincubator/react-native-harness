@@ -1,0 +1,288 @@
+# Configuration
+
+React Native Harness can be configured through a configuration object that defines various aspects of your testing setup.
+
+The most basic configuration would, assuming you support both iOS and Android platforms, look like this:
+
+**rn-harness.config.mjs**
+
+```javascript
+const config = {
+  include: ['./src/**/*.harness.{js,ts,jsx,tsx}'],
+
+  runners: [
+    {
+      name: 'android',
+      platform: 'android',
+      deviceId: 'Pixel_8_API_35',
+      bundleId: 'com.yourapp',
+    },
+    {
+      name: 'ios',
+      platform: 'ios',
+      deviceId: 'iPhone 16 Pro',
+      bundleId: 'com.yourapp',
+      systemVersion: '18.0',
+    },
+  ],
+};
+
+export default config;
+```
+
+## All Configuration Options
+
+```typescript
+{
+  // Required: Glob patterns to include test files
+  include: string | string[];
+
+  // Required: Array of test runners (at least one required)
+  runners: Array<TestRunnerConfig>;
+
+  // Optional: Default runner to use when none specified
+  defaultRunner?: string;
+
+  // Optional: Custom reporter for test results
+  reporter?: Reporter;
+
+  // Optional: Bridge timeout in milliseconds (default: 60000)
+  bridgeTimeout?: number;
+}
+```
+
+## Test Runners
+
+A test runner defines how tests are executed on a specific platform. React Native Harness supports three platform types:
+
+### Android Runner
+
+```typescript
+{
+  name: string;                    // Unique identifier for this runner
+  platform: 'android';
+  deviceId: string;                // Android emulator/device ID
+  bundleId: string;                // Android application ID
+  activityName?: string;           // Main activity name (default: '.MainActivity')
+}
+```
+
+**Example:**
+
+```javascript
+{
+  name: 'android-pixel',
+  platform: 'android',
+  deviceId: 'Pixel_8_API_35',
+  bundleId: 'com.myapp.debug',
+  activityName: '.MainActivity',
+}
+```
+
+### iOS Runner
+
+```typescript
+{
+  name: string; // Unique identifier for this runner
+  platform: 'ios';
+  deviceId: string; // iOS simulator/device ID
+  bundleId: string; // iOS bundle identifier
+  systemVersion: string; // iOS system version
+}
+```
+
+**Example:**
+
+```javascript
+{
+  name: 'ios-iphone',
+  platform: 'ios',
+  deviceId: 'iPhone 16 Pro',
+  bundleId: 'com.myapp',
+  systemVersion: '18.0',
+}
+```
+
+## Include Patterns
+
+The `include` field specifies which test files should be discovered and run. It accepts either a single glob pattern or an array of patterns.
+
+**Single pattern:**
+
+```javascript
+{
+  include: './src/**/*.harness.{js,ts,jsx,tsx}',
+}
+```
+
+**Multiple patterns:**
+
+```javascript
+{
+  include: [
+    './src/**/*.harness.{js,ts}',
+    './tests/**/*.integration.{js,ts}',
+    './e2e/**/*.test.{js,ts}',
+  ],
+}
+```
+
+**Common patterns:**
+
+- `'**/*.harness.{js,ts,jsx,tsx}'` - All harness files in any directory
+- `'./src/**/*.test.{js,ts}'` - Test files in src directory
+- `'./tests/**/*'` - All files in tests directory
+
+## Default Runner
+
+When you have multiple runners configured, you can specify which one to use by default when no runner is explicitly specified in the CLI command.
+
+```javascript
+{
+  runners: [
+    { name: 'android', platform: 'android', /* ... */ },
+    { name: 'ios', platform: 'ios', /* ... */ },
+  ],
+  defaultRunner: 'android',  // Will use Android runner by default
+}
+```
+
+If no `defaultRunner` is specified, you'll need to explicitly provide the runner name when running tests:
+
+```bash
+# With default runner set
+react-native-harness test
+
+# Without default runner (explicit runner required)
+react-native-harness test android
+```
+
+## Bridge Timeout
+
+The bridge timeout controls how long React Native Harness waits for communication between the test runner and the React Native app. This is particularly important for slower devices or complex test setups.
+
+```javascript
+{
+  bridgeTimeout: 120000,  // 2 minutes in milliseconds
+}
+```
+
+**Default:** 60000 (60 seconds)
+**Minimum:** 1000 (1 second)
+
+Increase this value if you experience timeout errors, especially on:
+
+- Slower devices or simulators
+- Complex test suites with heavy setup
+
+## Custom Reporters
+
+React Native Harness supports custom reporters to format and output test results. By default, it uses a console-based reporter, but you can customize this behavior.
+
+### Built-in Reporters
+
+**Default Reporter:**
+
+```javascript
+import { defaultReporter } from '@react-native-harness/reporters';
+
+export default {
+  reporter: defaultReporter,
+};
+```
+
+**JUnit Reporter:**
+
+```javascript
+import { junitReporter } from '@react-native-harness/reporters';
+
+export default {
+  reporter: junitReporter, // Outputs junit.xml file
+};
+```
+
+### Custom Reporter
+
+You can create a custom reporter by implementing the `Reporter` interface:
+
+```javascript
+const customReporter = {
+  report: async (results) => {
+    // Process test results
+    for (const suite of results) {
+      console.log(`Suite: ${suite.name}`);
+      for (const test of suite.tests) {
+        console.log(`  ${test.name}: ${test.status}`);
+      }
+    }
+  },
+};
+
+export default {
+  reporter: customReporter,
+};
+```
+
+## Environment-Specific Configurations
+
+You can create different configurations for different environments:
+
+**rn-harness.config.mjs**
+
+```javascript
+const isDevelopment = process.env.NODE_ENV === 'development';
+const isCI = process.env.CI === 'true';
+
+const config = {
+  include: ['./src/**/*.harness.{js,ts}'],
+
+  runners: isDevelopment
+    ? [
+        // Development runners with local simulators
+        {
+          name: 'android',
+          platform: 'android',
+          deviceId: 'Pixel_8_API_35',
+          bundleId: 'com.myapp.debug',
+        },
+      ]
+    : [
+        // CI runners with headless or cloud devices
+        {
+          name: 'android',
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          bundleId: 'com.myapp.debug',
+        },
+      ],
+
+  bridgeTimeout: isCI ? 180000 : 60000, // Longer timeout in CI
+  reporter: isCI ? junitReporter : defaultReporter,
+};
+
+export default config;
+```
+
+## Finding Device and Simulator IDs
+
+### Android Emulators
+
+List available Android emulators:
+
+```bash
+emulator -list-avds
+```
+
+### iOS Simulators
+
+List available iOS simulators:
+
+```bash
+xcrun simctl list devices
+```
+
+The device ID is the name shown in the simulator list (e.g., "iPhone 16 Pro", "iPad Air").
+
+:::info System Version Required
+React Native Harness requires the `systemVersion` field for iOS runners because there can be multiple simulators with the same device name but different iOS versions (e.g., "iPhone 16 Pro" with iOS 17.0 and "iPhone 16 Pro" with iOS 18.0). The system version ensures Harness targets the correct simulator.
+:::

@@ -40,6 +40,8 @@ const config = {
 export default config;
 ```
 
+For detailed information about all configuration options, see the [Configuration](/docs/getting-started/configuration) page.
+
 ### 2. Update Metro Configuration
 
 Update your `metro.config.js` so React Native Harness will be able to use it to bundle its tests:
@@ -152,6 +154,30 @@ Control test execution with `beforeAll(fn)` to run once before all tests, `after
 ### Assertions
 
 Create expectations using `expect(value)` with matchers like `.toBe()`, `.toEqual()`, `.toBeTruthy()`, `.toBeFalsy()`, `.toContain()`, `.toHaveLength()`, `.toMatch()`, `.toBeInstanceOf()`, `.toHaveProperty()`, and many more Jest-compatible matchers.
+
+## Building Your App
+
+Before running tests, you need to build your app in debug mode and install it on your emulator or simulator. React Native Harness will inject itself into your existing app, taking over access to all included native modules.
+
+Follow your framework's documentation to build and install the debug variant:
+
+### React Native CLI
+
+<PackageManagerTabs command="react-native run-android" />
+
+<PackageManagerTabs command="react-native run-ios" />
+
+### Expo
+
+<PackageManagerTabs command="expo run:android" />
+
+<PackageManagerTabs command="expo run:ios" />
+
+### Rock
+
+<PackageManagerTabs command="rock run:android" />
+
+<PackageManagerTabs command="rock run:ios" />
 
 ## Running Tests
 
