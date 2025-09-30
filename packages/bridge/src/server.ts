@@ -6,7 +6,7 @@ import type {
   BridgeServerFunctions,
   BridgeClientFunctions,
   DeviceDescriptor,
-  BridgeEventsMap,
+  BridgeEvents,
 } from './shared.js';
 import { deserialize, serialize } from './serializer.js';
 
@@ -16,7 +16,8 @@ export type BridgeServerOptions = {
 
 export type BridgeServerEvents = {
   ready: (device: DeviceDescriptor) => void;
-} & BridgeEventsMap;
+  event: (event: BridgeEvents) => void;
+};
 
 export type BridgeServer = {
   ws: WebSocketServer;
@@ -33,6 +34,7 @@ export type BridgeServer = {
     event: T,
     listener: BridgeServerEvents[T]
   ) => void;
+  dispose: () => void;
 };
 
 export const getBridgeServer = async ({
@@ -51,8 +53,8 @@ export const getBridgeServer = async ({
       reportReady: (device) => {
         emitter.emit('ready', device);
       },
-      emitEvent: (event, data) => {
-        emitter.emit(event, data);
+      emitEvent: (_, data) => {
+        emitter.emit('event', data);
       },
     } satisfies BridgeServerFunctions,
     []
@@ -82,11 +84,17 @@ export const getBridgeServer = async ({
     });
   });
 
+  const dispose = () => {
+    wss.close();
+    emitter.removeAllListeners();
+  };
+
   return {
     ws: wss,
     rpc: group,
     on: emitter.on.bind(emitter),
     once: emitter.once.bind(emitter),
     off: emitter.off.bind(emitter),
+    dispose,
   };
 };

@@ -5,6 +5,7 @@ import {
   getTimeoutSignal,
   spawn,
   SubprocessError,
+  logger,
 } from '@react-native-harness/tools';
 
 const METRO_PORT = 8081;
@@ -27,13 +28,17 @@ export const runMetro = async (isExpo = false): Promise<ChildProcess> => {
     }
   );
 
-  // Forward metro output to CLI output
+  // Forward metro output to logger
   metro.nodeChildProcess.then((childProcess) => {
     if (childProcess.stdout) {
-      childProcess.stdout.pipe(process.stdout);
+      childProcess.stdout.on('data', (data) => {
+        logger.debug(data.toString().trim());
+      });
     }
     if (childProcess.stderr) {
-      childProcess.stderr.pipe(process.stderr);
+      childProcess.stderr.on('data', (data) => {
+        logger.debug(data.toString().trim());
+      });
     }
   });
 

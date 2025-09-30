@@ -3,6 +3,7 @@ import type {
   TestSuiteResult,
 } from './shared/test-runner.js';
 import type { TestCollectorEvents } from './shared/test-collector.js';
+import type { BundlerEvents } from './shared/bundler.js';
 
 export type {
   TestCollectorEvents,
@@ -26,6 +27,12 @@ export type {
   SerializedError,
   CodeFrame,
 } from './shared/test-runner.js';
+export type {
+  ModuleBundlingStartedEvent,
+  ModuleBundlingFinishedEvent,
+  ModuleBundlingFailedEvent,
+  BundlerEvents,
+} from './shared/bundler.js';
 
 export type DeviceDescriptor = {
   platform: 'ios' | 'android';
@@ -34,7 +41,10 @@ export type DeviceDescriptor = {
   osVersion: string;
 };
 
-export type BridgeEvents = TestCollectorEvents | TestRunnerEvents;
+export type BridgeEvents =
+  | TestCollectorEvents
+  | TestRunnerEvents
+  | BundlerEvents;
 
 export type BridgeEventsMap = {
   [K in BridgeEvents['type']]: (

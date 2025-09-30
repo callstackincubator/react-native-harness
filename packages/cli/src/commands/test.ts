@@ -140,7 +140,7 @@ const runTests = async (context: TestRunContext): Promise<void> => {
 
 const cleanUp = async (context: TestRunContext): Promise<void> => {
   if (context.bridge) {
-    context.bridge.ws.close();
+    context.bridge.dispose();
   }
   if (context.environment) {
     await context.environment.dispose();

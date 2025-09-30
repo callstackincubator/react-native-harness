@@ -1,6 +1,7 @@
 import type {
   TestRunnerEvents,
   TestCollectorEvents,
+  BundlerEvents,
 } from '@react-native-harness/bridge';
 import { getBridgeClient } from '@react-native-harness/bridge/client';
 import { store } from '../ui/state.js';
@@ -9,7 +10,7 @@ import { getTestCollector, TestCollector } from '../collector/index.js';
 import { combineEventEmitters, EventEmitter } from '../utils/emitter.js';
 import { attachProgressLogger } from '../utils/progressLogger.js';
 import { getWSServer } from './getWSServer.js';
-import { fetchModule, evaluateModule } from '../bundler/index.js';
+import { getBundler, evaluateModule, Bundler } from '../bundler/index.js';
 
 export const getClient = async () => {
   const client = await getBridgeClient(getWSServer(), {
@@ -27,13 +28,20 @@ export const getClient = async () => {
 
     let collector: TestCollector | null = null;
     let runner: TestRunner | null = null;
-    let events: EventEmitter<TestRunnerEvents | TestCollectorEvents> | null =
-      null;
+    let events: EventEmitter<
+      TestRunnerEvents | TestCollectorEvents | BundlerEvents
+    > | null = null;
+    let bundler: Bundler | null = null;
 
     try {
       collector = getTestCollector();
       runner = getTestRunner();
-      events = combineEventEmitters(collector.events, runner.events);
+      bundler = getBundler();
+      events = combineEventEmitters(
+        collector.events,
+        runner.events,
+        bundler.events
+      );
 
       events.addListener((event) => {
         client.rpc.emitEvent(event.type, event);
@@ -42,7 +50,7 @@ export const getClient = async () => {
       // Add console logging for progress information
       attachProgressLogger(events, path);
 
-      const moduleJs = await fetchModule(path);
+      const moduleJs = await bundler.getModule(path);
       const collectionResult = await collector.collect(
         () => evaluateModule(moduleJs, path),
         path

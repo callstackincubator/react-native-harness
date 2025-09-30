@@ -1,6 +1,7 @@
 import type {
   TestRunnerEvents,
   TestCollectorEvents,
+  BundlerEvents,
 } from '@react-native-harness/bridge';
 import type { EventEmitter } from './emitter.js';
 
@@ -9,7 +10,7 @@ import type { EventEmitter } from './emitter.js';
  * This function handles all test run lifecycle events including start, progress, and completion.
  */
 export const attachProgressLogger = (
-  events: EventEmitter<TestRunnerEvents | TestCollectorEvents>,
+  events: EventEmitter<TestRunnerEvents | TestCollectorEvents | BundlerEvents>,
   testPath: string
 ): void => {
   // Log test run start
@@ -23,6 +24,12 @@ export const attachProgressLogger = (
         break;
       case 'collection-finished':
         console.log(`✅ Test collection completed in ${event.duration}ms`);
+        break;
+      case 'module-bundling-started':
+        console.log(`📦 Bundling module: ${event.file}`);
+        break;
+      case 'module-bundling-finished':
+        console.log(`✅ Module bundling completed in ${event.duration}ms`);
         break;
       case 'file-started':
         console.log(`🚀 Running tests in: ${event.file}`);
