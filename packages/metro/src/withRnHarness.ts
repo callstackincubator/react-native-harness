@@ -1,25 +1,23 @@
 import { MetroConfig } from '@react-native/metro-config';
 import { patchModuleSystem } from './moduleSystem';
 
-// These modules are already present in the main bundle
-const TEST_MODULES_IMPORTS_BLACKLIST = [
-  'react-native',
-  'react-native-harness',
-];
+export type RnHarnessOptions = {
+  unstable__skipAlreadyIncludedModules?: boolean;
+};
 
 export const withRnHarness = (
   config: MetroConfig,
-  options = { enabled: !!process.env.RN_HARNESS }
+  options: RnHarnessOptions = {}
 ): MetroConfig => {
-  if (!options.enabled) {
+  const isEnabled = !!process.env.RN_HARNESS;
+
+  if (!isEnabled) {
     return config;
   }
 
   patchModuleSystem();
 
-  const resolveRequest = config.resolver?.resolveRequest
-
-  return {
+  const patchedConfig: MetroConfig = {
     ...config,
     cacheVersion: 'react-native-harness',
     serializer: {
@@ -31,24 +29,15 @@ export const withRnHarness = (
     },
     resolver: {
       ...config.resolver,
-      resolveRequest: (context, moduleName, platform) => {
-        // Use custom resolver if provided or fallback to the default one
-        const resolve = resolveRequest ?? context.resolveRequest;
-
-        const resolverOptions = context.customResolverOptions;
-        const isHarness = resolverOptions?.isHarness === 'true';
-
-        // Do not resolve these modules when bundling tests
-        if (isHarness && TEST_MODULES_IMPORTS_BLACKLIST.includes(moduleName)) {
-          return {
-            type: 'empty'
-          }
-        }
-
-        return resolve(context, moduleName, platform);
-      },
       // Unlock __tests__ directory
       blockList: undefined,
     },
   };
+
+  if (options.unstable__skipAlreadyIncludedModules) {
+    patchedConfig.serializer!.customSerializer =
+      require('./getHarnessSerializer').getHarnessSerializer();
+  }
+
+  return patchedConfig;
 };

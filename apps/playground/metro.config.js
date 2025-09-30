@@ -22,7 +22,9 @@ const customConfig = {
 };
 
 module.exports = withNxMetro(
-  withRnHarness(mergeConfig(defaultConfig, customConfig)),
+  withRnHarness(mergeConfig(defaultConfig, customConfig), {
+    unstable__skipAlreadyIncludedModules: true,
+  }),
   {
     watchFolders: [monorepoRoot],
     nodeModulesPaths: [
