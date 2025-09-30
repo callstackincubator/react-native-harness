@@ -252,6 +252,9 @@ importers:
 
   packages/metro:
     dependencies:
+      '@react-native-harness/config':
+        specifier: workspace:*
+        version: link:../config
       '@react-native-harness/runtime':
         specifier: workspace:*
         version: link:../runtime

@@ -21,15 +21,12 @@ const customConfig = {
   },
 };
 
-module.exports = withNxMetro(
-  withRnHarness(mergeConfig(defaultConfig, customConfig), {
-    unstable__skipAlreadyIncludedModules: true,
-  }),
-  {
+module.exports = withRnHarness(
+  withNxMetro(mergeConfig(defaultConfig, customConfig), {
     watchFolders: [monorepoRoot],
     nodeModulesPaths: [
       path.resolve(projectRoot, 'node_modules'),
       path.resolve(monorepoRoot, 'node_modules'),
     ],
-  }
+  })
 );

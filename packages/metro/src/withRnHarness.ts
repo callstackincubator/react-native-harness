@@ -1,40 +1,43 @@
 import { MetroConfig } from '@react-native/metro-config';
+import { getConfig } from '@react-native-harness/config';
 import { patchModuleSystem } from './moduleSystem';
 
 export type RnHarnessOptions = {
   unstable__skipAlreadyIncludedModules?: boolean;
 };
 
-export const withRnHarness = (
-  config: MetroConfig,
-  options: RnHarnessOptions = {}
-): MetroConfig => {
+export const withRnHarness = async (
+  config: MetroConfig | Promise<MetroConfig>
+): Promise<MetroConfig> => {
   const isEnabled = !!process.env.RN_HARNESS;
 
   if (!isEnabled) {
     return config;
   }
 
+  const metroConfig = await config;
+  const { config: harnessConfig } = await getConfig(process.cwd());
+
   patchModuleSystem();
 
   const patchedConfig: MetroConfig = {
-    ...config,
+    ...metroConfig,
     cacheVersion: 'react-native-harness',
     serializer: {
-      ...config.serializer,
+      ...metroConfig.serializer,
       getPolyfills: (...args) => [
-        ...(config.serializer?.getPolyfills?.(...args) ?? []),
+        ...(metroConfig.serializer?.getPolyfills?.(...args) ?? []),
         require.resolve('../assets/init.js'),
       ],
     },
     resolver: {
-      ...config.resolver,
+      ...metroConfig.resolver,
       // Unlock __tests__ directory
       blockList: undefined,
     },
   };
 
-  if (options.unstable__skipAlreadyIncludedModules) {
+  if (harnessConfig.unstable__skipAlreadyIncludedModules) {
     patchedConfig.serializer!.customSerializer =
       require('./getHarnessSerializer').getHarnessSerializer();
   }
