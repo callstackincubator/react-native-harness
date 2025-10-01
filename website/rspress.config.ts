@@ -9,7 +9,7 @@ export default withCallstackPreset(
     context: __dirname,
     docs: {
       description:
-        'Bridge the testing gap: Jest-style tests in real native environments. Get the convenience of describe/it with full access to native modules.',
+        'Jest-style tool for testing native behavior directly on devices.',
       editUrl: EDIT_ROOT_URL,
       icon: '/logo.svg',
       logoDark: '/logo-dark.svg',
@@ -19,7 +19,6 @@ export default withCallstackPreset(
       rootUrl: 'https://react-native-harness.dev',
       socials: {
         github: 'https://github.com/callstackincubator/react-native-harness',
-        x: 'https://x.com/reactnativeharness',
         discord: 'https://discord.gg/TWDBep3nXV',
       },
       title: 'React Native Harness',
