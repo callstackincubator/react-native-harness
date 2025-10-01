@@ -69,7 +69,7 @@ const androidPlatformAdapter: PlatformAdapter = {
 
     return {
       restart: async () => {
-        await runApp(runner.deviceId, runner.bundleId, runner.activityName);
+        await runApp(deviceId, runner.bundleId, runner.activityName);
       },
       dispose: async () => {
         await killApp(deviceId, runner.bundleId);

@@ -6,6 +6,7 @@ import {
   restoreAllMocks,
 } from './spy/index.js';
 import { mock, unmock, requireActual, resetModules } from './mocker/index.js';
+import { waitFor, waitUntil } from './waitFor.js';
 
 export type HarnessNamespace = {
   spyOn: typeof spyOn;
@@ -17,6 +18,8 @@ export type HarnessNamespace = {
   resetAllMocks: typeof resetAllMocks;
   restoreAllMocks: typeof restoreAllMocks;
   resetModules: typeof resetModules;
+  waitFor: typeof waitFor;
+  waitUntil: typeof waitUntil;
 };
 
 const createHarnessNamespace = (): HarnessNamespace => {
@@ -30,6 +33,8 @@ const createHarnessNamespace = (): HarnessNamespace => {
     resetAllMocks,
     restoreAllMocks,
     resetModules,
+    waitFor,
+    waitUntil,
   };
 };
 

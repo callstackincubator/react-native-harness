@@ -1,5 +1,5 @@
 const config = {
-  include: ['./demo.harness.ts'],
+  include: ['./demo.harness.ts', './__tests__/**/*'],
 
   runners: [
     {
