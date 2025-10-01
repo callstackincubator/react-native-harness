@@ -1,7 +1,33 @@
-# babel
+![harness-banner](https://react-native-harness.dev/harness-banner.jpg)
 
-This library was generated with [Nx](https://nx.dev).
+### Babel Preset for React Native Harness
 
-## Building
+[![mit licence][license-badge]][license]
+[![npm downloads][npm-downloads-badge]][npm-downloads]
+[![Chat][chat-badge]][chat]
+[![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-Run `nx build babel` to build the library.
+Babel preset that enables React Native Harness test execution by transforming test files and providing necessary plugins for module mocking and bundling optimization.
+
+## Features
+
+- **Test File Transformation**: Transforms `.harness.js/.harness.ts` files for device execution
+- **Module Mocking Support**: Enables Jest-style module mocking in native environments
+- **Bundling Optimization**: Optimizes test bundles for faster execution on devices
+- **Global Plugin Integration**: Provides global RN_HARNESS variable for conditional test execution
+
+## Made with ❤️ at Callstack
+
+`@react-native-harness/babel-preset` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
+
+Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
+
+[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=react-native-harness&utm_term=readme-with-love
+[license-badge]: https://img.shields.io/npm/l/@react-native-harness/babel-preset?style=for-the-badge
+[license]: https://github.com/callstackincubator/react-native-harness/blob/main/LICENSE
+[npm-downloads-badge]: https://img.shields.io/npm/dm/@react-native-harness/babel-preset?style=for-the-badge
+[npm-downloads]: https://www.npmjs.com/package/@react-native-harness/babel-preset
+[prs-welcome-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge
+[prs-welcome]: ../../CONTRIBUTING.md
+[chat-badge]: https://img.shields.io/discord/426714625279524876.svg?style=for-the-badge
+[chat]: https://discord.gg/xgGt7KAjxv

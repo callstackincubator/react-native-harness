@@ -1,69 +1,47 @@
-<a id="readme-top"></a>
+![harness-banner](https://react-native-harness.dev/harness-banner.jpg)
 
-<!-- PROJECT LOGO -->
-<p align="center">
-  <a href="https://www.callstack.com/open-source">
-    <img src="./docs/logo.png" height="300" alt="React Native Harness" />
-  </a>
-</p>
-<h3 align="center" style="margin-top:-24px">Testing Framework for React Native</h3>
+### Jest-style tool for testing native behavior directly on devices
 
-<!-- SHIELDS -->
-<p align="center">
-<a href="https://github.com/callstackincubator/react-native-harness/actions/workflows/ci.yml">
-  <img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/callstackincubator/react-native-harness/ci.yml?style=flat-square" />
-</a>
+[![mit licence][license-badge]][license]
+[![npm downloads][npm-downloads-badge]][npm-downloads]
+[![Chat][chat-badge]][chat]
+[![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-<a href="https://www.npmjs.com/package/@callstack/react-native-harness">
-  <img alt="Version" src="https://img.shields.io/npm/v/@callstack/react-native-harness?style=flat-square" />
-</a>
+Bridge the testing gap: Jest-style tests in real native environments. Get the convenience of describe/it with full access to native modules.
 
-<a href="https://github.com/callstackincubator/react-native-harness/blob/master/LICENSE">
-  <img alt="License" src="https://img.shields.io/github/license/callstackincubator/react-native-harness?color=green&style=flat-square" />
-</a>
+## Features
 
-<a href="https://github.com/callstackincubator/react-native-harness/issues">
-  <img alt="Issues" src="https://img.shields.io/github/issues/callstackincubator/react-native-harness?color=green&style=flat-square" />
-</a>
-
-<a href="https://callstack.com/open-source/">
-  <img alt="Callstack Open Source" src="https://callstack.com/images/callstack-badge.svg" />
-</a>
-</p>
-
-<p align="center">
-  React Native Harness is a testing framework that allows you to run tests directly in your React Native apps, with full access to native modules.
-<br />
-<a href="https://github.com/callstackincubator/react-native-harness/issues/new?template=bug_report.yml">Report a Bug</a>
-&middot;
-<a href="https://github.com/callstackincubator/react-native-harness/discussions/new?category=ideas">Request Feature</a>
-
-</p>
-
-## Getting started
+- **Jest-Style Syntax, Native Power**: Write familiar describe/it tests that run in real iOS and Android environments with full native module access.
+- **Best of Both Worlds**: Unlike Jest (Node.js only) or Maestro (UI-based), get convenient test syntax AND native environment execution.
+- **Real Device & Simulator Testing**: Execute tests directly on iOS simulators and Android emulators — catch platform-specific issues Jest can't see.
+- **Native Module Testing**: Test native modules, platform APIs, and device-specific functionality that's impossible with JavaScript-only runners.
+- **Familiar Test Structure**: Use beforeEach, afterEach, describe, it, expect — all the testing patterns you know and love from Jest.
+- **Zero Configuration Setup**: Drop-in replacement for your existing test workflow with TypeScript support and seamless CI/CD integration.
 
 > [!WARNING]
 > This library is still under active development. Feel free to hack around, but use at your own risk.
 
-## How it works?
+## Documentation
 
-React Native Harness is a pioneering experimental test runner for React Native that enables developers to write and execute tests directly within the native environment (iOS, Android). Unlike traditional testing approaches that rely on simulated environments, React Native Harness runs tests in the actual native runtime.
+The documentation is available at [react-native-harness.dev](https://react-native-harness.dev). You can also use the following links to jump to specific topics:
 
-Key features:
-
-- Direct access to native modules for comprehensive testing
-- Support for end-to-end (E2E) testing of isolated React Native components
-- Ability to test native interactions that are impossible with JavaScript-only test runners
-- Bridges a significant gap in the current mobile testing ecosystem
-
-React Native Harness executes your tests within the same environment as your production app, providing more reliable and thorough test results that accurately reflect real-world behavior.
-
-## Contributing
-
-See the [contributing guide](CONTRIBUTING.md) to learn how to contribute to the repository and the development workflow.
+- [Quick Start](https://react-native-harness.dev/docs/getting-started/quick-start)
+- [Problem Statement](https://react-native-harness.dev/docs/getting-started/problem-statement)
+- [Feature Comparison](https://react-native-harness.dev/docs/feature-comparison)
+- [API Reference](https://react-native-harness.dev/docs/api/defining-tests)
 
 ## Made with ❤️ at Callstack
 
-React Native Harness is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack](https://callstack.com) is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
+`react-native-harness` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
 
 Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
+
+[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=react-native-harness&utm_term=readme-with-love
+[license-badge]: https://img.shields.io/npm/l/react-native-harness?style=for-the-badge
+[license]: https://github.com/callstackincubator/react-native-harness/blob/main/LICENSE
+[npm-downloads-badge]: https://img.shields.io/npm/dm/react-native-harness?style=for-the-badge
+[npm-downloads]: https://www.npmjs.com/package/react-native-harness
+[prs-welcome-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge
+[prs-welcome]: ./CONTRIBUTING.md
+[chat-badge]: https://img.shields.io/discord/426714625279524876.svg?style=for-the-badge
+[chat]: https://discord.gg/xgGt7KAjxv
