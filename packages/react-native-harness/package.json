@@ -22,7 +22,7 @@
       "import": "./dist/metro.js",
       "default": "./dist/metro.js"
     },
-    "./babel": {
+    "./babel-preset": {
       "development": "./src/babel.ts",
       "types": "./dist/babel.d.ts",
       "import": "./dist/babel.js",
