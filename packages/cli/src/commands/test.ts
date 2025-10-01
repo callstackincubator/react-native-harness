@@ -95,6 +95,7 @@ const findTestFiles = async (
   const globPattern = pattern || context.config.include;
   const glob = new Glob(globPattern, {
     cwd: context.projectRoot,
+    nodir: true,
   });
   context.testFiles = await glob.walk();
   discoverSpinner.stop(`Found ${context.testFiles.length} test files`);
