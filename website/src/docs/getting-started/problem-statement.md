@@ -1,10 +1,10 @@
 # Problem Statement
 
-React Native development has a testing problem. While JavaScript logic can be tested easily with Jest, testing native modules and platform-specific functionality has always been challenging. Let's understand why and how React Native Harness solves it.
+While JavaScript logic can be tested easily with Jest, testing native modules and platform-specific functionality has always been challenging. Let's understand why and how React Native Harness solves it.
 
-## The Problem: Jest Tests Can't Access Native Modules
+## Jest Tests Can't Access Native Modules
 
-Jest tests run in Node.js, which means they have no access to native modules or device capabilities:
+Jest tests run in Node.js environment, which means they have no access to native modules or device capabilities:
 
 ```javascript
 // This Jest test runs in Node.js - no native modules available
@@ -17,11 +17,11 @@ describe('Device Info Module', () => {
 });
 ```
 
-**Why Jest falls short for React Native:** Jest has no access to native modules, iOS/Android platform APIs, or device-specific functionality. Everything must be mocked, so nothing you test reflects the real native environment.
+Testing this code would require mocking the whole `NativeModules.DeviceInfo` object, which defeats the purpose of testing this code.
 
-## The Alternative: E2E Tools Like Maestro
+## E2E Tests Work But Require Extra UI Setup
 
-E2E tools run in real environments with native access, but they require cumbersome UI automation. You need to implement some sort of UI that allows you to interact with your native module and execute actions. Then, you need to somehow expose results so you can check them and verify they are correct. This is not what available end-to-end frameworks were created for.
+End-to-end testing tools run in real environments with native environment access, but they require cumbersome UI automation. You need to implement some sort of UI that allows you to interact with your native module and execute actions. Then, you need to somehow expose results so you can check them and verify they are correct. This is doable, but not the best developer experience as you need to write and maintain more code than necessary.
 
 ```yaml
 # Maestro test - indirect and complex
@@ -30,11 +30,11 @@ E2E tools run in real environments with native access, but they require cumberso
 - assertVisible: 'iPhone'  # Hope this matches the test device
 ```
 
-**The challenges with E2E approaches:** These tools rely on UI automation instead of direct testing, have slow setup and execution times, require complex test scenarios for simple logic, and make it difficult to isolate what you're actually testing.
+This approach requires complex test scenarios for simple logic and makes it difficult to isolate what you're actually testing.
 
-## What We Really Want: Run Tests on Real Devices
+## We Want To Run JavaScript Tests on Real Devices
 
-What we really want is to run the same test (or with minimal changes) directly on a device where native modules are available:
+What we really want is to run the same tests we write for our apps (or with minimal changes) directly on a device where native modules are available:
 
 ```javascript
 // The same test, but running on an actual iOS/Android device
@@ -48,9 +48,9 @@ describe('Device Info Module', () => {
 });
 ```
 
-We should not be forced to implement any UI. We should be able to write our tests as we do in Jest, and they should be executed on a device.
+We should not be forced to implement any UI. We should be able to write our tests as we do in Jest, and they should execute on a device.
 
-## The Challenge: Getting JavaScript to Run on Devices
+## Getting JavaScript to Run on Devices
 
 JavaScript code needs to be bundled by Metro to run on real devices with the Hermes engine. This means we need to:
 
@@ -64,7 +64,11 @@ JavaScript code needs to be bundled by Metro to run on real devices with the Her
 
 ### 1. Bundle Test Files with Metro
 
-React Native Harness uses your existing Metro bundler to create a device-compatible bundle that includes your test files (`.harness.js/.harness.ts`), the Harness test runner, and your app's native modules and dependencies.
+React Native Harness uses your existing Metro bundler to create a device-compatible bundle that includes:
+
+- Your test files (`.harness.js/.harness.ts`)
+- The Harness test runner
+- Your app's native modules and dependencies
 
 Instead of bundling your normal app, it bundles a test runtime that can execute tests on the device.
 
@@ -86,7 +90,7 @@ This architecture gives you:
 
 **Jest's Familiar APIs**: Write tests using the same `describe`, `it`, and `expect` syntax you already know, with all the lifecycle hooks and test organization patterns you're familiar with.
 
-**Real Native Environment**: Tests run on actual iOS simulators and Android emulators with full access to native modules, platform APIs, and device capabilities - no mocking required.
+**Real Native Environment**: Tests run on actual iOS simulators and Android emulators with full access to native modules, platform APIs, and device capabilities—no mocking required.
 
 **Practical Development**: No complex E2E setup, no UI automation, no brittle selectors. Just write tests that directly call the APIs you want to test.
 
@@ -94,13 +98,11 @@ This architecture gives you:
 
 Before React Native Harness, testing a simple device info call required:
 
-1. **With Jest**: Mock everything, test nothing real
+1. **With Jest**: Mock native parts, test the JavaScript logic only
 2. **With E2E tools**: Create UI to display info, automate interactions, parse visual results
 3. **Manual testing**: Run the app, add console logs, check output
 
-**With React Native Harness**: Write a simple test that calls the real API and asserts the result. Done.
-
-This fundamental shift from "testing around the problem" to "testing the actual problem" is what makes React Native Harness a game-changer for React Native development.
+**With React Native Harness**: Write a simple JavaScript test that calls the real API and asserts the result. Done.
 
 ## Ready to Get Started?
 
