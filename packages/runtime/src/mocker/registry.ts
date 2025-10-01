@@ -39,6 +39,15 @@ export const requireActual = <T = any>(moduleId: string): T =>
   // babel plugin will transform 'moduleId' to a number
   originalRequire(moduleId as unknown as ModuleId) as T;
 
+export const unmock = (moduleId: string) => {
+  mockRegistry.delete(moduleId as unknown as ModuleId);
+  mockCache.delete(moduleId as unknown as ModuleId);
+};
+
+export const resetModules = (): void => {
+  mockCache.clear();
+};
+
 const mockRequire = (moduleId: string) => {
   // babel plugin will transform 'moduleId' to a number
   const mockedModule = getMockImplementation(moduleId as unknown as ModuleId);

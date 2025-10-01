@@ -1,1 +1,7 @@
-export { mock, requireActual, clearMocks } from './registry.js';
+export {
+  mock,
+  requireActual,
+  clearMocks,
+  unmock,
+  resetModules,
+} from './registry.js';
