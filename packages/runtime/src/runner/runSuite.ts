@@ -137,6 +137,49 @@ export const runSuite = async (
     file: context.testFilePath,
   });
 
+  // Check if suite should be skipped or is todo
+  if (suite.status === 'skipped') {
+    const result = {
+      name: suite.name,
+      tests: [],
+      suites: [],
+      status: 'skipped' as const,
+      duration: 0,
+    };
+
+    // Emit suite-finished event
+    context.events.emit({
+      type: 'suite-finished',
+      file: context.testFilePath,
+      name: suite.name,
+      duration: 0,
+      status: 'skipped',
+    });
+
+    return result;
+  }
+
+  if (suite.status === 'todo') {
+    const result = {
+      name: suite.name,
+      tests: [],
+      suites: [],
+      status: 'todo' as const,
+      duration: 0,
+    };
+
+    // Emit suite-finished event
+    context.events.emit({
+      type: 'suite-finished',
+      file: context.testFilePath,
+      name: suite.name,
+      duration: 0,
+      status: 'todo',
+    });
+
+    return result;
+  }
+
   const testResults: TestResult[] = [];
   const suiteResults: TestSuiteResult[] = [];
 

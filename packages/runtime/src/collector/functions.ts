@@ -53,7 +53,21 @@ const computeSuiteStatus = (
 ): TestStatus => {
   if (suite.options.skip) return 'skipped';
   if (suite.options.only) return 'active';
+
+  // Check if this suite has any focused content (tests or child suites)
+  const hasFocusedTests = suite.tests.some((test) => test.options.only);
+  const hasFocusedChildren = suite.suites.some(
+    (childSuite) =>
+      childSuite.options.only ||
+      childSuite.tests.some((test) => test.options.only)
+  );
+
+  // If this suite has focused content, it should be active
+  if (hasFocusedTests || hasFocusedChildren) return 'active';
+
+  // If parent has focused children and this suite has no focused content, skip it
   if (parentContext.hasFocusedChildren) return 'skipped';
+
   return 'active';
 };
 
