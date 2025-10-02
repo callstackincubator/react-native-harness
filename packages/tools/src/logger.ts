@@ -2,7 +2,6 @@ import util from 'node:util';
 import { log as clackLog } from '@clack/prompts';
 import isUnicodeSupported from 'is-unicode-supported';
 import { color } from './color.js';
-import { isInteractive } from './isInteractive.js';
 
 const unicode = isUnicodeSupported();
 
@@ -11,7 +10,7 @@ const unicodeWithFallback = (c: string, fallback: string) =>
 
 const SYMBOL_DEBUG = unicodeWithFallback('●', '•');
 
-let verbose = false;
+let verbose = !!process.env.DEBUG;
 
 const success = (...messages: Array<unknown>) => {
   const output = util.format(...messages);
@@ -52,8 +51,7 @@ const setVerbose = (level: boolean) => {
 };
 
 const isVerbose = () => {
-  // For non-interactive environments, always show verbose logs
-  return !isInteractive() || verbose;
+  return verbose;
 };
 
 export const logger = {

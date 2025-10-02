@@ -2,13 +2,13 @@ import {
   getBridgeServer,
   type BridgeServer,
 } from '@react-native-harness/bridge/server';
+import { TestExecutionOptions } from '@react-native-harness/bridge';
 import {
   Config,
   getConfig,
   TestRunnerConfig,
 } from '@react-native-harness/config';
 import { getPlatformAdapter } from '../platforms/platform-registry.js';
-import { Glob } from 'glob';
 import {
   intro,
   logger,
@@ -26,6 +26,10 @@ import {
   RunnerNotFoundError,
 } from '../errors/errors.js';
 import { TestSuiteResult } from '@react-native-harness/bridge';
+import {
+  discoverTestFiles,
+  type TestFilterOptions,
+} from '../discovery/index.js';
 
 type TestRunContext = {
   config: Config;
@@ -87,21 +91,24 @@ const setupEnvironment = async (context: TestRunContext): Promise<void> => {
 
 const findTestFiles = async (
   context: TestRunContext,
-  pattern?: string
+  options: TestFilterOptions = {}
 ): Promise<void> => {
   const discoverSpinner = spinner();
   discoverSpinner.start('Discovering tests');
 
-  const globPattern = pattern || context.config.include;
-  const glob = new Glob(globPattern, {
-    cwd: context.projectRoot,
-    nodir: true,
-  });
-  context.testFiles = await glob.walk();
+  context.testFiles = await discoverTestFiles(
+    context.projectRoot,
+    context.config.include,
+    options
+  );
+
   discoverSpinner.stop(`Found ${context.testFiles.length} test files`);
 };
 
-const runTests = async (context: TestRunContext): Promise<void> => {
+const runTests = async (
+  context: TestRunContext,
+  options: TestFilterOptions = {}
+): Promise<void> => {
   const { bridge, environment, testFiles } = context;
   assert(bridge != null, 'Bridge not initialized');
   assert(environment != null, 'Environment not initialized');
@@ -133,7 +140,12 @@ const runTests = async (context: TestRunContext): Promise<void> => {
       );
     }
 
-    const result = await client.runTests(testFile);
+    // Pass only testNamePattern to runtime (file filtering already done)
+    const executionOptions: TestExecutionOptions = {
+      testNamePattern: options.testNamePattern,
+    };
+
+    const result = await client.runTests(testFile, executionOptions);
     context.results = [...(context.results ?? []), ...result.suites];
     shouldRestart = true;
   }
@@ -173,7 +185,7 @@ const hasFailedTests = (results: TestSuiteResult[]): boolean => {
 
 export const testCommand = async (
   runnerName?: string,
-  pattern?: string
+  options: TestFilterOptions = {}
 ): Promise<void> => {
   intro('React Native Test Harness');
 
@@ -200,8 +212,8 @@ export const testCommand = async (
 
   try {
     await setupEnvironment(context);
-    await findTestFiles(context, pattern);
-    await runTests(context);
+    await findTestFiles(context, options);
+    await runTests(context, options);
 
     assert(context.results != null, 'Results not initialized');
     config.reporter?.report(context.results);

@@ -2,6 +2,7 @@ import type {
   TestRunnerEvents,
   TestCollectorEvents,
   BundlerEvents,
+  TestExecutionOptions,
 } from '@react-native-harness/bridge';
 import { getBridgeClient } from '@react-native-harness/bridge/client';
 import { store } from '../ui/state.js';
@@ -11,6 +12,7 @@ import { combineEventEmitters, EventEmitter } from '../utils/emitter.js';
 import { attachProgressLogger } from '../utils/progressLogger.js';
 import { getWSServer } from './getWSServer.js';
 import { getBundler, evaluateModule, Bundler } from '../bundler/index.js';
+import { filterTestsByName } from '../filtering/index.js';
 
 export const getClient = async () => {
   const client = await getBridgeClient(getWSServer(), {
@@ -19,7 +21,10 @@ export const getClient = async () => {
     },
   });
 
-  client.rpc.$functions.runTests = async (path: string) => {
+  client.rpc.$functions.runTests = async (
+    path: string,
+    options: TestExecutionOptions = {}
+  ) => {
     if (store.getState().status === 'running') {
       throw new Error('Already running tests');
     }
@@ -55,7 +60,13 @@ export const getClient = async () => {
         () => evaluateModule(moduleJs, path),
         path
       );
-      const result = await runner.run(collectionResult.testSuite, path);
+
+      // Apply test name filtering if specified
+      const filteredTestSuite = options.testNamePattern
+        ? filterTestsByName(collectionResult.testSuite, options.testNamePattern)
+        : collectionResult.testSuite;
+
+      const result = await runner.run(filteredTestSuite, path);
       return result;
     } catch (error) {
       throw error;

@@ -13,14 +13,20 @@ const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
 
 const program = new Command();
 
-logger.setVerbose(true);
-
 program
   .name('react-native-harness')
   .description(
     'React Native Test Harness - A comprehensive testing framework for React Native applications'
   )
-  .version(packageJson.version);
+  .version(packageJson.version)
+  .option('-v, --verbose', 'Enable verbose logging')
+  .hook('preAction', (thisCommand) => {
+    // Handle global verbose option
+    const opts = thisCommand.optsWithGlobals();
+    if (opts.verbose) {
+      logger.setVerbose(true);
+    }
+  });
 
 program
   .command('test')
@@ -33,9 +39,31 @@ program
     '[pattern]',
     'glob pattern to match test files (uses config.include if not specified)'
   )
-  .action(async (runner, pattern) => {
+  .option(
+    '-t, --testNamePattern <pattern>',
+    'Run only tests with names matching regex pattern'
+  )
+  .option(
+    '--testPathPattern <pattern>',
+    'Run only test files with paths matching regex pattern'
+  )
+  .option(
+    '--testPathIgnorePatterns <patterns...>',
+    'Ignore test files matching these patterns'
+  )
+  .option(
+    '--testMatch <patterns...>',
+    'Override config.include with these glob patterns'
+  )
+  .action(async (runner, pattern, options) => {
     try {
-      await testCommand(runner, pattern);
+      // Convert CLI pattern argument to testMatch option
+      const mergedOptions = {
+        ...options,
+        testMatch: pattern ? [pattern] : options.testMatch,
+      };
+
+      await testCommand(runner, mergedOptions);
     } catch (error) {
       handleError(error);
       process.exit(1);
