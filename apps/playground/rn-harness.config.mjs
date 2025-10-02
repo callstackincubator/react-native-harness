@@ -1,5 +1,5 @@
 const config = {
-  include: ['./demo.harness.ts', './__tests__/**/*'],
+  include: ['./src/__tests__/**/*'],
 
   runners: [
     {
@@ -18,7 +18,7 @@ const config = {
   ],
   defaultRunner: 'android',
   bridgeTimeout: 120000,
-  unstable__skipAlreadyIncludedModules: true,
+  unstable__skipAlreadyIncludedModules: false,
 };
 
 export default config;

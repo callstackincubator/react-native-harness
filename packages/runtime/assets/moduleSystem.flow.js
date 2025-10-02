@@ -84,8 +84,16 @@ global.__r = (metroRequire: RequireFn);
 global[`${__METRO_GLOBAL_PREFIX__}__d`] = (define: DefineFn);
 global.__c = clear;
 global.__registerSegment = registerSegment;
+global.__resetAllModules = resetAllModules;
 
 var modules = clear();
+
+function resetAllModules() {
+  modules.forEach((mod) => {
+    // Mutating existing module doesn't work for some reason
+    modules.set(mod.id, { ...mod, isInitialized: false });
+  });
+}
 
 // Don't use a Symbol here, it would pull in an extra polyfill with all sorts of
 // additional stuff (e.g. Array.from).

@@ -15,11 +15,7 @@ export const clearMocks = (): void => {
   mockCache.clear();
 };
 
-export const getMockRegistry = (): Map<number, ModuleFactory> => {
-  return mockRegistry;
-};
-
-export const getMockImplementation = (moduleId: number): unknown | null => {
+const getMockImplementation = (moduleId: number): unknown | null => {
   if (mockCache.has(moduleId)) {
     return mockCache.get(moduleId);
   }
@@ -46,6 +42,9 @@ export const unmock = (moduleId: string) => {
 
 export const resetModules = (): void => {
   mockCache.clear();
+
+  // Reset Metro's module cache
+  global.__resetAllModules();
 };
 
 const mockRequire = (moduleId: string) => {
