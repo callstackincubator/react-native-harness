@@ -52,8 +52,15 @@ export type BridgeEventsMap = {
   ) => void;
 };
 
+export type TestExecutionOptions = {
+  testNamePattern?: string;
+};
+
 export type BridgeClientFunctions = {
-  runTests: (path: string) => Promise<TestSuiteResult>;
+  runTests: (
+    path: string,
+    options?: TestExecutionOptions
+  ) => Promise<TestSuiteResult>;
 };
 
 export type BridgeServerFunctions = {
