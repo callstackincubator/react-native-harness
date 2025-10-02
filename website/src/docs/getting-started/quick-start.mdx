@@ -145,15 +145,33 @@ React Native Harness provides Jest-compatible APIs through `react-native-harness
 
 ### Test Structure
 
-Use `describe(name, fn)` to group related tests, `it(name, fn)` or `test(name, fn)` to define individual tests, `it.skip()` or `test.skip()` to skip tests, and `it.only()` or `test.only()` to run only specific tests.
+- `describe(name, fn)` - Group related tests
+- `it(name, fn)` or `test(name, fn)` - Define individual tests
+- `it.skip()` or `test.skip()` - Skip tests
+- `it.only()` or `test.only()` - Run only specific tests
 
 ### Lifecycle Hooks
 
-Control test execution with `beforeAll(fn)` to run once before all tests, `afterAll(fn)` to run once after all tests, `beforeEach(fn)` to run before each test, and `afterEach(fn)` to run after each test.
+- `beforeAll(fn)` - Run once before all tests
+- `afterAll(fn)` - Run once after all tests
+- `beforeEach(fn)` - Run before each test
+- `afterEach(fn)` - Run after each test
 
 ### Assertions
 
-Create expectations using `expect(value)` with matchers like `.toBe()`, `.toEqual()`, `.toBeTruthy()`, `.toBeFalsy()`, `.toContain()`, `.toHaveLength()`, `.toMatch()`, `.toBeInstanceOf()`, `.toHaveProperty()`, and many more Jest-compatible matchers.
+Create expectations using `expect(value)` with matchers:
+
+- `.toBe()` - Strict equality
+- `.toEqual()` - Deep equality
+- `.toBeTruthy()` - Truthy values
+- `.toBeFalsy()` - Falsy values
+- `.toContain()` - Array/string contains
+- `.toHaveLength()` - Length check
+- `.toMatch()` - Regex match
+- `.toBeInstanceOf()` - Instance type
+- `.toHaveProperty()` - Object property
+
+...and many more Jest-compatible matchers.
 
 ## Building Your App
 
@@ -161,7 +179,7 @@ Before running tests, you need to build your app in debug mode and install it on
 
 Follow your framework's documentation to build and install the debug variant:
 
-### React Native CLI
+### React Native Community CLI
 
 <PackageManagerTabs command="react-native run-android" />
 

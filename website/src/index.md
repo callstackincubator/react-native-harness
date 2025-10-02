@@ -7,8 +7,8 @@ hero:
       light: /logo-light.svg
       dark: /logo-dark.svg
     alt: React Native Harness logo
-  name: React Native Harness
-  tagline: 'Test native modules with Jest-style syntax on iOS simulators and Android emulators. Write familiar describe/it tests that execute directly in native environments.'
+  name: Test Native Modules with JavaScript
+  tagline: 'Harness brings Jest-style tests to real native environments so you can test TurboModules like you would test your React Native app: with JavaScript.'
   actions:
     - theme: brand
       text: Get Started

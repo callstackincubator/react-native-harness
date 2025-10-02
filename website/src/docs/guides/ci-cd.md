@@ -12,7 +12,7 @@ React Native Harness doesn't require you to constantly rebuild the app from scra
 
 ## GitHub Actions Example
 
-The example workflow shared below is designed for **React Native CLI** setups. If you're using **Expo** or **Rock**, the workflow will be simpler as these frameworks provide their own build and deployment mechanisms that integrate seamlessly with CI/CD environments.
+The example workflow shared below is designed for **React Native Community CLI** setups. If you're using **Expo** or **Rock**, the workflow will be simpler as these frameworks provide their own build and deployment mechanisms that integrate seamlessly with CI/CD environments.
 
 Here's a complete GitHub Actions workflow that demonstrates how to run React Native Harness tests on both Android and iOS platforms:
 
@@ -243,9 +243,9 @@ This makes caching much more reliable and reduces the need for manual cache mana
 
 ## Adapting for Your Project
 
-### React Native CLI Projects
+### React Native Community CLI Projects
 
-For standard React Native CLI projects, adapt the workflow by:
+For standard React Native Community CLI projects, adapt the workflow by:
 
 1. **Update App Names**: Replace `YourApp` with your actual app name in the iOS configuration
 2. **Verify Paths**: Ensure build output paths match your project structure
