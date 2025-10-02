@@ -1,5 +1,12 @@
 import type { PluginObj, types as BabelTypes, NodePath } from '@babel/core';
 
+// Functions that need their first parameter wrapped with require.resolveWeak
+const FUNCTIONS_REQUIRING_RESOLVE_WEAK = [
+  'mock',
+  'unmock',
+  'requireActual',
+] as const;
+
 const resolveWeakPlugin = ({
   types: t,
 }: typeof import('@babel/core')): PluginObj => {
@@ -23,18 +30,18 @@ const resolveWeakPlugin = ({
         }
       },
 
-      // Transform requireActual and mock calls to use require.resolveWeak
+      // Transform requireActual, mock, and unmock calls to use require.resolveWeak
       CallExpression(path: NodePath<BabelTypes.CallExpression>) {
         const { node } = path;
 
-        // Check if this is a call to requireActual or mock
+        // Check if this is a call to requireActual, mock, or unmock
         if (t.isIdentifier(node.callee)) {
           const functionName = node.callee.name;
 
           // Only transform if the function was imported from react-native-harness
           if (
             importedNames.has(functionName) &&
-            (functionName === 'requireActual' || functionName === 'mock')
+            FUNCTIONS_REQUIRING_RESOLVE_WEAK.includes(functionName as any)
           ) {
             const firstArg = node.arguments[0];
 
