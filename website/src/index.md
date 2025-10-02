@@ -20,22 +20,13 @@ hero:
     text: Beta
     type: info
 features:
-  - title: Jest-Compatible APIs
+  - title: Jest-compatible APIs
     details: Write tests using familiar describe, it, expect, beforeEach, and afterEach syntax. No new testing patterns to learn.
     icon: <img src="/icons/speed-fast.svg" />
-  - title: Real Native Environment
-    details: Execute tests directly on iOS simulators and Android emulators where native modules are actually available.
+  - title: Truly native environment
+    details: Execute tests directly on iOS simulators and Android emulators where native modules are fully available without mocking.
     icon: <img src="/icons/device-phone.svg" />
-  - title: Direct Native Module Access
-    details: Test platform APIs, device capabilities, and native functionality without mocking - access real NativeModules in native environments.
-    icon: <img src="/icons/git-pull-request.svg" />
-  - title: No UI Automation Required
-    details: Test native functionality directly through JavaScript APIs instead of complex UI automation workflows.
-    icon: <img src="/icons/notes.svg" />
-  - title: Production-Like Testing
-    details: Catch platform-specific issues and device behavior that Jest running in Node.js simply cannot detect.
-    icon: <img src="/icons/debug.svg" />
-  - title: Quick Integration
+  - title: Quick integration
     details: Add to existing projects with straightforward configuration steps, TypeScript support and CI/CD compatibility.
     icon: <img src="/icons/cloud.svg" />
 ---
