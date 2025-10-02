@@ -9,7 +9,7 @@
         "@react-native-harness/babel-preset:build"
       ],
       "options": {
-        "command": "node ../../packages/cli/dist/index.js",
+        "command": "node ../../packages/react-native-harness/bin.js",
         "cwd": "apps/playground"
       }
     }
