@@ -1,0 +1,44 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v3.9.1
+        with:
+          node-version: '23'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set shas
+        uses: nrwl/nx-set-shas@826660b82addbef3abff5fa871492ebad618c9e1 # v.4.3.3
+
+      - name: Typecheck
+        run: pnpm nx affected -t typecheck
+
+      - name: Build
+        run: pnpm nx affected -t build
+
+      - name: Lint
+        run: pnpm nx affected -t lint
+
+      - name: Test
+        run: pnpm nx affected -t test
