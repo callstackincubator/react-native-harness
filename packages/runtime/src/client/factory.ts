@@ -11,7 +11,7 @@ import { getTestCollector, TestCollector } from '../collector/index.js';
 import { combineEventEmitters, EventEmitter } from '../utils/emitter.js';
 import { getWSServer } from './getWSServer.js';
 import { getBundler, evaluateModule, Bundler } from '../bundler/index.js';
-import { filterTestsByName } from '../filtering/index.js';
+import { markTestsAsSkippedByName } from '../filtering/index.js';
 
 export const getClient = async () => {
   const client = await getBridgeClient(getWSServer(), {
@@ -57,12 +57,15 @@ export const getClient = async () => {
         path
       );
 
-      // Apply test name filtering if specified
-      const filteredTestSuite = options.testNamePattern
-        ? filterTestsByName(collectionResult.testSuite, options.testNamePattern)
+      // Apply test name pattern by marking non-matching tests as skipped
+      const processedTestSuite = options.testNamePattern
+        ? markTestsAsSkippedByName(
+            collectionResult.testSuite,
+            options.testNamePattern
+          )
         : collectionResult.testSuite;
 
-      const result = await runner.run(filteredTestSuite, path);
+      const result = await runner.run(processedTestSuite, path);
       return result;
     } finally {
       collector?.dispose();

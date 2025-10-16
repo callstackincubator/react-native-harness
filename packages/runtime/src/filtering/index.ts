@@ -1,1 +1,4 @@
-export { filterTestsByName } from './testNameFilter.js';
+export {
+  filterTestsByName,
+  markTestsAsSkippedByName,
+} from './testNameFilter.js';

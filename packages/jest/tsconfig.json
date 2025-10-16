@@ -4,13 +4,16 @@
   "include": [],
   "references": [
     {
-      "path": "../../packages/jest"
+      "path": "../config"
     },
     {
-      "path": "../../packages/react-native-harness"
+      "path": "../bridge"
     },
     {
-      "path": "./tsconfig.app.json"
+      "path": "../cli"
+    },
+    {
+      "path": "./tsconfig.lib.json"
     }
   ]
 }

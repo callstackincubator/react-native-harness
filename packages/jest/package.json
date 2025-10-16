@@ -1,5 +1,5 @@
 {
-  "name": "@react-native-harness/cli",
+  "name": "@react-native-harness/jest",
   "version": "1.0.0-alpha.15",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,23 +12,19 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./external": {
-      "development": "./src/external.ts",
-      "types": "./dist/external.d.ts",
-      "import": "./dist/external.js",
-      "default": "./dist/external.js"
     }
   },
   "dependencies": {
+    "@jest/test-result": "^30.2.0",
+    "jest-runner": "^30.2.0",
+    "p-limit": "^7.1.1",
+    "tslib": "^2.3.0",
+    "yargs": "^17.7.2",
+    "@react-native-harness/cli": "workspace:*",
     "@react-native-harness/bridge": "workspace:*",
-    "@react-native-harness/config": "workspace:*",
-    "@react-native-harness/tools": "workspace:*",
-    "commander": "^14.0.0",
-    "glob": "^11.0.0",
-    "tslib": "^2.3.0"
+    "@react-native-harness/config": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "18.16.9"
+    "@types/yargs": "^17.0.32"
   }
 }
