@@ -5,6 +5,8 @@ module.exports = {
       testMatch: [
         '<rootDir>/src/__tests__/**/*.(test|spec|harness).(js|jsx|ts|tsx)',
       ],
+      setupFiles: ['./src/setupFile.ts'],
+      setupFilesAfterEnv: ['./src/setupFileAfterEnv.ts'],
     },
   ],
 };

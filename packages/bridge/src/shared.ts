@@ -31,6 +31,9 @@ export type {
   ModuleBundlingStartedEvent,
   ModuleBundlingFinishedEvent,
   ModuleBundlingFailedEvent,
+  SetupFileBundlingStartedEvent,
+  SetupFileBundlingFinishedEvent,
+  SetupFileBundlingFailedEvent,
   BundlerEvents,
 } from './shared/bundler.js';
 
@@ -54,6 +57,8 @@ export type BridgeEventsMap = {
 
 export type TestExecutionOptions = {
   testNamePattern?: string;
+  setupFiles?: string[];
+  setupFilesAfterEnv?: string[];
 };
 
 export type BridgeClientFunctions = {

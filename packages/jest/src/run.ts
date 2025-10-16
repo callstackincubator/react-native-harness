@@ -59,13 +59,25 @@ export type RunHarnessTestFile = (options: {
 export const runHarnessTestFile: RunHarnessTestFile = async ({
   testPath,
   globalConfig,
+  projectConfig,
   harness,
 }) => {
   const start = Date.now();
   const relativeTestPath = path.relative(globalConfig.rootDir, testPath);
+
+  // Extract setup files from Jest config and convert to relative paths
+  const setupFiles = projectConfig.setupFiles?.map((setupFile) =>
+    path.relative(globalConfig.rootDir, setupFile)
+  );
+  const setupFilesAfterEnv = projectConfig.setupFilesAfterEnv?.map(
+    (setupFile) => path.relative(globalConfig.rootDir, setupFile)
+  );
+
   const client = harness.bridge.rpc.clients.at(-1)!;
   const results = await client.runTests(relativeTestPath, {
     testNamePattern: globalConfig.testNamePattern,
+    setupFiles,
+    setupFilesAfterEnv,
   });
   const end = Date.now();
 

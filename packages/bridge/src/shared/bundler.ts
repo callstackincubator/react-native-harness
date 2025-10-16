@@ -16,7 +16,31 @@ export type ModuleBundlingFailedEvent = {
   error: string;
 };
 
+export type SetupFileBundlingStartedEvent = {
+  type: 'setup-file-bundling-started';
+  file: string;
+  setupType: 'setupFiles' | 'setupFilesAfterEnv';
+};
+
+export type SetupFileBundlingFinishedEvent = {
+  type: 'setup-file-bundling-finished';
+  file: string;
+  setupType: 'setupFiles' | 'setupFilesAfterEnv';
+  duration: number;
+};
+
+export type SetupFileBundlingFailedEvent = {
+  type: 'setup-file-bundling-failed';
+  file: string;
+  setupType: 'setupFiles' | 'setupFilesAfterEnv';
+  duration: number;
+  error: string;
+};
+
 export type BundlerEvents =
   | ModuleBundlingStartedEvent
   | ModuleBundlingFinishedEvent
-  | ModuleBundlingFailedEvent;
+  | ModuleBundlingFailedEvent
+  | SetupFileBundlingStartedEvent
+  | SetupFileBundlingFinishedEvent
+  | SetupFileBundlingFailedEvent;

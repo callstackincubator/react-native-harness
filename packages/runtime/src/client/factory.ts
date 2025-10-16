@@ -51,6 +51,73 @@ export const getClient = async () => {
         client.rpc.emitEvent(event.type, event);
       });
 
+      // Execute setup files before test collection
+      if (options.setupFiles) {
+        for (const setupFile of options.setupFiles) {
+          const startTime = Date.now();
+          events.emit({
+            type: 'setup-file-bundling-started',
+            file: setupFile,
+            setupType: 'setupFiles',
+          });
+
+          try {
+            const setupModuleJs = await bundler.getModule(setupFile);
+            events.emit({
+              type: 'setup-file-bundling-finished',
+              file: setupFile,
+              setupType: 'setupFiles',
+              duration: Date.now() - startTime,
+            });
+            evaluateModule(setupModuleJs, setupFile);
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : 'Unknown error';
+            events.emit({
+              type: 'setup-file-bundling-failed',
+              file: setupFile,
+              setupType: 'setupFiles',
+              duration: Date.now() - startTime,
+              error: errorMessage,
+            });
+            throw error;
+          }
+        }
+      }
+
+      if (options.setupFilesAfterEnv) {
+        for (const setupFile of options.setupFilesAfterEnv) {
+          const startTime = Date.now();
+          events.emit({
+            type: 'setup-file-bundling-started',
+            file: setupFile,
+            setupType: 'setupFilesAfterEnv',
+          });
+
+          try {
+            const setupModuleJs = await bundler.getModule(setupFile);
+            events.emit({
+              type: 'setup-file-bundling-finished',
+              file: setupFile,
+              setupType: 'setupFilesAfterEnv',
+              duration: Date.now() - startTime,
+            });
+            evaluateModule(setupModuleJs, setupFile);
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : 'Unknown error';
+            events.emit({
+              type: 'setup-file-bundling-failed',
+              file: setupFile,
+              setupType: 'setupFilesAfterEnv',
+              duration: Date.now() - startTime,
+              error: errorMessage,
+            });
+            throw error;
+          }
+        }
+      }
+
       const moduleJs = await bundler.getModule(path);
       const collectionResult = await collector.collect(
         () => evaluateModule(moduleJs, path),
