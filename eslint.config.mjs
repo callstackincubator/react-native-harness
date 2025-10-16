@@ -11,6 +11,7 @@ export default [
       '**/vitest.config.*.timestamp*',
       '**/doc_build',
       '**/build',
+      '**/out-tsc',
     ],
   },
   {
