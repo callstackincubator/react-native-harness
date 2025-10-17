@@ -287,6 +287,9 @@ importers:
 
   packages/metro:
     dependencies:
+      '@react-native-harness/babel-preset':
+        specifier: workspace:*
+        version: link:../babel-preset
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config
