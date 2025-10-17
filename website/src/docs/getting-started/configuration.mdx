@@ -8,6 +8,8 @@ The most basic configuration would, assuming you support both iOS and Android pl
 
 ```javascript
 const config = {
+  entryPoint: './index.js',
+  appRegistryComponentName: 'App',
   include: ['./src/**/*.harness.{js,ts,jsx,tsx}'],
 
   runners: [
@@ -30,10 +32,49 @@ const config = {
 export default config;
 ```
 
+## Entry Point and App Component
+
+React Native Harness needs to know how to locate and integrate with your React Native app.
+
+### `entryPoint`
+
+The path to your React Native app's entry point file.
+
+```javascript
+{
+  entryPoint: './src/main.tsx',
+}
+```
+
+### `appRegistryComponentName`
+
+The name of the component registered with React Native's `AppRegistry`.
+
+```javascript
+// In your app's entry point
+import { AppRegistry } from 'react-native';
+import App from './App';
+
+AppRegistry.registerComponent('MyApp', () => App);
+```
+
+```javascript
+// In your rn-harness.config.mjs
+{
+  appRegistryComponentName: 'MyApp',
+}
+```
+
 ## All Configuration Options
 
 ```typescript
 {
+  // Required: Entry point file for your React Native app
+  entryPoint: string;
+
+  // Required: Name of the component registered with AppRegistry
+  appRegistryComponentName: string;
+
   // Required: Glob patterns to include test files
   include: string | string[];
 

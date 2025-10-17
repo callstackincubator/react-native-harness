@@ -18,6 +18,8 @@ Create a `rn-harness.config.mjs` file in your project root:
 
 ```javascript
 const config = {
+  entryPoint: './index.js',
+  appRegistryComponentName: 'YourAppName',
   include: ['./src/**/*.harness.{js,ts,jsx,tsx}'],
 
   runners: [
@@ -40,7 +42,9 @@ const config = {
 export default config;
 ```
 
-For detailed information about all configuration options, see the [Configuration](/docs/getting-started/configuration) page.
+:::tip App Integration
+The `entryPoint` and `appRegistryComponentName` properties tell React Native Harness how to locate and integrate with your React Native app. See the [Configuration](/docs/getting-started/configuration) page for detailed information about these and all other configuration options.
+:::
 
 ### 2. Update Metro Configuration
 
@@ -70,32 +74,13 @@ module.exports = {
 };
 ```
 
-### 4. Update Your Entry Point
-
-Add a conditional entry point to your `index.js` or main entry file. This allows React Native Harness to take over the app when needed and run tests.
-
-```javascript
-// index.js (or your main entry file)
-import { AppRegistry } from 'react-native';
-
-AppRegistry.registerComponent(
-  'YourAppName',
-  () =>
-    global.RN_HARNESS
-      ? require('react-native-harness').ReactNativeHarness
-      : require('./App').default // Your normal app component
-);
-```
-
-### 5. TypeScript Support (Optional)
+### 4. TypeScript Support (Optional)
 
 If you're using TypeScript, add a `react-native-harness.d.ts` file to your project root to get proper type definitions:
 
 ```typescript
 /// <reference types="react-native-harness/types" />
 ```
-
-This way, your app will know about the RN_HARNESS global and won't mark it as an error.
 
 ## Writing Your First Test
 
