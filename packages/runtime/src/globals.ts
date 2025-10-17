@@ -1,5 +1,17 @@
+export type HarnessGlobal = {
+  appRegistryComponentName: string;
+};
+
 declare global {
-  var RN_HARNESS: boolean | undefined;
+  var RN_HARNESS: HarnessGlobal | undefined;
 }
 
-export {};
+export const getHarnessGlobal = (): HarnessGlobal => {
+  const harnessGlobal = global.RN_HARNESS;
+
+  if (!harnessGlobal) {
+    throw new Error('RN_HARNESS global is not set');
+  }
+
+  return harnessGlobal;
+};

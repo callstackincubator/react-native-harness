@@ -1,13 +1,11 @@
-import globalRnHarnessPlugin from './global-plugin';
 import resolveWeakPlugin from './resolve-weak-plugin';
 
 export const rnHarnessPreset = () => {
-  // Unfortunately, the Babel preset must be enabled at all times (at least for now).
+  if (!process.env.RN_HARNESS) {
+    return {};
+  }
+
   return {
-    plugins: [
-      '@babel/plugin-transform-class-static-block',
-      globalRnHarnessPlugin,
-      resolveWeakPlugin,
-    ],
+    plugins: ['@babel/plugin-transform-class-static-block', resolveWeakPlugin],
   };
 };

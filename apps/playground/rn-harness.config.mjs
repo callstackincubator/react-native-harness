@@ -1,4 +1,6 @@
 const config = {
+  entryPoint: './src/main.tsx',
+  appRegistryComponentName: 'Playground',
   include: ['./src/__tests__/**/*'],
 
   runners: [

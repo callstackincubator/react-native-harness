@@ -59,6 +59,10 @@ export const TestRunnerConfigSchema = z.discriminatedUnion('platform', [
 
 export const ConfigSchema = z
   .object({
+    entryPoint: z.string().min(1, 'Entry point is required'),
+    appRegistryComponentName: z
+      .string()
+      .min(1, 'App registry component name is required'),
     include: z.union([z.string(), z.array(z.string())]).refine(
       (val) => {
         if (Array.isArray(val)) {

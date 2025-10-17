@@ -14,7 +14,13 @@
       "default": "./dist/index.js"
     },
     "./moduleSystem": "./assets/moduleSystem.flow.js",
-    "./types": "./types/index.d.ts"
+    "./types": "./types/index.d.ts",
+    "./entry-point": {
+      "development": "./src/entry-point.ts",
+      "types": "./dist/entry-point.d.ts",
+      "import": "./dist/entry-point.js",
+      "default": "./dist/entry-point.js"
+    }
   },
   "peerDependencies": {
     "react": "*",

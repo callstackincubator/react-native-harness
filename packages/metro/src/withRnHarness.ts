@@ -1,10 +1,8 @@
 import { MetroConfig } from '@react-native/metro-config';
 import { getConfig } from '@react-native-harness/config';
 import { patchModuleSystem } from './moduleSystem';
-
-export type RnHarnessOptions = {
-  unstable__skipAlreadyIncludedModules?: boolean;
-};
+import { getHarnessResolver } from './resolver';
+import { getHarnessManifest } from './manifest';
 
 export const withRnHarness = async (
   config: MetroConfig | Promise<MetroConfig>
@@ -20,6 +18,9 @@ export const withRnHarness = async (
 
   patchModuleSystem();
 
+  const harnessResolver = getHarnessResolver(metroConfig, harnessConfig);
+  const harnessManifest = getHarnessManifest(harnessConfig);
+
   const patchedConfig: MetroConfig = {
     ...metroConfig,
     cacheVersion: 'react-native-harness',
@@ -27,13 +28,14 @@ export const withRnHarness = async (
       ...metroConfig.serializer,
       getPolyfills: (...args) => [
         ...(metroConfig.serializer?.getPolyfills?.(...args) ?? []),
-        require.resolve('../assets/init.js'),
+        harnessManifest,
       ],
     },
     resolver: {
       ...metroConfig.resolver,
       // Unlock __tests__ directory
       blockList: undefined,
+      resolveRequest: harnessResolver,
     },
   };
 

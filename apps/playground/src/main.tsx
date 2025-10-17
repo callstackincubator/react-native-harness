@@ -1,7 +1,4 @@
 import { AppRegistry } from 'react-native';
+import App from './app/App';
 
-AppRegistry.registerComponent('Playground', () =>
-  global.RN_HARNESS
-    ? require('react-native-harness').ReactNativeHarness
-    : require('./app/App').default
-);
+AppRegistry.registerComponent('Playground', () => App);
