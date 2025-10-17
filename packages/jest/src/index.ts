@@ -66,6 +66,13 @@ export default class JestHarness implements CallbackTestRunnerInterface {
     const { config: harnessConfig } = await getConfig(projectRoot);
     const cliArgs = getAdditionalCliArgs();
     const selectedRunner = getHarnessRunner(harnessConfig, cliArgs);
+
+    if (this.#globalConfig.collectCoverage) {
+      // This is going to be used by @react-native-harness/babel-preset
+      // to enable instrumentation of test files.
+      process.env.RN_HARNESS_COLLECT_COVERAGE = 'true';
+    }
+
     const harness = await getHarness(selectedRunner);
 
     try {

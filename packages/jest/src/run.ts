@@ -111,5 +111,6 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
     errorMessage,
     tests,
     jestTestPath: testPath,
+    coverage: results.coverage as JestTestResult['coverage'],
   });
 };

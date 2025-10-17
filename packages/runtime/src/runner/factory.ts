@@ -9,10 +9,17 @@ export const getTestRunner = (): TestRunner => {
   return {
     events,
     run: async (testSuite, testFilePath) => {
-      return runSuite(testSuite, {
+      const result = await runSuite(testSuite, {
         events,
         testFilePath,
       });
+
+      // If coverage is enabled, there will be a global variable called __coverage__
+      if ('__coverage__' in global && !!global.__coverage__) {
+        result.coverage = global.__coverage__;
+      }
+
+      return result;
     },
     dispose: () => {
       events.clearAllListeners();

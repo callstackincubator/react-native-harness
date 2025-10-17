@@ -80,4 +80,5 @@ export type TestSuiteResult = {
   status: TestResultStatus;
   error?: SerializedError;
   duration: number;
+  coverage?: unknown;
 };
