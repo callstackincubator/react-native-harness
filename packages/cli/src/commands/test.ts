@@ -103,7 +103,7 @@ const runTests = async (
   context: TestRunContext,
   options: TestFilterOptions = {}
 ): Promise<void> => {
-  const { bridge, environment, testFiles } = context;
+  const { bridge, environment, testFiles, config } = context;
   assert(bridge != null, 'Bridge not initialized');
   assert(environment != null, 'Environment not initialized');
   assert(testFiles != null, 'Test files not initialized');
@@ -141,7 +141,11 @@ const runTests = async (
 
     const result = await client.runTests(testFile, executionOptions);
     context.results = [...(context.results ?? []), ...result.suites];
-    shouldRestart = true;
+
+    if (config.resetEnvironmentBetweenTestFiles) {
+      shouldRestart = true;
+    }
+
     runSpinner.stop(`Test file ${testFile} completed`);
   }
 

@@ -81,6 +81,8 @@ export const ConfigSchema = z
       .number()
       .min(1000, 'Bridge timeout must be at least 1 second')
       .default(60000),
+
+    resetEnvironmentBetweenTestFiles: z.boolean().optional().default(true),
     unstable__skipAlreadyIncludedModules: z.boolean().optional().default(false),
   })
   .refine(

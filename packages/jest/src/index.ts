@@ -73,6 +73,7 @@ export default class JestHarness implements CallbackTestRunnerInterface {
         tests,
         watcher,
         harness,
+        harnessConfig,
         onStart,
         onResult,
         onFailure
@@ -87,6 +88,7 @@ export default class JestHarness implements CallbackTestRunnerInterface {
     tests: Array<Test>,
     watcher: TestWatcher,
     harness: Harness,
+    harnessConfig: HarnessConfig,
     onStart: OnTestStart,
     onResult: OnTestSuccess,
     onFailure: OnTestFailure
@@ -103,7 +105,10 @@ export default class JestHarness implements CallbackTestRunnerInterface {
                 throw new CancelRun();
               }
 
-              if (!isFirstTest) {
+              if (
+                harnessConfig.resetEnvironmentBetweenTestFiles &&
+                !isFirstTest
+              ) {
                 await new Promise((resolve) => {
                   harness.bridge.once('ready', resolve);
                   harness.environment.restart();
