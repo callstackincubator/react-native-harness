@@ -12,6 +12,9 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
+      "path": "../babel-preset/tsconfig.lib.json"
+    },
+    {
       "path": "../config/tsconfig.lib.json"
     },
     {

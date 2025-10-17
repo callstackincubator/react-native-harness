@@ -4,6 +4,9 @@
   "include": [],
   "references": [
     {
+      "path": "../babel-preset"
+    },
+    {
       "path": "../config"
     },
     {
