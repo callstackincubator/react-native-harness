@@ -63,17 +63,6 @@ const customConfig = {
 module.exports = withRnHarness(mergeConfig(defaultConfig, customConfig));
 ```
 
-### 3. Update Babel Configuration
-
-Add the required preset to `babel.config.js`. This is needed for module mocking and bundling speedup when running tests.
-
-```javascript
-module.exports = {
-  presets: ['module:@react-native/babel-preset', 'react-native-harness/babel'],
-  // Your existing Babel config
-};
-```
-
 ## Writing Your First Test
 
 Create a test file with a `.harness.js` or `.harness.ts` extension. Import testing utilities from `react-native-harness` instead of Jest:
