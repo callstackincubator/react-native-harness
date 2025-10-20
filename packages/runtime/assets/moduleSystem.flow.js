@@ -588,11 +588,14 @@ function loadModuleImplementation(
     // keep args in sync with with defineModuleCode in
     // metro/src/Resolver/index.js
     // and metro/src/ModuleGraph/worker.js
+    const capturedRequire = (...args) => global.__r(...args);
+    Object.assign(capturedRequire, global.__r);
+
     factory(
       global,
-      (...args) => global.__r(...args),
-      (...args) => global.__r.importDefault(...args),
-      (...args) => global.__r.importAll(...args),
+      capturedRequire,
+      capturedRequire.importDefault,
+      capturedRequire.importAll,
       moduleObject,
       moduleObject.exports,
       dependencyMap

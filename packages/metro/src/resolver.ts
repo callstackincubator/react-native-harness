@@ -30,6 +30,14 @@ export const getHarnessResolver = (
       };
     }
 
+    // Intercept @jest/globals imports and redirect to mock module
+    if (moduleName === '@jest/globals') {
+      return {
+        type: 'sourceFile',
+        filePath: require.resolve('./jest-globals-mock'),
+      };
+    }
+
     return resolvedModule;
   };
 };
