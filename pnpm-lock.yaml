@@ -280,6 +280,9 @@ importers:
       jest-runner:
         specifier: ^30.2.0
         version: 30.2.0
+      jest-util:
+        specifier: ^30.2.0
+        version: 30.2.0
       p-limit:
         specifier: ^7.1.1
         version: 7.1.1
@@ -10761,7 +10764,7 @@ snapshots:
       identity-obj-proxy: 3.0.0
       jest-config: 30.0.5(@types/node@18.16.9)(babel-plugin-macros@3.1.0)(ts-node@9.1.1(typescript@5.8.3))
       jest-resolve: 30.0.5
-      jest-util: 30.0.5
+      jest-util: 30.2.0
       minimatch: 9.0.3
       picocolors: 1.1.1
       resolve.exports: 2.0.3
@@ -11402,9 +11405,7 @@ snapshots:
     transitivePeerDependencies:
       - '@babel/core'
       - '@babel/preset-env'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-colors@0.76.9': {}
 
