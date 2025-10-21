@@ -145,7 +145,7 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb install -r "./app/build/outputs/apk/debug/app-debug.apk"
-            pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test android"
+            pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="--harnessRunner android"
 
   e2e-ios:
     name: E2E iOS - ${{ matrix.app }}
@@ -237,4 +237,4 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="test ios"
+          pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="--harnessRunner ios"
