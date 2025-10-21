@@ -6,7 +6,7 @@ React Native Harness allows you to write Jest-style tests that run directly in y
 
 ## Prerequisites
 
-The recommended way to run Harness is through Jest, which means you get all the great features of the Jest CLI including watch mode, code coverage, filtering, and more. The standalone React Native Harness CLI is going to be deprecated in the near future, so we strongly encourage using the Jest integration.
+React Native Harness provides a dedicated `react-native-harness` command that wraps the Jest CLI under the hood, giving you all the powerful features of Jest including watch mode, code coverage, filtering, and more. This means you get the full Jest experience with seamless integration for running tests in real native environments.
 
 Make sure you have Jest installed in your project. Most React Native projects come with Jest by default, so you should be all set! If Jest isn't installed yet, check out the [Jest Getting Started guide](https://jestjs.io/docs/getting-started) to get it up and running.
 
@@ -26,7 +26,6 @@ Create a `rn-harness.config.mjs` file in your project root:
 const config = {
   entryPoint: './index.js',
   appRegistryComponentName: 'YourAppName',
-  include: ['./src/**/*.harness.{js,ts,jsx,tsx}'],
 
   runners: [
     {
@@ -208,19 +207,22 @@ Follow your framework's documentation to build and install the debug variant:
 
 ## Running Tests
 
-Now you're ready to run your tests! Simply use Jest to execute your Harness tests:
+Now you're ready to run your tests! Use the `react-native-harness` command with the `--harnessRunner` flag to specify which platform to run on:
 
-<PackageManagerTabs command="jest" />
+<PackageManagerTabs command="react-native-harness --harnessRunner android" />
 
-Since Harness runs through Jest, you get all the powerful Jest CLI features out of the box:
+<PackageManagerTabs command="react-native-harness --harnessRunner ios" />
 
-- **Watch mode**: `jest --watch` to automatically rerun tests when files change
-- **Code coverage**: `jest --coverage` to see how much of your code is tested
-- **Run specific tests**: `jest MyComponent.harness` to run only certain test files
-
-:::note Legacy CLI
-The standalone `react-native-harness test` CLI command is still available but will be deprecated soon. We recommend using Jest directly for the best experience.
+:::tip Default Runner
+If you don't provide the `--harnessRunner` flag, React Native Harness will use the runner specified in the `defaultRunner` property of your `rn-harness.config.mjs` file. If no `defaultRunner` is configured, you must explicitly provide the `--harnessRunner` flag.
 :::
+
+Since the `react-native-harness` command wraps Jest CLI under the hood, you get all the powerful Jest CLI features out of the box:
+
+- **Watch mode**: `react-native-harness --watch --harnessRunner android` to automatically rerun tests when files change
+- **Code coverage**: `react-native-harness --coverage --harnessRunner android` to see how much of your code is tested
+- **Run specific tests**: `react-native-harness MyComponent.harness --harnessRunner android` to run only certain test files
+- **Filter by name**: `react-native-harness --testNamePattern="specific test" --harnessRunner android` to run tests matching a pattern
 
 ## What's Next?
 

@@ -10,9 +10,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "references": [
-    {
-      "path": "../reporters/tsconfig.lib.json"
-    }
-  ]
+  "references": []
 }

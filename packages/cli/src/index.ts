@@ -1,78 +1,47 @@
-import { Command } from 'commander';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { testCommand } from './commands/test.js';
-import { handleError } from './errors/errorHandler.js';
-import { logger } from '@react-native-harness/tools';
+import { run, yargsOptions } from 'jest-cli';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const packageJsonPath = join(__dirname, '../package.json');
-const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+const patchYargsOptions = () => {
+  yargsOptions.harnessRunner = {
+    type: 'string',
+    description: 'Specify which Harness runner to use',
+    requiresArg: true,
+  };
 
-const program = new Command();
+  // Remove all options that are not supported by Harness
+  delete yargsOptions.runner;
+  delete yargsOptions.testRunner;
+  delete yargsOptions.testEnvironment;
+  delete yargsOptions.testEnvironmentOptions;
+  delete yargsOptions.transform;
+  delete yargsOptions.transformIgnorePatterns;
+  delete yargsOptions.updateSnapshot;
+  delete yargsOptions.workerThreads;
+  delete yargsOptions.snapshotSerializers;
+  delete yargsOptions.shard;
+  delete yargsOptions.runInBand;
+  delete yargsOptions.resolver;
+  delete yargsOptions.resetMocks;
+  delete yargsOptions.resetModules;
+  delete yargsOptions.restoreMocks;
+  delete yargsOptions.preset;
+  delete yargsOptions.prettierPath;
+  delete yargsOptions.maxWorkers;
+  delete yargsOptions.moduleDirectories;
+  delete yargsOptions.moduleFileExtensions;
+  delete yargsOptions.moduleNameMapper;
+  delete yargsOptions.modulePathIgnorePatterns;
+  delete yargsOptions.modulePaths;
+  delete yargsOptions.maxConcurrency;
+  delete yargsOptions.injectGlobals;
+  delete yargsOptions.globalSetup;
+  delete yargsOptions.globalTeardown;
+  delete yargsOptions.clearMocks;
+  delete yargsOptions.globals;
+  delete yargsOptions.haste;
+  delete yargsOptions.automock;
+  delete yargsOptions.coverageProvider;
+  delete yargsOptions.logHeapUsage;
+};
 
-program
-  .name('react-native-harness')
-  .description(
-    'React Native Test Harness - A comprehensive testing framework for React Native applications'
-  )
-  .version(packageJson.version)
-  .option('-v, --verbose', 'Enable verbose logging')
-  .hook('preAction', (thisCommand) => {
-    // Handle global verbose option
-    const opts = thisCommand.optsWithGlobals();
-    if (opts.verbose) {
-      logger.setVerbose(true);
-    }
-  });
-
-program
-  .command('test')
-  .description('Run tests using the specified runner')
-  .argument(
-    '[runner]',
-    'test runner name (uses defaultRunner from config if not specified)'
-  )
-  .argument(
-    '[pattern]',
-    'glob pattern to match test files (uses config.include if not specified)'
-  )
-  .option(
-    '-t, --testNamePattern <pattern>',
-    'Run only tests with names matching regex pattern'
-  )
-  .option(
-    '--testPathPattern <pattern>',
-    'Run only test files with paths matching regex pattern'
-  )
-  .option(
-    '--testPathIgnorePatterns <patterns...>',
-    'Ignore test files matching these patterns'
-  )
-  .option(
-    '--testMatch <patterns...>',
-    'Override config.include with these glob patterns'
-  )
-  .action(async (runner, pattern, options) => {
-    try {
-      // Convert CLI pattern argument to testMatch option
-      const mergedOptions = {
-        ...options,
-        testMatch: pattern ? [pattern] : options.testMatch,
-      };
-
-      await testCommand(runner, mergedOptions);
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-process.on('uncaughtException', (error) => {
-  handleError(error);
-  process.exit(1);
-});
-
-program.parse();
+patchYargsOptions();
+run();

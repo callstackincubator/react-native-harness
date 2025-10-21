@@ -10,7 +10,6 @@ The most basic configuration would, assuming you support both iOS and Android pl
 const config = {
   entryPoint: './index.js',
   appRegistryComponentName: 'App',
-  include: ['./src/**/*.harness.{js,ts,jsx,tsx}'],
 
   runners: [
     {
@@ -74,9 +73,6 @@ AppRegistry.registerComponent('MyApp', () => App);
 
   // Required: Name of the component registered with AppRegistry
   appRegistryComponentName: string;
-
-  // Required: Glob patterns to include test files
-  include: string | string[];
 
   // Required: Array of test runners (at least one required)
   runners: Array<TestRunnerConfig>;
@@ -147,36 +143,6 @@ A test runner defines how tests are executed on a specific platform. React Nativ
 }
 ```
 
-## Include Patterns
-
-The `include` field specifies which test files should be discovered and run. It accepts either a single glob pattern or an array of patterns.
-
-**Single pattern:**
-
-```javascript
-{
-  include: './src/**/*.harness.{js,ts,jsx,tsx}',
-}
-```
-
-**Multiple patterns:**
-
-```javascript
-{
-  include: [
-    './src/**/*.harness.{js,ts}',
-    './tests/**/*.integration.{js,ts}',
-    './e2e/**/*.test.{js,ts}',
-  ],
-}
-```
-
-**Common patterns:**
-
-- `'**/*.harness.{js,ts,jsx,tsx}'` - All harness files in any directory
-- `'./src/**/*.test.{js,ts}'` - Test files in src directory
-- `'./tests/**/*'` - All files in tests directory
-
 ## Default Runner
 
 When you have multiple runners configured, you can specify which one to use by default when no runner is explicitly specified in the CLI command.
@@ -191,14 +157,15 @@ When you have multiple runners configured, you can specify which one to use by d
 }
 ```
 
-If no `defaultRunner` is specified, you'll need to explicitly provide the runner name when running tests:
+If no `defaultRunner` is specified, you must explicitly provide the `--harnessRunner` flag when running tests:
 
 ```bash
-# With default runner set
-react-native-harness test
+# With default runner set (uses the runner specified in defaultRunner)
+react-native-harness
 
 # Without default runner (explicit runner required)
-react-native-harness test android
+react-native-harness --harnessRunner android
+react-native-harness --harnessRunner ios
 ```
 
 ## Bridge Timeout
@@ -278,8 +245,6 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 const isCI = process.env.CI === 'true';
 
 const config = {
-  include: ['./src/**/*.harness.{js,ts}'],
-
   runners: isDevelopment
     ? [
         // Development runners with local simulators

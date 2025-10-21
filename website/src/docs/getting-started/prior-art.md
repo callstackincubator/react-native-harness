@@ -8,7 +8,11 @@ The idea for React Native Harness came from seeing how Marc Rousavy set up testi
 
 ## Open Source Libraries
 
-React Native Harness leverages a powerful set of open-source libraries to implement its testing capabilities, with many core components coming from the Vitest ecosystem:
+React Native Harness leverages a powerful set of open-source libraries to implement its testing capabilities, with core components coming from both the Jest and Vitest ecosystems:
+
+### From Jest
+
+- **[Jest](https://github.com/jestjs/jest)** - The incredibly extensible Jest CLI forms the backbone of React Native Harness's command-line interface, providing watch mode, code coverage, filtering, and countless other features out of the box. The Jest team's focus on extensibility allowed us to wrap their CLI and add native runner support while inheriting all the powerful features developers already know and love.
 
 ### From Vitest
 
@@ -33,6 +37,8 @@ We extend our heartfelt gratitude to:
 - **Marc Rousavy** for showing us how native module testing could actually work well. Their approach gave us the confidence that we could build something better for React Native testing.
 
 - **Kræn Hansen** for jumping in early and helping shape what React Native Harness became. His ideas and feedback were crucial in getting the APIs and functionality right.
+
+- **The Jest team** for creating an incredibly extensible CLI that we could build upon. Their architectural decisions to make Jest's CLI wrappable and extensible offloaded an enormous amount of work from us and made React Native Harness significantly better. Features like watch mode, code coverage, and advanced filtering came for free, allowing us to focus on the native testing integration.
 
 - **The Vitest team** for building such solid, modular testing tools that we could actually use as a foundation. Their focus on performance and developer experience made our job a lot easier.
 

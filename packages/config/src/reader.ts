@@ -74,10 +74,7 @@ export const getConfig = async (
   const { config, configDir } = await importUp(dir, 'rn-harness.config');
 
   return {
-    config: {
-      ...config,
-      reporter: config.reporter,
-    },
+    config,
     projectRoot: configDir,
   };
 };

@@ -10,9 +10,6 @@
       "path": "../bridge"
     },
     {
-      "path": "../cli"
-    },
-    {
       "path": "./tsconfig.lib.json"
     }
   ]

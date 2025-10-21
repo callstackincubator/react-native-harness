@@ -1,11 +1,6 @@
 import { z } from 'zod';
-import { defaultReporter } from '@react-native-harness/reporters';
 
 export const PlatformSchema = z.enum(['ios', 'android', 'web', 'vega']);
-
-export const ReporterSchema = z.object({
-  report: z.function().args(z.array(z.any())).returns(z.promise(z.void())),
-});
 
 export const BrowserTypeSchema = z.enum(['chrome', 'firefox', 'safari']);
 
@@ -63,20 +58,10 @@ export const ConfigSchema = z
     appRegistryComponentName: z
       .string()
       .min(1, 'App registry component name is required'),
-    include: z.union([z.string(), z.array(z.string())]).refine(
-      (val) => {
-        if (Array.isArray(val)) {
-          return val.length > 0;
-        }
-        return val.length > 0;
-      },
-      { message: 'Include patterns cannot be empty' }
-    ),
     runners: z
       .array(TestRunnerConfigSchema)
       .min(1, 'At least one runner is required'),
     defaultRunner: z.string().optional(),
-    reporter: ReporterSchema.optional().default(defaultReporter),
     bridgeTimeout: z
       .number()
       .min(1000, 'Bridge timeout must be at least 1 second')

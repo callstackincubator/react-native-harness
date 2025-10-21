@@ -133,7 +133,7 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             adb install -r "./app/build/outputs/apk/debug/app-debug.apk"
-            npx react-native-harness test android
+            npx react-native-harness --harnessRunner android
 
   test-ios:
     name: Test iOS
@@ -211,7 +211,7 @@ jobs:
       # Step 4: Run Harness tests
       - name: Run Harness tests
         run: |
-          npx react-native-harness test ios
+          npx react-native-harness --harnessRunner ios
 ```
 
 ## Build Artifact Caching
@@ -249,7 +249,7 @@ For standard React Native Community CLI projects, adapt the workflow by:
 
 1. **Update App Names**: Replace `YourApp` with your actual app name in the iOS configuration
 2. **Verify Paths**: Ensure build output paths match your project structure
-3. **Test Command**: The `npx react-native-harness test [platform]` command should work out of the box
+3. **Test Command**: Use `npx react-native-harness --harnessRunner [platform]` to run tests on the specified platform
 
 ### Expo Projects
 
