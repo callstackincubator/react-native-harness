@@ -12,6 +12,24 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./jest-preset": {
+      "development": "./src/jest-preset.ts",
+      "types": "./dist/jest-preset.d.ts",
+      "import": "./dist/jest-preset.js",
+      "default": "./dist/jest-preset.js"
+    },
+    "./global-setup": {
+      "development": "./src/global-setup.ts",
+      "types": "./dist/global-setup.d.ts",
+      "import": "./dist/global-setup.js",
+      "default": "./dist/global-setup.js"
+    },
+    "./global-teardown": {
+      "development": "./src/global-teardown.ts",
+      "types": "./dist/global-teardown.d.ts",
+      "import": "./dist/global-teardown.js",
+      "default": "./dist/global-teardown.js"
     }
   },
   "dependencies": {

@@ -85,6 +85,7 @@ global[`${__METRO_GLOBAL_PREFIX__}__d`] = (define: DefineFn);
 global.__c = clear;
 global.__registerSegment = registerSegment;
 global.__resetAllModules = resetAllModules;
+global.__clearModule = clearModule;
 
 var modules = clear();
 
@@ -93,6 +94,14 @@ function resetAllModules() {
     // Mutating existing module doesn't work for some reason
     modules.set(mod.id, { ...mod, isInitialized: false });
   });
+}
+
+function clearModule(moduleId: ModuleID) {
+  if (!modules.has(moduleId)) {
+    return;
+  }
+
+  modules.delete(moduleId);
 }
 
 // Don't use a Symbol here, it would pull in an extra polyfill with all sorts of
@@ -222,15 +231,6 @@ function metroRequire(
   }
 
   const module = modules.get(moduleIdReallyIsNumber);
-
-  // Optionally return a lazy proxy that triggers evaluation on first access.
-  if (
-    module &&
-    !module.isInitialized &&
-    shouldUseLazyModuleProxy(moduleIdReallyIsNumber, module)
-  ) {
-    return createModuleEvaluationProxy(moduleIdReallyIsNumber);
-  }
 
   return module && module.isInitialized
     ? module.publicModule.exports
@@ -397,92 +397,6 @@ function packModuleId(value: {
   return (value.segmentId << ID_MASK_SHIFT) + value.localId;
 }
 metroRequire.packModuleId = packModuleId;
-
-// ------------------------------
-// Lazy evaluation via Proxy (opt-in)
-// ------------------------------
-const LAZY_REQUIRE_FLAG_KEY =
-  __METRO_GLOBAL_PREFIX__ + '__LAZY_REQUIRE_BY_ACCESS';
-const LAZY_REQUIRE_ALLOW_DEV_KEY =
-  __METRO_GLOBAL_PREFIX__ + '__LAZY_REQUIRE_ALLOW_DEV';
-const LAZY_REQUIRE_WHITELIST_KEY =
-  __METRO_GLOBAL_PREFIX__ + '__LAZY_REQUIRE_WHITELIST';
-
-function isLazyRequireEnabled(): boolean {
-  // const enabled = global[LAZY_REQUIRE_FLAG_KEY];
-  // if (!enabled) {
-  //   return false;
-  // }
-  // // In DEV, require explicit opt-in due to HMR/export inspection.
-  // return __DEV__ ? !!global[LAZY_REQUIRE_ALLOW_DEV_KEY] : true;
-  return true;
-}
-
-function isModuleWhitelisted(moduleId: ModuleID): boolean {
-  const list = global[LAZY_REQUIRE_WHITELIST_KEY];
-  if (list == null) {
-    // No whitelist provided -> treat as disabled for safety unless explicitly enabled
-    // at call site (we still require shouldUseLazyModuleProxy to decide).
-    return false;
-  }
-  return Array.isArray(list) && list.indexOf(moduleId) !== -1;
-}
-
-function shouldUseLazyModuleProxy(
-  moduleId: ModuleID,
-  module: ?ModuleDefinition
-): boolean {
-  if (!isLazyRequireEnabled()) {
-    return false;
-  }
-  if (!module || module.isInitialized) {
-    return false;
-  }
-  // Only enable for explicitly whitelisted modules to avoid changing semantics
-  // of side-effect-only requires.
-  return isModuleWhitelisted(moduleId);
-}
-
-function createModuleEvaluationProxy(moduleId: ModuleID): Exports {
-  let evaluated = false;
-  const ensure = (): Exports => {
-    if (!evaluated) {
-      // Evaluate the module using the same guarded path used by metroRequire.
-      // Pass the current (possibly undefined) ModuleDefinition for better error messages.
-      const existing = modules.get(moduleId);
-      // guardedLoadModule will throw appropriately if unknown or failing.
-      // It will also set module.isInitialized and publicModule.exports.
-      // $FlowFixMe[incompatible-call]
-      guardedLoadModule(moduleId, existing);
-      console.log('evaluated module', moduleId);
-      evaluated = true;
-    }
-    // $FlowFixMe[incompatible-type]
-    const initializedModule: ModuleDefinition | void = modules.get(moduleId);
-    // $FlowFixMe[incompatible-use]
-    return initializedModule
-      ? initializedModule.publicModule.exports
-      : undefined;
-  };
-
-  // Use an object target since CommonJS exports are objects in Metro.
-  const target = {};
-  return new Proxy(target, {
-    get: (_t, prop) => Reflect.get(ensure(), prop),
-    set: (_t, prop, value) => Reflect.set(ensure(), prop, value),
-    has: (_t, prop) => Reflect.has(ensure(), prop),
-    ownKeys: () => Reflect.ownKeys(ensure()),
-    getOwnPropertyDescriptor: (_t, prop) =>
-      Reflect.getOwnPropertyDescriptor(ensure(), prop),
-    getPrototypeOf: () => Reflect.getPrototypeOf(ensure()),
-    setPrototypeOf: (_t, proto) => Reflect.setPrototypeOf(ensure(), proto),
-    isExtensible: () => Reflect.isExtensible(ensure()),
-    preventExtensions: () => Reflect.preventExtensions(ensure()),
-    defineProperty: (_t, prop, desc) =>
-      Reflect.defineProperty(ensure(), prop, desc),
-    deleteProperty: (_t, prop) => Reflect.deleteProperty(ensure(), prop),
-  });
-}
 
 const moduleDefinersBySegmentID: Array<?ModuleDefiner> = [];
 const definingSegmentByModuleID: Map<ModuleID, number> = new Map();

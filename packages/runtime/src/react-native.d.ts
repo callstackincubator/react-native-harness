@@ -43,11 +43,3 @@ declare module 'react-native/Libraries/Core/Devtools/parseErrorStack' {
   };
   export default function parseErrorStack(errorStack?: string): StackFrame[];
 }
-
-declare global {
-  var __r:
-    | {
-        (moduleId: number): unknown;
-      }
-    | undefined;
-}

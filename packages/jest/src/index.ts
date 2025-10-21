@@ -10,15 +10,8 @@ import type {
 } from 'jest-runner';
 import pLimit from 'p-limit';
 import { runHarnessTestFile } from './run.js';
-import { getHarness } from '@react-native-harness/cli/external';
-import {
-  getConfig,
-  Config as HarnessConfig,
-  TestRunnerConfig as HarnessTestRunnerConfig,
-} from '@react-native-harness/config';
-import { getAdditionalCliArgs, HarnessCliArgs } from './cli-args.js';
+import { Config as HarnessConfig } from '@react-native-harness/config';
 import type { Harness } from '@react-native-harness/cli/external';
-import { logTestEnvironmentReady, logTestRunHeader } from './logs.js';
 
 class CancelRun extends Error {
   constructor(message?: string) {
@@ -27,21 +20,6 @@ class CancelRun extends Error {
   }
 }
 
-const getHarnessRunner = (
-  config: HarnessConfig,
-  cliArgs: HarnessCliArgs
-): HarnessTestRunnerConfig => {
-  const selectedRunnerName = cliArgs.harnessRunner ?? config.defaultRunner;
-  const runner = config.runners.find(
-    (runner) => runner.name === selectedRunnerName
-  );
-
-  if (!runner) {
-    throw new Error(`Runner "${selectedRunnerName}" not found`);
-  }
-
-  return runner;
-};
 export default class JestHarness implements CallbackTestRunnerInterface {
   readonly isSerial = true;
 
@@ -63,37 +41,18 @@ export default class JestHarness implements CallbackTestRunnerInterface {
       throw new Error('Parallel test running is not supported');
     }
 
-    const projectRoot = this.#globalConfig.rootDir;
-    const { config: harnessConfig } = await getConfig(projectRoot);
-    const cliArgs = getAdditionalCliArgs();
-    const selectedRunner = getHarnessRunner(harnessConfig, cliArgs);
+    const harness = global.HARNESS;
+    const harnessConfig = global.HARNESS_CONFIG;
 
-    logTestRunHeader(selectedRunner);
-
-    if (this.#globalConfig.collectCoverage) {
-      // This is going to be used by @react-native-harness/babel-preset
-      // to enable instrumentation of test files.
-      process.env.RN_HARNESS_COLLECT_COVERAGE = 'true';
-    }
-
-    const harness = await getHarness(selectedRunner);
-
-    logTestEnvironmentReady(selectedRunner);
-
-    try {
-      return await this._createInBandTestRun(
-        tests,
-        watcher,
-        harness,
-        harnessConfig,
-        onStart,
-        onResult,
-        onFailure
-      );
-    } finally {
-      harness.bridge.dispose();
-      await harness.environment.dispose();
-    }
+    return await this._createInBandTestRun(
+      tests,
+      watcher,
+      harness,
+      harnessConfig,
+      onStart,
+      onResult,
+      onFailure
+    );
   }
 
   async _createInBandTestRun(
