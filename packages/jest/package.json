@@ -16,13 +16,15 @@
   },
   "dependencies": {
     "@jest/test-result": "^30.2.0",
+    "@react-native-harness/bridge": "workspace:*",
+    "@react-native-harness/cli": "workspace:*",
+    "@react-native-harness/config": "workspace:*",
+    "chalk": "^5.6.2",
+    "jest-message-util": "^30.2.0",
     "jest-runner": "^30.2.0",
     "p-limit": "^7.1.1",
     "tslib": "^2.3.0",
-    "yargs": "^17.7.2",
-    "@react-native-harness/cli": "workspace:*",
-    "@react-native-harness/bridge": "workspace:*",
-    "@react-native-harness/config": "workspace:*"
+    "yargs": "^17.7.2"
   },
   "devDependencies": {
     "@types/yargs": "^17.0.32"
