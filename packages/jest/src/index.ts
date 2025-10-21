@@ -18,6 +18,7 @@ import {
 } from '@react-native-harness/config';
 import { getAdditionalCliArgs, HarnessCliArgs } from './cli-args.js';
 import type { Harness } from '@react-native-harness/cli/external';
+import { logTestEnvironmentReady, logTestRunHeader } from './logs.js';
 
 class CancelRun extends Error {
   constructor(message?: string) {
@@ -67,6 +68,8 @@ export default class JestHarness implements CallbackTestRunnerInterface {
     const cliArgs = getAdditionalCliArgs();
     const selectedRunner = getHarnessRunner(harnessConfig, cliArgs);
 
+    logTestRunHeader(selectedRunner);
+
     if (this.#globalConfig.collectCoverage) {
       // This is going to be used by @react-native-harness/babel-preset
       // to enable instrumentation of test files.
@@ -74,6 +77,8 @@ export default class JestHarness implements CallbackTestRunnerInterface {
     }
 
     const harness = await getHarness(selectedRunner);
+
+    logTestEnvironmentReady(selectedRunner);
 
     try {
       return await this._createInBandTestRun(

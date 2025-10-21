@@ -6,17 +6,28 @@ import type {
   TestResult as HarnessTestResult,
 } from '@react-native-harness/bridge';
 import type { Harness } from '@react-native-harness/cli/external';
-
+import { formatResultsErrors } from 'jest-message-util';
 import { toTestResult } from './toTestResult.js';
 
-// Helper function to flatten nested test suites into a flat array of tests
+// Helper function to flatten nested test suites into a flat array of tests with hierarchy
 const flattenTests = (
-  suiteResult: HarnessTestSuiteResult
-): HarnessTestResult[] => {
-  const tests: HarnessTestResult[] = [...suiteResult.tests];
+  suiteResult: HarnessTestSuiteResult,
+  ancestorTitles: string[] = []
+): Array<HarnessTestResult & { ancestorTitles: string[] }> => {
+  const tests: Array<HarnessTestResult & { ancestorTitles: string[] }> = [];
 
+  // Add tests from current suite with current hierarchy
+  for (const test of suiteResult.tests) {
+    tests.push({
+      ...test,
+      ancestorTitles: [...ancestorTitles],
+    });
+  }
+
+  // Process child suites with updated hierarchy
   for (const childSuite of suiteResult.suites) {
-    tests.push(...flattenTests(childSuite));
+    const newAncestorTitles = [...ancestorTitles, childSuite.name];
+    tests.push(...flattenTests(childSuite, newAncestorTitles));
   }
 
   return tests;
@@ -85,12 +96,23 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
   const stats = calculateStats(allTests);
 
   // Convert TestResult[] to the format expected by toTestResult
-  const tests = allTests.map((test) => ({
-    duration: test.duration,
-    errorMessage: test.error?.message,
-    title: test.name,
-    status: test.status,
-  }));
+  const tests = allTests.map((test) => {
+    const errorMessage = test.error?.message;
+    const codeFrame = test.error?.codeFrame;
+
+    return {
+      duration: test.duration,
+      errorMessage: errorMessage
+        ? `${errorMessage}${codeFrame ? `\n\n${codeFrame.content}` : ''}`
+        : undefined,
+      title: test.name,
+      status: test.status,
+      location: codeFrame?.location
+        ? { column: codeFrame.location.column, line: codeFrame.location.row }
+        : undefined,
+      ancestorTitles: test.ancestorTitles,
+    };
+  });
 
   // Check if the entire suite was skipped
   const skipped = results.status === 'skipped';
@@ -98,7 +120,7 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
   // Get error message from suite if it failed
   const errorMessage = results.error?.message || null;
 
-  return toTestResult({
+  const totalResults = toTestResult({
     stats: {
       failures: stats.failures,
       pending: stats.pending,
@@ -113,4 +135,13 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
     jestTestPath: testPath,
     coverage: results.coverage as JestTestResult['coverage'],
   });
+
+  totalResults.failureMessage = formatResultsErrors(
+    totalResults.testResults,
+    projectConfig,
+    globalConfig,
+    testPath
+  );
+
+  return totalResults;
 };

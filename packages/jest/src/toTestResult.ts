@@ -17,6 +17,11 @@ export type Options = {
     testPath?: string;
     title?: string;
     status: Status;
+    location?: {
+      column: number;
+      line: number;
+    };
+    ancestorTitles?: string[];
   }>;
   jestTestPath: string;
   coverage?: TestResult['coverage'];
@@ -63,7 +68,7 @@ const getTestResults = ({
     const actualErrorMessage = errorMessage || test.errorMessage;
 
     return {
-      ancestorTitles: [],
+      ancestorTitles: test.ancestorTitles || [],
       duration: test.duration,
       failureDetails: [],
       failureMessages: actualErrorMessage ? [actualErrorMessage] : [],
@@ -71,6 +76,7 @@ const getTestResults = ({
       numPassingAsserts: test.errorMessage ? 1 : 0,
       status: test.status,
       title: test.title || '',
+      location: test.location,
     };
   });
 };
