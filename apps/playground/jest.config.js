@@ -1,7 +1,7 @@
 module.exports = {
   projects: [
     {
-      preset: '@react-native-harness/jest',
+      preset: 'react-native-harness',
       testMatch: [
         '<rootDir>/src/__tests__/**/*.(test|spec|harness).(js|jsx|ts|tsx)',
       ],

@@ -28,14 +28,21 @@
       "import": "./dist/babel.js",
       "default": "./dist/babel.js"
     },
-    "./types": "./types/index.d.ts"
+    "./types": "./types/index.d.ts",
+    "./jest-preset": {
+      "development": "./src/jest-preset.ts",
+      "types": "./dist/jest-preset.d.ts",
+      "import": "./dist/jest-preset.js",
+      "default": "./dist/jest-preset.js"
+    }
   },
   "dependencies": {
     "tslib": "^2.3.0",
     "@react-native-harness/runtime": "workspace:*",
     "@react-native-harness/cli": "workspace:*",
     "@react-native-harness/metro": "workspace:*",
-    "@react-native-harness/babel-preset": "workspace:*"
+    "@react-native-harness/babel-preset": "workspace:*",
+    "@react-native-harness/jest": "workspace:*"
   },
   "license": "MIT"
 }

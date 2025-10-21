@@ -4,6 +4,9 @@
   "include": [],
   "references": [
     {
+      "path": "../jest"
+    },
+    {
       "path": "../babel-preset"
     },
     {
