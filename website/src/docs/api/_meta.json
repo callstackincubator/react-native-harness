@@ -13,10 +13,10 @@
     "type": "file",
     "name": "mocking-and-spying",
     "label": "Mocking & Spying"
+  },
+  {
+    "type": "file",
+    "name": "rendering-components",
+    "label": "Rendering Components"
   }
 ]
-
-
-
-
-
