@@ -11,7 +11,7 @@ const getModuleUrl = (fileName: string): string => {
     'resolver.isHarness': 'true',
   });
 
-  return `${devServerUrl}/${bundleName}?${urlSearchParams.toString()}`;
+  return `${devServerUrl}${bundleName}?${urlSearchParams.toString()}`;
 };
 
 export const fetchModule = async (fileName: string): Promise<string> => {
