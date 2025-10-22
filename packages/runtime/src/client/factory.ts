@@ -12,6 +12,7 @@ import { combineEventEmitters, EventEmitter } from '../utils/emitter.js';
 import { getWSServer } from './getWSServer.js';
 import { getBundler, evaluateModule, Bundler } from '../bundler/index.js';
 import { markTestsAsSkippedByName } from '../filtering/index.js';
+import { setup } from '../render/setup.js';
 
 export const getClient = async () => {
   const client = await getBridgeClient(getWSServer(), {
@@ -119,10 +120,11 @@ export const getClient = async () => {
       }
 
       const moduleJs = await bundler.getModule(path);
-      const collectionResult = await collector.collect(
-        () => evaluateModule(moduleJs, path),
-        path
-      );
+      const collectionResult = await collector.collect(() => {
+        // Setup automatic cleanup for rendered components
+        setup();
+        evaluateModule(moduleJs, path);
+      }, path);
 
       // Apply test name pattern by marking non-matching tests as skipped
       const processedTestSuite = options.testNamePattern

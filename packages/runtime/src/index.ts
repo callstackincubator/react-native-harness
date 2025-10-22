@@ -7,3 +7,4 @@ export * from './collector/index.js';
 export * from './mocker/index.js';
 export * from './namespace.js';
 export * from './waitFor.js';
+export * from './render/index.js';

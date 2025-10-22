@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { LOGO_IMAGE } from '../constants.js';
 import { useRunnerStatus } from './state.js';
+import { TestComponentOverlay } from '../render/TestComponentOverlay.js';
 
 require('../initialize.js');
 
@@ -44,6 +45,7 @@ export const ReadyScreen = () => {
           </View>
         )}
       </View>
+      <TestComponentOverlay />
     </View>
   );
 };
