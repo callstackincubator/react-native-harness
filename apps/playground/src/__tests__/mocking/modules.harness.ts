@@ -51,19 +51,26 @@ describe('Module mocking', () => {
       // Get the actual react-native module
       const actualRN = requireActual('react-native');
 
-      // Return the actual module but with Platform mocked
-      return {
-        ...actualRN,
-        Platform: {
-          OS: 'mockOS',
-          Version: 999,
-          select: fn().mockImplementation((options: Record<string, any>) => {
-            return options.mockOS || options.default;
-          }),
-          isPad: false,
-          isTesting: true,
-        },
+      // Copy without invoking getters to avoid triggering lazy initialization
+      const proto = Object.getPrototypeOf(actualRN);
+      const descriptors = Object.getOwnPropertyDescriptors(actualRN);
+
+      const mockedRN = Object.create(proto, descriptors);
+      const mockedPlatform = {
+        OS: 'mockOS',
+        Version: 999,
+        select: fn().mockImplementation((options: Record<string, any>) => {
+          return options.mockOS || options.default;
+        }),
+        isPad: false,
+        isTesting: true,
       };
+      Object.defineProperty(mockedRN, 'Platform', {
+        get() {
+          return mockedPlatform;
+        },
+      });
+      return mockedRN;
     };
 
     mock('react-native', mockFactory);
