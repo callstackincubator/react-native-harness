@@ -80,9 +80,6 @@ AppRegistry.registerComponent('MyApp', () => App);
   // Optional: Default runner to use when none specified
   defaultRunner?: string;
 
-  // Optional: Custom reporter for test results
-  reporter?: Reporter;
-
   // Optional: Bridge timeout in milliseconds (default: 60000)
   bridgeTimeout?: number;
 
@@ -186,54 +183,6 @@ Increase this value if you experience timeout errors, especially on:
 - Slower devices or simulators
 - Complex test suites with heavy setup
 
-## Custom Reporters
-
-React Native Harness supports custom reporters to format and output test results. By default, it uses a console-based reporter, but you can customize this behavior.
-
-### Built-in Reporters
-
-**Default Reporter:**
-
-```javascript
-import { defaultReporter } from '@react-native-harness/reporters';
-
-export default {
-  reporter: defaultReporter,
-};
-```
-
-**JUnit Reporter:**
-
-```javascript
-import { junitReporter } from '@react-native-harness/reporters';
-
-export default {
-  reporter: junitReporter, // Outputs junit.xml file
-};
-```
-
-### Custom Reporter
-
-You can create a custom reporter by implementing the `Reporter` interface:
-
-```javascript
-const customReporter = {
-  report: async (results) => {
-    // Process test results
-    for (const suite of results) {
-      console.log(`Suite: ${suite.name}`);
-      for (const test of suite.tests) {
-        console.log(`  ${test.name}: ${test.status}`);
-      }
-    }
-  },
-};
-
-export default {
-  reporter: customReporter,
-};
-```
-
 ## Environment-Specific Configurations
 
 You can create different configurations for different environments:
@@ -266,7 +215,6 @@ const config = {
       ],
 
   bridgeTimeout: isCI ? 180000 : 60000, // Longer timeout in CI
-  reporter: isCI ? junitReporter : defaultReporter,
 };
 
 export default config;

@@ -4,6 +4,7 @@ This section contains comprehensive guides for advanced React Native Harness usa
 
 ## Available Guides
 
+- [**Migration Guide**](./migration-guide.md) - Learn how to migrate from the old CLI-based workflow to the new Jest-based workflow
 - [**CI/CD Integration**](./ci-cd.md) - Learn how to run React Native Harness tests in GitHub Actions and other CI/CD environments
 
 ## Contributing
