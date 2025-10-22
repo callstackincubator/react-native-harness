@@ -1,3 +1,4 @@
+import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useRenderedElement } from '../ui/state.js';
 import { store } from '../ui/state.js';
@@ -5,6 +6,16 @@ import { ErrorBoundary } from './ErrorBoundary.js';
 
 export const TestComponentOverlay = (): React.ReactElement | null => {
   const { element, key } = useRenderedElement();
+
+  useEffect(() => {
+    // Call onRenderCallback when element changes
+    const callback = store.getState().onRenderCallback;
+
+    if (callback) {
+      callback();
+      store.getState().setOnRenderCallback(null);
+    }
+  }, [element]);
 
   if (!element) {
     return null;

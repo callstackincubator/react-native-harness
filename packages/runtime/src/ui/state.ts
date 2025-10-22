@@ -16,6 +16,8 @@ export type RunnerState = {
   renderKey: string | null;
   onLayoutCallback: (() => void) | null;
   setOnLayoutCallback: (callback: (() => void) | null) => void;
+  onRenderCallback: (() => void) | null;
+  setOnRenderCallback: (callback: (() => void) | null) => void;
 };
 
 export const store = create<RunnerState>((set) => ({
@@ -34,6 +36,8 @@ export const store = create<RunnerState>((set) => ({
   renderKey: null,
   onLayoutCallback: null,
   setOnLayoutCallback: (callback) => set({ onLayoutCallback: callback }),
+  onRenderCallback: null,
+  setOnRenderCallback: (callback) => set({ onRenderCallback: callback }),
 }));
 
 export const useRunnerStatus = () => useStore(store, (state) => state.status);

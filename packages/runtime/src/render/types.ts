@@ -6,9 +6,6 @@ export type RenderResult = {
 };
 
 export type RenderOptions = {
-  /**
-   * Timeout in milliseconds to wait for component to be laid out
-   * @default 1000
-   */
   timeout?: number;
+  wrapper?: React.ComponentType<{ children: React.ReactNode }>;
 };

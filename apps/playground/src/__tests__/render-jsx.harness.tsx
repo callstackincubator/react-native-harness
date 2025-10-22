@@ -7,27 +7,27 @@ import {
   waitFor,
 } from 'react-native-harness';
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text } from 'react-native';
 
 type TestComponentProps = {
-  text: string;
-  onMount: () => void;
-  onUnmount: () => void;
+  children?: React.ReactNode;
+  onMount?: () => void;
+  onUnmount?: () => void;
 };
 
-const TestComponent = ({ text, onMount, onUnmount }: TestComponentProps) => {
+const TestComponent = ({
+  children,
+  onMount,
+  onUnmount,
+}: TestComponentProps) => {
   useEffect(() => {
-    onMount();
+    onMount?.();
     return () => {
-      onUnmount();
+      onUnmount?.();
     };
   }, [onMount, onUnmount]);
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.text}>{text}</Text>
-    </View>
-  );
+  return <View>{children}</View>;
 };
 
 describe('render', () => {
@@ -36,7 +36,9 @@ describe('render', () => {
     const onUnmount = fn();
 
     const { unmount } = await render(
-      <TestComponent text="Test" onMount={onMount} onUnmount={onUnmount} />
+      <TestComponent onMount={onMount} onUnmount={onUnmount}>
+        <Text>Test</Text>
+      </TestComponent>
     );
 
     expect(onMount).toHaveBeenCalledTimes(1);
@@ -50,7 +52,9 @@ describe('render', () => {
     const onUnmount = fn();
 
     const { unmount } = await render(
-      <TestComponent text="Test" onMount={onMount} onUnmount={onUnmount} />
+      <TestComponent onMount={onMount} onUnmount={onUnmount}>
+        <Text>Test</Text>
+      </TestComponent>
     );
 
     expect(onMount).toHaveBeenCalledTimes(1);
@@ -68,31 +72,80 @@ describe('render', () => {
     const onUnmount = fn();
 
     const { rerender } = await render(
-      <TestComponent text="Initial" onMount={onMount} onUnmount={onUnmount} />
+      <TestComponent onMount={onMount} onUnmount={onUnmount}>
+        <Text>Initial</Text>
+      </TestComponent>
     );
 
     expect(onMount).toHaveBeenCalledTimes(1);
     expect(onUnmount).toHaveBeenCalledTimes(0);
 
     await rerender(
-      <TestComponent text="Updated" onMount={onMount} onUnmount={onUnmount} />
+      <TestComponent onMount={onMount} onUnmount={onUnmount}>
+        <Text>Updated</Text>
+      </TestComponent>
     );
 
     expect(onMount).toHaveBeenCalledTimes(1);
     expect(onUnmount).toHaveBeenCalledTimes(0);
   });
-});
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-  },
-  text: {
-    fontSize: 24,
-    color: '#38bdf8',
-    fontWeight: '600',
-  },
+  it('should mount wrapper when render with wrapper is called', async () => {
+    const onWrapperMount = fn();
+    const onWrapperUnmount = fn();
+
+    const { unmount } = await render(<Text>Child</Text>, {
+      wrapper: ({ children }) => (
+        <TestComponent onMount={onWrapperMount} onUnmount={onWrapperUnmount}>
+          {children}
+        </TestComponent>
+      ),
+    });
+
+    expect(onWrapperMount).toHaveBeenCalledTimes(1);
+    expect(onWrapperUnmount).toHaveBeenCalledTimes(0);
+
+    unmount();
+  });
+
+  it('should unmount wrapper when unmount is called', async () => {
+    const onWrapperMount = fn();
+    const onWrapperUnmount = fn();
+
+    const { unmount } = await render(<Text>Child</Text>, {
+      wrapper: ({ children }) => (
+        <TestComponent onMount={onWrapperMount} onUnmount={onWrapperUnmount}>
+          {children}
+        </TestComponent>
+      ),
+    });
+
+    expect(onWrapperMount).toHaveBeenCalledTimes(1);
+
+    unmount();
+
+    await waitFor(() => {
+      expect(onWrapperUnmount).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('should not remount wrapper when component is rerendered', async () => {
+    const onWrapperMount = fn();
+    const onWrapperUnmount = fn();
+
+    const { rerender } = await render(<Text>Initial</Text>, {
+      wrapper: ({ children }) => (
+        <TestComponent onMount={onWrapperMount} onUnmount={onWrapperUnmount}>
+          {children}
+        </TestComponent>
+      ),
+    });
+
+    expect(onWrapperMount).toHaveBeenCalledTimes(1);
+
+    await rerender(<Text>Updated</Text>);
+
+    expect(onWrapperMount).toHaveBeenCalledTimes(1);
+    expect(onWrapperUnmount).toHaveBeenCalledTimes(0);
+  });
 });
