@@ -7,44 +7,44 @@ const noop = () => {
 };
 
 describe('error handling', () => {
-  it('should throw TestError with proper code for invalid test names', () => {
-    expect(() => {
+  it('should throw TestError with proper code for invalid test names', async () => {
+    await expect(() =>
       harnessRuntime.collectTests(() => {
         harnessRuntime.describe('Test Suite', () => {
           harnessRuntime.test('', noop);
         });
-      });
-    }).toThrow(TestError);
+      })
+    ).rejects.toThrow(TestError);
 
-    expect(() => {
+    await expect(() =>
       harnessRuntime.collectTests(() => {
         harnessRuntime.describe('Test Suite', () => {
           harnessRuntime.test(null as unknown as string, noop);
         });
-      });
-    }).toThrow(TestError);
+      })
+    ).rejects.toThrow(TestError);
   });
 
-  it('should throw TestError with proper code for invalid functions', () => {
-    expect(() => {
+  it('should throw TestError with proper code for invalid functions', async () => {
+    await expect(() =>
       harnessRuntime.collectTests(() => {
         harnessRuntime.describe('Test Suite', () => {
           // @ts-expect-error - Testing invalid input
           harnessRuntime.test('test name', null);
         });
-      });
-    }).toThrow(TestError);
+      })
+    ).rejects.toThrow(TestError);
   });
 
-  it('should throw TestError for duplicate test names', () => {
-    expect(() => {
+  it('should throw TestError for duplicate test names', async () => {
+    await expect(() =>
       harnessRuntime.collectTests(() => {
         harnessRuntime.describe('Test Suite', () => {
           harnessRuntime.test('duplicate name', noop);
           harnessRuntime.test('duplicate name', noop);
         });
-      });
-    }).toThrow(TestError);
+      })
+    ).rejects.toThrow(TestError);
   });
 
   it('should throw TestError when calling test outside describe', () => {
@@ -71,9 +71,9 @@ describe('error handling', () => {
     }).toThrow(TestError);
   });
 
-  it('should provide proper error context', () => {
+  it('should provide proper error context', async () => {
     try {
-      harnessRuntime.collectTests(() => {
+      await harnessRuntime.collectTests(() => {
         harnessRuntime.describe('Test Suite', () => {
           harnessRuntime.test('test1', noop);
           harnessRuntime.test('test1', noop);
@@ -89,44 +89,44 @@ describe('error handling', () => {
     }
   });
 
-  it('should validate describe function inputs', () => {
-    expect(() => {
+  it('should validate describe function inputs', async () => {
+    await expect(() =>
       harnessRuntime.collectTests(() => {
         harnessRuntime.describe('', noop);
-      });
-    }).toThrow(TestError);
+      })
+    ).rejects.toThrow(TestError);
 
-    expect(() => {
+    await expect(() =>
       harnessRuntime.collectTests(() => {
         // @ts-expect-error - Testing invalid input
         harnessRuntime.describe('Test Suite', null);
-      });
-    }).toThrow(TestError);
+      })
+    ).rejects.toThrow(TestError);
   });
 
-  it('should validate test modifiers', () => {
-    expect(() => {
+  it('should validate test modifiers', async () => {
+    await expect(() =>
       harnessRuntime.collectTests(() => {
         harnessRuntime.describe('Test Suite', () => {
           harnessRuntime.test.skip('', noop);
         });
-      });
-    }).toThrow(TestError);
+      })
+    ).rejects.toThrow(TestError);
 
-    expect(() => {
+    await expect(() =>
       harnessRuntime.collectTests(() => {
         harnessRuntime.describe('Test Suite', () => {
           harnessRuntime.test.only('', noop);
         });
-      });
-    }).toThrow(TestError);
+      })
+    ).rejects.toThrow(TestError);
 
-    expect(() => {
+    await expect(() =>
       harnessRuntime.collectTests(() => {
         harnessRuntime.describe('Test Suite', () => {
           harnessRuntime.test.todo('');
         });
-      });
-    }).toThrow(TestError);
+      })
+    ).rejects.toThrow(TestError);
   });
 });

@@ -370,11 +370,13 @@ const countTests = (suite: TestSuite): number => {
   return count;
 };
 
-export const collectTests = (fn: () => void): CollectionResult => {
+export const collectTests = async (
+  fn: () => void | Promise<void>
+): Promise<CollectionResult> => {
   currentContext = clearState();
 
   try {
-    fn();
+    await fn();
 
     // Convert raw structure to final structure using computation phase
     const testSuite = convertRawTestSuiteToTestSuite(getRootSuite());

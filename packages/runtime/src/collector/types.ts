@@ -10,6 +10,9 @@ export type TestCollectorEventsEmitter = EventEmitter<TestCollectorEvents>;
 
 export type TestCollector = {
   events: TestCollectorEventsEmitter;
-  collect: (fn: () => void, testFilePath: string) => Promise<CollectionResult>;
+  collect: (
+    fn: () => void | Promise<void>,
+    testFilePath: string
+  ) => Promise<CollectionResult>;
   dispose: () => void;
 };

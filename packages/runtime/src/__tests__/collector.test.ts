@@ -6,8 +6,8 @@ const noop = () => {
 };
 
 describe('test collector - test case recognition', () => {
-  it('should collect basic test cases using it()', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect basic test cases using it()', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Sample Suite', () => {
         collectorFunctions.it('test 1', noop);
         collectorFunctions.it('test 2', noop);
@@ -24,8 +24,8 @@ describe('test collector - test case recognition', () => {
     expect(sampleSuite.tests[1].status).toBe('active');
   });
 
-  it('should collect basic test cases using test()', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect basic test cases using test()', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Sample Suite', () => {
         collectorFunctions.test('test 1', noop);
         collectorFunctions.test('test 2', noop);
@@ -39,8 +39,8 @@ describe('test collector - test case recognition', () => {
     expect(sampleSuite.tests[1].name).toBe('test 2');
   });
 
-  it('should collect async test functions', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect async test functions', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Async Suite', () => {
         collectorFunctions.it('async test', async () => {
           await new Promise((resolve) => setTimeout(resolve, 10));
@@ -53,8 +53,8 @@ describe('test collector - test case recognition', () => {
     expect(typeof asyncSuite.tests[0].fn).toBe('function');
   });
 
-  it('should collect tests at root level', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect tests at root level', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.it('root test 1', noop);
       collectorFunctions.test('root test 2', noop);
 
@@ -76,8 +76,8 @@ describe('test collector - test case recognition', () => {
     expect(collectedSuite.testSuite.suites[0].tests[0].name).toBe('suite test');
   });
 
-  it('should collect tests with modifiers at root level', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect tests with modifiers at root level', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.it('regular root test', noop);
       collectorFunctions.test.skip('skipped root test', noop);
       collectorFunctions.it.todo('todo root test');
@@ -101,8 +101,8 @@ describe('test collector - test case recognition', () => {
 });
 
 describe('test collector - suite recognition', () => {
-  it('should collect nested describe blocks', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect nested describe blocks', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Outer Suite', () => {
         collectorFunctions.describe('Inner Suite 1', () => {
           collectorFunctions.it('test 1', noop);
@@ -123,8 +123,8 @@ describe('test collector - suite recognition', () => {
     expect(outerSuite.suites[1].tests[0].name).toBe('test 2');
   });
 
-  it('should collect multiple top-level describe blocks', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect multiple top-level describe blocks', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Suite 1', () => {
         collectorFunctions.it('test 1', noop);
       });
@@ -138,8 +138,8 @@ describe('test collector - suite recognition', () => {
     expect(collectedSuite.testSuite.suites[1].name).toBe('Suite 2');
   });
 
-  it('should collect deeply nested suites', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect deeply nested suites', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Level 1', () => {
         collectorFunctions.describe('Level 2', () => {
           collectorFunctions.describe('Level 3', () => {
@@ -161,8 +161,8 @@ describe('test collector - suite recognition', () => {
 });
 
 describe('test collector - skip modifier recognition', () => {
-  it('should collect and mark skipped tests with test.skip()', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect and mark skipped tests with test.skip()', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Skip Suite', () => {
         collectorFunctions.it('active test', noop);
         collectorFunctions.test.skip('skipped test', noop);
@@ -177,8 +177,8 @@ describe('test collector - skip modifier recognition', () => {
     expect(skipSuite.tests[2].status).toBe('skipped');
   });
 
-  it('should collect and mark skipped suites with describe.skip()', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect and mark skipped suites with describe.skip()', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Active Suite', () => {
         collectorFunctions.it('active test', noop);
       });
@@ -192,8 +192,8 @@ describe('test collector - skip modifier recognition', () => {
     expect(collectedSuite.testSuite.suites[1].status).toBe('skipped');
   });
 
-  it('should collect nested skipped suites', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect nested skipped suites', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe.skip('Outer Skipped', () => {
         collectorFunctions.describe('Inner Suite', () => {
           collectorFunctions.it('test', noop);
@@ -208,8 +208,8 @@ describe('test collector - skip modifier recognition', () => {
 });
 
 describe('test collector - only modifier recognition', () => {
-  it('should collect and mark only tests and skip others with test.only()', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect and mark only tests and skip others with test.only()', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Only Suite', () => {
         collectorFunctions.it('regular test 1', noop);
         collectorFunctions.test.only('focused test', noop);
@@ -225,8 +225,8 @@ describe('test collector - only modifier recognition', () => {
     expect(onlySuite._hasFocused).toBe(true);
   });
 
-  it('should collect multiple test.only() calls', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect multiple test.only() calls', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Multiple Only Suite', () => {
         collectorFunctions.it('regular test', noop);
         collectorFunctions.test.only('focused test 1', noop);
@@ -240,8 +240,8 @@ describe('test collector - only modifier recognition', () => {
     expect(multipleSuite.tests[2].status).toBe('active'); // Second only also active
   });
 
-  it('should collect and mark only suites and skip others with describe.only()', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect and mark only suites and skip others with describe.only()', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Regular Suite 1', () => {
         collectorFunctions.it('test 1', noop);
       });
@@ -260,8 +260,8 @@ describe('test collector - only modifier recognition', () => {
     expect(collectedSuite.testSuite.suites[1]._hasFocused).toBe(true);
   });
 
-  it('should collect nested describe.only()', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect nested describe.only()', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Outer Suite', () => {
         collectorFunctions.describe('Regular Inner', () => {
           collectorFunctions.it('test 1', noop);
@@ -281,8 +281,8 @@ describe('test collector - only modifier recognition', () => {
 });
 
 describe('test collector - todo test recognition', () => {
-  it('should collect and mark todo tests with test.todo()', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect and mark todo tests with test.todo()', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Todo Suite', () => {
         collectorFunctions.it('regular test', noop);
         collectorFunctions.test.todo('todo test');
@@ -297,8 +297,8 @@ describe('test collector - todo test recognition', () => {
     expect(todoSuite.tests[2].status).toBe('todo');
   });
 
-  it('should collect todo tests without function bodies', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect todo tests without function bodies', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Todo Suite', () => {
         collectorFunctions.test.todo('implement this feature');
       });
@@ -312,8 +312,8 @@ describe('test collector - todo test recognition', () => {
 });
 
 describe('test collector - hook recognition', () => {
-  it('should collect beforeAll hooks', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect beforeAll hooks', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Hook Suite', () => {
         collectorFunctions.beforeAll(() => {
           // setup
@@ -331,8 +331,8 @@ describe('test collector - hook recognition', () => {
     expect(typeof hookSuite.beforeAll[1]).toBe('function');
   });
 
-  it('should collect afterAll hooks', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect afterAll hooks', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Hook Suite', () => {
         collectorFunctions.afterAll(() => {
           // cleanup
@@ -346,8 +346,8 @@ describe('test collector - hook recognition', () => {
     expect(typeof hookSuite.afterAll[0]).toBe('function');
   });
 
-  it('should collect beforeEach hooks', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect beforeEach hooks', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Hook Suite', () => {
         collectorFunctions.beforeEach(() => {
           // setup each
@@ -365,8 +365,8 @@ describe('test collector - hook recognition', () => {
     expect(typeof hookSuite.beforeEach[1]).toBe('function');
   });
 
-  it('should collect afterEach hooks', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect afterEach hooks', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Hook Suite', () => {
         collectorFunctions.afterEach(() => {
           // cleanup each
@@ -380,8 +380,8 @@ describe('test collector - hook recognition', () => {
     expect(typeof hookSuite.afterEach[0]).toBe('function');
   });
 
-  it('should collect all types of hooks together', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect all types of hooks together', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('All Hooks Suite', () => {
         collectorFunctions.beforeAll(noop);
         collectorFunctions.afterAll(noop);
@@ -398,8 +398,8 @@ describe('test collector - hook recognition', () => {
     expect(allHooksSuite.afterEach).toHaveLength(1);
   });
 
-  it('should collect hooks at root level', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect hooks at root level', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.beforeAll(() => {
         // root level setup
       });
@@ -429,8 +429,8 @@ describe('test collector - hook recognition', () => {
     expect(typeof collectedSuite.testSuite.afterEach[0]).toBe('function');
   });
 
-  it('should collect hooks at both root and suite levels', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect hooks at both root and suite levels', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       // Root level hooks
       collectorFunctions.beforeAll(() => {
         // global setup
@@ -463,8 +463,8 @@ describe('test collector - hook recognition', () => {
 });
 
 describe('test collector - complex scenarios', () => {
-  it('should collect mix of tests, suites, hooks, and modifiers', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect mix of tests, suites, hooks, and modifiers', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Complex Suite', () => {
         collectorFunctions.beforeAll(noop);
         collectorFunctions.beforeEach(noop);
@@ -515,14 +515,14 @@ describe('test collector - complex scenarios', () => {
     expect(innerSuite.tests[2].status).toBe('skipped'); // Due to .only
   });
 
-  it('should clear collector state between collectTests calls', () => {
-    const collectedSuite1 = collectorFunctions.collectTests(() => {
+  it('should clear collector state between collectTests calls', async () => {
+    const collectedSuite1 = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Suite 1', () => {
         collectorFunctions.it('test 1', noop);
       });
     });
 
-    const collectedSuite2 = collectorFunctions.collectTests(() => {
+    const collectedSuite2 = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Suite 2', () => {
         collectorFunctions.it('test 2', noop);
       });
@@ -534,8 +534,8 @@ describe('test collector - complex scenarios', () => {
     expect(collectedSuite2.testSuite.suites[0].name).toBe('Suite 2');
   });
 
-  it('should collect empty describe blocks', () => {
-    const collectedSuite = collectorFunctions.collectTests(() => {
+  it('should collect empty describe blocks', async () => {
+    const collectedSuite = await collectorFunctions.collectTests(() => {
       collectorFunctions.describe('Empty Suite', () => {
         // No tests or hooks
       });

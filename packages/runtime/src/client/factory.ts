@@ -13,6 +13,7 @@ import { getWSServer } from './getWSServer.js';
 import { getBundler, evaluateModule, Bundler } from '../bundler/index.js';
 import { markTestsAsSkippedByName } from '../filtering/index.js';
 import { setup } from '../render/setup.js';
+import { runSetupFiles } from './setup-files.js';
 
 export const getClient = async () => {
   const client = await getBridgeClient(getWSServer(), {
@@ -52,75 +53,24 @@ export const getClient = async () => {
         client.rpc.emitEvent(event.type, event);
       });
 
-      // Execute setup files before test collection
-      if (options.setupFiles) {
-        for (const setupFile of options.setupFiles) {
-          const startTime = Date.now();
-          events.emit({
-            type: 'setup-file-bundling-started',
-            file: setupFile,
-            setupType: 'setupFiles',
-          });
-
-          try {
-            const setupModuleJs = await bundler.getModule(setupFile);
-            events.emit({
-              type: 'setup-file-bundling-finished',
-              file: setupFile,
-              setupType: 'setupFiles',
-              duration: Date.now() - startTime,
-            });
-            evaluateModule(setupModuleJs, setupFile);
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : 'Unknown error';
-            events.emit({
-              type: 'setup-file-bundling-failed',
-              file: setupFile,
-              setupType: 'setupFiles',
-              duration: Date.now() - startTime,
-              error: errorMessage,
-            });
-            throw error;
-          }
-        }
-      }
-
-      if (options.setupFilesAfterEnv) {
-        for (const setupFile of options.setupFilesAfterEnv) {
-          const startTime = Date.now();
-          events.emit({
-            type: 'setup-file-bundling-started',
-            file: setupFile,
-            setupType: 'setupFilesAfterEnv',
-          });
-
-          try {
-            const setupModuleJs = await bundler.getModule(setupFile);
-            events.emit({
-              type: 'setup-file-bundling-finished',
-              file: setupFile,
-              setupType: 'setupFilesAfterEnv',
-              duration: Date.now() - startTime,
-            });
-            evaluateModule(setupModuleJs, setupFile);
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : 'Unknown error';
-            events.emit({
-              type: 'setup-file-bundling-failed',
-              file: setupFile,
-              setupType: 'setupFilesAfterEnv',
-              duration: Date.now() - startTime,
-              error: errorMessage,
-            });
-            throw error;
-          }
-        }
-      }
+      await runSetupFiles({
+        setupFiles: options.setupFiles ?? [],
+        setupFilesAfterEnv: [],
+        events: events as EventEmitter<BundlerEvents>,
+        bundler: bundler as Bundler,
+        evaluateModule,
+      });
 
       const moduleJs = await bundler.getModule(path);
-      const collectionResult = await collector.collect(() => {
+      const collectionResult = await collector.collect(async () => {
+        await runSetupFiles({
+          setupFiles: [],
+          setupFilesAfterEnv: options.setupFilesAfterEnv ?? [],
+          events: events as EventEmitter<BundlerEvents>,
+          bundler: bundler as Bundler,
+          evaluateModule,
+        });
+
         // Setup automatic cleanup for rendered components
         setup();
         evaluateModule(moduleJs, path);
