@@ -1,4 +1,28 @@
 import { run, yargsOptions } from 'jest-cli';
+import { getConfig } from '@react-native-harness/config';
+
+const checkForOldConfig = async () => {
+  try {
+    const { config } = await getConfig(process.cwd());
+
+    if (config.include) {
+      console.error('\n❌ Migration Required\n');
+      console.error('React Native Harness has migrated to the Jest CLI.');
+      console.error(
+        'The "include" property in your rn-harness.config file is no longer supported.\n'
+      );
+      console.error(
+        'Please follow the migration guide to update your configuration:'
+      );
+      console.error(
+        'https://react-native-harness.dev/docs/guides/migration-guide\n'
+      );
+      process.exit(1);
+    }
+  } catch {
+    // Swallow the error - if we can't load the config, let Jest CLI handle it
+  }
+};
 
 const patchYargsOptions = () => {
   yargsOptions.harnessRunner = {
@@ -44,4 +68,4 @@ const patchYargsOptions = () => {
 };
 
 patchYargsOptions();
-run();
+checkForOldConfig().then(() => run());

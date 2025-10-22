@@ -69,6 +69,9 @@ export const ConfigSchema = z
 
     resetEnvironmentBetweenTestFiles: z.boolean().optional().default(true),
     unstable__skipAlreadyIncludedModules: z.boolean().optional().default(false),
+
+    // Deprecated property - used for migration detection
+    include: z.array(z.string()).optional(),
   })
   .refine(
     (config) => {
