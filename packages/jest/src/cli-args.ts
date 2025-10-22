@@ -10,12 +10,6 @@ export const getAdditionalCliArgs = (): HarnessCliArgs => {
     .option('harnessRunner', {
       type: 'string',
       description: 'Specify which Harness runner to use',
-      coerce: (value: string) => {
-        if (!value || value.trim().length === 0) {
-          throw new Error('harnessRunner must be a non-empty string');
-        }
-        return value.trim();
-      },
     })
     .strict(false)
     .help(false)

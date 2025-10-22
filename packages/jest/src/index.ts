@@ -11,7 +11,9 @@ import type {
 import pLimit from 'p-limit';
 import { runHarnessTestFile } from './run.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
-import type { Harness } from '@react-native-harness/cli/external';
+import { formatError, type Harness } from '@react-native-harness/cli/external';
+import { setup } from './setup.js';
+import { teardown } from './teardown.js';
 
 class CancelRun extends Error {
   constructor(message?: string) {
@@ -41,18 +43,29 @@ export default class JestHarness implements CallbackTestRunnerInterface {
       throw new Error('Parallel test running is not supported');
     }
 
-    const harness = global.HARNESS;
-    const harnessConfig = global.HARNESS_CONFIG;
+    try {
+      // This is necessary as Harness may throw and we want to catch it and display a helpful error message.
+      await setup(this.#globalConfig);
 
-    return await this._createInBandTestRun(
-      tests,
-      watcher,
-      harness,
-      harnessConfig,
-      onStart,
-      onResult,
-      onFailure
-    );
+      const harness = global.HARNESS;
+      const harnessConfig = global.HARNESS_CONFIG;
+
+      return await this._createInBandTestRun(
+        tests,
+        watcher,
+        harness,
+        harnessConfig,
+        onStart,
+        onResult,
+        onFailure
+      );
+    } catch (error) {
+      // Jest will print strings as they are, without processing them further.
+      throw formatError(error);
+    } finally {
+      // This is necessary as Harness may throw and we want to catch it and display a helpful error message.
+      await teardown(this.#globalConfig);
+    }
   }
 
   async _createInBandTestRun(

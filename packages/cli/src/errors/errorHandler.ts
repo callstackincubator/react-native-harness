@@ -16,211 +16,203 @@ import {
   MetroPortUnavailableError,
 } from './errors.js';
 
-export const handleError = (error: unknown): void => {
+export const formatError = (error: unknown): string => {
+  const lines: string[] = [];
+
   if (error instanceof AssertionError) {
-    console.error(`\n❌ Assertion Error`);
-    console.error(`\nError: ${error.message}`);
-    console.error(`\nPlease check your configuration and try again.`);
+    lines.push(`\n❌ Assertion Error`);
+    lines.push(`\nError: ${error.message}`);
+    lines.push(`\nPlease check your configuration and try again.`);
   } else if (error instanceof ConfigValidationError) {
-    console.error(`\n❌ Configuration Error`);
-    console.error(`\nFile: ${error.filePath}`);
-    console.error(`\nValidation errors:`);
+    lines.push(`\n❌ Configuration Error`);
+    lines.push(`\nFile: ${error.filePath}`);
+    lines.push(`\nValidation errors:`);
     error.validationErrors.forEach((err) => {
-      console.error(`  • ${err}`);
+      lines.push(`  • ${err}`);
     });
-    console.error(`\nPlease fix the configuration errors and try again.`);
+    lines.push(`\nPlease fix the configuration errors and try again.`);
   } else if (error instanceof ConfigNotFoundError) {
-    console.error(`\n❌ Configuration Not Found`);
-    console.error(
+    lines.push(`\n❌ Configuration Not Found`);
+    lines.push(
       `\nCould not find 'rn-harness.config' in '${error.searchPath}' or any parent directories.`
     );
-    console.error(`\nSupported file extensions: .js, .mjs, .cjs, .json`);
-    console.error(
+    lines.push(`\nSupported file extensions: .js, .mjs, .cjs, .json`);
+    lines.push(
       `\nPlease create a configuration file or run from a directory that contains one.`
     );
   } else if (error instanceof ConfigLoadError) {
-    console.error(`\n❌ Configuration Load Error`);
-    console.error(`\nFile: ${error.filePath}`);
-    console.error(`Error: ${error.message}`);
+    lines.push(`\n❌ Configuration Load Error`);
+    lines.push(`\nFile: ${error.filePath}`);
+    lines.push(`Error: ${error.message}`);
     if (error.cause) {
-      console.error(`\nCause: ${error.cause.message}`);
+      lines.push(`\nCause: ${error.cause.message}`);
     }
-    console.error(
-      `\nPlease check your configuration file syntax and try again.`
-    );
+    lines.push(`\nPlease check your configuration file syntax and try again.`);
   } else if (error instanceof NoRunnerSpecifiedError) {
-    console.error('\n❌ No runner specified');
-    console.error(
+    lines.push('\n❌ No runner specified');
+    lines.push(
       '\nPlease specify a runner name or set a defaultRunner in your config.'
     );
-    console.error('\nUsage: react-native-harness test [runner-name] [pattern]');
-    console.error('\nAvailable runners:');
+    lines.push('\nUsage: react-native-harness test [runner-name] [pattern]');
+    lines.push('\nAvailable runners:');
     error.availableRunners.forEach((r) => {
-      console.error(`  • ${r.name} (${r.platform})`);
+      lines.push(`  • ${r.name} (${r.platform})`);
     });
-    console.error(
+    lines.push(
       '\nTo set a default runner, add "defaultRunner" to your config:'
     );
-    console.error('  { "defaultRunner": "your-runner-name" }');
+    lines.push('  { "defaultRunner": "your-runner-name" }');
   } else if (error instanceof RunnerNotFoundError) {
-    console.error(`\n❌ Runner "${error.runnerName}" not found`);
-    console.error('\nAvailable runners:');
+    lines.push(`\n❌ Runner "${error.runnerName}" not found`);
+    lines.push('\nAvailable runners:');
     error.availableRunners.forEach((r) => {
-      console.error(`  • ${r.name} (${r.platform})`);
+      lines.push(`  • ${r.name} (${r.platform})`);
     });
-    console.error('\nTo add a new runner, update your rn-harness.config file.');
+    lines.push('\nTo add a new runner, update your rn-harness.config file.');
   } else if (error instanceof EnvironmentInitializationError) {
-    console.error(`\n❌ Environment Initialization Error`);
-    console.error(`\nRunner: ${error.runnerName} (${error.platform})`);
-    console.error(`\nError: ${error.message}`);
+    lines.push(`\n❌ Environment Initialization Error`);
+    lines.push(`\nRunner: ${error.runnerName} (${error.platform})`);
+    lines.push(`\nError: ${error.message}`);
     if (error.details) {
-      console.error(`\nDetails: ${error.details}`);
+      lines.push(`\nDetails: ${error.details}`);
     }
-    console.error(`\nTroubleshooting steps:`);
-    console.error(
+    lines.push(`\nTroubleshooting steps:`);
+    lines.push(
       `  • Verify that ${error.platform} development environment is properly set up`
     );
-    console.error(`  • Check that the app is built and ready for testing`);
-    console.error(`  • Ensure all required dependencies are installed`);
+    lines.push(`  • Check that the app is built and ready for testing`);
+    lines.push(`  • Ensure all required dependencies are installed`);
     if (error.platform === 'ios') {
-      console.error(`  • Verify Xcode and iOS Simulator are working correctly`);
+      lines.push(`  • Verify Xcode and iOS Simulator are working correctly`);
     } else if (error.platform === 'android') {
-      console.error(
-        `  • Verify Android SDK and emulator are working correctly`
-      );
+      lines.push(`  • Verify Android SDK and emulator are working correctly`);
     }
-    console.error(
-      `\nPlease check your environment configuration and try again.`
-    );
+    lines.push(`\nPlease check your environment configuration and try again.`);
   } else if (error instanceof TestExecutionError) {
-    console.error(`\n❌ Test Execution Error`);
-    console.error(`\nFile: ${error.testFile}`);
+    lines.push(`\n❌ Test Execution Error`);
+    lines.push(`\nFile: ${error.testFile}`);
     if (error.testSuite) {
-      console.error(`\nSuite: ${error.testSuite}`);
+      lines.push(`\nSuite: ${error.testSuite}`);
     }
     if (error.testName) {
-      console.error(`\nTest: ${error.testName}`);
+      lines.push(`\nTest: ${error.testName}`);
     }
-    console.error(`\nError: ${error.message}`);
-    console.error(`\nTroubleshooting steps:`);
-    console.error(`  • Check the test file syntax and logic`);
-    console.error(`  • Verify all test dependencies are available`);
-    console.error(`  • Ensure the app is in the expected state for the test`);
-    console.error(
-      `  • Check device/emulator logs for additional error details`
-    );
-    console.error(`\nPlease check your test file and try again.`);
+    lines.push(`\nError: ${error.message}`);
+    lines.push(`\nTroubleshooting steps:`);
+    lines.push(`  • Check the test file syntax and logic`);
+    lines.push(`  • Verify all test dependencies are available`);
+    lines.push(`  • Ensure the app is in the expected state for the test`);
+    lines.push(`  • Check device/emulator logs for additional error details`);
+    lines.push(`\nPlease check your test file and try again.`);
   } else if (error instanceof RpcClientError) {
-    console.error(`\n❌ RPC Client Error`);
-    console.error(`\nError: ${error.message}`);
+    lines.push(`\n❌ RPC Client Error`);
+    lines.push(`\nError: ${error.message}`);
     if (error.bridgePort) {
-      console.error(`\nBridge Port: ${error.bridgePort}`);
+      lines.push(`\nBridge Port: ${error.bridgePort}`);
     }
     if (error.connectionStatus) {
-      console.error(`\nConnection Status: ${error.connectionStatus}`);
+      lines.push(`\nConnection Status: ${error.connectionStatus}`);
     }
-    console.error(`\nTroubleshooting steps:`);
-    console.error(`  • Verify the React Native app is running and connected`);
-    console.error(`  • Check that the bridge port is not blocked by firewall`);
-    console.error(
+    lines.push(`\nTroubleshooting steps:`);
+    lines.push(`  • Verify the React Native app is running and connected`);
+    lines.push(`  • Check that the bridge port is not blocked by firewall`);
+    lines.push(
       `  • Ensure the app has the React Native Harness runtime integrated`
     );
-    console.error(`  • Try restarting the app and test harness`);
-    console.error(`\nPlease check your bridge connection and try again.`);
+    lines.push(`  • Try restarting the app and test harness`);
+    lines.push(`\nPlease check your bridge connection and try again.`);
   } else if (error instanceof AppNotInstalledError) {
-    console.error(`\n❌ App Not Installed`);
+    lines.push(`\n❌ App Not Installed`);
     const deviceType =
       error.platform === 'ios'
         ? 'simulator'
         : error.platform === 'android'
         ? 'emulator'
         : 'virtual device';
-    console.error(
+    lines.push(
       `\nThe app "${error.bundleId}" is not installed on ${deviceType} "${error.deviceName}".`
     );
-    console.error(`\nTo resolve this issue:`);
+    lines.push(`\nTo resolve this issue:`);
     if (error.platform === 'ios') {
-      console.error(
+      lines.push(
         `  • Build and install the app: npx react-native run-ios --simulator="${error.deviceName}"`
       );
-      console.error(
+      lines.push(
         `  • Or install from Xcode: Open ios/*.xcworkspace and run the project`
       );
     } else if (error.platform === 'android') {
-      console.error(
-        `  • Build and install the app: npx react-native run-android`
-      );
-      console.error(
+      lines.push(`  • Build and install the app: npx react-native run-android`);
+      lines.push(
         `  • Or build manually: ./gradlew assembleDebug && adb install android/app/build/outputs/apk/debug/app-debug.apk`
       );
     } else if (error.platform === 'vega') {
-      console.error(`  • Build the Vega app: npm run build:app`);
-      console.error(
+      lines.push(`  • Build the Vega app: npm run build:app`);
+      lines.push(
         `  • Install the app: kepler device install-app -p <path-to-vpkg> --device "${error.deviceName}"`
       );
-      console.error(
+      lines.push(
         `  • Or use the combined command: kepler run-kepler <path-to-vpkg> "${error.bundleId}" -d "${error.deviceName}"`
       );
     }
-    console.error(`\nPlease install the app and try running the tests again.`);
+    lines.push(`\nPlease install the app and try running the tests again.`);
   } else if (error instanceof BundlingFailedError) {
-    console.error(`\n❌ Test File Bundling Error`);
-    console.error(`\nFile: ${error.modulePath}`);
-    console.error(`\nError: ${error.reason}`);
-    console.error(`\nTroubleshooting steps:`);
-    console.error(`  • Check the test file syntax and imports`);
-    console.error(`  • Verify all imported modules exist and are accessible`);
-    console.error(`  • Ensure the Metro bundler configuration is correct`);
-    console.error(`  • Check for any circular dependencies in the test file`);
-    console.error(`  • Verify that all required packages are installed`);
-    console.error(`\nPlease fix the bundling issues and try again.`);
+    lines.push(`\n❌ Test File Bundling Error`);
+    lines.push(`\nFile: ${error.modulePath}`);
+    lines.push(`\nError: ${error.reason}`);
+    lines.push(`\nTroubleshooting steps:`);
+    lines.push(`  • Check the test file syntax and imports`);
+    lines.push(`  • Verify all imported modules exist and are accessible`);
+    lines.push(`  • Ensure the Metro bundler configuration is correct`);
+    lines.push(`  • Check for any circular dependencies in the test file`);
+    lines.push(`  • Verify that all required packages are installed`);
+    lines.push(`\nPlease fix the bundling issues and try again.`);
   } else if (error instanceof BridgeTimeoutError) {
-    console.error(`\n❌ Bridge Connection Timeout`);
-    console.error(
+    lines.push(`\n❌ Bridge Connection Timeout`);
+    lines.push(
       `\nThe bridge connection timed out after ${error.timeout}ms while waiting for the "${error.runnerName}" (${error.platform}) runner to be ready.`
     );
-    console.error(`\nThis usually indicates that:`);
-    console.error(
+    lines.push(`\nThis usually indicates that:`);
+    lines.push(
       `  • The React Native app failed to load or connect to the bridge`
     );
-    console.error(`  • The app crashed during startup`);
-    console.error(
+    lines.push(`  • The app crashed during startup`);
+    lines.push(
       `  • Network connectivity issues between the app and the test harness`
     );
-    console.error(`  • The app is taking longer than expected to initialize`);
-    console.error(`\nTo resolve this issue:`);
-    console.error(
+    lines.push(`  • The app is taking longer than expected to initialize`);
+    lines.push(`\nTo resolve this issue:`);
+    lines.push(
       `  • Check that the app is properly installed and can start normally`
     );
-    console.error(
+    lines.push(
       `  • Verify that the app has the React Native Harness runtime integrated`
     );
-    console.error(`  • Check device/emulator logs for any startup errors`);
-    console.error(
-      `  • Ensure the test harness bridge port (3001) is not blocked`
-    );
-    console.error(
+    lines.push(`  • Check device/emulator logs for any startup errors`);
+    lines.push(`  • Ensure the test harness bridge port (3001) is not blocked`);
+    lines.push(
       `\nIf the app needs more time to start, consider increasing the timeout in the configuration.`
     );
   } else if (error instanceof MetroPortUnavailableError) {
-    console.error(`\n❌ Metro Port Unavailable`);
-    console.error(`\nPort ${error.port} is already in use or unavailable.`);
-    console.error(`\nThis usually indicates that:`);
-    console.error(`  • Another Metro bundler instance is already running`);
-    console.error(`  • Another application is using port ${error.port}`);
-    console.error(`  • The port is blocked by a firewall or security software`);
-    console.error(`\nTo resolve this issue:`);
-    console.error(`  • Stop any running Metro bundler instances`);
-    console.error(
+    lines.push(`\n❌ Metro Port Unavailable`);
+    lines.push(`\nPort ${error.port} is already in use or unavailable.`);
+    lines.push(`\nThis usually indicates that:`);
+    lines.push(`  • Another Metro bundler instance is already running`);
+    lines.push(`  • Another application is using port ${error.port}`);
+    lines.push(`  • The port is blocked by a firewall or security software`);
+    lines.push(`\nTo resolve this issue:`);
+    lines.push(`  • Stop any running Metro bundler instances`);
+    lines.push(
       `  • Check for other applications using port ${error.port}: lsof -i :${error.port}`
     );
-    console.error(`  • Kill the process using the port: kill -9 <PID>`);
-    console.error(
+    lines.push(`  • Kill the process using the port: kill -9 <PID>`);
+    lines.push(
       `  • Or use a different port by updating your Metro configuration`
     );
-    console.error(`\nPlease free up the port and try again.`);
+    lines.push(`\nPlease free up the port and try again.`);
   } else {
-    console.error(`\n❌ Unexpected Error`);
-    console.error(error);
+    // Re-throw the error to be handled by the caller
+    throw error;
   }
+
+  return lines.join('');
 };

@@ -7,6 +7,8 @@ import {
 import type { Config as JestConfig } from 'jest-runner';
 import {
   getHarness as getHarnessExternal,
+  NoRunnerSpecifiedError,
+  RunnerNotFoundError,
   type Harness,
 } from '@react-native-harness/cli/external';
 import { preRunMessage } from 'jest-util';
@@ -26,12 +28,17 @@ const getHarnessRunner = (
   cliArgs: HarnessCliArgs
 ): HarnessTestRunnerConfig => {
   const selectedRunnerName = cliArgs.harnessRunner ?? config.defaultRunner;
+
+  if (!selectedRunnerName) {
+    throw new NoRunnerSpecifiedError(config.runners);
+  }
+
   const runner = config.runners.find(
     (runner) => runner.name === selectedRunnerName
   );
 
   if (!runner) {
-    throw new Error(`Runner "${selectedRunnerName}" not found`);
+    throw new RunnerNotFoundError(selectedRunnerName, config.runners);
   }
 
   return runner;
@@ -41,7 +48,7 @@ const getHarness = async (runner: TestRunnerConfig): Promise<Harness> => {
   return await getHarnessExternal(runner);
 };
 
-export default async function (globalConfig: JestConfig.GlobalConfig) {
+export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   preRunMessage.remove(process.stderr);
   const harnessConfig =
     global.HARNESS_CONFIG ?? (await getHarnessConfig(globalConfig));
@@ -85,4 +92,4 @@ export default async function (globalConfig: JestConfig.GlobalConfig) {
 
   global.HARNESS_CONFIG = harnessConfig;
   global.HARNESS = harness;
-}
+};

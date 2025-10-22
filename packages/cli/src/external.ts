@@ -42,3 +42,6 @@ export const getHarness = async (
     bridge: serverBridge,
   };
 };
+
+export { formatError } from './errors/errorHandler.js';
+export * from './errors/errors.js';
