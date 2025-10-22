@@ -5,51 +5,54 @@ import { getHarnessResolver } from './resolver';
 import { getHarnessManifest } from './manifest';
 import { getHarnessBabelTransformerPath } from './babel-transformer';
 
-export const withRnHarness = async (
+export const withRnHarness = (
   config: MetroConfig | Promise<MetroConfig>
-): Promise<MetroConfig> => {
-  const isEnabled = !!process.env.RN_HARNESS;
+): (() => Promise<MetroConfig>) => {
+  // This is a workaround for a regression in Metro 0.83, when promises are not handled correctly.
+  return async () => {
+    const isEnabled = !!process.env.RN_HARNESS;
 
-  if (!isEnabled) {
-    return config;
-  }
+    if (!isEnabled) {
+      return config;
+    }
 
-  const metroConfig = await config;
-  const { config: harnessConfig } = await getConfig(process.cwd());
+    const metroConfig = await config;
+    const { config: harnessConfig } = await getConfig(process.cwd());
 
-  patchModuleSystem();
+    patchModuleSystem();
 
-  const harnessResolver = getHarnessResolver(metroConfig, harnessConfig);
-  const harnessManifest = getHarnessManifest(harnessConfig);
-  const harnessBabelTransformerPath =
-    getHarnessBabelTransformerPath(metroConfig);
+    const harnessResolver = getHarnessResolver(metroConfig, harnessConfig);
+    const harnessManifest = getHarnessManifest(harnessConfig);
+    const harnessBabelTransformerPath =
+      getHarnessBabelTransformerPath(metroConfig);
 
-  const patchedConfig: MetroConfig = {
-    ...metroConfig,
-    cacheVersion: 'react-native-harness',
-    serializer: {
-      ...metroConfig.serializer,
-      getPolyfills: (...args) => [
-        ...(metroConfig.serializer?.getPolyfills?.(...args) ?? []),
-        harnessManifest,
-      ],
-    },
-    resolver: {
-      ...metroConfig.resolver,
-      // Unlock __tests__ directory
-      blockList: undefined,
-      resolveRequest: harnessResolver,
-    },
-    transformer: {
-      ...metroConfig.transformer,
-      babelTransformerPath: harnessBabelTransformerPath,
-    },
+    const patchedConfig: MetroConfig = {
+      ...metroConfig,
+      cacheVersion: 'react-native-harness',
+      serializer: {
+        ...metroConfig.serializer,
+        getPolyfills: (...args) => [
+          ...(metroConfig.serializer?.getPolyfills?.(...args) ?? []),
+          harnessManifest,
+        ],
+      },
+      resolver: {
+        ...metroConfig.resolver,
+        // Unlock __tests__ directory
+        blockList: undefined,
+        resolveRequest: harnessResolver,
+      },
+      transformer: {
+        ...metroConfig.transformer,
+        babelTransformerPath: harnessBabelTransformerPath,
+      },
+    };
+
+    if (harnessConfig.unstable__skipAlreadyIncludedModules) {
+      patchedConfig.serializer!.customSerializer =
+        require('./getHarnessSerializer').getHarnessSerializer();
+    }
+
+    return patchedConfig;
   };
-
-  if (harnessConfig.unstable__skipAlreadyIncludedModules) {
-    patchedConfig.serializer!.customSerializer =
-      require('./getHarnessSerializer').getHarnessSerializer();
-  }
-
-  return patchedConfig;
 };
