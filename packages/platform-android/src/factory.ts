@@ -1,0 +1,75 @@
+import {
+  DeviceNotFoundError,
+  HarnessPlatform,
+} from '@react-native-harness/platforms';
+import {
+  AndroidPlatformConfigSchema,
+  isAndroidDevicePhysical,
+  type AndroidEmulator,
+  type AndroidPlatformConfig,
+  type PhysicalAndroidDevice,
+} from './config.js';
+import { getAdbId } from './adb-id.js';
+import * as adb from './adb.js';
+import { getDeviceName } from './utils.js';
+
+export const androidEmulator = (name: string): AndroidEmulator => ({
+  type: 'emulator',
+  name,
+});
+
+export const physicalAndroidDevice = (
+  manufacturer: string,
+  model: string
+): PhysicalAndroidDevice => ({
+  type: 'physical',
+  manufacturer: manufacturer.toLowerCase(),
+  model: model.toLowerCase(),
+});
+
+export const androidPlatform = (
+  config: AndroidPlatformConfig
+): HarnessPlatform => ({
+  name: config.name,
+  getInstance: async () => {
+    const parsedConfig = AndroidPlatformConfigSchema.parse(config);
+    const adbId = await getAdbId(parsedConfig.device);
+
+    if (!adbId) {
+      throw new DeviceNotFoundError(getDeviceName(parsedConfig.device));
+    }
+
+    if (isAndroidDevicePhysical(parsedConfig.device)) {
+      // Reverse ports to allow the app to load from a local machine.
+      await Promise.all([
+        adb.reversePort(adbId, 8081),
+        adb.reversePort(adbId, 8080),
+        adb.reversePort(adbId, 3001),
+      ]);
+    }
+
+    return {
+      startApp: async () => {
+        await adb.startApp(
+          adbId,
+          parsedConfig.bundleId,
+          parsedConfig.activityName
+        );
+      },
+      restartApp: async () => {
+        await adb.stopApp(adbId, parsedConfig.bundleId);
+        await adb.startApp(
+          adbId,
+          parsedConfig.bundleId,
+          parsedConfig.activityName
+        );
+      },
+      stopApp: async () => {
+        await adb.stopApp(adbId, parsedConfig.bundleId);
+      },
+      dispose: async () => {
+        await adb.stopApp(adbId, parsedConfig.bundleId);
+      },
+    };
+  },
+});

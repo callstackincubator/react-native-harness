@@ -1,21 +1,39 @@
+import {
+  androidPlatform,
+  androidEmulator,
+  physicalAndroidDevice,
+} from '@react-native-harness/platform-android';
+import {
+  applePlatform,
+  applePhysicalDevice,
+  appleSimulator,
+} from '@react-native-harness/platform-apple';
+
 const config = {
   entryPoint: './src/main.tsx',
   appRegistryComponentName: 'Playground',
 
   runners: [
-    {
+    androidPlatform({
       name: 'android',
-      platform: 'android',
-      deviceId: 'Pixel_8_API_35',
+      device: androidEmulator('Pixel_8_API_35'),
       bundleId: 'com.playground',
-    },
-    {
+    }),
+    androidPlatform({
+      name: 'moto-g72',
+      device: physicalAndroidDevice('Motorola', 'Moto G72'),
+      bundleId: 'com.playground',
+    }),
+    applePlatform({
+      name: 'iphone-16-pro',
+      device: applePhysicalDevice('iPhone (Szymon) (2)'),
+      bundleId: 'react-native-harness',
+    }),
+    applePlatform({
       name: 'ios',
-      platform: 'ios',
-      deviceId: 'iPhone 16 Pro',
+      device: appleSimulator('iPhone 16 Pro Max', '18.0'),
       bundleId: 'org.reactjs.native.example.Playground',
-      systemVersion: '18.6',
-    },
+    }),
   ],
   defaultRunner: 'android',
   bridgeTimeout: 120000,

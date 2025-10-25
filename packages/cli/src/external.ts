@@ -1,45 +1,49 @@
-import { TestRunnerConfig } from '@react-native-harness/config';
-import { Environment } from './platforms/platform-adapter.js';
-import {
-  BridgeServer,
-  getBridgeServer,
-} from '@react-native-harness/bridge/server';
-import { BridgeTimeoutError } from './errors/errors.js';
-import { getPlatformAdapter } from './platforms/platform-registry.js';
+import { getBridgeServer } from '@react-native-harness/bridge/server';
+import { runMetro } from './bundlers/metro.js';
+import { BridgeClientFunctions } from '@react-native-harness/bridge';
+import { HarnessPlatform } from '@react-native-harness/platforms';
+import { killWithAwait } from './process.js';
 
 export type Harness = {
-  environment: Environment;
-  bridge: BridgeServer;
+  runTests: BridgeClientFunctions['runTests'];
+  restart: () => Promise<void>;
+  dispose: () => Promise<void>;
 };
 
 export const getHarness = async (
-  runner: TestRunnerConfig
+  platform: HarnessPlatform
 ): Promise<Harness> => {
-  const bridgeTimeout = 60000;
-  const platformAdapter = await getPlatformAdapter(runner.platform);
-  const serverBridge = await getBridgeServer({
-    port: 3001,
-  });
-
-  const readyPromise = new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(
-        new BridgeTimeoutError(bridgeTimeout, runner.name, runner.platform)
-      );
-    }, bridgeTimeout);
-
-    serverBridge.once('ready', () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-  });
-
-  const environment = await platformAdapter.getEnvironment(runner);
-  await readyPromise;
+  const [metro, platformInstance, serverBridge] = await Promise.all([
+    runMetro(),
+    platform.getInstance(),
+    getBridgeServer({
+      port: 3001,
+    }),
+  ]);
 
   return {
-    environment,
-    bridge: serverBridge,
+    runTests: async (path, options) => {
+      const client = serverBridge.rpc.clients.at(-1);
+
+      if (!client) {
+        throw new Error('No client found');
+      }
+
+      return await client.runTests(path, options);
+    },
+    restart: () => {
+      return new Promise<void>((resolve, reject) => {
+        serverBridge.once('ready', () => resolve());
+        platformInstance.restartApp().catch(reject);
+      });
+    },
+    dispose: async () => {
+      await Promise.all([
+        serverBridge.dispose(),
+        platformInstance.dispose(),
+        killWithAwait(metro),
+      ]);
+    },
   };
 };
 

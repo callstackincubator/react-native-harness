@@ -10,7 +10,6 @@ import {
   EnvironmentInitializationError,
   TestExecutionError,
   RpcClientError,
-  AppNotInstalledError,
   BridgeTimeoutError,
   BundlingFailedError,
   MetroPortUnavailableError,
@@ -121,40 +120,6 @@ export const formatError = (error: unknown): string => {
     );
     lines.push(`  • Try restarting the app and test harness`);
     lines.push(`\nPlease check your bridge connection and try again.`);
-  } else if (error instanceof AppNotInstalledError) {
-    lines.push(`\n❌ App Not Installed`);
-    const deviceType =
-      error.platform === 'ios'
-        ? 'simulator'
-        : error.platform === 'android'
-        ? 'emulator'
-        : 'virtual device';
-    lines.push(
-      `\nThe app "${error.bundleId}" is not installed on ${deviceType} "${error.deviceName}".`
-    );
-    lines.push(`\nTo resolve this issue:`);
-    if (error.platform === 'ios') {
-      lines.push(
-        `  • Build and install the app: npx react-native run-ios --simulator="${error.deviceName}"`
-      );
-      lines.push(
-        `  • Or install from Xcode: Open ios/*.xcworkspace and run the project`
-      );
-    } else if (error.platform === 'android') {
-      lines.push(`  • Build and install the app: npx react-native run-android`);
-      lines.push(
-        `  • Or build manually: ./gradlew assembleDebug && adb install android/app/build/outputs/apk/debug/app-debug.apk`
-      );
-    } else if (error.platform === 'vega') {
-      lines.push(`  • Build the Vega app: npm run build:app`);
-      lines.push(
-        `  • Install the app: kepler device install-app -p <path-to-vpkg> --device "${error.deviceName}"`
-      );
-      lines.push(
-        `  • Or use the combined command: kepler run-kepler <path-to-vpkg> "${error.bundleId}" -d "${error.deviceName}"`
-      );
-    }
-    lines.push(`\nPlease install the app and try running the tests again.`);
   } else if (error instanceof BundlingFailedError) {
     lines.push(`\n❌ Test File Bundling Error`);
     lines.push(`\nFile: ${error.modulePath}`);

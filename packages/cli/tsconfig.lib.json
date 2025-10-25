@@ -19,7 +19,11 @@
     "../tools/src/prompts.ts",
     "../tools/src/spawn.ts"
   ],
+  "exclude": ["src/platforms/**/*.ts"],
   "references": [
+    {
+      "path": "../platforms/tsconfig.lib.json"
+    },
     {
       "path": "../tools/tsconfig.lib.json"
     },

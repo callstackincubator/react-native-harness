@@ -9,7 +9,6 @@ export const teardown = async (globalConfig: JestConfig.GlobalConfig) => {
   }
 
   if (global.HARNESS) {
-    await global.HARNESS.bridge.dispose();
-    await global.HARNESS.environment.dispose();
+    await global.HARNESS.dispose();
   }
 };

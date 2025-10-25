@@ -84,8 +84,7 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
     (setupFile) => path.relative(globalConfig.rootDir, setupFile)
   );
 
-  const client = harness.bridge.rpc.clients.at(-1)!;
-  const results = await client.runTests(relativeTestPath, {
+  const results = await harness.runTests(relativeTestPath, {
     testNamePattern: globalConfig.testNamePattern,
     setupFiles,
     setupFilesAfterEnv,

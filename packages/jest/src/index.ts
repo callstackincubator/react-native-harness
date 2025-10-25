@@ -93,10 +93,7 @@ export default class JestHarness implements CallbackTestRunnerInterface {
                 harnessConfig.resetEnvironmentBetweenTestFiles &&
                 !isFirstTest
               ) {
-                await new Promise((resolve) => {
-                  harness.bridge.once('ready', resolve);
-                  harness.environment.restart();
-                });
+                await harness.restart();
               }
               isFirstTest = false;
 

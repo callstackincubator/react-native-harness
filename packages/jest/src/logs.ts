@@ -1,4 +1,4 @@
-import { TestRunnerConfig } from '@react-native-harness/config';
+type TestRunnerConfig = any;
 import chalk from 'chalk';
 
 const TAG = chalk.supportsColor

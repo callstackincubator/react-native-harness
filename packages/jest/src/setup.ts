@@ -1,8 +1,6 @@
 import {
   getConfig,
-  TestRunnerConfig,
   type Config as HarnessConfig,
-  type TestRunnerConfig as HarnessTestRunnerConfig,
 } from '@react-native-harness/config';
 import type { Config as JestConfig } from 'jest-runner';
 import {
@@ -14,6 +12,7 @@ import {
 import { preRunMessage } from 'jest-util';
 import { getAdditionalCliArgs, HarnessCliArgs } from './cli-args.js';
 import { logTestEnvironmentReady, logTestRunHeader } from './logs.js';
+import { HarnessPlatform } from '@react-native-harness/platforms';
 
 const getHarnessConfig = async (
   globalConfig: JestConfig.GlobalConfig
@@ -26,7 +25,7 @@ const getHarnessConfig = async (
 const getHarnessRunner = (
   config: HarnessConfig,
   cliArgs: HarnessCliArgs
-): HarnessTestRunnerConfig => {
+): HarnessPlatform => {
   const selectedRunnerName = cliArgs.harnessRunner ?? config.defaultRunner;
 
   if (!selectedRunnerName) {
@@ -44,7 +43,7 @@ const getHarnessRunner = (
   return runner;
 };
 
-const getHarness = async (runner: TestRunnerConfig): Promise<Harness> => {
+const getHarness = async (runner: HarnessPlatform): Promise<Harness> => {
   return await getHarnessExternal(runner);
 };
 
@@ -52,7 +51,6 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   preRunMessage.remove(process.stderr);
   const harnessConfig =
     global.HARNESS_CONFIG ?? (await getHarnessConfig(globalConfig));
-  const isWatchMode = globalConfig.watch || globalConfig.watchAll;
 
   if (global.HARNESS) {
     // Do not setup again if HARNESS is already initialized
@@ -60,22 +58,16 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
 
     if (harnessConfig.resetEnvironmentBetweenTestFiles) {
       // In watch mode, we want to restart the environment before each test run
-      await new Promise((resolve) => {
-        global.HARNESS.bridge.once('ready', resolve);
-        global.HARNESS.environment.restart();
-      });
+      await global.HARNESS.restart();
     }
 
     return;
   }
 
-  if (isWatchMode) {
-    // In watch mode, we want to dispose the Harness when the process exits.
-    process.on('exit', async () => {
-      await global.HARNESS.bridge.dispose();
-      await global.HARNESS.environment.dispose();
-    });
-  }
+  // Gracefully dispose the Harness when the process exits.
+  process.on('exit', async () => {
+    await global.HARNESS.dispose();
+  });
 
   const cliArgs = getAdditionalCliArgs();
   const selectedRunner = getHarnessRunner(harnessConfig, cliArgs);
@@ -89,6 +81,8 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   logTestRunHeader(selectedRunner);
   const harness = await getHarness(selectedRunner);
   logTestEnvironmentReady(selectedRunner);
+
+  await harness.restart();
 
   global.HARNESS_CONFIG = harnessConfig;
   global.HARNESS = harness;

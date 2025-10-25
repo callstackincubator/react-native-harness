@@ -1,4 +1,4 @@
-import { TestRunnerConfig } from '@react-native-harness/config';
+type TestRunnerConfig = any;
 
 export class NoRunnerSpecifiedError extends Error {
   constructor(availableRunners: TestRunnerConfig[]) {
@@ -90,26 +90,6 @@ export class BridgeTimeoutError extends Error {
       `Bridge connection timed out after ${timeout}ms while waiting for "${runnerName}" (${platform}) runner to be ready`
     );
     this.name = 'BridgeTimeoutError';
-  }
-}
-
-export class AppNotInstalledError extends Error {
-  constructor(
-    public readonly deviceName: string,
-    public readonly bundleId: string,
-    public readonly platform: 'ios' | 'android' | 'vega'
-  ) {
-    const deviceType =
-      platform === 'ios'
-        ? 'simulator'
-        : platform === 'android'
-        ? 'emulator'
-        : 'virtual device';
-
-    super(
-      `App "${bundleId}" is not installed on ${deviceType} "${deviceName}"`
-    );
-    this.name = 'AppNotInstalledError';
   }
 }
 

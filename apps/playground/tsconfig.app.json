@@ -34,10 +34,16 @@
   ],
   "references": [
     {
-      "path": "../../packages/jest/tsconfig.lib.json"
+      "path": "../../packages/react-native-harness/tsconfig.lib.json"
     },
     {
-      "path": "../../packages/react-native-harness/tsconfig.lib.json"
+      "path": "../../packages/platform-ios/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/platform-android/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/jest/tsconfig.lib.json"
     }
   ]
 }

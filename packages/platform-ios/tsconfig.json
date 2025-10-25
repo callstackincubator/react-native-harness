@@ -4,16 +4,10 @@
   "include": [],
   "references": [
     {
+      "path": "../tools"
+    },
+    {
       "path": "../platforms"
-    },
-    {
-      "path": "../config"
-    },
-    {
-      "path": "../cli"
-    },
-    {
-      "path": "../bridge"
     },
     {
       "path": "./tsconfig.lib.json"

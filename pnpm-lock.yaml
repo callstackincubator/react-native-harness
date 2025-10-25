@@ -181,6 +181,12 @@ importers:
       '@react-native-harness/jest':
         specifier: workspace:*
         version: link:../../packages/jest
+      '@react-native-harness/platform-android':
+        specifier: workspace:*
+        version: link:../../packages/platform-android
+      '@react-native-harness/platform-apple':
+        specifier: workspace:*
+        version: link:../../packages/platform-ios
       jest:
         specifier: ^30.2.0
         version: 30.2.0(@types/node@18.16.9)(babel-plugin-macros@3.1.0)(ts-node@9.1.1(typescript@5.8.3))
@@ -228,6 +234,9 @@ importers:
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config
+      '@react-native-harness/platforms':
+        specifier: workspace:*
+        version: link:../platforms
       '@react-native-harness/tools':
         specifier: workspace:*
         version: link:../tools
@@ -265,6 +274,9 @@ importers:
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config
+      '@react-native-harness/platforms':
+        specifier: workspace:*
+        version: link:../platforms
       chalk:
         specifier: ^4.1.2
         version: 4.1.2
@@ -309,6 +321,38 @@ importers:
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
+
+  packages/platform-android:
+    dependencies:
+      '@react-native-harness/platforms':
+        specifier: workspace:*
+        version: link:../platforms
+      '@react-native-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
+      zod:
+        specifier: ^3.25.67
+        version: 3.25.67
+
+  packages/platform-ios:
+    dependencies:
+      '@react-native-harness/platforms':
+        specifier: workspace:*
+        version: link:../platforms
+      '@react-native-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
+      zod:
+        specifier: ^3.25.67
+        version: 3.25.67
+
+  packages/platforms: {}
 
   packages/react-native-harness:
     dependencies:
