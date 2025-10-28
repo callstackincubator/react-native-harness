@@ -1,13 +1,11 @@
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   ActivityIndicator,
   StatusBar,
   Platform,
 } from 'react-native';
-import { LOGO_IMAGE } from '../constants.js';
 import { useRunnerStatus } from './state.js';
 import { TestComponentOverlay } from '../render/TestComponentOverlay.js';
 
@@ -19,9 +17,6 @@ export const ReadyScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.contentContainer}>
-        <View style={styles.logoContainer}>
-          <Image style={styles.logo} source={LOGO_IMAGE} />
-        </View>
         <Text style={styles.title}>React Native Harness</Text>
 
         {status === 'idle' ? (
@@ -78,13 +73,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 30,
     maxWidth: 350,
-  },
-  logoContainer: {
-    marginBottom: 12,
-  },
-  logo: {
-    width: 128,
-    height: 128,
   },
   title: {
     fontSize: 28,

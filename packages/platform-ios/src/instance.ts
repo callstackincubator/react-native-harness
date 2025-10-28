@@ -57,6 +57,9 @@ export const getAppleSimulatorPlatformInstance = async (
     restartApp: async () => {
       await simctl.stopApp(udid, config.bundleId);
       await simctl.startApp(udid, config.bundleId);
+
+      // TODO: REMOVE
+      await fetch('http://localhost:8081/reload');
     },
     stopApp: async () => {
       await simctl.stopApp(udid, config.bundleId);

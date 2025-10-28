@@ -105,7 +105,7 @@ export const stopApp = async (
   udid: string,
   bundleId: string
 ): Promise<void> => {
-  // We don't care about the error here.
+  //
   await spawnAndForget('xcrun', ['simctl', 'terminate', udid, bundleId]);
 };
 
