@@ -229,6 +229,7 @@ jobs:
 
       - name: Run E2E tests
         run: |
+          pnpm nx run-many -t build --projects="packages/*"
           pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="--harnessRunner ios"
 
       - name: Capture simulator screenshot on failure

@@ -3,12 +3,8 @@
     "start": {
       "executor": "nx:run-commands",
       "options": {
-        "commands": [
-          "nx run-many -t build --projects=\"packages/*\"",
-          "node ../../packages/react-native-harness/bin.js"
-        ],
-        "cwd": "apps/playground",
-        "parallel": false
+        "command": "node ../../packages/react-native-harness/bin.js",
+        "cwd": "apps/playground"
       }
     }
   }
