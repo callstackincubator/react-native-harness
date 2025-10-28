@@ -149,7 +149,7 @@ jobs:
 
   e2e-ios:
     name: E2E iOS - ${{ matrix.app }}
-    runs-on: macos-26-arm64
+    runs-on: macos-26-xlarge
     needs: discover-apps
     if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios' }}
     strategy:
