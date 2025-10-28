@@ -2,18 +2,13 @@
   "targets": {
     "start": {
       "executor": "nx:run-commands",
-      "dependsOn": [
-        "react-native-harness:build",
-        "@react-native-harness/metro:build",
-        "@react-native-harness/runtime:build",
-        "@react-native-harness/babel-preset:build",
-        "@react-native-harness/platforms:build",
-        "@react-native-harness/platform-android:build",
-        "@react-native-harness/platform-apple:build"
-      ],
       "options": {
-        "command": "node ../../packages/react-native-harness/bin.js",
-        "cwd": "apps/playground"
+        "commands": [
+          "nx run-many -t build --projects=\"packages/*\"",
+          "node ../../packages/react-native-harness/bin.js"
+        ],
+        "cwd": "apps/playground",
+        "parallel": false
       }
     }
   }
