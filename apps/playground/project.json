@@ -6,7 +6,10 @@
         "react-native-harness:build",
         "@react-native-harness/metro:build",
         "@react-native-harness/runtime:build",
-        "@react-native-harness/babel-preset:build"
+        "@react-native-harness/babel-preset:build",
+        "@react-native-harness/platforms:build",
+        "@react-native-harness/platform-android:build",
+        "@react-native-harness/platform-apple:build"
       ],
       "options": {
         "command": "node ../../packages/react-native-harness/bin.js",
