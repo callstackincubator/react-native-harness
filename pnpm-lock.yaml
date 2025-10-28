@@ -370,7 +370,11 @@ importers:
         specifier: ^3.25.67
         version: 3.25.67
 
-  packages/platforms: {}
+  packages/platforms:
+    dependencies:
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
 
   packages/react-native-harness:
     dependencies:
