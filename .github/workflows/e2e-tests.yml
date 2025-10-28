@@ -149,7 +149,7 @@ jobs:
 
   e2e-ios:
     name: E2E iOS - ${{ matrix.app }}
-    runs-on: macos-26
+    runs-on: macos-latest
     needs: discover-apps
     if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios' }}
     strategy:
@@ -219,7 +219,7 @@ jobs:
           os: iOS
           os_version: 18.6
           wait_for_boot: true
-          erase_before_boot: true
+          erase_before_boot: false
 
       - name: Install app
         run: |
