@@ -3,7 +3,7 @@
     "start": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "node ../../packages/react-native-harness/bin.js",
+        "command": "DEBUG=true node ../../packages/react-native-harness/bin.js",
         "cwd": "apps/playground"
       }
     }
