@@ -18,29 +18,41 @@ Install React Native Harness as a development dependency:
 
 ## Configuration
 
-### 1. Create Harness Configuration
+### 1. Install Platform Packages
+
+First, install the platform packages you need:
+
+<PackageManagerTabs command="install @react-native-harness/platform-android @react-native-harness/platform-apple" />
+
+### 2. Create Harness Configuration
 
 Create a `rn-harness.config.mjs` file in your project root:
 
 ```javascript
+import {
+  androidPlatform,
+  androidEmulator,
+} from '@react-native-harness/platform-android';
+import {
+  applePlatform,
+  appleSimulator,
+} from '@react-native-harness/platform-apple';
+
 const config = {
   entryPoint: './index.js',
   appRegistryComponentName: 'YourAppName',
 
   runners: [
-    {
+    androidPlatform({
       name: 'android',
-      platform: 'android',
-      deviceId: 'Pixel_8_API_35', // Your Android emulator name
+      device: androidEmulator('Pixel_8_API_35'), // Your Android emulator name
       bundleId: 'com.yourapp', // Your Android bundle ID
-    },
-    {
+    }),
+    applePlatform({
       name: 'ios',
-      platform: 'ios',
-      deviceId: 'iPhone 16 Pro', // Your iOS simulator name
+      device: appleSimulator('iPhone 16 Pro', '18.0'), // Your iOS simulator name and version
       bundleId: 'com.yourapp', // Your iOS bundle ID
-      systemVersion: '18.0',
-    },
+    }),
   ],
 };
 
@@ -51,7 +63,7 @@ export default config;
 The `entryPoint` and `appRegistryComponentName` properties tell React Native Harness how to locate and integrate with your React Native app. See the [Configuration](/docs/getting-started/configuration) page for detailed information about these and all other configuration options.
 :::
 
-### 2. Update Metro Configuration
+### 3. Update Metro Configuration
 
 Update your `metro.config.js` so React Native Harness will be able to use it to bundle its tests:
 
@@ -72,7 +84,7 @@ module.exports = withRnHarness(mergeConfig(defaultConfig, customConfig));
 The `withRnHarness` function is a noop when you're not running Harness tests, so you don't need to worry about it affecting your app in production. It only kicks in when running tests!
 :::
 
-### 3. Configure Jest
+### 4. Configure Jest
 
 Update your `jest.config.js` to use the React Native Harness preset:
 

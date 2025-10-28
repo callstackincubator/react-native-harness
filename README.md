@@ -21,6 +21,43 @@ Bridge the testing gap: Jest-style tests in real native environments. Get the co
 > [!WARNING]
 > This library is still under active development. Feel free to hack around, but use at your own risk.
 
+## Quick Configuration Example
+
+```javascript
+// rn-harness.config.mjs
+import {
+  androidPlatform,
+  androidEmulator,
+  physicalAndroidDevice,
+} from '@react-native-harness/platform-android';
+import {
+  applePlatform,
+  applePhysicalDevice,
+  appleSimulator,
+} from '@react-native-harness/platform-apple';
+
+const config = {
+  entryPoint: './src/main.tsx',
+  appRegistryComponentName: 'MyApp',
+
+  runners: [
+    androidPlatform({
+      name: 'android',
+      device: androidEmulator('Pixel_8_API_35'),
+      bundleId: 'com.myapp',
+    }),
+    applePlatform({
+      name: 'ios',
+      device: appleSimulator('iPhone 16 Pro Max', '18.0'),
+      bundleId: 'com.myapp',
+    }),
+  ],
+  defaultRunner: 'android',
+};
+
+export default config;
+```
+
 ## Documentation
 
 The documentation is available at [react-native-harness.dev](https://react-native-harness.dev). You can also use the following links to jump to specific topics:

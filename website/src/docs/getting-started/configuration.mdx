@@ -7,24 +7,30 @@ The most basic configuration would, assuming you support both iOS and Android pl
 **rn-harness.config.mjs**
 
 ```javascript
+import {
+  androidPlatform,
+  androidEmulator,
+} from '@react-native-harness/platform-android';
+import {
+  applePlatform,
+  appleSimulator,
+} from '@react-native-harness/platform-apple';
+
 const config = {
   entryPoint: './index.js',
   appRegistryComponentName: 'App',
 
   runners: [
-    {
+    androidPlatform({
       name: 'android',
-      platform: 'android',
-      deviceId: 'Pixel_8_API_35',
+      device: androidEmulator('Pixel_8_API_35'),
       bundleId: 'com.yourapp',
-    },
-    {
+    }),
+    applePlatform({
       name: 'ios',
-      platform: 'ios',
-      deviceId: 'iPhone 16 Pro',
+      device: appleSimulator('iPhone 16 Pro', '18.0'),
       bundleId: 'com.yourapp',
-      systemVersion: '18.0',
-    },
+    }),
   ],
 };
 
@@ -90,54 +96,93 @@ AppRegistry.registerComponent('MyApp', () => App);
 
 ## Test Runners
 
-A test runner defines how tests are executed on a specific platform. React Native Harness supports three platform types:
+A test runner defines how tests are executed on a specific platform. React Native Harness uses platform-specific packages to create runners with type-safe configurations.
 
 ### Android Runner
 
-```typescript
-{
-  name: string;                    // Unique identifier for this runner
-  platform: 'android';
-  deviceId: string;                // Android emulator/device ID
-  bundleId: string;                // Android application ID
-  activityName?: string;           // Main activity name (default: '.MainActivity')
-}
+Install the Android platform package:
+
+```bash
+npm install @react-native-harness/platform-android
 ```
 
-**Example:**
+**Usage:**
 
 ```javascript
-{
-  name: 'android-pixel',
-  platform: 'android',
-  deviceId: 'Pixel_8_API_35',
+import {
+  androidPlatform,
+  androidEmulator,
+  physicalAndroidDevice,
+} from '@react-native-harness/platform-android';
+
+// Emulator configuration
+androidPlatform({
+  name: 'android-emulator',
+  device: androidEmulator('Pixel_8_API_35'),
   bundleId: 'com.myapp.debug',
-  activityName: '.MainActivity',
-}
+});
+
+// Physical device configuration
+androidPlatform({
+  name: 'android-device',
+  device: physicalAndroidDevice('Motorola', 'Moto G72'),
+  bundleId: 'com.myapp.debug',
+});
 ```
 
-### iOS Runner
+### Apple (iOS) Runner
 
-```typescript
-{
-  name: string; // Unique identifier for this runner
-  platform: 'ios';
-  deviceId: string; // iOS simulator/device ID
-  bundleId: string; // iOS bundle identifier
-  systemVersion: string; // iOS system version
-}
+Install the Apple platform package:
+
+```bash
+npm install @react-native-harness/platform-apple
 ```
 
-**Example:**
+**Usage:**
 
 ```javascript
-{
-  name: 'ios-iphone',
-  platform: 'ios',
-  deviceId: 'iPhone 16 Pro',
+import {
+  applePlatform,
+  appleSimulator,
+  applePhysicalDevice,
+} from '@react-native-harness/platform-apple';
+
+// Simulator configuration
+applePlatform({
+  name: 'ios-simulator',
+  device: appleSimulator('iPhone 16 Pro', '18.0'),
   bundleId: 'com.myapp',
-  systemVersion: '18.0',
-}
+});
+
+// Physical device configuration
+applePlatform({
+  name: 'ios-device',
+  device: applePhysicalDevice('iPhone (Your Name)'),
+  bundleId: 'com.myapp',
+});
+```
+
+### Vega Runner
+
+Install the Vega platform package:
+
+```bash
+npm install @react-native-harness/platform-vega
+```
+
+**Usage:**
+
+```javascript
+import {
+  vegaPlatform,
+  vegaEmulator,
+} from '@react-native-harness/platform-vega';
+
+vegaPlatform({
+  name: 'vega',
+  device: vegaEmulator('VegaTV_1'),
+  bundleId: 'com.myapp',
+});
 ```
 
 ## Default Runner
@@ -145,13 +190,30 @@ A test runner defines how tests are executed on a specific platform. React Nativ
 When you have multiple runners configured, you can specify which one to use by default when no runner is explicitly specified in the CLI command.
 
 ```javascript
-{
+import {
+  androidPlatform,
+  androidEmulator,
+} from '@react-native-harness/platform-android';
+import {
+  applePlatform,
+  appleSimulator,
+} from '@react-native-harness/platform-apple';
+
+const config = {
   runners: [
-    { name: 'android', platform: 'android', /* ... */ },
-    { name: 'ios', platform: 'ios', /* ... */ },
+    androidPlatform({
+      name: 'android',
+      device: androidEmulator('Pixel_8_API_35'),
+      bundleId: 'com.myapp',
+    }),
+    applePlatform({
+      name: 'ios',
+      device: appleSimulator('iPhone 16 Pro', '18.0'),
+      bundleId: 'com.myapp',
+    }),
   ],
-  defaultRunner: 'android',  // Will use Android runner by default
-}
+  defaultRunner: 'android', // Will use Android runner by default
+};
 ```
 
 If no `defaultRunner` is specified, you must explicitly provide the `--harnessRunner` flag when running tests:
@@ -190,6 +252,11 @@ You can create different configurations for different environments:
 **rn-harness.config.mjs**
 
 ```javascript
+import {
+  androidPlatform,
+  androidEmulator,
+} from '@react-native-harness/platform-android';
+
 const isDevelopment = process.env.NODE_ENV === 'development';
 const isCI = process.env.CI === 'true';
 
@@ -197,21 +264,19 @@ const config = {
   runners: isDevelopment
     ? [
         // Development runners with local simulators
-        {
+        androidPlatform({
           name: 'android',
-          platform: 'android',
-          deviceId: 'Pixel_8_API_35',
+          device: androidEmulator('Pixel_8_API_35'),
           bundleId: 'com.myapp.debug',
-        },
+        }),
       ]
     : [
         // CI runners with headless or cloud devices
-        {
+        androidPlatform({
           name: 'android',
-          platform: 'android',
-          deviceId: 'emulator-5554',
+          device: androidEmulator('emulator-5554'),
           bundleId: 'com.myapp.debug',
-        },
+        }),
       ],
 
   bridgeTimeout: isCI ? 180000 : 60000, // Longer timeout in CI
@@ -241,5 +306,5 @@ xcrun simctl list devices
 The device ID is the name shown in the simulator list (e.g., "iPhone 16 Pro", "iPad Air").
 
 :::info System Version Required
-React Native Harness requires the `systemVersion` field for iOS runners because there can be multiple simulators with the same device name but different iOS versions (e.g., "iPhone 16 Pro" with iOS 17.0 and "iPhone 16 Pro" with iOS 18.0). The system version ensures Harness targets the correct simulator.
+React Native Harness requires the iOS version to be specified when using `appleSimulator()` because there can be multiple simulators with the same device name but different iOS versions (e.g., "iPhone 16 Pro" with iOS 17.0 and "iPhone 16 Pro" with iOS 18.0). The system version ensures Harness targets the correct simulator.
 :::
