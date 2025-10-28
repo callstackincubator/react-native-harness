@@ -21,6 +21,9 @@
   ],
   "references": [
     {
+      "path": "../bundler-metro/tsconfig.lib.json"
+    },
+    {
       "path": "../platforms/tsconfig.lib.json"
     },
     {

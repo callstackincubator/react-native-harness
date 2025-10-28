@@ -5,13 +5,12 @@ import {
 import type { Config as JestConfig } from 'jest-runner';
 import {
   getHarness as getHarnessExternal,
-  NoRunnerSpecifiedError,
-  RunnerNotFoundError,
   type Harness,
 } from '@react-native-harness/cli/external';
 import { preRunMessage } from 'jest-util';
 import { getAdditionalCliArgs, HarnessCliArgs } from './cli-args.js';
 import { logTestEnvironmentReady, logTestRunHeader } from './logs.js';
+import { NoRunnerSpecifiedError, RunnerNotFoundError } from './errors.js';
 import { HarnessPlatform } from '@react-native-harness/platforms';
 
 const getHarnessConfig = async (
@@ -29,7 +28,7 @@ const getHarnessRunner = (
   const selectedRunnerName = cliArgs.harnessRunner ?? config.defaultRunner;
 
   if (!selectedRunnerName) {
-    throw new NoRunnerSpecifiedError(config.runners);
+    throw new NoRunnerSpecifiedError();
   }
 
   const runner = config.runners.find(
@@ -37,7 +36,7 @@ const getHarnessRunner = (
   );
 
   if (!runner) {
-    throw new RunnerNotFoundError(selectedRunnerName, config.runners);
+    throw new RunnerNotFoundError(selectedRunnerName);
   }
 
   return runner;

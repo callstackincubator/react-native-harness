@@ -11,9 +11,10 @@ import type {
 import pLimit from 'p-limit';
 import { runHarnessTestFile } from './run.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
-import { formatError, type Harness } from '@react-native-harness/cli/external';
+import { type Harness } from '@react-native-harness/cli/external';
 import { setup } from './setup.js';
 import { teardown } from './teardown.js';
+import { HarnessError } from '@react-native-harness/tools';
 
 class CancelRun extends Error {
   constructor(message?: string) {
@@ -60,8 +61,12 @@ export default class JestHarness implements CallbackTestRunnerInterface {
         onFailure
       );
     } catch (error) {
-      // Jest will print strings as they are, without processing them further.
-      throw formatError(error);
+      if (error instanceof HarnessError) {
+        // Jest will print strings as they are, without processing them further.
+        throw error.message;
+      }
+
+      throw error;
     } finally {
       // This is necessary as Harness may throw and we want to catch it and display a helpful error message.
       await teardown(this.#globalConfig);

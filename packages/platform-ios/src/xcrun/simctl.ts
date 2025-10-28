@@ -1,4 +1,4 @@
-import { spawn } from '@react-native-harness/tools';
+import { spawn, spawnAndForget } from '@react-native-harness/tools';
 
 const plistToJson = async (plistOutput: string): Promise<any> => {
   const { stdout: jsonOutput } = await spawn(
@@ -105,7 +105,8 @@ export const stopApp = async (
   udid: string,
   bundleId: string
 ): Promise<void> => {
-  await spawn('xcrun', ['simctl', 'terminate', udid, bundleId]);
+  // We don't care about the error here.
+  await spawnAndForget('xcrun', ['simctl', 'terminate', udid, bundleId]);
 };
 
 export const getSimulatorId = async (

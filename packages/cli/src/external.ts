@@ -1,8 +1,7 @@
 import { getBridgeServer } from '@react-native-harness/bridge/server';
-import { runMetro } from './bundlers/metro.js';
 import { BridgeClientFunctions } from '@react-native-harness/bridge';
 import { HarnessPlatform } from '@react-native-harness/platforms';
-import { killWithAwait } from './process.js';
+import { getMetroInstance } from '@react-native-harness/bundler-metro';
 
 export type Harness = {
   runTests: BridgeClientFunctions['runTests'];
@@ -13,8 +12,8 @@ export type Harness = {
 export const getHarness = async (
   platform: HarnessPlatform
 ): Promise<Harness> => {
-  const [metro, platformInstance, serverBridge] = await Promise.all([
-    runMetro(),
+  const [metroInstance, platformInstance, serverBridge] = await Promise.all([
+    getMetroInstance(),
     platform.getInstance(),
     getBridgeServer({
       port: 3001,
@@ -41,11 +40,8 @@ export const getHarness = async (
       await Promise.all([
         serverBridge.dispose(),
         platformInstance.dispose(),
-        killWithAwait(metro),
+        metroInstance.dispose(),
       ]);
     },
   };
 };
-
-export { formatError } from './errors/errorHandler.js';
-export * from './errors/errors.js';

@@ -4,19 +4,7 @@
   "include": [],
   "references": [
     {
-      "path": "../bundler-metro"
-    },
-    {
-      "path": "../platforms"
-    },
-    {
       "path": "../tools"
-    },
-    {
-      "path": "../config"
-    },
-    {
-      "path": "../bridge"
     },
     {
       "path": "./tsconfig.lib.json"
