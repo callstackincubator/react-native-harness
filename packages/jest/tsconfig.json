@@ -4,6 +4,9 @@
   "include": [],
   "references": [
     {
+      "path": "../bundler-metro"
+    },
+    {
       "path": "../tools"
     },
     {
@@ -11,9 +14,6 @@
     },
     {
       "path": "../config"
-    },
-    {
-      "path": "../cli"
     },
     {
       "path": "../bridge"

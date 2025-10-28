@@ -10,25 +10,8 @@
     "types": ["node"],
     "lib": ["DOM"]
   },
-  "include": [
-    "src/**/*.ts",
-    "../tools/src/abort.ts",
-    "../tools/src/color.ts",
-    "../tools/src/isInteractive.ts",
-    "../tools/src/logger.ts",
-    "../tools/src/prompts.ts",
-    "../tools/src/spawn.ts"
-  ],
+  "include": ["src/**/*.ts"],
   "references": [
-    {
-      "path": "../bundler-metro/tsconfig.lib.json"
-    },
-    {
-      "path": "../platforms/tsconfig.lib.json"
-    },
-    {
-      "path": "../tools/tsconfig.lib.json"
-    },
     {
       "path": "../config/tsconfig.lib.json"
     },

@@ -11,7 +11,7 @@ import type {
 import pLimit from 'p-limit';
 import { runHarnessTestFile } from './run.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
-import { type Harness } from '@react-native-harness/cli/external';
+import { type Harness } from './harness.js';
 import { setup } from './setup.js';
 import { teardown } from './teardown.js';
 import { HarnessError } from '@react-native-harness/tools';

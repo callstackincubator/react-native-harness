@@ -5,7 +5,7 @@ import type {
   TestSuiteResult as HarnessTestSuiteResult,
   TestResult as HarnessTestResult,
 } from '@react-native-harness/bridge';
-import type { Harness } from '@react-native-harness/cli/external';
+import type { Harness } from './harness.js';
 import { formatResultsErrors } from 'jest-message-util';
 import { toTestResult } from './toTestResult.js';
 

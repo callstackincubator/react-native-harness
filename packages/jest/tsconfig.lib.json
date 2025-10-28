@@ -13,6 +13,9 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
+      "path": "../bundler-metro/tsconfig.lib.json"
+    },
+    {
       "path": "../tools/tsconfig.lib.json"
     },
     {
@@ -20,9 +23,6 @@
     },
     {
       "path": "../config/tsconfig.lib.json"
-    },
-    {
-      "path": "../cli/tsconfig.lib.json"
     },
     {
       "path": "../bridge/tsconfig.lib.json"

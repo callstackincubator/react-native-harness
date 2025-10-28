@@ -3,10 +3,7 @@ import {
   type Config as HarnessConfig,
 } from '@react-native-harness/config';
 import type { Config as JestConfig } from 'jest-runner';
-import {
-  getHarness as getHarnessExternal,
-  type Harness,
-} from '@react-native-harness/cli/external';
+import { getHarness as getHarnessExternal, type Harness } from './harness.js';
 import { preRunMessage } from 'jest-util';
 import { getAdditionalCliArgs, HarnessCliArgs } from './cli-args.js';
 import { logTestEnvironmentReady, logTestRunHeader } from './logs.js';

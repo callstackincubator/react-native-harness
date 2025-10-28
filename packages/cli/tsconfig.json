@@ -4,15 +4,6 @@
   "include": [],
   "references": [
     {
-      "path": "../bundler-metro"
-    },
-    {
-      "path": "../platforms"
-    },
-    {
-      "path": "../tools"
-    },
-    {
       "path": "../config"
     },
     {
