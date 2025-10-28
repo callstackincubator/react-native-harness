@@ -149,15 +149,13 @@ jobs:
 
   e2e-ios:
     name: E2E iOS - ${{ matrix.app }}
-    runs-on: macos-latest
+    runs-on: macos-26-arm64
     needs: discover-apps
     if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios' }}
     strategy:
       fail-fast: false
       matrix:
         app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_16.4.0.app/Contents/Developer
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
