@@ -68,6 +68,7 @@ export const getMetroInstance = async (
         ...process.env,
         RN_HARNESS: 'true',
         ...(isExpo && { EXPO_NO_METRO_WORKSPACE_ROOT: 'true' }),
+        DEBUG: '*',
       },
     }
   );
