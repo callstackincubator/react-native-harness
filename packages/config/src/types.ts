@@ -1,39 +1,5 @@
 import { z } from 'zod';
 
-export const PlatformSchema = z.enum(['ios', 'android', 'web', 'vega']);
-
-export const BrowserTypeSchema = z.enum(['chrome', 'firefox', 'safari']);
-
-export const iOSTestRunnerConfigSchema = z.object({
-  name: z.string().min(1, 'Runner name is required'),
-  platform: z.literal('ios'),
-  deviceId: z.string().min(1, 'Device ID is required'),
-  bundleId: z.string().min(1, 'Bundle ID is required'),
-  systemVersion: z.string().min(1, 'System version is required'),
-});
-
-export const WebTestRunnerConfigSchema = z.object({
-  name: z.string().min(1, 'Runner name is required'),
-  platform: z.literal('web'),
-  browser: BrowserTypeSchema,
-});
-
-export const VegaTestRunnerConfigSchema = z.object({
-  name: z.string().min(1, 'Runner name is required'),
-  platform: z.literal('vega'),
-  deviceId: z
-    .string()
-    .min(
-      1,
-      'Virtual device instance name is required (e.g., "VegaTV_1", "VegaTV_Debug")'
-    ),
-  bundleId: z
-    .string()
-    .min(1, 'Bundle ID is required (package identifier from manifest.toml)'),
-  buildType: z.enum(['Debug', 'Release']).default('Release'),
-  target: z.enum(['sim_tv_x86_64', 'sim_tv_aarch64']).default('sim_tv_x86_64'),
-});
-
 export const ConfigSchema = z
   .object({
     entryPoint: z.string().min(1, 'Entry point is required'),
@@ -68,9 +34,4 @@ export const ConfigSchema = z
     }
   );
 
-export type Platform = z.infer<typeof PlatformSchema>;
-export type BrowserType = z.infer<typeof BrowserTypeSchema>;
-export type iOSTestRunnerConfig = z.infer<typeof iOSTestRunnerConfigSchema>;
-export type WebTestRunnerConfig = z.infer<typeof WebTestRunnerConfigSchema>;
-export type VegaTestRunnerConfig = z.infer<typeof VegaTestRunnerConfigSchema>;
 export type Config = z.infer<typeof ConfigSchema>;
