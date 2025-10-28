@@ -35,7 +35,7 @@ const config = {
     }),
     applePlatform({
       name: 'ios',
-      device: appleSimulator('iPhone 16 Pro Max', '18.0'),
+      device: appleSimulator('iPhone 16 Pro', '18.6'),
       bundleId: 'org.reactjs.native.example.Playground',
     }),
     vegaPlatform({
