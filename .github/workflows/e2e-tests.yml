@@ -177,19 +177,11 @@ jobs:
         run: |
           pnpm install
 
-      - name: Get build products directory
-        id: get-build-dir
-        working-directory: apps/${{ matrix.app }}/ios
-        run: |
-          BUILD_DIR=$(xcodebuild -showBuildSettings -workspace Playground.xcworkspace -scheme Playground -configuration Debug -sdk iphonesimulator -destination "platform=iOS Simulator,name=iPhone 16 Pro" 2>/dev/null | grep -w BUILT_PRODUCTS_DIR | awk '{print $3}')
-          echo "build_dir=$BUILD_DIR" >> $GITHUB_OUTPUT
-          echo "Build products directory: $BUILD_DIR"
-
       - name: Restore app from cache
         id: cache-app-restore
         uses: actions/cache/restore@v4
         with:
-          path: ${{ steps.get-build-dir.outputs.build_dir }}/Playground.app
+          path: ./apps/${{ matrix.app }}/ios/build/Build/Products/Debug-iphonesimulator/Playground.app
           key: ios-app-${{ matrix.app }}
 
       - name: CocoaPods cache
@@ -214,13 +206,13 @@ jobs:
         if: steps.cache-app-restore.outputs.cache-hit != 'true'
         working-directory: apps/${{ matrix.app }}
         run: |
-          pnpm react-native build-ios --verbose
+          pnpm react-native build-ios --buildFolder ./build --verbose
 
       - name: Save app to cache
         if: steps.cache-app-restore.outputs.cache-hit != 'true' && success()
         uses: actions/cache/save@v4
         with:
-          path: ${{ steps.get-build-dir.outputs.build_dir }}/Playground.app
+          path: ./apps/${{ matrix.app }}/ios/build/Build/Products/Debug-iphonesimulator/Playground.app
           key: ios-app-${{ matrix.app }}
 
       - uses: futureware-tech/simulator-action@v4
@@ -233,7 +225,7 @@ jobs:
 
       - name: Install app
         run: |
-          xcrun simctl install booted ${{ steps.get-build-dir.outputs.build_dir }}/Playground.app
+          xcrun simctl install booted ./apps/${{ matrix.app }}/ios/build/Build/Products/Debug-iphonesimulator/Playground.app
 
       - name: Run E2E tests
         run: |
