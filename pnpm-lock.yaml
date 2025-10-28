@@ -187,6 +187,9 @@ importers:
       '@react-native-harness/platform-apple':
         specifier: workspace:*
         version: link:../../packages/platform-ios
+      '@react-native-harness/platform-vega':
+        specifier: workspace:*
+        version: link:../../packages/platform-vega
       jest:
         specifier: ^30.2.0
         version: 30.2.0(@types/node@18.16.9)(babel-plugin-macros@3.1.0)(ts-node@9.1.1(typescript@5.8.3))
@@ -338,6 +341,21 @@ importers:
         version: 3.25.67
 
   packages/platform-ios:
+    dependencies:
+      '@react-native-harness/platforms':
+        specifier: workspace:*
+        version: link:../platforms
+      '@react-native-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
+      zod:
+        specifier: ^3.25.67
+        version: 3.25.67
+
+  packages/platform-vega:
     dependencies:
       '@react-native-harness/platforms':
         specifier: workspace:*

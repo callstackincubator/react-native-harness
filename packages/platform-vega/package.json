@@ -1,0 +1,24 @@
+{
+  "name": "@react-native-harness/platform-vega",
+  "version": "1.0.0-alpha.17",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@react-native-harness/platforms": "workspace:*",
+    "@react-native-harness/tools": "workspace:*",
+    "zod": "^3.25.67",
+    "tslib": "^2.3.0"
+  },
+  "license": "MIT"
+}

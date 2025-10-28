@@ -1,5 +1,6 @@
 import {
   DeviceNotFoundError,
+  AppNotInstalledError,
   HarnessPlatform,
 } from '@react-native-harness/platforms';
 import {
@@ -37,6 +38,15 @@ export const androidPlatform = (
 
     if (!adbId) {
       throw new DeviceNotFoundError(getDeviceName(parsedConfig.device));
+    }
+
+    const isInstalled = await adb.isAppInstalled(adbId, parsedConfig.bundleId);
+
+    if (!isInstalled) {
+      throw new AppNotInstalledError(
+        parsedConfig.bundleId,
+        getDeviceName(parsedConfig.device)
+      );
     }
 
     if (isAndroidDevicePhysical(parsedConfig.device)) {

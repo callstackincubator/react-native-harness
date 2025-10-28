@@ -8,6 +8,10 @@ import {
   applePhysicalDevice,
   appleSimulator,
 } from '@react-native-harness/platform-apple';
+import {
+  vegaPlatform,
+  vegaEmulator,
+} from '@react-native-harness/platform-vega';
 
 const config = {
   entryPoint: './src/main.tsx',
@@ -33,6 +37,11 @@ const config = {
       name: 'ios',
       device: appleSimulator('iPhone 16 Pro Max', '18.0'),
       bundleId: 'org.reactjs.native.example.Playground',
+    }),
+    vegaPlatform({
+      name: 'vega',
+      device: vegaEmulator('VegaTV_1'),
+      bundleId: 'com.playground',
     }),
   ],
   defaultRunner: 'android',

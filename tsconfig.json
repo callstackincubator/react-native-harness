@@ -44,6 +44,9 @@
     },
     {
       "path": "./packages/platform-ios"
+    },
+    {
+      "path": "./packages/platform-vega"
     }
   ]
 }

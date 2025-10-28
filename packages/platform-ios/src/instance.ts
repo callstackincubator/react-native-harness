@@ -26,6 +26,15 @@ export const getAppleSimulatorPlatformInstance = async (
     throw new DeviceNotFoundError(getDeviceName(config.device));
   }
 
+  const isInstalled = await simctl.isAppInstalled(udid, config.bundleId);
+
+  if (!isInstalled) {
+    throw new AppNotInstalledError(
+      config.bundleId,
+      getDeviceName(config.device)
+    );
+  }
+
   const simulatorStatus = await simctl.getSimulatorStatus(udid);
 
   if (simulatorStatus !== 'Booted') {
