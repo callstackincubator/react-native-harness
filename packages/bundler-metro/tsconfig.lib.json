@@ -13,6 +13,9 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
+      "path": "../metro/tsconfig.lib.json"
+    },
+    {
       "path": "../tools/tsconfig.lib.json"
     }
   ]

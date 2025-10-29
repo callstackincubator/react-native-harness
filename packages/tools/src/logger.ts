@@ -10,7 +10,7 @@ const unicodeWithFallback = (c: string, fallback: string) =>
 
 const SYMBOL_DEBUG = unicodeWithFallback('●', '•');
 
-let verbose = !!process.env.DEBUG;
+let verbose = !!process.env.HARNESS_DEBUG;
 
 const success = (...messages: Array<unknown>) => {
   const output = util.format(...messages);

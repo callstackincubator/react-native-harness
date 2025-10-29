@@ -14,8 +14,11 @@ import {
 import { METRO_PORT } from './constants.js';
 import type { MetroInstance } from './types.js';
 import assert from 'node:assert';
+import { createRequire } from 'node:module';
 
 const DEV_SERVER_READY_MESSAGE = 'Dev server ready';
+
+const require = createRequire(import.meta.url);
 
 const waitForReady = (
   metroProcess: ChildProcess,
@@ -62,13 +65,14 @@ export const getMetroInstance = async (
       'start',
       '--port',
       METRO_PORT.toString(),
+      '--customLogReporterPath',
+      require.resolve('@react-native-harness/metro/json-reporter'),
     ],
     {
       env: {
         ...process.env,
         RN_HARNESS: 'true',
         ...(isExpo && { EXPO_NO_METRO_WORKSPACE_ROOT: 'true' }),
-        DEBUG: '*',
       },
     }
   );
