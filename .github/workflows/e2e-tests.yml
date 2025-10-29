@@ -23,8 +23,6 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       apps: ${{ steps.set-apps.outputs.apps }}
-    env:
-      HARNESS_DEBUG: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,9 +41,11 @@ jobs:
 
   e2e-android:
     name: E2E Android - ${{ matrix.app }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: discover-apps
     if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android' }}
+    env:
+      HARNESS_DEBUG: true
     strategy:
       fail-fast: false
       matrix:
