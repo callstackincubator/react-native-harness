@@ -266,6 +266,9 @@ importers:
 
   packages/config:
     dependencies:
+      '@react-native-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
