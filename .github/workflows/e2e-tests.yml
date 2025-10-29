@@ -20,7 +20,7 @@ on:
 jobs:
   discover-apps:
     name: Discover Apps
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       apps: ${{ steps.set-apps.outputs.apps }}
     steps:
@@ -50,14 +50,6 @@ jobs:
         app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
 
     steps:
-      - name: Delete unnecessary tools
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          android: false # Don't remove Android tools
-          tool-cache: true # Remove image tool cache - rm -rf "$AGENT_TOOLSDIRECTORY"
-          docker-images: false # Takes 16s, enable if needed in the future
-          large-packages: false # includes google-cloud-sdk and it's slow
-
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -69,7 +61,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '23'
+          node-version: '24.10.0'
           cache: 'pnpm'
 
       - name: Install dependencies
