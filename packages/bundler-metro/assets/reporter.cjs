@@ -17,6 +17,7 @@ class HarnessReporter {
       });
     }
     this._stream.write(JSON.stringify(event) + '\n');
+    process.stdout.write(JSON.stringify(event) + '\n');
   }
 }
 
