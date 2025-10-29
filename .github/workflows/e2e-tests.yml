@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       apps: ${{ steps.set-apps.outputs.apps }}
+    env:
+      HARNESS_DEBUG: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
