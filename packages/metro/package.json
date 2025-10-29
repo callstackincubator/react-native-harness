@@ -12,12 +12,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./json-reporter": {
-      "development": "./src/json-reporter.ts",
-      "types": "./dist/json-reporter.d.ts",
-      "import": "./dist/json-reporter.js",
-      "default": "./dist/json-reporter.js"
     }
   },
   "peerDependencies": {
