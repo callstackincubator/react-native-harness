@@ -5,7 +5,6 @@ import {
 } from '@react-native-harness/platforms';
 import {
   AndroidPlatformConfigSchema,
-  isAndroidDevicePhysical,
   type AndroidEmulator,
   type AndroidPlatformConfig,
   type PhysicalAndroidDevice,
@@ -49,14 +48,11 @@ export const androidPlatform = (
       );
     }
 
-    if (isAndroidDevicePhysical(parsedConfig.device)) {
-      // Reverse ports to allow the app to load from a local machine.
-      await Promise.all([
-        adb.reversePort(adbId, 8081),
-        adb.reversePort(adbId, 8080),
-        adb.reversePort(adbId, 3001),
-      ]);
-    }
+    await Promise.all([
+      adb.reversePort(adbId, 8081),
+      adb.reversePort(adbId, 8080),
+      adb.reversePort(adbId, 3001),
+    ]);
 
     return {
       startApp: async () => {
