@@ -76,6 +76,10 @@ jobs:
         run: |
           pnpm install
 
+      - name: Build packages
+        run: |
+          pnpm nx run-many -t build --projects="packages/*"
+
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
@@ -152,8 +156,6 @@ jobs:
     runs-on: macos-latest
     needs: discover-apps
     if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios' }}
-    env:
-      NODE_OPTIONS: '--max-old-space-size=4096 --max-semi-space-size=64'
     strategy:
       fail-fast: false
       matrix:
@@ -179,6 +181,10 @@ jobs:
       - name: Install dependencies
         run: |
           pnpm install
+
+      - name: Build packages
+        run: |
+          pnpm nx run-many -t build --projects="packages/*"
 
       - name: Restore app from cache
         id: cache-app-restore
@@ -232,7 +238,6 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          pnpm nx run-many -t build --projects="packages/*"
           pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="--harnessRunner ios"
 
       - name: Capture simulator screenshot on failure
