@@ -39,8 +39,11 @@ const getHarnessRunner = (
   return runner;
 };
 
-const getHarness = async (runner: HarnessPlatform): Promise<Harness> => {
-  return await getHarnessExternal(runner);
+const getHarness = async (
+  runner: HarnessPlatform,
+  timeout: number
+): Promise<Harness> => {
+  return await getHarnessExternal(runner, timeout);
 };
 
 export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
@@ -75,7 +78,7 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   }
 
   logTestRunHeader(selectedRunner);
-  const harness = await getHarness(selectedRunner);
+  const harness = await getHarness(selectedRunner, harnessConfig.bridgeTimeout);
   logTestEnvironmentReady(selectedRunner);
 
   global.HARNESS_CONFIG = harnessConfig;

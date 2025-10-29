@@ -13,3 +13,10 @@ export class RunnerNotFoundError extends HarnessError {
     this.name = 'RunnerNotFoundError';
   }
 }
+
+export class InitializationTimeoutError extends HarnessError {
+  constructor() {
+    super('The Harness did not become ready within the timeout period.');
+    this.name = 'InitializationTimeoutError';
+  }
+}
