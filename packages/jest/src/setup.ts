@@ -78,8 +78,6 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   const harness = await getHarness(selectedRunner);
   logTestEnvironmentReady(selectedRunner);
 
-  await harness.restart();
-
   global.HARNESS_CONFIG = harnessConfig;
   global.HARNESS = harness;
 };

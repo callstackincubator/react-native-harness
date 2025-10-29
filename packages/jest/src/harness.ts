@@ -20,6 +20,15 @@ export const getHarness = async (
     }),
   ]);
 
+  const restart = () =>
+    new Promise<void>((resolve, reject) => {
+      serverBridge.once('ready', () => resolve());
+      platformInstance.restartApp().catch(reject);
+    });
+
+  // Wait for the bridge to be ready
+  await restart();
+
   return {
     runTests: async (path, options) => {
       const client = serverBridge.rpc.clients.at(-1);
@@ -30,12 +39,7 @@ export const getHarness = async (
 
       return await client.runTests(path, options);
     },
-    restart: () => {
-      return new Promise<void>((resolve, reject) => {
-        serverBridge.once('ready', () => resolve());
-        platformInstance.restartApp().catch(reject);
-      });
-    },
+    restart,
     dispose: async () => {
       await Promise.all([
         serverBridge.dispose(),
