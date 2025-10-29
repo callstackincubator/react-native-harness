@@ -152,6 +152,8 @@ jobs:
     runs-on: macos-latest
     needs: discover-apps
     if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios' }}
+    env:
+      NODE_OPTIONS: '--max-old-space-size=4096 --max-semi-space-size=64'
     strategy:
       fail-fast: false
       matrix:
