@@ -1,0 +1,16 @@
+diff --git a/src/index.flow.js b/src/index.flow.js
+index b6aa228bd4cabdc6fef4663a6417c492954a65e1..91cf0cc785c0414b6ee0395ddd5ea54ff49743c2 100644
+--- a/src/index.flow.js
++++ b/src/index.flow.js
+@@ -138,9 +138,9 @@ exports.runServer = async (
+     end: endMiddleware,
+     metroServer,
+   } = await createConnectMiddleware(config, {
+-    hasReducedPerformance,
++    hasReducedPerformance: true,
+     waitForBundler,
+-    watch,
++    watch: false,
+   });
+   for (const handler of unstable_extraMiddleware ?? []) {
+     serverApp.use(handler);
