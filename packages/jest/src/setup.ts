@@ -3,7 +3,7 @@ import {
   type Config as HarnessConfig,
 } from '@react-native-harness/config';
 import type { Config as JestConfig } from 'jest-runner';
-import { getHarness as getHarnessExternal, type Harness } from './harness.js';
+import { getHarness } from './harness.js';
 import { preRunMessage } from 'jest-util';
 import { getAdditionalCliArgs, HarnessCliArgs } from './cli-args.js';
 import { logTestEnvironmentReady, logTestRunHeader } from './logs.js';
@@ -39,13 +39,6 @@ const getHarnessRunner = (
   return runner;
 };
 
-const getHarness = async (
-  runner: HarnessPlatform,
-  timeout: number
-): Promise<Harness> => {
-  return await getHarnessExternal(runner, timeout);
-};
-
 export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   preRunMessage.remove(process.stderr);
   const harnessConfig =
@@ -78,7 +71,7 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   }
 
   logTestRunHeader(selectedRunner);
-  const harness = await getHarness(selectedRunner, harnessConfig.bridgeTimeout);
+  const harness = await getHarness(harnessConfig, selectedRunner);
   logTestEnvironmentReady(selectedRunner);
 
   global.HARNESS_CONFIG = harnessConfig;

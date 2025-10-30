@@ -9,9 +9,11 @@ import type {
   BridgeEvents,
 } from './shared.js';
 import { deserialize, serialize } from './serializer.js';
+import { DeviceNotRespondingError } from './errors.js';
 
 export type BridgeServerOptions = {
   port: number;
+  timeout?: number;
 };
 
 export type BridgeServerEvents = {
@@ -39,6 +41,7 @@ export type BridgeServer = {
 
 export const getBridgeServer = async ({
   port,
+  timeout,
 }: BridgeServerOptions): Promise<BridgeServer> => {
   const wss = await new Promise<WebSocketServer>((resolve) => {
     const server = new WebSocketServer({ port, host: '0.0.0.0' }, () => {
@@ -57,7 +60,13 @@ export const getBridgeServer = async ({
         emitter.emit('event', data);
       },
     } satisfies BridgeServerFunctions,
-    []
+    [],
+    {
+      timeout,
+      onTimeoutError(functionName, args) {
+        throw new DeviceNotRespondingError(functionName, args);
+      },
+    }
   );
 
   wss.on('connection', (ws: WebSocket) => {

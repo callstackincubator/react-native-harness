@@ -3,6 +3,7 @@ import { BridgeClientFunctions } from '@react-native-harness/bridge';
 import { HarnessPlatform } from '@react-native-harness/platforms';
 import { getMetroInstance } from '@react-native-harness/bundler-metro';
 import { InitializationTimeoutError } from './errors.js';
+import { Config as HarnessConfig } from '@react-native-harness/config';
 
 export type Harness = {
   runTests: BridgeClientFunctions['runTests'];
@@ -11,6 +12,7 @@ export type Harness = {
 };
 
 const getHarnessInternal = async (
+  config: HarnessConfig,
   platform: HarnessPlatform,
   signal: AbortSignal
 ): Promise<Harness> => {
@@ -19,24 +21,41 @@ const getHarnessInternal = async (
     platform.getInstance(),
     getBridgeServer({
       port: 3001,
+      timeout: config.bridgeTimeout,
     }),
   ]);
 
+  const dispose = async () => {
+    await Promise.all([
+      serverBridge.dispose(),
+      platformInstance.dispose(),
+      metroInstance.dispose(),
+    ]);
+  };
+
   if (signal.aborted) {
-    metroInstance.dispose();
-    platformInstance.dispose();
-    serverBridge.dispose();
-    signal.throwIfAborted();
+    await dispose();
+
+    throw new DOMException('The operation was aborted', 'AbortError');
   }
 
   const restart = () =>
     new Promise<void>((resolve, reject) => {
+      signal.addEventListener('abort', () => {
+        reject(new DOMException('The operation was aborted', 'AbortError'));
+      });
+
       serverBridge.once('ready', () => resolve());
       platformInstance.restartApp().catch(reject);
     });
 
   // Wait for the bridge to be ready
-  await restart();
+  try {
+    await restart();
+  } catch (error) {
+    await dispose();
+    throw error;
+  }
 
   return {
     runTests: async (path, options) => {
@@ -49,25 +68,18 @@ const getHarnessInternal = async (
       return await client.runTests(path, options);
     },
     restart,
-    dispose: async () => {
-      await Promise.all([
-        serverBridge.dispose(),
-        platformInstance.dispose(),
-        metroInstance.dispose(),
-      ]);
-    },
+    dispose,
   };
 };
 
 export const getHarness = async (
-  platform: HarnessPlatform,
-  timeout: number
+  config: HarnessConfig,
+  platform: HarnessPlatform
 ): Promise<Harness> => {
-  const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), timeout);
+  const abortSignal = AbortSignal.timeout(config.bridgeTimeout);
+
   try {
-    const harness = await getHarnessInternal(platform, abortController.signal);
-    clearTimeout(timeoutId);
+    const harness = await getHarnessInternal(config, platform, abortSignal);
     return harness;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {

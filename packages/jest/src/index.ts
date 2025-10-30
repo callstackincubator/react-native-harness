@@ -15,6 +15,7 @@ import { type Harness } from './harness.js';
 import { setup } from './setup.js';
 import { teardown } from './teardown.js';
 import { HarnessError } from '@react-native-harness/tools';
+import { getErrorMessage } from './logs.js';
 
 class CancelRun extends Error {
   constructor(message?: string) {
@@ -63,7 +64,7 @@ export default class JestHarness implements CallbackTestRunnerInterface {
     } catch (error) {
       if (error instanceof HarnessError) {
         // Jest will print strings as they are, without processing them further.
-        throw error.message;
+        throw getErrorMessage(error);
       }
 
       throw error;
