@@ -36,6 +36,7 @@ export type {
   SetupFileBundlingFailedEvent,
   BundlerEvents,
 } from './shared/bundler.js';
+export { DeviceNotRespondingError } from './errors.js';
 
 export type DeviceDescriptor = {
   platform: 'ios' | 'android' | 'vega';
