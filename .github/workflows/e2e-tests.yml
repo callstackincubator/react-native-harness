@@ -66,6 +66,14 @@ jobs:
           node-version: '24.10.0'
           cache: 'pnpm'
 
+      - name: Metro cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/rn-harness/metro-cache
+          key: metro-cache-${{ hashFiles('node_modules/.cache/rn-harness/metro-cache/**/*') }}
+          restore-keys: |
+            metro-cache
+
       - name: Install dependencies
         run: |
           pnpm install
@@ -168,6 +176,14 @@ jobs:
         with:
           node-version: '24.10.0'
           cache: 'pnpm'
+
+      - name: Metro cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/rn-harness/metro-cache
+          key: metro-cache-${{ hashFiles('node_modules/.cache/rn-harness/metro-cache/**/*') }}
+          restore-keys: |
+            metro-cache
 
       - name: Install Watchman
         run: brew install watchman

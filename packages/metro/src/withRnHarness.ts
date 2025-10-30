@@ -4,6 +4,7 @@ import { patchModuleSystem } from './moduleSystem';
 import { getHarnessResolver } from './resolver';
 import { getHarnessManifest } from './manifest';
 import { getHarnessBabelTransformerPath } from './babel-transformer';
+import { getHarnessCacheStores } from './metro-cache';
 
 export const withRnHarness = (
   config: MetroConfig | Promise<MetroConfig>
@@ -46,6 +47,7 @@ export const withRnHarness = (
         ...metroConfig.transformer,
         babelTransformerPath: harnessBabelTransformerPath,
       },
+      cacheStores: getHarnessCacheStores(),
     };
 
     if (harnessConfig.unstable__skipAlreadyIncludedModules) {
