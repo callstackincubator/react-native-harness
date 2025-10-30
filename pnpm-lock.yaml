@@ -338,7 +338,7 @@ importers:
         specifier: ^7.20.5
         version: 7.20.5
       metro-cache:
-        specifier: ^0.83.0
+        specifier: '*'
         version: 0.83.3
 
   packages/platform-android:

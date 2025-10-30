@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@types/babel__core": "^7.20.5",
-    "metro-cache": "^0.83.0"
+    "metro-cache": "*"
   },
   "license": "MIT"
 }
