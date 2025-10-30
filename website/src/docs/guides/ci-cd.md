@@ -158,6 +158,10 @@ jobs:
           node-version: '18'
           cache: 'pnpm'
 
+      # Watchman dramatically speeds up file crawling for large projects
+      - name: Install Watchman
+        run: brew install watchman
+
       - name: Install dependencies
         run: pnpm install
 
