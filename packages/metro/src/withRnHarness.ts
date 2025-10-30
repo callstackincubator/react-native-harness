@@ -5,6 +5,9 @@ import { getHarnessResolver } from './resolver';
 import { getHarnessManifest } from './manifest';
 import { getHarnessBabelTransformerPath } from './babel-transformer';
 
+const INTERNAL_CALLSITES_REGEX =
+  /(^|[\\/])(node_modules[/\\]@react-native-harness)([\\/]|$)/;
+
 export const withRnHarness = (
   config: MetroConfig | Promise<MetroConfig>
 ): (() => Promise<MetroConfig>) => {
@@ -35,6 +38,18 @@ export const withRnHarness = (
           ...(metroConfig.serializer?.getPolyfills?.(...args) ?? []),
           harnessManifest,
         ],
+        isThirdPartyModule({ path: modulePath }) {
+          const isThirdPartyByDefault =
+            metroConfig.serializer?.isThirdPartyModule?.({
+              path: modulePath,
+            }) ?? false;
+
+          if (isThirdPartyByDefault) {
+            return true;
+          }
+
+          return INTERNAL_CALLSITES_REGEX.test(modulePath);
+        },
       },
       resolver: {
         ...metroConfig.resolver,
@@ -45,6 +60,26 @@ export const withRnHarness = (
       transformer: {
         ...metroConfig.transformer,
         babelTransformerPath: harnessBabelTransformerPath,
+      },
+      symbolicator: {
+        ...metroConfig.symbolicator,
+        customizeFrame: async (frame) => {
+          const defaultCustomizeFrame =
+            await metroConfig.symbolicator?.customizeFrame?.(frame);
+          const shouldCollapseByDefault =
+            defaultCustomizeFrame?.collapse ?? false;
+
+          if (shouldCollapseByDefault) {
+            return {
+              collapse: true,
+            };
+          }
+
+          return {
+            collapse:
+              frame.file != null && INTERNAL_CALLSITES_REGEX.test(frame.file),
+          };
+        },
       },
     };
 

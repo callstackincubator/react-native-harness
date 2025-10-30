@@ -234,16 +234,16 @@ jobs:
         run: |
           pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="--harnessRunner ios"
 
-      - name: Capture simulator screenshot on failure
+      - name: Take screenshot after E2E tests
         if: failure()
         run: |
           mkdir -p screenshots
-          xcrun simctl io booted screenshot screenshots/ios-failure-${{ matrix.app }}.png
+          xcrun simctl io booted screenshot screenshots/ios-${{ matrix.app }}-after.png
 
-      - name: Upload screenshot artifact
+      - name: Upload iOS screenshots
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-failure-screenshot-${{ matrix.app }}
-          path: screenshots/ios-failure-${{ matrix.app }}.png
+          name: ios-screenshots-${{ matrix.app }}
+          path: screenshots/ios-${{ matrix.app }}-*.png
           retention-days: 7
