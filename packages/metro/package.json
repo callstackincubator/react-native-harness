@@ -15,8 +15,7 @@
     }
   },
   "peerDependencies": {
-    "@react-native-harness/runtime": "workspace:*",
-    "metro-cache": "*"
+    "@react-native-harness/runtime": "workspace:*"
   },
   "dependencies": {
     "tslib": "^2.3.0",
@@ -24,8 +23,7 @@
     "@react-native-harness/babel-preset": "workspace:*"
   },
   "devDependencies": {
-    "@types/babel__core": "^7.20.5",
-    "metro-cache": "*"
+    "@types/babel__core": "^7.20.5"
   },
   "license": "MIT"
 }
