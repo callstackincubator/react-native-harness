@@ -1,10 +1,11 @@
-import { MetroConfig } from '@react-native/metro-config';
+import type { MetroConfig } from '@react-native/metro-config';
 import { getConfig } from '@react-native-harness/config';
 import { patchModuleSystem } from './moduleSystem';
 import { getHarnessResolver } from './resolver';
 import { getHarnessManifest } from './manifest';
 import { getHarnessBabelTransformerPath } from './babel-transformer';
 import { getHarnessCacheStores } from './metro-cache';
+import type { NotReadOnly } from './utils';
 
 export const withRnHarness = (
   config: MetroConfig | Promise<MetroConfig>
@@ -27,7 +28,7 @@ export const withRnHarness = (
     const harnessBabelTransformerPath =
       getHarnessBabelTransformerPath(metroConfig);
 
-    const patchedConfig: MetroConfig = {
+    const patchedConfig: NotReadOnly<MetroConfig> = {
       ...metroConfig,
       cacheVersion: 'react-native-harness',
       serializer: {
@@ -47,8 +48,11 @@ export const withRnHarness = (
         ...metroConfig.transformer,
         babelTransformerPath: harnessBabelTransformerPath,
       },
-      cacheStores: getHarnessCacheStores(),
     };
+
+    if (harnessConfig.unstable__enableMetroCache) {
+      patchedConfig.cacheStores = getHarnessCacheStores();
+    }
 
     if (harnessConfig.unstable__skipAlreadyIncludedModules) {
       patchedConfig.serializer!.customSerializer =
