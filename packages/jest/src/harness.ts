@@ -6,6 +6,8 @@ import { InitializationTimeoutError } from './errors.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
 import pRetry from 'p-retry';
 
+const BRIDGE_READY_TIMEOUT = 10000;
+
 export type Harness = {
   runTests: BridgeClientFunctions['runTests'];
   restart: () => Promise<void>;
@@ -52,8 +54,8 @@ const getHarnessInternal = async (
           platformInstance.restartApp().catch(reject);
         }),
       {
-        minTimeout: 1000,
-        maxTimeout: 1000,
+        minTimeout: BRIDGE_READY_TIMEOUT,
+        maxTimeout: BRIDGE_READY_TIMEOUT,
         retries: Infinity,
         signal,
       }
