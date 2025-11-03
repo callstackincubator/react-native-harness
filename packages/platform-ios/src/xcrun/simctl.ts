@@ -105,7 +105,6 @@ export const stopApp = async (
   udid: string,
   bundleId: string
 ): Promise<void> => {
-  //
   await spawnAndForget('xcrun', ['simctl', 'terminate', udid, bundleId]);
 };
 

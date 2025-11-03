@@ -4,6 +4,7 @@ import { HarnessPlatform } from '@react-native-harness/platforms';
 import { getMetroInstance } from '@react-native-harness/bundler-metro';
 import { InitializationTimeoutError } from './errors.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
+import pRetry from 'p-retry';
 
 export type Harness = {
   runTests: BridgeClientFunctions['runTests'];
@@ -39,19 +40,24 @@ const getHarnessInternal = async (
     throw new DOMException('The operation was aborted', 'AbortError');
   }
 
-  const initialRestart = () =>
-    new Promise<void>((resolve, reject) => {
-      signal.addEventListener('abort', () => {
-        reject(new DOMException('The operation was aborted', 'AbortError'));
-      });
-
-      serverBridge.once('ready', () => resolve());
-      platformInstance.restartApp().catch(reject);
-    });
-
-  // Wait for the bridge to be ready
   try {
-    await initialRestart();
+    await pRetry(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted', 'AbortError'));
+          });
+
+          serverBridge.once('ready', () => resolve());
+          platformInstance.restartApp().catch(reject);
+        }),
+      {
+        minTimeout: 1000,
+        maxTimeout: 1000,
+        retries: Infinity,
+        signal,
+      }
+    );
   } catch (error) {
     await dispose();
     throw error;
