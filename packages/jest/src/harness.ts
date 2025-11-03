@@ -39,7 +39,7 @@ const getHarnessInternal = async (
     throw new DOMException('The operation was aborted', 'AbortError');
   }
 
-  const restart = () =>
+  const initialRestart = () =>
     new Promise<void>((resolve, reject) => {
       signal.addEventListener('abort', () => {
         reject(new DOMException('The operation was aborted', 'AbortError'));
@@ -51,11 +51,17 @@ const getHarnessInternal = async (
 
   // Wait for the bridge to be ready
   try {
-    await restart();
+    await initialRestart();
   } catch (error) {
     await dispose();
     throw error;
   }
+
+  const restart = () =>
+    new Promise<void>((resolve, reject) => {
+      serverBridge.once('ready', () => resolve());
+      platformInstance.restartApp().catch(reject);
+    });
 
   return {
     runTests: async (path, options) => {
