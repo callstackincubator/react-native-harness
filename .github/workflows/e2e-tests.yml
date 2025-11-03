@@ -232,7 +232,7 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="--harnessRunner ios"
+          HARNESS_DEBUG=true pnpm nx run @react-native-harness/${{ matrix.app }}:start --args="--harnessRunner ios"
 
       - name: Take screenshot after E2E tests
         if: failure()

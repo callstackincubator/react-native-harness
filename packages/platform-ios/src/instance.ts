@@ -62,7 +62,8 @@ export const getAppleSimulatorPlatformInstance = async (
       await simctl.stopApp(udid, config.bundleId);
     },
     dispose: async () => {
-      await simctl.stopApp(udid, config.bundleId);
+      // TODO: Stop the simulator
+      // await simctl.stopApp(udid, config.bundleId);
     },
   };
 };
