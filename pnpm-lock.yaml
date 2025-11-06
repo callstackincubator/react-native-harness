@@ -231,13 +231,28 @@ importers:
 
   packages/bundler-metro:
     dependencies:
+      '@react-native-harness/metro':
+        specifier: workspace:*
+        version: link:../metro
       '@react-native-harness/tools':
         specifier: workspace:*
         version: link:../tools
+      connect:
+        specifier: ^3.7.0
+        version: 3.7.0
+      metro:
+        specifier: '*'
+        version: 0.81.5
+      nocache:
+        specifier: ^4.0.0
+        version: 4.0.0
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
     devDependencies:
+      '@types/connect':
+        specifier: ^3.4.38
+        version: 3.4.38
       '@types/node':
         specifier: 18.16.9
         version: 18.16.9
@@ -2794,6 +2809,9 @@ packages:
 
   '@types/chai@5.2.2':
     resolution: {integrity: sha512-8kB30R7Hwqf40JPiKhVzodJs2Qc1ZJ5zuT3uzw5Hq/dhNCl3G3l83jfpdI1e20BP348+fV7VIL/+FxaXkqBmWg==}
+
+  '@types/connect@3.4.38':
+    resolution: {integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==}
 
   '@types/debug@4.1.12':
     resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}
@@ -6339,6 +6357,10 @@ packages:
   nocache@3.0.4:
     resolution: {integrity: sha512-WDD0bdg9mbq6F4mRxEYcPWwfA1vxd0mrvKOyxI7Xj/atfRHVeutzuWByG//jfm4uPzp0y4Kj051EORCBSQMycw==}
     engines: {node: '>=12.0.0'}
+
+  nocache@4.0.0:
+    resolution: {integrity: sha512-AntnTbmKZvNYIsTVPPwv7dfZdAfo/6H/2ZlZACK66NAOQtIApxkB/6pf/c+s+ACW8vemGJzUCyVTssrzNUK6yQ==}
+    engines: {node: '>=16.0.0'}
 
   node-abort-controller@3.1.1:
     resolution: {integrity: sha512-AGK2yQKIjRuqnc6VkX2Xj5d+QW8xZ87pa1UK6yA6ouUyuxfHuMP6umE5QK7UmTeOAymo+Zx1Fxiuw9rVx8taHQ==}
@@ -11684,6 +11706,10 @@ snapshots:
     dependencies:
       '@types/deep-eql': 4.0.2
 
+  '@types/connect@3.4.38':
+    dependencies:
+      '@types/node': 18.16.9
+
   '@types/debug@4.1.12':
     dependencies:
       '@types/ms': 2.1.0
@@ -16422,6 +16448,8 @@ snapshots:
       tslib: 2.8.1
 
   nocache@3.0.4: {}
+
+  nocache@4.0.0: {}
 
   node-abort-controller@3.1.1: {}
 

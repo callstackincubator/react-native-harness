@@ -16,10 +16,17 @@
     }
   },
   "dependencies": {
+    "@react-native-harness/metro": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
+    "connect": "^3.7.0",
+    "nocache": "^4.0.0",
     "tslib": "^2.3.0"
   },
+  "peerDependencies": {
+    "metro": "*"
+  },
   "devDependencies": {
+    "@types/connect": "^3.4.38",
     "@types/node": "18.16.9"
   },
   "license": "MIT"

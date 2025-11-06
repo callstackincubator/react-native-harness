@@ -1,135 +1,90 @@
-import {
-  getReactNativeCliPath,
-  getExpoCliPath,
-  spawn,
-  logger,
-  SubprocessError,
-} from '@react-native-harness/tools';
-import type { ChildProcess } from 'child_process';
-import { isPortAvailable } from './utils.js';
-import {
-  MetroPortUnavailableError,
-  MetroBundlerNotReadyError,
-} from './errors.js';
+import { withRnHarness } from '@react-native-harness/metro';
+import { logger } from '@react-native-harness/tools';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import connect from 'connect';
+import nocache from 'nocache';
+import { isPortAvailable, getMetroPackage } from './utils.js';
+import { MetroPortUnavailableError } from './errors.js';
 import { METRO_PORT } from './constants.js';
-import type { MetroInstance } from './types.js';
-import assert from 'node:assert';
-import { createRequire } from 'node:module';
+import type { MetroInstance, MetroOptions } from './types.js';
+import {
+  type Reporter,
+  withReporter,
+  type ReportableEvent,
+} from './reporter.js';
 
-const INITIALIZATION_DONE_EVENT_TYPE = 'initialize_done';
-
-const require = createRequire(import.meta.url);
-
-const waitForReady = (
-  metroProcess: ChildProcess,
-  timeoutMs = 60000
+const waitForBundler = async (
+  reporter: Reporter,
+  abortSignal: AbortSignal
 ): Promise<void> => {
-  return new Promise<void>((resolve, reject) => {
-    const customPipe = metroProcess.stdio[3];
-    assert(customPipe, 'customPipe is required');
-
-    // eslint-disable-next-line prefer-const
-    let pipeListener: (data: Buffer) => void;
-    // eslint-disable-next-line prefer-const
-    let timer: NodeJS.Timeout;
-
-    const cleanup = () => {
-      clearTimeout(timer);
-      customPipe.off('data', pipeListener);
-    };
-
-    pipeListener = (data) => {
-      const text = data.toString().split('\n');
-
-      for (const line of text) {
-        if (line.trim() === '') {
-          continue;
-        }
-
-        try {
-          const event = JSON.parse(line);
-
-          if (event.type === INITIALIZATION_DONE_EVENT_TYPE) {
-            cleanup();
-            resolve();
-          }
-        } catch (error) {
-          logger.error('Failed to parse event', error);
-        }
+  return new Promise((resolve, reject) => {
+    const onEvent = (event: ReportableEvent) => {
+      if (event.type === 'initialize_done') {
+        reporter.removeListener(onEvent);
+        resolve();
       }
     };
+    reporter.addListener(onEvent);
 
-    customPipe.on('data', pipeListener);
-
-    timer = setTimeout(() => {
-      cleanup();
-      reject(new MetroBundlerNotReadyError(timeoutMs));
-    }, timeoutMs);
+    abortSignal.addEventListener('abort', () =>
+      reject(new DOMException('The operation was aborted', 'AbortError'))
+    );
   });
 };
 
 export const getMetroInstance = async (
-  isExpo = false
+  options: MetroOptions,
+  abortSignal: AbortSignal
 ): Promise<MetroInstance> => {
-  const metro = spawn(
-    'node',
-    [
-      isExpo ? getExpoCliPath() : getReactNativeCliPath(),
-      'start',
-      '--port',
-      METRO_PORT.toString(),
-      '--customLogReporterPath',
-      require.resolve('../assets/reporter.cjs'),
-    ],
-    {
-      stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        RN_HARNESS: 'true',
-        ...(isExpo && { EXPO_NO_METRO_WORKSPACE_ROOT: 'true' }),
-      },
-    }
-  );
-
+  const { projectRoot } = options;
   const isDefaultPortAvailable = await isPortAvailable(METRO_PORT);
 
   if (!isDefaultPortAvailable) {
     throw new MetroPortUnavailableError(METRO_PORT);
   }
 
-  const childProcess = await metro.nodeChildProcess;
+  const Metro = getMetroPackage(projectRoot);
 
-  // Forward metro output to logger
-  if (childProcess.stdout) {
-    childProcess.stdout.on('data', (data) => {
-      logger.debug(data.toString().trim());
-    });
-  }
-  if (childProcess.stderr) {
-    childProcess.stderr.on('data', (data) => {
-      logger.debug(data.toString().trim());
-    });
-  }
+  process.env.RN_HARNESS = 'true';
 
-  metro.catch((error) => {
-    // This process is going to be killed by us, so we don't need to throw an error
-    if (error instanceof SubprocessError && error.signalName === 'SIGTERM') {
-      return;
-    }
-
-    logger.error('Metro crashed unexpectedly', error);
+  const projectMetroConfig = await Metro.loadConfig({
+    port: METRO_PORT,
+    projectRoot,
   });
+  const config = await withRnHarness(projectMetroConfig)();
+  const reporter = withReporter(config);
 
-  // Wait for Metro to be ready by monitoring stdout for "Dev server ready."
-  await waitForReady(childProcess);
+  abortSignal.throwIfAborted();
+
+  const statusPageMiddleware = (_: IncomingMessage, res: ServerResponse) => {
+    res.setHeader(
+      'X-React-Native-Project-Root',
+      new URL(`file:///${projectRoot}`).pathname.slice(1)
+    );
+    res.end('packager-status:running');
+  };
+  const middleware = connect()
+    .use(nocache())
+    .use('/status', statusPageMiddleware);
+
+  const ready = waitForBundler(reporter, abortSignal);
+  const server = await Metro.runServer(config, {
+    waitForBundler: true,
+    unstable_extraMiddleware: [middleware],
+  });
+  server.keepAliveTimeout = 30000;
+
+  abortSignal.throwIfAborted();
+
+  await ready;
+
+  logger.debug('Metro server is running');
 
   return {
-    dispose: async () => {
-      const isKilled = childProcess.kill('SIGTERM');
-
-      if (!isKilled) {
-        childProcess.kill('SIGKILL');
-      }
-    },
+    events: reporter,
+    dispose: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      }),
   };
 };

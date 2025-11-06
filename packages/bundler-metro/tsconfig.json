@@ -4,6 +4,9 @@
   "include": [],
   "references": [
     {
+      "path": "../metro"
+    },
+    {
       "path": "../tools"
     },
     {

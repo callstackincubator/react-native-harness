@@ -7,9 +7,11 @@ export class MetroPortUnavailableError extends HarnessError {
   }
 }
 
-export class MetroBundlerNotReadyError extends HarnessError {
-  constructor(public readonly maxRetries: number) {
-    super(`Metro bundler is not ready after ${maxRetries} attempts`);
-    this.name = 'MetroBundlerNotReadyError';
+export class MetroNotInstalledError extends HarnessError {
+  constructor() {
+    super(
+      'Metro was not found in your project. This is unexpected. Please report this issue to the React Native Harness team.'
+    );
+    this.name = 'MetroNotInstalledError';
   }
 }

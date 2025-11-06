@@ -17,10 +17,11 @@ export type Harness = {
 const getHarnessInternal = async (
   config: HarnessConfig,
   platform: HarnessPlatform,
+  projectRoot: string,
   signal: AbortSignal
 ): Promise<Harness> => {
   const [metroInstance, platformInstance, serverBridge] = await Promise.all([
-    getMetroInstance(),
+    getMetroInstance({ projectRoot }, signal),
     platform.getInstance(),
     getBridgeServer({
       port: 3001,
@@ -88,12 +89,18 @@ const getHarnessInternal = async (
 
 export const getHarness = async (
   config: HarnessConfig,
-  platform: HarnessPlatform
+  platform: HarnessPlatform,
+  projectRoot: string
 ): Promise<Harness> => {
   const abortSignal = AbortSignal.timeout(config.bridgeTimeout);
 
   try {
-    const harness = await getHarnessInternal(config, platform, abortSignal);
+    const harness = await getHarnessInternal(
+      config,
+      platform,
+      projectRoot,
+      abortSignal
+    );
     return harness;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {

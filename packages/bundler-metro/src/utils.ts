@@ -1,4 +1,8 @@
 import net from 'node:net';
+import { createRequire } from 'node:module';
+import { MetroNotInstalledError } from './errors.js';
+
+const require = createRequire(import.meta.url);
 
 export const isPortAvailable = (port: number): Promise<boolean> => {
   return new Promise((resolve) => {
@@ -13,4 +17,15 @@ export const isPortAvailable = (port: number): Promise<boolean> => {
     });
     server.listen(port);
   });
+};
+
+export const getMetroPackage = (
+  projectRoot: string
+): typeof import('metro') => {
+  try {
+    const metroPath = require.resolve('metro', { paths: [projectRoot] });
+    return require(metroPath);
+  } catch {
+    throw new MetroNotInstalledError();
+  }
 };
