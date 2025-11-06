@@ -26,9 +26,10 @@ const waitForBundler = async (
     };
     reporter.addListener(onEvent);
 
-    abortSignal.addEventListener('abort', () =>
-      reject(new DOMException('The operation was aborted', 'AbortError'))
-    );
+    abortSignal.addEventListener('abort', () => {
+      reporter.removeListener(onEvent);
+      reject(new DOMException('The operation was aborted', 'AbortError'));
+    });
   });
 };
 
