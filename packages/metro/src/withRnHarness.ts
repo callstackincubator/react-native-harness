@@ -11,10 +11,17 @@ const INTERNAL_CALLSITES_REGEX =
   /(^|[\\/])(node_modules[/\\]@react-native-harness)([\\/]|$)/;
 
 export const withRnHarness = <T extends MetroConfig>(
-  config: T | Promise<T>
+  config: T | Promise<T>,
+  isInvokedByHarness = false
 ): (() => Promise<T>) => {
   // This is a workaround for a regression in Metro 0.83, when promises are not handled correctly.
   return async () => {
+    // If the function is not invoked by the Harness, return the config as is.
+    // We'll remove it in the next major version.
+    if (!isInvokedByHarness) {
+      return config;
+    }
+
     const metroConfig = await config;
     const { config: harnessConfig } = await getConfig(process.cwd());
 

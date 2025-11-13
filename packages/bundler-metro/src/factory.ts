@@ -52,7 +52,7 @@ export const getMetroInstance = async (
     port: METRO_PORT,
     projectRoot,
   });
-  const config = await withRnHarness(projectMetroConfig)();
+  const config = await withRnHarness(projectMetroConfig, true)();
   const reporter = withReporter(config);
 
   abortSignal.throwIfAborted();
