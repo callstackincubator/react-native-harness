@@ -1,0 +1,54 @@
+name: "\U0001F41B Bug report"
+description: Report an issue
+labels: ['status:new', 'type:bug']
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to fill out this bug report!
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+      placeholder: I am doing ... What I expect is ... What actually happening is ...
+    validations:
+      required: true
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System Info
+      description: Output of `npx react-native info`
+      render: shell
+      placeholder: System, Binaries, Managers, SDKs, IDEs, Languages, etc.
+    validations:
+      required: true
+  - type: input
+    id: harness-version
+    attributes:
+      label: React Native Harness Version
+      description: The version of React Native Harness you are using.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description:
+        'Please provide a link to a repository that can reproduce the problem you encountered.
+        A minimal reproduction is ideal—focus on isolating the bug without extra dependencies or irrelevant code.
+        If you need guidance, see [this guide on creating a minimal reproducible example](https://stackoverflow.com/help/minimal-reproducible-example).
+        Issues without a reproduction repository are difficult to investigate and are very likely to stall.'
+      placeholder: Reproduction URL
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to reproduce
+      description:
+        'Please describe any additional steps needed to reproduce the issue. Include relevant details like
+        whether the problem only on specific platforms, or under certain conditions.
+        The more precise and detailed your steps are, the easier it is for us to replicate and address the bug.'
+    validations:
+      required: true
