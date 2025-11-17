@@ -2,7 +2,12 @@
   "name": "@react-native-harness/monorepo",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "build:all": "nx run-many -t build",
+    "lint:all": "nx run-many -t lint",
+    "test:all": "nx run-many -t test",
+    "typecheck:all": "nx run-many -t typecheck"
+  },
   "private": true,
   "devDependencies": {
     "@babel/core": "^7.14.5",
