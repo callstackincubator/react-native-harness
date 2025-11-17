@@ -18,9 +18,6 @@ Bridge the testing gap: Jest-style tests in real native environments. Get the co
 - **Familiar Test Structure**: Use beforeEach, afterEach, describe, it, expect — all the testing patterns you know and love from Jest.
 - **Zero Configuration Setup**: Drop-in replacement for your existing test workflow with TypeScript support and seamless CI/CD integration.
 
-> [!WARNING]
-> This library is still under active development. Feel free to hack around, but use at your own risk.
-
 ## Quick Configuration Example
 
 ```javascript
