@@ -2,6 +2,9 @@
   "name": "@react-native-harness/playground",
   "version": "0.0.1",
   "private": true,
+  "scripts": {
+    "test:harness": "jest --selectProjects react-native-harness"
+  },
   "dependencies": {
     "react-native": "*",
     "react-native-harness": "workspace:*"
