@@ -36,7 +36,7 @@ const config = {
     applePlatform({
       name: 'ios',
       device: appleSimulator('iPhone 16 Pro', '18.6'),
-      bundleId: 'org.reactjs.native.example.Playground',
+      bundleId: 'com.harnessplayground',
     }),
     vegaPlatform({
       name: 'vega',
