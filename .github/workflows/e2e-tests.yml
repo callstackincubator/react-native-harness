@@ -134,7 +134,7 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          profile: medium_phone
+          profile: pixel_6
           disk-size: 1G
           heap-size: 1G
           force-avd-creation: false
