@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "Playground.app"
-               BlueprintName = "Playground"
-               ReferencedContainer = "container:Playground.xcodeproj">
+               BuildableName = "HarnessPlayground.app"
+               BlueprintName = "HarnessPlayground"
+               ReferencedContainer = "container:HarnessPlayground.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "PlaygroundTests.xctest"
-               BlueprintName = "PlaygroundTests"
-               ReferencedContainer = "container:Playground.xcodeproj">
+               BuildableName = "HarnessPlaygroundTests.xctest"
+               BlueprintName = "HarnessPlaygroundTests"
+               ReferencedContainer = "container:HarnessPlayground.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "Playground.app"
-            BlueprintName = "Playground"
-            ReferencedContainer = "container:Playground.xcodeproj">
+            BuildableName = "HarnessPlayground.app"
+            BlueprintName = "HarnessPlayground"
+            ReferencedContainer = "container:HarnessPlayground.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "Playground.app"
-            BlueprintName = "Playground"
-            ReferencedContainer = "container:Playground.xcodeproj">
+            BuildableName = "HarnessPlayground.app"
+            BlueprintName = "HarnessPlayground"
+            ReferencedContainer = "container:HarnessPlayground.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

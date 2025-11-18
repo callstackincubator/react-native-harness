@@ -21,12 +21,12 @@ const config = {
     androidPlatform({
       name: 'android',
       device: androidEmulator('Pixel_8_API_35'),
-      bundleId: 'com.playground',
+      bundleId: 'com.harnessplayground',
     }),
     androidPlatform({
       name: 'moto-g72',
       device: physicalAndroidDevice('Motorola', 'Moto G72'),
-      bundleId: 'com.playground',
+      bundleId: 'com.harnessplayground',
     }),
     applePlatform({
       name: 'iphone-16-pro',

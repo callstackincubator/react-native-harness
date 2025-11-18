@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@types/connect": "^3.4.38",
-    "@types/node": "18.16.9"
+    "metro": "*"
   },
   "license": "MIT"
 }

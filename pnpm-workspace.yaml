@@ -6,6 +6,8 @@ onlyBuiltDependencies:
   - '@apollo/protobufjs'
   - '@swc/core'
   - appium
+  - detox
+  - dtrace-provider
   - edgedriver
   - electron
   - esbuild

@@ -2,6 +2,7 @@ import { CacheStore, MetroCache } from 'metro-cache';
 import type { MixedOutput, TransformResult } from 'metro';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { CacheStoresConfigT } from 'metro-config';
 
 const CACHE_ROOT = path.resolve(
   process.cwd(),
@@ -10,7 +11,7 @@ const CACHE_ROOT = path.resolve(
 
 export const getHarnessCacheStores = (): ((
   metroCache: MetroCache
-) => CacheStore<TransformResult<MixedOutput>>[]) => {
+) => CacheStoresConfigT) => {
   return ({ FileStore }) => {
     fs.mkdirSync(CACHE_ROOT, { recursive: true });
 

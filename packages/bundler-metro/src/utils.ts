@@ -29,3 +29,7 @@ export const getMetroPackage = (
     throw new MetroNotInstalledError();
   }
 };
+
+export type NotReadOnly<T> = {
+  -readonly [K in keyof T]: T[K];
+};

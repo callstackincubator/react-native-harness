@@ -1,6 +1,11 @@
 import { withRnHarness } from '@react-native-harness/metro';
 import { logger } from '@react-native-harness/tools';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type {
+  IncomingMessage,
+  ServerResponse,
+  Server as HttpServer,
+} from 'node:http';
+import type { Server as HttpsServer } from 'node:https';
 import connect from 'connect';
 import nocache from 'nocache';
 import { isPortAvailable, getMetroPackage } from './utils.js';
@@ -69,10 +74,14 @@ export const getMetroInstance = async (
     .use('/status', statusPageMiddleware);
 
   const ready = waitForBundler(reporter, abortSignal);
-  const server = await Metro.runServer(config, {
+  const maybeServer = await Metro.runServer(config, {
     waitForBundler: true,
     unstable_extraMiddleware: [middleware],
   });
+
+  // Metro <0.83 returns the server directly, while 0.83+ returns an object with the server as a property.
+  const server: HttpServer | HttpsServer =
+    'httpServer' in maybeServer ? maybeServer.httpServer : maybeServer;
   server.keepAliveTimeout = 30000;
 
   abortSignal.throwIfAborted();
