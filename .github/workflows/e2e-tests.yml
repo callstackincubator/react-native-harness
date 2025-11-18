@@ -126,7 +126,7 @@ jobs:
 
       - name: List AVDs
         run: |
-          avdmanager list device -c
+          $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager list device -c
 
       - name: Create AVD and generate snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
