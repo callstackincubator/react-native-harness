@@ -124,6 +124,10 @@ jobs:
             ~/.android/adb*
           key: avd-35-2
 
+      - name: List AVDs
+        run: |
+          avdmanager list device -c
+
       - name: Create AVD and generate snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
