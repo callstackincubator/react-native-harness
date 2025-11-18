@@ -14,8 +14,8 @@ import {
 } from '@react-native-harness/platform-vega';
 
 const config = {
-  entryPoint: './src/main.tsx',
-  appRegistryComponentName: 'Playground',
+  entryPoint: './index.js',
+  appRegistryComponentName: 'HarnessPlayground',
 
   runners: [
     androidPlatform({

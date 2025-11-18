@@ -8,6 +8,9 @@ module.exports = {
       ],
       setupFiles: ['./src/setupFile.ts'],
       setupFilesAfterEnv: ['./src/setupFileAfterEnv.ts'],
+      // This is necessary to prevent Jest from transforming the workspace packages.
+      // Not needed in users projects, as they will have the packages installed in their node_modules.
+      transformIgnorePatterns: ['/packages/'],
     },
   ],
   collectCoverageFrom: ['./src/**/*.(ts|tsx)'],
