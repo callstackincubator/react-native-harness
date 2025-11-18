@@ -204,7 +204,7 @@ jobs:
         id: cache-app-restore
         uses: actions/cache/restore@v4
         with:
-          path: ./apps/${{ matrix.app }}/ios/build/Build/Products/Debug-iphonesimulator/Playground.app
+          path: ./apps/${{ matrix.app }}/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-${{ matrix.app }}
 
       - name: CocoaPods cache
@@ -235,7 +235,7 @@ jobs:
         if: steps.cache-app-restore.outputs.cache-hit != 'true' && success()
         uses: actions/cache/save@v4
         with:
-          path: ./apps/${{ matrix.app }}/ios/build/Build/Products/Debug-iphonesimulator/Playground.app
+          path: ./apps/${{ matrix.app }}/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-${{ matrix.app }}
 
       - uses: futureware-tech/simulator-action@v4
@@ -248,7 +248,7 @@ jobs:
 
       - name: Install app
         run: |
-          xcrun simctl install booted ./apps/${{ matrix.app }}/ios/build/Build/Products/Debug-iphonesimulator/Playground.app
+          xcrun simctl install booted ./apps/${{ matrix.app }}/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
 
       - name: Run E2E tests
         run: |
