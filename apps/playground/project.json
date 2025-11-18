@@ -1,4 +1,6 @@
 {
+  "name": "@react-native-harness/playground",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "targets": {
     "start": {
       "executor": "nx:run-commands",

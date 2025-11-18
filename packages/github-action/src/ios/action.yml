@@ -1,0 +1,39 @@
+name: React Native Harness for iOS
+description: Run React Native Harness tests on iOS
+inputs:
+  app:
+    description: The path to the iOS app (.app)
+    required: true
+  runner:
+    description: The runner to use
+    required: true
+    type: string
+  projectRoot:
+    description: The project root directory
+    required: false
+    type: string
+runs:
+  using: 'composite'
+  steps:
+    - uses: 'callstackincubator/react-native-harness/packages/github-action/dist/load-config@feat/github-action'
+      id: load-config
+      with:
+        runner: ${{ inputs.runner }}
+        projectRoot: ${{ inputs.projectRoot }}
+    - uses: futureware-tech/simulator-action@v4
+      with:
+        model: ${{ fromJson(steps.load-config.outputs.config).config.device.name }}
+        os: iOS
+        os_version: ${{ fromJson(steps.load-config.outputs.config).config.device.systemVersion }}
+        wait_for_boot: true
+        erase_before_boot: false
+    - name: Install app
+      shell: bash
+      working-directory: ${{ inputs.projectRoot }}
+      run: |
+        xcrun simctl install booted ${{ inputs.app }}
+    - name: Run E2E tests
+      shell: bash
+      working-directory: ${{ inputs.projectRoot }}
+      run: |
+        pnpm react-native-harness --harnessRunner ${{ inputs.runner }}

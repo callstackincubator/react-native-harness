@@ -4,11 +4,6 @@ import type {
   ApplePhysicalDevice,
   ApplePlatformConfig,
 } from './config.js';
-import { ApplePlatformConfigSchema, isAppleDeviceSimulator } from './config.js';
-import {
-  getApplePhysicalDevicePlatformInstance,
-  getAppleSimulatorPlatformInstance,
-} from './instance.js';
 
 export const appleSimulator = (
   name: string,
@@ -26,15 +21,8 @@ export const applePhysicalDevice = (name: string): ApplePhysicalDevice => ({
 
 export const applePlatform = (
   config: ApplePlatformConfig
-): HarnessPlatform => ({
+): HarnessPlatform<ApplePlatformConfig> => ({
   name: config.name,
-  getInstance: async () => {
-    const parsedConfig = ApplePlatformConfigSchema.parse(config);
-
-    if (isAppleDeviceSimulator(parsedConfig.device)) {
-      return getAppleSimulatorPlatformInstance(parsedConfig);
-    }
-
-    return getApplePhysicalDevicePlatformInstance(parsedConfig);
-  },
+  config,
+  runner: import.meta.resolve('./runner.js'),
 });

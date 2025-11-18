@@ -20,7 +20,12 @@ const config = {
   runners: [
     androidPlatform({
       name: 'android',
-      device: androidEmulator('Pixel_8_API_35'),
+      device: androidEmulator('Pixel_8_API_35', {
+        apiLevel: 35,
+        profile: 'pixel_6',
+        diskSize: '1G',
+        heapSize: '1G',
+      }),
       bundleId: 'com.harnessplayground',
     }),
     androidPlatform({

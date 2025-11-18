@@ -50,6 +50,9 @@
     },
     {
       "path": "./packages/bundler-metro"
+    },
+    {
+      "path": "./packages/github-action"
     }
   ]
 }

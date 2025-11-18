@@ -1,7 +1,7 @@
 import {
   AppNotInstalledError,
   DeviceNotFoundError,
-  HarnessPlatformInstance,
+  HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import {
   ApplePlatformConfig,
@@ -14,7 +14,7 @@ import { getDeviceName } from './utils.js';
 
 export const getAppleSimulatorPlatformInstance = async (
   config: ApplePlatformConfig
-): Promise<HarnessPlatformInstance> => {
+): Promise<HarnessPlatformRunner> => {
   assertAppleDeviceSimulator(config.device);
 
   const udid = await simctl.getSimulatorId(
@@ -69,7 +69,7 @@ export const getAppleSimulatorPlatformInstance = async (
 
 export const getApplePhysicalDevicePlatformInstance = async (
   config: ApplePlatformConfig
-): Promise<HarnessPlatformInstance> => {
+): Promise<HarnessPlatformRunner> => {
   assertAppleDevicePhysical(config.device);
 
   const deviceId = await devicectl.getDeviceId(config.device.name);

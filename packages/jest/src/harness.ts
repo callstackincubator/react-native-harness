@@ -22,7 +22,7 @@ const getHarnessInternal = async (
 ): Promise<Harness> => {
   const [metroInstance, platformInstance, serverBridge] = await Promise.all([
     getMetroInstance({ projectRoot }, signal),
-    platform.getInstance(),
+    import(platform.runner).then((module) => module.default(platform.config)),
     getBridgeServer({
       port: 3001,
       timeout: config.bridgeTimeout,
