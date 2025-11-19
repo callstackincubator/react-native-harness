@@ -234,6 +234,9 @@ importers:
       metro:
         specifier: '*'
         version: 0.83.3
+      metro-config:
+        specifier: '*'
+        version: 0.83.3
 
   packages/cli:
     dependencies:

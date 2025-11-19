@@ -23,11 +23,13 @@
     "tslib": "^2.3.0"
   },
   "peerDependencies": {
-    "metro": "*"
+    "metro": "*",
+    "metro-config": "*"
   },
   "devDependencies": {
     "@types/connect": "^3.4.38",
-    "metro": "*"
+    "metro": "*",
+    "metro-config": "*"
   },
   "license": "MIT"
 }
