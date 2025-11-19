@@ -11,9 +11,7 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@react-native-harness/config": "workspace:*",
-    "@actions/core": "^1.11.1",
-    "@actions/github": "^6.0.1"
+    "@react-native-harness/config": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.5.1"
