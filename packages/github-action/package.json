@@ -1,5 +1,6 @@
 {
   "name": "@react-native-harness/github-action",
+  "private": true,
   "description": "GitHub Actions for React Native Harness",
   "version": "1.0.0-alpha.18",
   "type": "commonjs",
