@@ -10,11 +10,41 @@ The amount of time needed to run Harness tests is typically around **5 minutes**
 React Native Harness doesn't require you to constantly rebuild the app from scratch. You can reuse the same debug build as long as your native modules stay the same, significantly reducing CI execution time through intelligent caching.
 :::
 
+## Official GitHub Actions
+
+React Native Harness provides official GitHub Actions that simplify running tests in CI/CD environments. These actions handle the complex setup of emulators, simulators, and test execution automatically.
+
+### Available Actions
+
+- **Android Action**: `callstackincubator/react-native-harness/actions/android`
+- **iOS Action**: `callstackincubator/react-native-harness/actions/ios`
+
+:::tip Versioning
+You can pin to a specific version by appending `@<version>` to the action path (e.g., `@main`, `@v1.0.0`). For production use, we recommend pinning to a specific release tag once available.
+:::
+
+Both actions automatically:
+
+- Load your React Native Harness configuration
+- Set up and configure the emulator/simulator based on your config
+- Install your app
+- Run the tests
+
+The actions read your `rn-harness.config.mjs` file to determine the device configuration, so you don't need to hardcode emulator settings in your workflow.
+
+### Action Inputs
+
+Both actions accept the following inputs:
+
+- `app` (required): Path to your built app (`.apk` for Android, `.app` for iOS)
+- `runner` (required): The runner name (e.g., `"android"` or `"ios"`)
+- `projectRoot` (optional): The project root directory (defaults to the repository root)
+
 ## GitHub Actions Example
 
 The example workflow shared below is designed for **React Native Community CLI** setups. If you're using **Expo** or **Rock**, the workflow will be simpler as these frameworks provide their own build and deployment mechanisms that integrate seamlessly with CI/CD environments.
 
-Here's a complete GitHub Actions workflow that demonstrates how to run React Native Harness tests on both Android and iOS platforms:
+Here's a complete GitHub Actions workflow that demonstrates how to run React Native Harness tests on both Android and iOS platforms using the official actions:
 
 ### Complete Workflow Configuration
 
@@ -69,7 +99,7 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Step 3: Build optimization with caching
+      # Step 2: Build optimization with caching
       - name: Restore APK from cache
         id: cache-apk-restore
         uses: actions/cache/restore@v4
@@ -89,51 +119,12 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           key: android-app-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
 
-      # Step 4: Android Emulator setup with caching
-      - name: Enable KVM group perms
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: AVD cache
-        uses: actions/cache@v4
-        id: avd-cache
+      # Step 3: Run Harness tests
+      - name: Run React Native Harness
+        uses: callstackincubator/react-native-harness/actions/android@main
         with:
-          path: |
-            ~/.android/avd/*
-            ~/.android/adb*
-          key: avd-35-2
-
-      - name: Create AVD and generate snapshot for caching
-        if: steps.avd-cache.outputs.cache-hit != 'true'
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          profile: pixel_7
-          disk-size: 1G
-          heap-size: 1G
-          force-avd-creation: false
-          avd-name: Pixel_8_API_35
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: echo "Generated AVD snapshot for caching."
-
-      # Step 5: Run Harness tests
-      - name: Run Harness tests
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          working-directory: android
-          api-level: 35
-          arch: x86_64
-          force-avd-creation: false
-          avd-name: Pixel_8_API_35
-          disable-animations: true
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: |
-            adb install -r "./app/build/outputs/apk/debug/app-debug.apk"
-            npx react-native-harness --harnessRunner android
+          app: android/app/build/outputs/apk/debug/app-debug.apk
+          runner: android
 
   test-ios:
     name: Test iOS
@@ -199,23 +190,12 @@ jobs:
           path: ios/build/Build/Products/Debug-iphonesimulator/YourApp.app
           key: ios-app-${{ hashFiles('ios/Podfile.lock', 'ios/**/*.pbxproj') }}
 
-      # Step 3: iOS Simulator setup
-      - uses: futureware-tech/simulator-action@v4
+      # Step 3: Run Harness tests
+      - name: Run React Native Harness
+        uses: callstackincubator/react-native-harness/actions/ios@main
         with:
-          model: 'iPhone 16 Pro'
-          os: iOS
-          os_version: 18.6
-          wait_for_boot: true
-          erase_before_boot: false
-
-      - name: Install app
-        run: |
-          xcrun simctl install booted ios/build/Build/Products/Debug-iphonesimulator/YourApp.app
-
-      # Step 4: Run Harness tests
-      - name: Run Harness tests
-        run: |
-          npx react-native-harness --harnessRunner ios
+          app: ios/build/Build/Products/Debug-iphonesimulator/YourApp.app
+          runner: ios
 ```
 
 ## Build Artifact Caching
