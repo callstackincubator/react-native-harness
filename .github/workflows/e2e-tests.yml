@@ -197,7 +197,7 @@ jobs:
           key: ios-app-${{ matrix.app }}
 
       - name: Run React Native Harness
-        uses: ./packages/github-action/dist/ios
+        uses: ./actions/ios
         with:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           runner: ios
