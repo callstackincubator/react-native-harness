@@ -15,11 +15,14 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - uses: 'callstackincubator/react-native-harness/packages/github-action/dist/load-config@feat/github-action'
+    - name: Load React Native Harness configuration
       id: load-config
-      with:
-        runner: ${{ inputs.runner }}
-        projectRoot: ${{ inputs.projectRoot }}
+      shell: bash
+      env:
+        INPUT_RUNNER: ${{ inputs.runner }}
+        INPUT_PROJECTROOT: ${{ inputs.projectRoot }}
+      run: |
+        node ${{ github.action_path }}/../shared/index.cjs
     - name: Verify Android config
       shell: bash
       run: |

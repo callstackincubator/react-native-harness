@@ -10,30 +10,7 @@ GitHub Actions that simplify running React Native Harness tests in CI/CD environ
 
 ## Available Actions
 
-This package provides three GitHub Actions:
-
-### `load-config`
-
-Loads and validates React Native Harness configuration from your project. This action is used internally by the platform-specific actions but can also be used standalone if you need to access configuration in your workflows.
-
-**Inputs:**
-
-- `runner` (required): The runner name to load configuration for
-- `projectRoot` (optional): The project root directory (defaults to repository root)
-
-**Outputs:**
-
-- `config`: The entire runner configuration as JSON
-
-**Example:**
-
-```yaml
-- uses: callstackincubator/react-native-harness/actions/load-config@main
-  id: load-config
-  with:
-    runner: 'android'
-    projectRoot: './apps/my-app'
-```
+This package provides two GitHub Actions:
 
 ### `android`
 

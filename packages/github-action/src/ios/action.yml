@@ -15,11 +15,14 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - uses: 'callstackincubator/react-native-harness/packages/github-action/dist/load-config@feat/github-action'
+    - name: Load React Native Harness configuration
       id: load-config
-      with:
-        runner: ${{ inputs.runner }}
-        projectRoot: ${{ inputs.projectRoot }}
+      shell: bash
+      env:
+        INPUT_RUNNER: ${{ inputs.runner }}
+        INPUT_PROJECTROOT: ${{ inputs.projectRoot }}
+      run: |
+        node ${{ github.action_path }}/../shared/index.cjs
     - uses: futureware-tech/simulator-action@v4
       with:
         model: ${{ fromJson(steps.load-config.outputs.config).config.device.name }}
