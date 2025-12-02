@@ -41,6 +41,10 @@ export const startApp = async (
     'shell',
     'am',
     'start',
+    '-a',
+    'android.intent.action.MAIN',
+    '-c',
+    'android.intent.category.LAUNCHER',
     '-n',
     `${bundleId}/${activityName}`,
   ]);
