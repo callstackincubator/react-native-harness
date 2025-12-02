@@ -1,10 +1,6 @@
 import { withRnHarness } from '@react-native-harness/metro';
 import { logger } from '@react-native-harness/tools';
-import type {
-  IncomingMessage,
-  ServerResponse,
-  Server as HttpServer,
-} from 'node:http';
+import type { Server as HttpServer } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
 import connect from 'connect';
 import nocache from 'nocache';
@@ -17,6 +13,8 @@ import {
   withReporter,
   type ReportableEvent,
 } from './reporter.js';
+import { getExpoMiddleware } from './middlewares/expo-middleware.js';
+import { getStatusMiddleware } from './middlewares/status-middleware.js';
 
 const waitForBundler = async (
   reporter: Reporter,
@@ -42,7 +40,7 @@ export const getMetroInstance = async (
   options: MetroOptions,
   abortSignal: AbortSignal
 ): Promise<MetroInstance> => {
-  const { projectRoot } = options;
+  const { projectRoot, harnessConfig } = options;
   const isDefaultPortAvailable = await isPortAvailable(METRO_PORT);
 
   if (!isDefaultPortAvailable) {
@@ -62,16 +60,10 @@ export const getMetroInstance = async (
 
   abortSignal.throwIfAborted();
 
-  const statusPageMiddleware = (_: IncomingMessage, res: ServerResponse) => {
-    res.setHeader(
-      'X-React-Native-Project-Root',
-      new URL(`file:///${projectRoot}`).pathname.slice(1)
-    );
-    res.end('packager-status:running');
-  };
   const middleware = connect()
     .use(nocache())
-    .use('/status', statusPageMiddleware);
+    .use('/', getExpoMiddleware(projectRoot, harnessConfig.entryPoint))
+    .use('/status', getStatusMiddleware(projectRoot));
 
   const ready = waitForBundler(reporter, abortSignal);
   const maybeServer = await Metro.runServer(config, {

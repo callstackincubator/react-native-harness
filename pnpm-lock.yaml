@@ -212,6 +212,9 @@ importers:
 
   packages/bundler-metro:
     dependencies:
+      '@react-native-harness/config':
+        specifier: workspace:*
+        version: link:../config
       '@react-native-harness/metro':
         specifier: workspace:*
         version: link:../metro
