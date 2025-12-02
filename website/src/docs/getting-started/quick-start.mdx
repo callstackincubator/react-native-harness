@@ -63,6 +63,10 @@ export default config;
 The `entryPoint` and `appRegistryComponentName` properties tell React Native Harness how to locate and integrate with your React Native app. See the [Configuration](/docs/getting-started/configuration) page for detailed information about these and all other configuration options.
 :::
 
+:::tip Expo
+For Expo projects, the `entryPoint` should be set to the path specified in the `main` property of package.json. The `appRegistryComponentName` is typically set to `main` for Expo apps.
+:::
+
 ### 3. Update Metro Configuration
 
 Update your `metro.config.js` so React Native Harness will be able to use it to bundle its tests:
