@@ -8,15 +8,31 @@ const optionalResolve = (path: string, from: string): string | null => {
   }
 };
 
-const getMetroDefaultsPath = (): string => {
-  const reactNativeMetroConfigPath = require.resolve(
+const getMetroConfigPath = (): string => {
+  const expoConfigPath = optionalResolve('@expo/metro-config', process.cwd());
+
+  if (expoConfigPath) {
+    return expoConfigPath;
+  }
+
+  const reactNativeMetroConfigPath = optionalResolve(
     '@react-native/metro-config',
-    { paths: [process.cwd()] }
+    process.cwd()
   );
+
+  if (reactNativeMetroConfigPath) {
+    return reactNativeMetroConfigPath;
+  }
+
+  throw new CouldNotPatchModuleSystemError();
+};
+
+const getMetroDefaultsPath = (): string => {
+  const metroConfigPath = getMetroConfigPath();
 
   const preExportsDefaults = optionalResolve(
     'metro-config/src/defaults/defaults',
-    reactNativeMetroConfigPath
+    metroConfigPath
   );
 
   if (preExportsDefaults) {
@@ -25,7 +41,7 @@ const getMetroDefaultsPath = (): string => {
 
   const privateDefaults = optionalResolve(
     'metro-config/private/defaults/defaults',
-    reactNativeMetroConfigPath
+    metroConfigPath
   );
 
   if (privateDefaults) {
