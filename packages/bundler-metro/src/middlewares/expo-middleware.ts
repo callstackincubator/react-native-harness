@@ -20,6 +20,7 @@ export const getExpoMiddleware =
     const manifestJson = JSON.stringify({
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
+      runtimeVersion: 'react-native-harness',
       launchAsset: {
         key: 'bundle',
         contentType: 'application/javascript',
