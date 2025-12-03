@@ -31,15 +31,11 @@
     "@vitest/spy": "4.0.0-beta.8",
     "chai": "^5.3.1",
     "event-target-shim": "^6.0.2",
-    "react-native-url-polyfill": "^2.0.0",
-    "sinon": "^21.0.0",
     "use-sync-external-store": "^1.6.0",
-    "util": "^0.12.5",
     "zustand": "^5.0.5"
   },
   "devDependencies": {
     "@types/chai": "^5.2.2",
-    "@types/sinon": "^17.0.4",
     "react": "*",
     "react-native": "*"
   },

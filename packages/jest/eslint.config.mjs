@@ -9,7 +9,8 @@ export default [
         'error',
         {
           ignoredFiles: ['{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}'],
-          ignoredDependencies: ['@react-native-harness/cli'],
+          // jest-runner: we only ingest types
+          ignoredDependencies: ['@react-native-harness/cli', 'jest-runner'],
         },
       ],
     },
