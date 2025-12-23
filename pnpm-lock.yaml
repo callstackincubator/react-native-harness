@@ -458,7 +458,7 @@ importers:
     devDependencies:
       '@types/chai':
         specifier: ^5.2.2
-        version: 5.2.2
+        version: 5.2.3
       react:
         specifier: '*'
         version: 19.1.1
@@ -11292,7 +11292,6 @@ snapshots:
       metro-runtime: 0.83.3
     transitivePeerDependencies:
       - '@babel/core'
-      - '@babel/preset-env'
       - bufferutil
       - supports-color
       - utf-8-validate
