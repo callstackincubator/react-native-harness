@@ -27,9 +27,9 @@
   },
   "dependencies": {
     "@react-native-harness/bridge": "workspace:*",
-    "@vitest/expect": "4.0.0-beta.8",
-    "@vitest/spy": "4.0.0-beta.8",
-    "chai": "^5.3.1",
+    "@vitest/expect": "4.0.16",
+    "@vitest/spy": "4.0.16",
+    "chai": "^6.2.2",
     "event-target-shim": "^6.0.2",
     "use-sync-external-store": "^1.6.0",
     "zustand": "^5.0.5"
