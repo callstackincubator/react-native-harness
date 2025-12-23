@@ -1,5 +1,6 @@
 import { getDeviceDescriptor } from './client/getDeviceDescriptor.js';
 import { getClient } from './client/index.js';
+import { disableHMRWhenReady } from './disableHMRWhenReady.js';
 import { setupJestMock } from './jest-mock.js';
 
 // Polyfill for EventTarget
@@ -21,7 +22,7 @@ const HMRClient =
 
 // Wait for HMRClient to be initialized
 setTimeout(() => {
-  HMRClient.disable();
+  disableHMRWhenReady(() => HMRClient.disable(), 50);
 
   // Initialize the React Native Harness
   void getClient().then((client) =>
