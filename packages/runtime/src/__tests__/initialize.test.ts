@@ -15,8 +15,9 @@ describe('initialize', () => {
         // ok
       });
 
-    disableHMRWhenReady(disable, 50);
+    const promise = disableHMRWhenReady(disable, 50);
     await vi.runAllTimersAsync();
+    await promise;
 
     expect(disable).toHaveBeenCalledTimes(2);
   });

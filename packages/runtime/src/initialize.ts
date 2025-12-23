@@ -22,11 +22,10 @@ const HMRClient =
 
 // Wait for HMRClient to be initialized
 setTimeout(() => {
-  disableHMRWhenReady(() => HMRClient.disable(), 50);
-
-  // Initialize the React Native Harness
-  void getClient().then((client) =>
-    client.rpc.reportReady(getDeviceDescriptor())
+  void disableHMRWhenReady(() => HMRClient.disable(), 50).then(() =>
+    getClient().then((client) =>
+      client.rpc.reportReady(getDeviceDescriptor())
+    )
   );
 });
 

@@ -3,18 +3,25 @@ export function disableHMRWhenReady(
   retriesLeft: number,
   schedule: (cb: () => void) => void = (cb) => setTimeout(cb, 0),
 ) {
-  try {
-    disable();
-  } catch (error) {
-    if (
-      retriesLeft > 0 &&
-      error instanceof Error &&
-      error.message.includes('Expected HMRClient.setup() call at startup.')
-    ) {
-      schedule(() => disableHMRWhenReady(disable, retriesLeft - 1, schedule));
-      return;
+  return new Promise<void>((resolve, reject) => {
+    function attempt(remaining: number) {
+      try {
+        disable();
+        resolve();
+      } catch (error) {
+        if (
+          remaining > 0 &&
+          error instanceof Error &&
+          error.message.includes('Expected HMRClient.setup() call at startup.')
+        ) {
+          schedule(() => attempt(remaining - 1));
+          return;
+        }
+
+        reject(error);
+      }
     }
 
-    throw error;
-  }
+    attempt(retriesLeft);
+  });
 }
