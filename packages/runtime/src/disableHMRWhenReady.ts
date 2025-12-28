@@ -1,7 +1,7 @@
 export function disableHMRWhenReady(
   disable: () => void,
   retriesLeft: number,
-  schedule: (cb: () => void) => void = (cb) => setTimeout(cb, 0),
+  retryDelay = 10
 ) {
   return new Promise<void>((resolve, reject) => {
     function attempt(remaining: number) {
@@ -14,7 +14,7 @@ export function disableHMRWhenReady(
           error instanceof Error &&
           error.message.includes('Expected HMRClient.setup() call at startup.')
         ) {
-          schedule(() => attempt(remaining - 1));
+          setTimeout(() => attempt(remaining - 1), retryDelay);
           return;
         }
 
