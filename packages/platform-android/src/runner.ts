@@ -3,6 +3,7 @@ import {
   AppNotInstalledError,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
+import { Config } from '@react-native-harness/config';
 import {
   AndroidPlatformConfigSchema,
   type AndroidPlatformConfig,
@@ -12,7 +13,8 @@ import * as adb from './adb.js';
 import { getDeviceName } from './utils.js';
 
 const getAndroidRunner = async (
-  config: AndroidPlatformConfig
+  config: AndroidPlatformConfig,
+  harnessConfig: Config
 ): Promise<HarnessPlatformRunner> => {
   const parsedConfig = AndroidPlatformConfigSchema.parse(config);
   const adbId = await getAdbId(parsedConfig.device);
@@ -33,6 +35,7 @@ const getAndroidRunner = async (
   await Promise.all([
     adb.reversePort(adbId, 8081),
     adb.reversePort(adbId, 8080),
+    adb.reversePort(adbId, harnessConfig.webSocketPort),
   ]);
 
   return {

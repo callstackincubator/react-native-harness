@@ -352,6 +352,9 @@ importers:
 
   packages/platform-android:
     dependencies:
+      '@react-native-harness/config':
+        specifier: workspace:*
+        version: link:../config
       '@react-native-harness/platforms':
         specifier: workspace:*
         version: link:../platforms
@@ -367,6 +370,9 @@ importers:
 
   packages/platform-ios:
     dependencies:
+      '@react-native-harness/config':
+        specifier: workspace:*
+        version: link:../config
       '@react-native-harness/platforms':
         specifier: workspace:*
         version: link:../platforms
