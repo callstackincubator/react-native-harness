@@ -8,6 +8,7 @@ export const ConfigSchema = z
       .min(1, 'App registry component name is required'),
     runners: z.array(z.any()).min(1, 'At least one runner is required'),
     defaultRunner: z.string().optional(),
+    webSocketPort: z.number().optional().default(3001),
     bridgeTimeout: z
       .number()
       .min(1000, 'Bridge timeout must be at least 1 second')

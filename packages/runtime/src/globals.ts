@@ -1,5 +1,6 @@
 export type HarnessGlobal = {
   appRegistryComponentName: string;
+  webSocketPort?: number;
 };
 
 declare global {

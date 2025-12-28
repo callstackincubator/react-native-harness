@@ -18,9 +18,10 @@ export const isAppInstalled = async (
 
 export const reversePort = async (
   adbId: string,
-  port: number
+  port: number,
+  hostPort: number = port
 ): Promise<void> => {
-  await spawn('adb', ['-s', adbId, 'reverse', `tcp:${port}`, `tcp:${port}`]);
+  await spawn('adb', ['-s', adbId, 'reverse', `tcp:${port}`, `tcp:${hostPort}`]);
 };
 
 export const stopApp = async (

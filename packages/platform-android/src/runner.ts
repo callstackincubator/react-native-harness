@@ -33,7 +33,6 @@ const getAndroidRunner = async (
   await Promise.all([
     adb.reversePort(adbId, 8081),
     adb.reversePort(adbId, 8080),
-    adb.reversePort(adbId, 3001),
   ]);
 
   return {

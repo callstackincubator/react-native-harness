@@ -24,7 +24,7 @@ const getHarnessInternal = async (
     getMetroInstance({ projectRoot, harnessConfig: config }, signal),
     import(platform.runner).then((module) => module.default(platform.config)),
     getBridgeServer({
-      port: 3001,
+      port: config.webSocketPort,
       timeout: config.bridgeTimeout,
     }),
   ]);
