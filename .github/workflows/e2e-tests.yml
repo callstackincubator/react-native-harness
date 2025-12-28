@@ -3,10 +3,6 @@ name: E2E Tests
 on:
   workflow_dispatch:
     inputs:
-      app:
-        description: 'Specific app to test (leave empty for all apps)'
-        required: false
-        type: string
       platform:
         description: 'Platform to test'
         required: false
@@ -16,44 +12,29 @@ on:
           - all
           - android
           - ios
+  pull_request:
+    types: [ready_for_review]
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
-  discover-apps:
-    name: Discover Apps
-    runs-on: ubuntu-22.04
-    outputs:
-      apps: ${{ steps.set-apps.outputs.apps }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Discover apps
-        id: set-apps
-        run: |
-          if [ -n "${{ github.event.inputs.app }}" ]; then
-            apps='["${{ github.event.inputs.app }}"]'
-          else
-            # Dynamically discover apps in the /apps directory
-            apps=$(find apps -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | jq -R . | jq -sc .)
-          fi
-          echo "apps=$apps" >> $GITHUB_OUTPUT
-          echo "Discovered apps: $apps"
-
   e2e-android:
-    name: E2E Android - ${{ matrix.app }}
+    name: E2E Android
     runs-on: ubuntu-22.04
-    needs: discover-apps
-    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android' }}
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android')) }}
     env:
       HARNESS_DEBUG: true
-    strategy:
-      fail-fast: false
-      matrix:
-        app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
@@ -69,8 +50,8 @@ jobs:
       - name: Metro cache
         uses: actions/cache@v4
         with:
-          path: apps/${{ matrix.app }}/node_modules/.cache/rn-harness/metro-cache
-          key: metro-cache-${{ hashFiles('apps/${{ matrix.app }}/node_modules/.cache/rn-harness/metro-cache/**/*') }}
+          path: apps/playground/node_modules/.cache/rn-harness/metro-cache
+          key: metro-cache-${{ hashFiles('apps/playground/node_modules/.cache/rn-harness/metro-cache/**/*') }}
           restore-keys: |
             metro-cache
 
@@ -92,41 +73,39 @@ jobs:
         id: cache-apk-restore
         uses: actions/cache/restore@v4
         with:
-          path: apps/${{ matrix.app }}/android/app/build/outputs/apk/debug/app-debug.apk
-          key: apk-${{ matrix.app }}
+          path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
+          key: apk-playground
 
       - name: Build Android app
         if: steps.cache-apk-restore.outputs.cache-hit != 'true'
-        working-directory: apps/${{ matrix.app }}
+        working-directory: apps/playground
         run: |
-          pnpm nx run @react-native-harness/${{ matrix.app }}:build-android --tasks=assembleDebug
+          pnpm nx run @react-native-harness/playground:build-android --tasks=assembleDebug
 
       - name: Save APK to cache
         if: steps.cache-apk-restore.outputs.cache-hit != 'true' && success()
         uses: actions/cache/save@v4
         with:
-          path: apps/${{ matrix.app }}/android/app/build/outputs/apk/debug/app-debug.apk
-          key: apk-${{ matrix.app }}
+          path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
+          key: apk-playground
 
       - name: Run React Native Harness
         uses: ./actions/android
         with:
           app: android/app/build/outputs/apk/debug/app-debug.apk
           runner: android
-          projectRoot: apps/${{ matrix.app }}
+          projectRoot: apps/playground
 
   e2e-ios:
-    name: E2E iOS - ${{ matrix.app }}
+    name: E2E iOS
     runs-on: macos-latest
-    needs: discover-apps
-    if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        app: ${{ fromJson(needs.discover-apps.outputs.apps) }}
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios')) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
@@ -142,8 +121,8 @@ jobs:
       - name: Metro cache
         uses: actions/cache@v4
         with:
-          path: apps/${{ matrix.app }}/node_modules/.cache/rn-harness/metro-cache
-          key: metro-cache-${{ hashFiles('apps/${{ matrix.app }}/node_modules/.cache/rn-harness/metro-cache/**/*') }}
+          path: apps/playground/node_modules/.cache/rn-harness/metro-cache
+          key: metro-cache-${{ hashFiles('apps/playground/node_modules/.cache/rn-harness/metro-cache/**/*') }}
           restore-keys: |
             metro-cache
 
@@ -162,30 +141,30 @@ jobs:
         id: cache-app-restore
         uses: actions/cache/restore@v4
         with:
-          path: ./apps/${{ matrix.app }}/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
-          key: ios-app-${{ matrix.app }}
+          path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
+          key: ios-app-playground
 
       - name: CocoaPods cache
         if: steps.cache-app-restore.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         with:
           path: |
-            ./apps/${{ matrix.app }}/ios/Pods
+            ./apps/playground/ios/Pods
             ~/Library/Caches/CocoaPods
             ~/.cocoapods
-          key: ${{ matrix.app }}-${{ runner.os }}-pods-${{ hashFiles('./apps/${{ matrix.app }}/ios/Podfile.lock') }}
+          key: playground-${{ runner.os }}-pods-${{ hashFiles('./apps/playground/ios/Podfile.lock') }}
           restore-keys: |
-            ${{ matrix.app }}-${{ runner.os }}-pods-
+            playground-${{ runner.os }}-pods-
 
       - name: Install CocoaPods
         if: steps.cache-app-restore.outputs.cache-hit != 'true'
-        working-directory: apps/${{ matrix.app }}/ios
+        working-directory: apps/playground/ios
         run: |
           pod install
 
       - name: Build iOS app
         if: steps.cache-app-restore.outputs.cache-hit != 'true'
-        working-directory: apps/${{ matrix.app }}
+        working-directory: apps/playground
         run: |
           pnpm react-native build-ios --buildFolder ./build --verbose
 
@@ -193,26 +172,12 @@ jobs:
         if: steps.cache-app-restore.outputs.cache-hit != 'true' && success()
         uses: actions/cache/save@v4
         with:
-          path: ./apps/${{ matrix.app }}/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
-          key: ios-app-${{ matrix.app }}
+          path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
+          key: ios-app-playground
 
       - name: Run React Native Harness
         uses: ./actions/ios
         with:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           runner: ios
-          projectRoot: apps/${{ matrix.app }}
-
-      - name: Take screenshot after E2E tests
-        if: failure()
-        run: |
-          mkdir -p screenshots
-          xcrun simctl io booted screenshot screenshots/ios-${{ matrix.app }}-after.png
-
-      - name: Upload iOS screenshots
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-screenshots-${{ matrix.app }}
-          path: screenshots/ios-${{ matrix.app }}-*.png
-          retention-days: 7
+          projectRoot: apps/playground
