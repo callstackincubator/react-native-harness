@@ -20,7 +20,7 @@
     // Create a wrapped factory
     const wrappedFactory = function (...args) {
       // 1. Your Custom Require
-      const myRequire = (id) => {
+      const myRequire = function (id) {
         // Logic to capture/redirect the require
         // globalObject.__r is the global require function from Metro
         // @ts-ignore
@@ -28,13 +28,13 @@
       };
 
       // 2. Custom importDefault (MUST use myRequire)
-      const myImportDefault = (id) => {
+      const myImportDefault = function (id) {
         const mod = myRequire(id);
         return mod && mod.__esModule ? mod.default : mod;
       };
 
       // 3. Custom importAll (MUST use myRequire)
-      const myImportAll = (id) => {
+      const myImportAll = function (id) {
         const mod = myRequire(id);
         if (mod && mod.__esModule) {
           return mod;
@@ -52,40 +52,22 @@
         return result;
       };
 
-      if (args.length >= 7) {
-        // Standard Metro with import support (7 arguments)
-        // args: global, require, importDefault, importAll, module, exports, dependencyMap
-        const [
-          global,
-          _require,
-          _importDefault,
-          _importAll,
-          moduleObject,
-          exports,
-          dependencyMap,
-        ] = args;
+      // Standard Metro with import support (7 arguments)
+      // args: global, require, importDefault, importAll, module, exports, dependencyMap
+      const global = args[0];
+      const moduleObject = args[4];
+      const exports = args[5];
+      const depMap = args[6];
 
-        return factory(
-          global,
-          myRequire,
-          myImportDefault,
-          myImportAll,
-          moduleObject,
-          exports,
-          dependencyMap
-        );
-      } else if (args.length === 4) {
-        // Legacy Metro or CommonJS only (4 arguments)
-        // args: global, require, module, exports
-        const [global, _require, moduleObject, exports] = args;
-
-        return factory(global, myRequire, moduleObject, exports);
-      } else {
-        // Unknown signature, try to patch the second argument (require) and hope for the best
-        // This is a fallback
-        args[1] = myRequire;
-        return factory.apply(this, args);
-      }
+      return factory(
+        global,
+        myRequire,
+        myImportDefault,
+        myImportAll,
+        moduleObject,
+        exports,
+        depMap
+      );
     };
 
     // Call the original define with the wrapped factory
@@ -109,7 +91,7 @@
     if (globalObject.__r && globalObject.__r.getModules) {
       const modules = globalObject.__r.getModules();
       if (modules) {
-        for (const [moduleId, mod] of modules) {
+        modules.forEach(function (mod, moduleId) {
           if (mod) {
             // We need to create a new object to ensure that the module is re-evaluated
             // Mutating existing module directly might not work as expected in some cases
@@ -122,7 +104,7 @@
             newMod.isInitialized = false;
             modules.set(moduleId, newMod);
           }
-        }
+        });
       }
     }
   };
