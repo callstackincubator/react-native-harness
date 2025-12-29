@@ -102,6 +102,30 @@
       }
     }
   };
+
+  // Implement __resetAllModules
+  // This allows the test runner to reset the state of all modules
+  globalObject.__resetAllModules = function () {
+    if (globalObject.__r && globalObject.__r.getModules) {
+      const modules = globalObject.__r.getModules();
+      if (modules) {
+        for (const [moduleId, mod] of modules) {
+          if (mod) {
+            // We need to create a new object to ensure that the module is re-evaluated
+            // Mutating existing module directly might not work as expected in some cases
+            const newMod = {};
+            for (const key in mod) {
+              if (Object.prototype.hasOwnProperty.call(mod, key)) {
+                newMod[key] = mod[key];
+              }
+            }
+            newMod.isInitialized = false;
+            modules.set(moduleId, newMod);
+          }
+        }
+      }
+    }
+  };
 })(
   typeof globalThis !== 'undefined'
     ? globalThis
