@@ -102,6 +102,16 @@
               }
             }
             newMod.isInitialized = false;
+            // Reset publicModule.exports to ensure a clean start
+            // This is crucial because if we reuse the old exports object,
+            // the module factory might append to it instead of overwriting it,
+            // or we might be left with stale state (e.g., class definitions)
+            newMod.publicModule = { exports: {} };
+            
+            // Also clear error state
+            newMod.hasError = false;
+            newMod.error = undefined;
+
             modules.set(moduleId, newMod);
           }
         });
