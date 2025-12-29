@@ -18,17 +18,9 @@
   // @ts-ignore
   globalObject.__d = function (factory, moduleId, dependencyMap) {
     // Create a wrapped factory
-    const wrappedFactory = (
-      global: any,
-      _unusedRequire: any,
-      _unusedImportDefault: any,
-      _unusedImportAll: any,
-      moduleObject: any,
-      exports: any,
-      dependencyMap: any
-    ) => {
+    const wrappedFactory = function (...args) {
       // 1. Your Custom Require
-      const myRequire = (id: any) => {
+      const myRequire = (id) => {
         // Logic to capture/redirect the require
         // globalObject.__r is the global require function from Metro
         // @ts-ignore
@@ -36,19 +28,19 @@
       };
 
       // 2. Custom importDefault (MUST use myRequire)
-      const myImportDefault = (id: any) => {
+      const myImportDefault = (id) => {
         const mod = myRequire(id);
         return mod && mod.__esModule ? mod.default : mod;
       };
 
       // 3. Custom importAll (MUST use myRequire)
-      const myImportAll = (id: any) => {
+      const myImportAll = (id) => {
         const mod = myRequire(id);
         if (mod && mod.__esModule) {
           return mod;
         }
 
-        const result: any = {};
+        const result = {};
         if (mod) {
           for (const key in mod) {
             if (Object.prototype.hasOwnProperty.call(mod, key)) {
@@ -60,16 +52,40 @@
         return result;
       };
 
-      // 4. Execute the original factory with YOUR custom functions
-      return factory(
-        global,
-        myRequire,
-        myImportDefault,
-        myImportAll,
-        moduleObject,
-        exports,
-        dependencyMap
-      );
+      if (args.length >= 7) {
+        // Standard Metro with import support (7 arguments)
+        // args: global, require, importDefault, importAll, module, exports, dependencyMap
+        const [
+          global,
+          _require,
+          _importDefault,
+          _importAll,
+          moduleObject,
+          exports,
+          dependencyMap,
+        ] = args;
+
+        return factory(
+          global,
+          myRequire,
+          myImportDefault,
+          myImportAll,
+          moduleObject,
+          exports,
+          dependencyMap
+        );
+      } else if (args.length === 4) {
+        // Legacy Metro or CommonJS only (4 arguments)
+        // args: global, require, module, exports
+        const [global, _require, moduleObject, exports] = args;
+
+        return factory(global, myRequire, moduleObject, exports);
+      } else {
+        // Unknown signature, try to patch the second argument (require) and hope for the best
+        // This is a fallback
+        args[1] = myRequire;
+        return factory.apply(this, args);
+      }
     };
 
     // Call the original define with the wrapped factory

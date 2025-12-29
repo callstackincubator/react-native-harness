@@ -14,8 +14,8 @@
       "default": "./dist/index.js"
     },
     "./polyfills/harness-module-system": {
-      "import": "./dist/polyfills/harness-module-system.js",
-      "default": "./dist/polyfills/harness-module-system.js"
+      "import": "./assets/harness-module-system.js",
+      "default": "./assets/harness-module-system.js"
     },
     "./entry-point": {
       "development": "./src/entry-point.ts",
