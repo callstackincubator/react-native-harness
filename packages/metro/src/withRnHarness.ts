@@ -1,6 +1,5 @@
 import type { MetroConfig } from 'metro-config';
 import { getConfig } from '@react-native-harness/config';
-import { patchModuleSystem } from './moduleSystem';
 import { getHarnessResolver } from './resolver';
 import { getHarnessManifest } from './manifest';
 import { getHarnessBabelTransformerPath } from './babel-transformer';
@@ -25,8 +24,6 @@ export const withRnHarness = <T extends MetroConfig>(
     const metroConfig = await config;
     const { config: harnessConfig } = await getConfig(process.cwd());
 
-    patchModuleSystem();
-
     const harnessResolver = getHarnessResolver(metroConfig, harnessConfig);
     const harnessManifest = getHarnessManifest(harnessConfig);
     const harnessBabelTransformerPath =
@@ -40,6 +37,9 @@ export const withRnHarness = <T extends MetroConfig>(
         getPolyfills: (...args) => [
           ...(metroConfig.serializer?.getPolyfills?.(...args) ?? []),
           harnessManifest,
+          require.resolve(
+            '@react-native-harness/runtime/polyfills/harness-module-system'
+          ),
         ],
         isThirdPartyModule({ path: modulePath }) {
           const isThirdPartyByDefault =

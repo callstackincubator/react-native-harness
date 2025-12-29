@@ -13,7 +13,10 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./moduleSystem": "./assets/moduleSystem.flow.js",
+    "./polyfills/harness-module-system": {
+      "import": "./dist/polyfills/harness-module-system.js",
+      "default": "./dist/polyfills/harness-module-system.js"
+    },
     "./entry-point": {
       "development": "./src/entry-point.ts",
       "types": "./dist/entry-point.d.ts",
