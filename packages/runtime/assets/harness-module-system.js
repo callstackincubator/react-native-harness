@@ -91,6 +91,17 @@
     // Call the original define with the wrapped factory
     return originalDefine.call(this, wrappedFactory, moduleId, dependencyMap);
   };
+
+  // Implement __clearModule
+  // This allows the test runner to re-evaluate modules by clearing them from the cache
+  globalObject.__clearModule = function (moduleId) {
+    if (globalObject.__r && globalObject.__r.getModules) {
+      const modules = globalObject.__r.getModules();
+      if (modules && modules.has(moduleId)) {
+        modules.delete(moduleId);
+      }
+    }
+  };
 })(
   typeof globalThis !== 'undefined'
     ? globalThis
