@@ -24,8 +24,8 @@ export const getAdbId = async (
     } else if (isAndroidDevicePhysical(device)) {
       const deviceInfo = await adb.getDeviceInfo(adbId);
       if (
-        deviceInfo?.manufacturer === device.manufacturer &&
-        deviceInfo?.model === device.model
+        deviceInfo?.manufacturer.toLowerCase() === device.manufacturer &&
+        deviceInfo?.model.toLowerCase() === device.model
       ) {
         return adbId;
       }
