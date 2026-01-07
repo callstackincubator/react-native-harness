@@ -23,9 +23,18 @@ export const getAdbId = async (
       }
     } else if (isAndroidDevicePhysical(device)) {
       const deviceInfo = await adb.getDeviceInfo(adbId);
+
+      if (!deviceInfo) {
+        // This should never happen as we already checked if the device is physical.
+        return null;
+      }
+
+      const normalizedManufacturer = deviceInfo.manufacturer?.toLowerCase() ?? '';
+      const normalizedModel = deviceInfo.model?.toLowerCase() ?? '';
+
       if (
-        deviceInfo?.manufacturer.toLowerCase() === device.manufacturer &&
-        deviceInfo?.model.toLowerCase() === device.model
+        normalizedManufacturer === device.manufacturer &&
+        normalizedModel === device.model
       ) {
         return adbId;
       }
