@@ -18,7 +18,7 @@ export const evaluateModule = (moduleJs: string, modulePath: string): void => {
   const moduleId = Number(__rParam);
 
   // This is important as if module was already initialized, it would not be re-initialized
-  global.__clearModule(moduleId);
+  global.__resetModule(moduleId);
 
   // eslint-disable-next-line no-eval
   eval(moduleJs);

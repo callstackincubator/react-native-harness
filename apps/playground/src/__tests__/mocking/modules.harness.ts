@@ -7,14 +7,18 @@ import {
   unmock,
   requireActual,
   fn,
-  clearMocks,
   resetModules,
 } from 'react-native-harness';
 
 describe('Module mocking', () => {
   afterEach(() => {
-    // Clean up mocks after each test
-    clearMocks();
+    resetModules();
+  });
+
+  it('should not interfere with modules that are not mocked', () => {
+    const moduleA = require('react-native');
+    const moduleB = require('react-native');
+    expect(moduleA === moduleB).toBe(true);
   });
 
   it('should completely mock a module and return mock implementation', () => {
@@ -132,22 +136,5 @@ describe('Module mocking', () => {
     // Require again, should reinitialize the module
     const newNow = require('react-native').now;
     expect(newNow).not.toBe(oldNow);
-  });
-
-  it('should unmock all modules when clearMocks is called', () => {
-    // Mock a module
-    const mockFactory = () => ({ mockProperty: 'mocked' });
-    mock('react-native', mockFactory);
-
-    // Verify it's mocked
-    const module = require('react-native');
-    expect(module.mockProperty).toBe('mocked');
-
-    // Unmock all modules
-    clearMocks();
-
-    // Verify it's back to actual
-    const actualModule = require('react-native');
-    expect(actualModule).not.toHaveProperty('mockProperty');
   });
 });

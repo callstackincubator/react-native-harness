@@ -5,53 +5,22 @@
 // to allow capturing nested require calls.
 
 (function (globalObject) {
-  // @ts-ignore
-  const originalDefine = globalObject.__d;
+  const myRequire = function (id) {
+    return globalObject.__r(id);
+  };
 
-  if (!originalDefine) {
-    // If __d is not defined, we are probably not in a Metro environment or
-    // the module system hasn't loaded yet.
-    return;
-  }
+  const myImportDefault = function (id) {
+    return globalObject.__r.importDefault(id);
+  };
+
+  const myImportAll = function (id) {
+    return globalObject.__r.importAll(id);
+  };
 
   // Monkey-patch define
-  // @ts-ignore
+  const originalDefine = globalObject.__d;
   globalObject.__d = function (factory, moduleId, dependencyMap) {
-    // Create a wrapped factory
     const wrappedFactory = function (...args) {
-      // 1. Your Custom Require
-      const myRequire = function (id) {
-        // Logic to capture/redirect the require
-        // globalObject.__r is the global require function from Metro
-        // @ts-ignore
-        return globalObject.__r(id);
-      };
-
-      // 2. Custom importDefault (MUST use myRequire)
-      const myImportDefault = function (id) {
-        const mod = myRequire(id);
-        return mod && mod.__esModule ? mod.default : mod;
-      };
-
-      // 3. Custom importAll (MUST use myRequire)
-      const myImportAll = function (id) {
-        const mod = myRequire(id);
-        if (mod && mod.__esModule) {
-          return mod;
-        }
-
-        const result = {};
-        if (mod) {
-          for (const key in mod) {
-            if (Object.prototype.hasOwnProperty.call(mod, key)) {
-              result[key] = mod[key];
-            }
-          }
-        }
-        result.default = mod;
-        return result;
-      };
-
       // Standard Metro with import support (7 arguments)
       // args: global, require, importDefault, importAll, module, exports, dependencyMap
       const global = args[0];
@@ -74,49 +43,24 @@
     return originalDefine.call(this, wrappedFactory, moduleId, dependencyMap);
   };
 
-  // Implement __clearModule
-  // This allows the test runner to re-evaluate modules by clearing them from the cache
-  globalObject.__clearModule = function (moduleId) {
-    if (globalObject.__r && globalObject.__r.getModules) {
-      const modules = globalObject.__r.getModules();
-      if (modules && modules.has(moduleId)) {
-        modules.delete(moduleId);
-      }
+  globalObject.__resetModule = function (moduleId) {
+    const module = globalObject.__r.getModules().get(moduleId);
+
+    if (!module) {
+      return;
     }
+
+    module.hasError = false;
+    module.error = undefined;
+    module.isInitialized = false;
   };
 
-  // Implement __resetAllModules
-  // This allows the test runner to reset the state of all modules
-  globalObject.__resetAllModules = function () {
-    if (globalObject.__r && globalObject.__r.getModules) {
-      const modules = globalObject.__r.getModules();
-      if (modules) {
-        modules.forEach(function (mod, moduleId) {
-          if (mod) {
-            // We need to create a new object to ensure that the module is re-evaluated
-            // Mutating existing module directly might not work as expected in some cases
-            const newMod = {};
-            for (const key in mod) {
-              if (Object.prototype.hasOwnProperty.call(mod, key)) {
-                newMod[key] = mod[key];
-              }
-            }
-            newMod.isInitialized = false;
-            // Reset publicModule.exports to ensure a clean start
-            // This is crucial because if we reuse the old exports object,
-            // the module factory might append to it instead of overwriting it,
-            // or we might be left with stale state (e.g., class definitions)
-            newMod.publicModule = { exports: {} };
-            
-            // Also clear error state
-            newMod.hasError = false;
-            newMod.error = undefined;
+  globalObject.__resetModules = function () {
+    const modules = globalObject.__r.getModules();
 
-            modules.set(moduleId, newMod);
-          }
-        });
-      }
-    }
+    modules.forEach(function (mod, moduleId) {
+      globalObject.__resetModule(moduleId);
+    });
   };
 })(
   typeof globalThis !== 'undefined'
