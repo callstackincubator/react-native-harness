@@ -198,3 +198,5 @@ Harness provides the complete Vitest spy and mock API including:
 - **Spying**: `spyOn()`, method restoration
 - **Mock Management**: `clearAllMocks()`, `resetAllMocks()`, `restoreAllMocks()`
 - **Spy Assertions**: All `toHaveBeenCalled*` and `toHaveReturned*` matchers
+
+For module mocking capabilities, see the [Module Mocking](/docs/api/module-mocking) documentation.

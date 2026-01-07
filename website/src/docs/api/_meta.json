@@ -16,6 +16,11 @@
   },
   {
     "type": "file",
+    "name": "module-mocking",
+    "label": "Module Mocking"
+  },
+  {
+    "type": "file",
     "name": "rendering-components",
     "label": "Rendering Components"
   }
