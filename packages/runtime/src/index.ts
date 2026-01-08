@@ -1,3 +1,5 @@
+// Polyfills must be imported first to ensure compatibility with Hermes
+import './polyfills.js';
 import './globals.d.ts';
 
 export { UI as ReactNativeHarness } from './ui/index.js';
