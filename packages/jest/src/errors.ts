@@ -20,3 +20,13 @@ export class InitializationTimeoutError extends HarnessError {
     this.name = 'InitializationTimeoutError';
   }
 }
+
+export class MaxAppRestartsError extends HarnessError {
+  constructor(attempts: number) {
+    super(
+      `App failed to start after ${attempts} attempts. ` +
+        `No bundling activity detected within timeout period.`
+    );
+    this.name = 'MaxAppRestartsError';
+  }
+}
