@@ -93,6 +93,12 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
   // Optional: Bridge timeout in milliseconds (default: 60000)
   bridgeTimeout?: number;
 
+  // Optional: Bundle start timeout in milliseconds (default: 15000)
+  bundleStartTimeout?: number;
+
+  // Optional: Maximum number of app restarts when app fails to report ready (default: 2)
+  maxAppRestarts?: number;
+
   // Optional: Reset environment between test files (default: true)
   resetEnvironmentBetweenTestFiles?: boolean;
 }
@@ -248,6 +254,39 @@ Increase this value if you experience timeout errors, especially on:
 
 - Slower devices or simulators
 - Complex test suites with heavy setup
+
+## Bundle Start Timeout
+
+The bundle start timeout controls how long React Native Harness waits for Metro to start bundling after the app is restarted. This timeout is used in conjunction with the app restart mechanism to detect when an app has failed to report ready.
+
+```javascript
+{
+  bundleStartTimeout: 30000,  // 30 seconds in milliseconds
+}
+```
+
+**Default:** 15000 (15 seconds)
+**Minimum:** 1000 (1 second)
+
+This timeout works with the `maxAppRestarts` setting to automatically restart the app when it fails to communicate with the test harness. If no bundling activity is detected within this timeout period, the app will be restarted automatically.
+
+## Maximum App Restarts
+
+The maximum app restarts setting controls how many times React Native Harness will attempt to restart the app when it fails to report ready within the configured timeout periods.
+
+```javascript
+{
+  maxAppRestarts: 3,  // Allow up to 3 restart attempts
+}
+```
+
+**Default:** 2
+**Minimum:** 0
+
+When set to 0, automatic app restarting is disabled. Higher values provide more resilience against flaky test environments but may increase test execution time. The app will be restarted when:
+
+- No bundling activity is detected within the `bundleStartTimeout` period
+- The bridge fails to establish communication within the `bridgeTimeout` period
 
 ## Environment-Specific Configurations
 
