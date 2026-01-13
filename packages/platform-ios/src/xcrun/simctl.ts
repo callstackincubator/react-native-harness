@@ -120,3 +120,21 @@ export const getSimulatorId = async (
 
   return simulator?.udid ?? null;
 };
+
+export const isAppRunning = async (
+  udid: string,
+  bundleId: string
+): Promise<boolean> => {
+  try {
+    const { stdout } = await spawn('xcrun', [
+      'simctl',
+      'spawn',
+      udid,
+      'launchctl',
+      'list',
+    ]);
+    return stdout.includes(bundleId);
+  } catch {
+    return false;
+  }
+};

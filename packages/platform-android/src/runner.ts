@@ -60,6 +60,9 @@ const getAndroidRunner = async (
     dispose: async () => {
       await adb.stopApp(adbId, parsedConfig.bundleId);
     },
+    isAppRunning: async () => {
+      return await adb.isAppRunning(adbId, parsedConfig.bundleId);
+    },
   };
 };
 

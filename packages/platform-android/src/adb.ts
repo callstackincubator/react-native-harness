@@ -21,7 +21,13 @@ export const reversePort = async (
   port: number,
   hostPort: number = port
 ): Promise<void> => {
-  await spawn('adb', ['-s', adbId, 'reverse', `tcp:${port}`, `tcp:${hostPort}`]);
+  await spawn('adb', [
+    '-s',
+    adbId,
+    'reverse',
+    `tcp:${port}`,
+    `tcp:${hostPort}`,
+  ]);
 };
 
 export const stopApp = async (
@@ -101,4 +107,18 @@ export const isBootCompleted = async (adbId: string): Promise<boolean> => {
 
 export const stopEmulator = async (adbId: string): Promise<void> => {
   await spawn('adb', ['-s', adbId, 'emu', 'kill']);
+};
+
+export const isAppRunning = async (
+  adbId: string,
+  bundleId: string
+): Promise<boolean> => {
+  const { stdout } = await spawn('adb', [
+    '-s',
+    adbId,
+    'shell',
+    'pidof',
+    bundleId,
+  ]);
+  return stdout.trim() !== '';
 };

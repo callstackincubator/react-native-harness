@@ -64,6 +64,9 @@ export const getAppleSimulatorPlatformInstance = async (
     dispose: async () => {
       await simctl.stopApp(udid, config.bundleId);
     },
+    isAppRunning: async () => {
+      return await simctl.isAppRunning(udid, config.bundleId);
+    },
   };
 };
 
@@ -100,6 +103,9 @@ export const getApplePhysicalDevicePlatformInstance = async (
     },
     dispose: async () => {
       await devicectl.stopApp(deviceId, config.bundleId);
+    },
+    isAppRunning: async () => {
+      return await devicectl.isAppRunning(deviceId, config.bundleId);
     },
   };
 };

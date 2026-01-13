@@ -30,3 +30,13 @@ export class MaxAppRestartsError extends HarnessError {
     this.name = 'MaxAppRestartsError';
   }
 }
+
+export class NativeCrashError extends HarnessError {
+  constructor(
+    public readonly testFilePath: string,
+    public readonly lastKnownTest?: string
+  ) {
+    super('The native app crashed during test execution.');
+    this.name = 'NativeCrashError';
+  }
+}

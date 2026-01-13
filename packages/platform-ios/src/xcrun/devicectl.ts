@@ -151,3 +151,19 @@ export const getDeviceId = async (name: string): Promise<string | null> => {
 
   return device?.identifier ?? null;
 };
+
+export const isAppRunning = async (
+  identifier: string,
+  bundleId: string
+): Promise<boolean> => {
+  const appInfo = await getAppInfo(identifier, bundleId);
+
+  if (!appInfo) {
+    return false;
+  }
+
+  const processes = await getProcesses(identifier);
+  return processes.some((process) =>
+    process.executable.startsWith(appInfo.url)
+  );
+};

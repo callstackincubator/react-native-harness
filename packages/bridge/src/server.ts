@@ -19,6 +19,7 @@ export type BridgeServerOptions = {
 export type BridgeServerEvents = {
   ready: (device: DeviceDescriptor) => void;
   event: (event: BridgeEvents) => void;
+  disconnect: () => void;
 };
 
 export type BridgeServer = {
@@ -76,6 +77,7 @@ export const getBridgeServer = async ({
 
       // TODO: Remove channel when connection is closed.
       clients.delete(ws);
+      emitter.emit('disconnect');
     });
 
     group.updateChannels((channels) => {

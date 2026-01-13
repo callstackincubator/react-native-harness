@@ -17,6 +17,7 @@ import { teardown } from './teardown.js';
 import { HarnessError } from '@react-native-harness/tools';
 import { getErrorMessage } from './logs.js';
 import { DeviceNotRespondingError } from '@react-native-harness/bridge';
+import { NativeCrashError } from './errors.js';
 
 class CancelRun extends Error {
   constructor(message?: string) {
@@ -104,17 +105,52 @@ export default class JestHarness implements CallbackTestRunnerInterface {
               }
               isFirstTest = false;
 
-              return onStart(test).then(() =>
-                runHarnessTestFile({
-                  testPath: test.path,
-                  harness,
-                  globalConfig: this.#globalConfig,
-                  projectConfig: test.context.config,
-                })
-              );
+              return onStart(test).then(async () => {
+                if (!harnessConfig.detectNativeCrashes) {
+                  return runHarnessTestFile({
+                    testPath: test.path,
+                    harness,
+                    globalConfig: this.#globalConfig,
+                    projectConfig: test.context.config,
+                  });
+                }
+
+                // Start crash monitoring
+                const crashPromise = harness.crashMonitor.startMonitoring(
+                  test.path
+                );
+
+                try {
+                  const result = await Promise.race([
+                    runHarnessTestFile({
+                      testPath: test.path,
+                      harness,
+                      globalConfig: this.#globalConfig,
+                      projectConfig: test.context.config,
+                    }),
+                    crashPromise,
+                  ]);
+
+                  return result;
+                } finally {
+                  harness.crashMonitor.stopMonitoring();
+                }
+              });
             })
             .then((result) => onResult(test, result))
-            .catch((err) => {
+            .catch(async (err) => {
+              if (err instanceof NativeCrashError) {
+                onFailure(test, {
+                  message: err.message,
+                  stack: '',
+                });
+
+                // Restart the app for the next test file
+                await harness.restart();
+
+                return;
+              }
+
               if (err instanceof DeviceNotRespondingError) {
                 onFailure(test, {
                   message: err.message,

@@ -38,6 +38,9 @@ const getVegaRunner = async (
     dispose: async () => {
       await kepler.stopApp(deviceId, bundleId);
     },
+    isAppRunning: async () => {
+      return await kepler.isAppRunning(deviceId, bundleId);
+    },
   };
 };
 

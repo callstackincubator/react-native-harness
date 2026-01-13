@@ -28,6 +28,12 @@ export const ConfigSchema = z
     unstable__skipAlreadyIncludedModules: z.boolean().optional().default(false),
     unstable__enableMetroCache: z.boolean().optional().default(false),
 
+    detectNativeCrashes: z.boolean().optional().default(true),
+    crashDetectionInterval: z
+      .number()
+      .min(100, 'Crash detection interval must be at least 100ms')
+      .default(500),
+
     // Deprecated property - used for migration detection
     include: z.array(z.string()).optional(),
   })

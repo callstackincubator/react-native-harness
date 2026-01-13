@@ -14,11 +14,13 @@ import {
 } from '@react-native-harness/bundler-metro';
 import { InitializationTimeoutError, MaxAppRestartsError } from './errors.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
+import { createCrashMonitor, CrashMonitor } from './crash-monitor.js';
 
 export type Harness = {
   runTests: BridgeClientFunctions['runTests'];
   restart: () => Promise<void>;
   dispose: () => Promise<void>;
+  crashMonitor: CrashMonitor;
 };
 
 export const waitForAppReady = async (options: {
@@ -135,6 +137,12 @@ const getHarnessInternal = async (
     ]);
   };
 
+  const crashMonitor = createCrashMonitor({
+    interval: config.crashDetectionInterval,
+    platformRunner: platformInstance,
+    bridgeServer: serverBridge,
+  });
+
   if (signal.aborted) {
     await dispose();
 
@@ -157,7 +165,11 @@ const getHarnessInternal = async (
 
   const restart = () =>
     new Promise<void>((resolve, reject) => {
-      serverBridge.once('ready', () => resolve());
+      crashMonitor.markIntentionalRestart();
+      serverBridge.once('ready', () => {
+        crashMonitor.clearIntentionalRestart();
+        resolve();
+      });
       platformInstance.restartApp().catch(reject);
     });
 
@@ -173,6 +185,7 @@ const getHarnessInternal = async (
     },
     restart,
     dispose,
+    crashMonitor,
   };
 };
 
