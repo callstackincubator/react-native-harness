@@ -20,7 +20,8 @@ export class BundlingFailedError extends Error {
     public readonly modulePath: string,
     public readonly reason: string
   ) {
-    super(`Bundling of ${modulePath} failed`);
+    const reasonMessage = JSON.parse(reason).message ?? reason;
+    super(`Bundling of ${modulePath} failed with error:\n\n${reasonMessage}\n`);
     this.name = 'BundlingFailedError';
   }
 }
