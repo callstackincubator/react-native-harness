@@ -1,4 +1,3 @@
-import { InteractionManager } from 'react-native';
 import NativeHarnessUI from './NativeHarnessUI.js';
 import type { ElementReference } from './screen.js';
 
@@ -7,17 +6,18 @@ import type { ElementReference } from './screen.js';
  * This ensures that any events triggered by native code (like onPress callbacks)
  * are processed before we continue.
  *
- * Uses InteractionManager.runAfterInteractions to wait until all touch events
- * and animations have completed, then does additional event loop tick to
- * ensure React state updates are fully processed.
+ * Uses requestAnimationFrame to wait for the next frame render, ensuring React
+ * has had time to process events and commit state updates. Includes a small
+ * timeout buffer for slow devices.
  */
 const flushEvents = (): Promise<void> => {
   return new Promise((resolve) => {
-    // Wait for React Native to finish processing all interactions (touch events, animations)
-    InteractionManager.runAfterInteractions(() => {
-      // Additional event loop ticks to ensure state updates are processed
-      setImmediate(() => {
-        resolve();
+    // Wait for the next frame - ensures React has processed events and rendered
+    requestAnimationFrame(() => {
+      // Wait for another frame to handle any cascading updates
+      requestAnimationFrame(() => {
+        // Small timeout buffer for slow devices to complete any async processing
+        setTimeout(resolve, 16);
       });
     });
   });
