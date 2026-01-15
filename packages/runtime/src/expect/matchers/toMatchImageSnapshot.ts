@@ -6,12 +6,6 @@ import {
 } from '@react-native-harness/bridge';
 import { getHarnessContext } from '../../runner/index.js';
 
-declare module '@vitest/expect' {
-  interface Matchers {
-    toMatchImageSnapshot(options: ImageSnapshotOptions): Promise<void>;
-  }
-}
-
 type ScreenshotResult = {
   data: Uint8Array;
   width: number;

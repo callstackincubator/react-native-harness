@@ -1,5 +1,5 @@
 import './polyfills.js';
-import './globals.d.ts';
+import './globals.js';
 
 export { UI as ReactNativeHarness } from './ui/index.js';
 export * from './spy/index.js';

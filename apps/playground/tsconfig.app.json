@@ -25,13 +25,7 @@
     "src/**/*.spec.jsx",
     "src/test-setup.ts"
   ],
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "src/**/*.js",
-    "src/**/*.jsx",
-    "react-native-harness.d.ts"
-  ],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.jsx"],
   "references": [
     {
       "path": "../../packages/platform-vega/tsconfig.lib.json"
