@@ -34,7 +34,6 @@
     }
   },
   "peerDependencies": {
-    "react": "*",
     "react-native": "*"
   },
   "dependencies": {
@@ -42,7 +41,6 @@
     "@react-native-harness/runtime": "workspace:*"
   },
   "devDependencies": {
-    "react": "*",
     "react-native": "*"
   },
   "codegenConfig": {

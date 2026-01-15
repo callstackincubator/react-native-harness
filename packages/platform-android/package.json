@@ -20,8 +20,7 @@
     "@react-native-harness/tools": "workspace:*",
     "@react-native-harness/config": "workspace:*",
     "zod": "^3.25.67",
-    "tslib": "^2.3.0",
-    "fast-xml-parser": "^4.3.2"
+    "tslib": "^2.3.0"
   },
   "license": "MIT"
 }
