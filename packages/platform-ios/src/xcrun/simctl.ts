@@ -138,3 +138,11 @@ export const isAppRunning = async (
     return false;
   }
 };
+
+export const screenshot = async (
+  udid: string,
+  destination: string
+): Promise<string> => {
+  await spawn('xcrun', ['simctl', 'io', udid, 'screenshot', destination]);
+  return destination;
+};

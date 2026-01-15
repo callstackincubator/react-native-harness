@@ -2,7 +2,11 @@ import {
   getBridgeServer,
   BridgeServer,
 } from '@react-native-harness/bridge/server';
-import { BridgeClientFunctions } from '@react-native-harness/bridge';
+import {
+  HarnessContext,
+  TestExecutionOptions,
+  TestSuiteResult,
+} from '@react-native-harness/bridge';
 import {
   HarnessPlatform,
   HarnessPlatformRunner,
@@ -16,8 +20,14 @@ import { InitializationTimeoutError, MaxAppRestartsError } from './errors.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
 import { createCrashMonitor, CrashMonitor } from './crash-monitor.js';
 
+export type HarnessRunTestsOptions = Exclude<TestExecutionOptions, 'platform'>;
+
 export type Harness = {
-  runTests: BridgeClientFunctions['runTests'];
+  context: HarnessContext;
+  runTests: (
+    path: string,
+    options: HarnessRunTestsOptions
+  ) => Promise<TestSuiteResult>;
   restart: () => Promise<void>;
   dispose: () => Promise<void>;
   crashMonitor: CrashMonitor;
@@ -118,6 +128,10 @@ const getHarnessInternal = async (
   projectRoot: string,
   signal: AbortSignal
 ): Promise<Harness> => {
+  const context: HarnessContext = {
+    platform,
+  };
+
   const [metroInstance, platformInstance, serverBridge] = await Promise.all([
     getMetroInstance({ projectRoot, harnessConfig: config }, signal),
     import(platform.runner).then((module) =>
@@ -126,6 +140,7 @@ const getHarnessInternal = async (
     getBridgeServer({
       port: config.webSocketPort,
       timeout: config.bridgeTimeout,
+      context,
     }),
   ]);
 
@@ -174,6 +189,7 @@ const getHarnessInternal = async (
     });
 
   return {
+    context,
     runTests: async (path, options) => {
       const client = serverBridge.rpc.clients.at(-1);
 
@@ -181,7 +197,10 @@ const getHarnessInternal = async (
         throw new Error('No client found');
       }
 
-      return await client.runTests(path, options);
+      return await client.runTests(path, {
+        ...options,
+        runner: platform.runner,
+      });
     },
     restart,
     dispose,

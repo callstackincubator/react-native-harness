@@ -41,15 +41,6 @@ export const getAppleSimulatorPlatformInstance = async (
     throw new Error('Simulator is not booted');
   }
 
-  const isAvailable = await simctl.isAppInstalled(udid, config.bundleId);
-
-  if (!isAvailable) {
-    throw new AppNotInstalledError(
-      config.bundleId,
-      getDeviceName(config.device)
-    );
-  }
-
   return {
     startApp: async () => {
       await simctl.startApp(udid, config.bundleId);

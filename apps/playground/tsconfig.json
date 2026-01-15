@@ -16,6 +16,12 @@
       "path": "../../packages/jest"
     },
     {
+      "path": "../../packages/ui"
+    },
+    {
+      "path": "../../packages/runtime"
+    },
+    {
       "path": "../../packages/react-native-harness"
     },
     {

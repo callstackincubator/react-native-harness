@@ -16,7 +16,7 @@ import { setup } from './setup.js';
 import { teardown } from './teardown.js';
 import { HarnessError } from '@react-native-harness/tools';
 import { getErrorMessage } from './logs.js';
-import { DeviceNotRespondingError } from '@react-native-harness/bridge';
+import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
 import { NativeCrashError } from './errors.js';
 
 class CancelRun extends Error {

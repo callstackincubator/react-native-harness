@@ -14,3 +14,17 @@ export class DeviceNotFoundError extends Error {
     this.name = 'DeviceNotFoundError';
   }
 }
+
+export class DependencyNotFoundError extends Error {
+  constructor(
+    public readonly dependencyName: string,
+    public readonly installInstructions?: string
+  ) {
+    super(
+      `Dependency "${dependencyName}" not found.${
+        installInstructions ? ` ${installInstructions}` : ''
+      }`
+    );
+    this.name = 'DependencyNotFoundError';
+  }
+}

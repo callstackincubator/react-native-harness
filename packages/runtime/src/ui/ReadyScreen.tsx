@@ -16,6 +16,7 @@ export const ReadyScreen = () => {
 
   return (
     <View style={styles.container}>
+      <StatusBar hidden={true} />
       <View style={styles.contentContainer}>
         <Text style={styles.title}>React Native Harness</Text>
 

@@ -53,6 +53,9 @@
     },
     {
       "path": "./packages/github-action"
+    },
+    {
+      "path": "./packages/ui"
     }
   ]
 }

@@ -4,8 +4,10 @@ packages:
   - website
 onlyBuiltDependencies:
   - '@apollo/protobufjs'
+  - '@parcel/watcher'
   - '@swc/core'
   - appium
+  - core-js
   - detox
   - dtrace-provider
   - edgedriver
@@ -15,3 +17,4 @@ onlyBuiltDependencies:
   - nx
   - sharp
   - sqlite3
+  - unrs-resolver

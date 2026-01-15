@@ -1,12 +1,24 @@
 import { z } from 'zod';
 
+const RunnerSchema = z.object({
+  name: z
+    .string()
+    .min(1, 'Runner name is required')
+    .regex(
+      /^[a-zA-Z0-9._-]+$/,
+      'Runner name can only contain alphanumeric characters, dots, underscores, and hyphens'
+    ),
+  config: z.record(z.any()),
+  runner: z.string(),
+});
+
 export const ConfigSchema = z
   .object({
     entryPoint: z.string().min(1, 'Entry point is required'),
     appRegistryComponentName: z
       .string()
       .min(1, 'App registry component name is required'),
-    runners: z.array(z.any()).min(1, 'At least one runner is required'),
+    runners: z.array(RunnerSchema).min(1, 'At least one runner is required'),
     defaultRunner: z.string().optional(),
     webSocketPort: z.number().optional().default(3001),
     bridgeTimeout: z

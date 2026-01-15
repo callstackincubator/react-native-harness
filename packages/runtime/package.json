@@ -1,10 +1,19 @@
 {
   "name": "@react-native-harness/runtime",
+  "description": "The core test runtime that executes on React Native devices, providing Jest-compatible APIs (describe, it, expect) and managing test collection, execution, and result reporting in native environments.",
   "version": "1.0.0-alpha.21",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "src",
+    "lib",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__",
+    "!**/.*"
+  ],
   "exports": {
     "./package.json": "./package.json",
     ".": {
@@ -41,6 +50,15 @@
     "@types/chai": "^5.2.2",
     "react": "*",
     "react-native": "*"
+  },
+  "author": {
+    "name": "Szymon Chmal",
+    "email": "szymon.chmal@callstack.com"
+  },
+  "homepage": "https://github.com/callstackincubator/react-native-harness",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/callstackincubator/react-native-harness.git"
   },
   "license": "MIT"
 }

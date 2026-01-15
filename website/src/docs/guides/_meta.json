@@ -1,0 +1,17 @@
+[
+  {
+    "type": "file",
+    "name": "ui-testing",
+    "label": "UI Testing"
+  },
+  {
+    "type": "file",
+    "name": "ci-cd",
+    "label": "CI/CD Integration"
+  },
+  {
+    "type": "file",
+    "name": "migration-guide",
+    "label": "Migration Guide"
+  }
+]

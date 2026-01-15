@@ -8,6 +8,10 @@ import { runHooks } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
 import { TestRunnerContext } from './types.js';
 
+declare global {
+  var HARNESS_TEST_PATH: string;
+}
+
 const runTest = async (
   test: TestCase,
   suite: TestSuite,

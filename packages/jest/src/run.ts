@@ -88,6 +88,7 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
     testNamePattern: globalConfig.testNamePattern,
     setupFiles,
     setupFilesAfterEnv,
+    runner: harness.context.platform.runner,
   });
   const end = Date.now();
 

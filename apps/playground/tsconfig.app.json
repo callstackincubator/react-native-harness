@@ -46,6 +46,12 @@
       "path": "../../packages/jest/tsconfig.lib.json"
     },
     {
+      "path": "../../packages/ui/tsconfig.lib.json"
+    },
+    {
+      "path": "../../packages/runtime/tsconfig.lib.json"
+    },
+    {
       "path": "../../packages/react-native-harness/tsconfig.lib.json"
     }
   ]

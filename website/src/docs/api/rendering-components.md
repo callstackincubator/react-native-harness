@@ -107,8 +107,7 @@ While Harness's render API is inspired by React Native Testing Library, there ar
 
 ### Differences
 
-- **No query functions**: Harness does not provide `getByText`, `findByRole`, etc. as it focuses on testing native behavior rather than component structure
-- **No user interaction utilities**: No `fireEvent` or user interaction helpers
+- **Query functions and user interaction utilities**: Available through the separate [`@react-native-harness/ui` package](/docs/guides/ui-testing) which provides `screen.findByTestId()`, `screen.findByAccessibilityLabel()`, `userEvent.press()`, `userEvent.type()`, and other utilities
 - **Visual rendering**: Components are rendered as an overlay on the actual device/simulator, not in-memory
 - **Enforces single component**: Only one component can be visible at a time
 

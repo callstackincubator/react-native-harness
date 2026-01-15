@@ -27,12 +27,18 @@
     }
   },
   "dependencies": {
+    "@react-native-harness/platforms": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
     "birpc": "^2.4.0",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
+    "ssim.js": "^3.5.0",
     "tslib": "^2.3.0",
     "ws": "^8.18.2"
   },
   "devDependencies": {
+    "@types/pixelmatch": "^5.2.6",
+    "@types/pngjs": "^6.0.5",
     "@types/ws": "^8.18.1"
   },
   "license": "MIT"

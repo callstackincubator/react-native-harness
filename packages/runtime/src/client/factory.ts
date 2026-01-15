@@ -14,6 +14,7 @@ import { getBundler, evaluateModule, Bundler } from '../bundler/index.js';
 import { markTestsAsSkippedByName } from '../filtering/index.js';
 import { setup } from '../render/setup.js';
 import { runSetupFiles } from './setup-files.js';
+import { setClient } from './store.js';
 
 export const getClient = async () => {
   const client = await getBridgeClient(getWSServer(), {
@@ -22,9 +23,11 @@ export const getClient = async () => {
     },
   });
 
+  setClient(client);
+
   client.rpc.$functions.runTests = async (
     path: string,
-    options: TestExecutionOptions = {}
+    options: TestExecutionOptions
   ) => {
     if (store.getState().status === 'running') {
       throw new Error('Already running tests');
@@ -84,7 +87,11 @@ export const getClient = async () => {
           )
         : collectionResult.testSuite;
 
-      const result = await runner.run(processedTestSuite, path);
+      const result = await runner.run({
+        testSuite: processedTestSuite,
+        testFilePath: path,
+        runner: options.runner,
+      });
       return result;
     } finally {
       collector?.dispose();

@@ -12,8 +12,14 @@ export type TestRunnerContext = {
   testFilePath: string;
 };
 
+export type RunTestsOptions = {
+  testSuite: TestSuite;
+  testFilePath: string;
+  runner: string;
+};
+
 export type TestRunner = {
   events: TestRunnerEventsEmitter;
-  run: (testSuite: TestSuite, testFilePath: string) => Promise<TestSuiteResult>;
+  run: (options: RunTestsOptions) => Promise<TestSuiteResult>;
   dispose: () => void;
 };

@@ -2,13 +2,19 @@ import type { TestRunnerEvents } from '@react-native-harness/bridge';
 import { getEmitter } from '../utils/emitter.js';
 import { runSuite } from './runSuite.js';
 import { TestRunner } from './types.js';
+import { setHarnessContext } from './context.js';
 
 export const getTestRunner = (): TestRunner => {
   const events = getEmitter<TestRunnerEvents>();
 
   return {
     events,
-    run: async (testSuite, testFilePath) => {
+    run: async ({ testSuite, testFilePath, runner }) => {
+      setHarnessContext({
+        testFilePath,
+        runner,
+      });
+
       const result = await runSuite(testSuite, {
         events,
         testFilePath,

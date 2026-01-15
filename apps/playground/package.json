@@ -11,6 +11,8 @@
   },
   "devDependencies": {
     "react-native-harness": "workspace:*",
+    "@react-native-harness/runtime": "workspace:*",
+    "@react-native-harness/ui": "workspace:*",
     "@react-native-community/cli": "20.0.0",
     "@react-native-community/cli-platform-android": "20.0.0",
     "@react-native-community/cli-platform-ios": "20.0.0",
