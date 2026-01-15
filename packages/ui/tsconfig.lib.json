@@ -10,9 +10,10 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "references": [],
-  "exclude": [
-    "src/**/*.test.ts",
-    "src/**/*.spec.ts"
-  ]
+  "references": [
+    {
+      "path": "../runtime/tsconfig.lib.json"
+    }
+  ],
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"]
 }
