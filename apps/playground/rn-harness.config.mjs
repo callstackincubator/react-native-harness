@@ -20,7 +20,7 @@ const config = {
   runners: [
     androidPlatform({
       name: 'android',
-      device: androidEmulator('Pixel_8_API_33', {
+      device: androidEmulator('Pixel_8_API_35', {
         apiLevel: 35,
         profile: 'pixel_6',
         diskSize: '1G',
@@ -40,7 +40,7 @@ const config = {
     }),
     applePlatform({
       name: 'ios',
-      device: appleSimulator('iPhone 16 Pro', '26.0'),
+      device: appleSimulator('iPhone 16 Pro', '18.6'),
       bundleId: 'com.harnessplayground',
     }),
     vegaPlatform({
@@ -49,7 +49,7 @@ const config = {
       bundleId: 'com.playground',
     }),
   ],
-  defaultRunner: 'ios',
+  defaultRunner: 'android',
   bridgeTimeout: 120000,
   webSocketPort: 3002,
 
