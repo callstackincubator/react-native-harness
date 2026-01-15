@@ -4,6 +4,21 @@ import { useRenderedElement } from '../ui/state.js';
 import { store } from '../ui/state.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 
+/**
+ * Waits for the native view hierarchy to be fully updated.
+ * Uses double requestAnimationFrame to ensure native has processed
+ * all view creation commands after React's commit phase.
+ */
+const waitForNativeViewHierarchy = (): Promise<void> => {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
+};
+
 export const TestComponentOverlay = (): React.ReactElement | null => {
   const { element, key } = useRenderedElement();
 
@@ -12,8 +27,13 @@ export const TestComponentOverlay = (): React.ReactElement | null => {
     const callback = store.getState().onRenderCallback;
 
     if (callback) {
-      callback();
-      store.getState().setOnRenderCallback(null);
+      // Wait for native view hierarchy to be fully updated before calling callback.
+      // useEffect fires after React commits, but native processes commands async.
+      // Double rAF ensures native has finished processing all view creation.
+      waitForNativeViewHierarchy().then(() => {
+        callback();
+        store.getState().setOnRenderCallback(null);
+      });
     }
   }, [element]);
 
