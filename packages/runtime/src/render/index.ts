@@ -25,16 +25,18 @@ export const render = async (
     store.getState().setOnRenderCallback(null);
   }
 
-  // Create a promise that resolves when the element is laid out
-  const layoutPromise = new Promise<void>((resolve, reject) => {
+  // Create a promise that resolves when the element is rendered.
+  // We use onRenderCallback which fires in useEffect, guaranteeing that
+  // React has committed all children to the native view hierarchy.
+  const renderPromise = new Promise<void>((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      store.getState().setOnLayoutCallback(null);
+      store.getState().setOnRenderCallback(null);
       reject(
         new Error(`Render timeout: Element did not mount within ${timeout}ms`)
       );
     }, timeout);
 
-    store.getState().setOnLayoutCallback(() => {
+    store.getState().setOnRenderCallback(() => {
       clearTimeout(timeoutId);
       resolve();
     });
@@ -44,8 +46,8 @@ export const render = async (
   const wrappedElement = wrapElement(element, wrapper);
   store.getState().setRenderedElement(wrappedElement);
 
-  // Wait for layout
-  await layoutPromise;
+  // Wait for useEffect to fire, ensuring all children are committed
+  await renderPromise;
 
   const rerender = async (newElement: React.ReactElement): Promise<void> => {
     if (store.getState().renderedElement === null) {
