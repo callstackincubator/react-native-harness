@@ -12,6 +12,11 @@ inputs:
     description: The project root directory
     required: false
     type: string
+  uploadVisualTestArtifacts:
+    description: Whether to upload visual test diff and actual images as artifacts
+    required: false
+    type: boolean
+    default: 'true'
 runs:
   using: 'composite'
   steps:
@@ -112,3 +117,12 @@ runs:
           echo $(pwd)
           adb install -r ${{ inputs.app }}
           pnpm react-native-harness --harnessRunner ${{ inputs.runner }}
+    - name: Upload visual test artifacts
+      if: always() && inputs.uploadVisualTestArtifacts == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: visual-test-diffs-android
+        path: |
+          ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
+          ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
+        if-no-files-found: ignore

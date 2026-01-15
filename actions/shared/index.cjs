@@ -29,9 +29,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../node_modules/.pnpm/picocolors@1.1.1/node_modules/picocolors/picocolors.js
+// ../../node_modules/picocolors/picocolors.js
 var require_picocolors = __commonJS({
-  "../../node_modules/.pnpm/picocolors@1.1.1/node_modules/picocolors/picocolors.js"(exports2, module2) {
+  "../../node_modules/picocolors/picocolors.js"(exports2, module2) {
     "use strict";
     var p = process || {};
     var argv = p.argv || [];
@@ -102,9 +102,9 @@ var require_picocolors = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/sisteransi@1.0.5/node_modules/sisteransi/src/index.js
+// ../../node_modules/sisteransi/src/index.js
 var require_src = __commonJS({
-  "../../node_modules/.pnpm/sisteransi@1.0.5/node_modules/sisteransi/src/index.js"(exports2, module2) {
+  "../../node_modules/sisteransi/src/index.js"(exports2, module2) {
     "use strict";
     var ESC = "\x1B";
     var CSI = `${ESC}[`;
@@ -158,9 +158,9 @@ var require_src = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/is-unicode-supported@0.1.0/node_modules/is-unicode-supported/index.js
+// ../../node_modules/is-unicode-supported/index.js
 var require_is_unicode_supported = __commonJS({
-  "../../node_modules/.pnpm/is-unicode-supported@0.1.0/node_modules/is-unicode-supported/index.js"(exports2, module2) {
+  "../../node_modules/is-unicode-supported/index.js"(exports2, module2) {
     "use strict";
     module2.exports = () => {
       if (process.platform !== "win32") {
@@ -172,7 +172,7 @@ var require_is_unicode_supported = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/zod@3.25.67/node_modules/zod/dist/esm/v3/external.js
+// ../../node_modules/zod/dist/esm/v3/external.js
 var external_exports = {};
 __export(external_exports, {
   BRAND: () => BRAND,
@@ -284,7 +284,7 @@ __export(external_exports, {
   void: () => voidType
 });
 
-// ../../node_modules/.pnpm/zod@3.25.67/node_modules/zod/dist/esm/v3/helpers/util.js
+// ../../node_modules/zod/dist/esm/v3/helpers/util.js
 var util;
 (function(util3) {
   util3.assertEqual = (_) => {
@@ -418,7 +418,7 @@ var getParsedType = (data) => {
   }
 };
 
-// ../../node_modules/.pnpm/zod@3.25.67/node_modules/zod/dist/esm/v3/ZodError.js
+// ../../node_modules/zod/dist/esm/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -535,7 +535,7 @@ ZodError.create = (issues) => {
   return error;
 };
 
-// ../../node_modules/.pnpm/zod@3.25.67/node_modules/zod/dist/esm/v3/locales/en.js
+// ../../node_modules/zod/dist/esm/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -636,7 +636,7 @@ var errorMap = (issue, _ctx) => {
 };
 var en_default = errorMap;
 
-// ../../node_modules/.pnpm/zod@3.25.67/node_modules/zod/dist/esm/v3/errors.js
+// ../../node_modules/zod/dist/esm/v3/errors.js
 var overrideErrorMap = en_default;
 function setErrorMap(map) {
   overrideErrorMap = map;
@@ -645,7 +645,7 @@ function getErrorMap() {
   return overrideErrorMap;
 }
 
-// ../../node_modules/.pnpm/zod@3.25.67/node_modules/zod/dist/esm/v3/helpers/parseUtil.js
+// ../../node_modules/zod/dist/esm/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path: path4, errorMaps, issueData } = params;
   const fullPath = [...path4, ...issueData.path || []];
@@ -755,14 +755,14 @@ var isDirty = (x) => x.status === "dirty";
 var isValid = (x) => x.status === "valid";
 var isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
 
-// ../../node_modules/.pnpm/zod@3.25.67/node_modules/zod/dist/esm/v3/helpers/errorUtil.js
+// ../../node_modules/zod/dist/esm/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// ../../node_modules/.pnpm/zod@3.25.67/node_modules/zod/dist/esm/v3/types.js
+// ../../node_modules/zod/dist/esm/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path4, key) {
     this._cachedPath = [];
@@ -4214,6 +4214,7 @@ var ConfigSchema = external_exports.object({
   appRegistryComponentName: external_exports.string().min(1, "App registry component name is required"),
   runners: external_exports.array(external_exports.any()).min(1, "At least one runner is required"),
   defaultRunner: external_exports.string().optional(),
+  webSocketPort: external_exports.number().optional().default(3001),
   bridgeTimeout: external_exports.number().min(1e3, "Bridge timeout must be at least 1 second").default(6e4),
   resetEnvironmentBetweenTestFiles: external_exports.boolean().optional().default(true),
   unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().default(false),
@@ -4233,7 +4234,7 @@ var ConfigSchema = external_exports.object({
 // ../tools/dist/logger.js
 var import_node_util2 = __toESM(require("util"), 1);
 
-// ../../node_modules/.pnpm/@clack+core@1.0.0-alpha.5/node_modules/@clack/core/dist/index.mjs
+// ../../node_modules/@clack/core/dist/index.mjs
 var import_node_process = require("process");
 var V = __toESM(require("readline"), 1);
 var import_node_readline = __toESM(require("readline"), 1);
@@ -4251,7 +4252,7 @@ var C = { actions: new Set(gt), aliases: /* @__PURE__ */ new Map([["k", "up"], [
 var At = globalThis.process.platform.startsWith("win");
 var G = Symbol("clack:cancel");
 
-// ../../node_modules/.pnpm/@clack+prompts@1.0.0-alpha.5/node_modules/@clack/prompts/dist/index.mjs
+// ../../node_modules/@clack/prompts/dist/index.mjs
 var import_picocolors = __toESM(require_picocolors(), 1);
 var import_node_process2 = __toESM(require("process"), 1);
 var import_node_fs = require("fs");
