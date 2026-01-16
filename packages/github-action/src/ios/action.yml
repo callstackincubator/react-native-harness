@@ -40,6 +40,13 @@ runs:
       working-directory: ${{ inputs.projectRoot }}
       run: |
         xcrun simctl install booted ${{ inputs.app }}
+    - name: Grant local network permission
+      shell: bash
+      working-directory: ${{ inputs.projectRoot }}
+      run: |
+        BUNDLE_ID="${{ fromJson(steps.load-config.outputs.config).config.bundleId }}"
+        echo "Granting local network permission to app: $BUNDLE_ID"
+        xcrun simctl privacy booted grant local-network "$BUNDLE_ID" || echo "Warning: Could not grant local-network permission"
     - name: Run E2E tests
       shell: bash
       working-directory: ${{ inputs.projectRoot }}

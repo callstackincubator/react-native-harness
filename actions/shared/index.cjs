@@ -4209,16 +4209,25 @@ var coerce = {
 var NEVER = INVALID;
 
 // ../config/dist/types.js
+var RunnerSchema = external_exports.object({
+  name: external_exports.string().min(1, "Runner name is required").regex(/^[a-zA-Z0-9._-]+$/, "Runner name can only contain alphanumeric characters, dots, underscores, and hyphens"),
+  config: external_exports.record(external_exports.any()),
+  runner: external_exports.string()
+});
 var ConfigSchema = external_exports.object({
   entryPoint: external_exports.string().min(1, "Entry point is required"),
   appRegistryComponentName: external_exports.string().min(1, "App registry component name is required"),
-  runners: external_exports.array(external_exports.any()).min(1, "At least one runner is required"),
+  runners: external_exports.array(RunnerSchema).min(1, "At least one runner is required"),
   defaultRunner: external_exports.string().optional(),
   webSocketPort: external_exports.number().optional().default(3001),
   bridgeTimeout: external_exports.number().min(1e3, "Bridge timeout must be at least 1 second").default(6e4),
+  bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(15e3),
+  maxAppRestarts: external_exports.number().min(0, "Max app restarts must be non-negative").default(2),
   resetEnvironmentBetweenTestFiles: external_exports.boolean().optional().default(true),
   unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().default(false),
   unstable__enableMetroCache: external_exports.boolean().optional().default(false),
+  detectNativeCrashes: external_exports.boolean().optional().default(true),
+  crashDetectionInterval: external_exports.number().min(100, "Crash detection interval must be at least 100ms").default(500),
   // Deprecated property - used for migration detection
   include: external_exports.array(external_exports.string()).optional()
 }).refine((config) => {
