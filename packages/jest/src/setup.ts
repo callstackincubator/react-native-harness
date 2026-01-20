@@ -68,6 +68,10 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
     // This is going to be used by @react-native-harness/babel-preset
     // to enable instrumentation of test files.
     process.env.RN_HARNESS_COLLECT_COVERAGE = 'true';
+
+    if (harnessConfig.coverageRoot) {
+      process.env.RN_HARNESS_COVERAGE_ROOT = harnessConfig.coverageRoot;
+    }
   }
 
   logTestRunHeader(selectedRunner);

@@ -46,6 +46,13 @@ export const ConfigSchema = z
       .min(100, 'Crash detection interval must be at least 100ms')
       .default(500),
 
+    coverageRoot: z
+      .string()
+      .optional()
+      .describe(
+        'Root directory for coverage instrumentation. Defaults to cwd. Use ".." for create-react-native-library projects where source is in parent directory.'
+      ),
+
     // Deprecated property - used for migration detection
     include: z.array(z.string()).optional(),
   })
