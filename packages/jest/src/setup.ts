@@ -69,8 +69,8 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
     // to enable instrumentation of test files.
     process.env.RN_HARNESS_COLLECT_COVERAGE = 'true';
 
-    if (harnessConfig.coverageRoot) {
-      process.env.RN_HARNESS_COVERAGE_ROOT = harnessConfig.coverageRoot;
+    if (harnessConfig.coverage?.root) {
+      process.env.RN_HARNESS_COVERAGE_ROOT = harnessConfig.coverage.root;
     }
   }
 
