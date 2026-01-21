@@ -103,6 +103,9 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 
   // Optional: Reset environment between test files (default: true)
   resetEnvironmentBetweenTestFiles?: boolean;
+
+  // Optional: Root directory for coverage instrumentation in monorepos (default: process.cwd())
+  coverageRoot?: string;
 }
 ```
 
@@ -323,6 +326,30 @@ const config = {
 
 export default config;
 ```
+
+## Coverage Root
+
+The coverage root option specifies the root directory for coverage instrumentation in monorepository setups. This is particularly important when your tests run from a different directory than where your source files are located.
+
+```javascript
+{
+  coverageRoot: '../',  // Use parent directory as coverage root
+}
+```
+
+**Default:** `process.cwd()` (current working directory)
+
+This option is passed to babel-plugin-istanbul's `cwd` option and ensures that coverage data is collected correctly in monorepo scenarios where:
+
+- Tests run from an `example/` directory but source files are in `../src/`
+- Libraries are structured with separate test and source directories
+- Projects have nested directory structures that don't align with the current working directory
+
+Without specifying `coverageRoot`, babel-plugin-istanbul may skip instrumenting files outside the current working directory, resulting in incomplete coverage reports.
+
+:::tip When to use coverageRoot
+Set `coverageRoot` when you notice 0% coverage in your reports or when source files are not being instrumented for coverage. This commonly occurs in create-react-native-library projects and other monorepo setups.
+:::
 
 ## Finding Device and Simulator IDs
 
