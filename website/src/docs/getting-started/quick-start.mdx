@@ -119,10 +119,10 @@ The `withRnHarness` function is a noop when you're not running Harness tests, so
 
 #### 3. Configure Jest
 
-The wizard creates a dedicated `jest.harness.config.mjs` file for your Harness tests. If you prefer manual setup, update your `jest.config.js`:
+The wizard creates a dedicated `jest.harness.config.mjs` file for your Harness tests. If you prefer manual setup, create a `jest.harness.config.mjs` file:
 
 ```javascript
-module.exports = {
+export default {
   preset: 'react-native-harness',
 };
 ```
