@@ -52,7 +52,10 @@ export const ConfigSchema = z
           .string()
           .optional()
           .describe(
-            'Root directory for coverage instrumentation. Defaults to cwd. Use ".." for create-react-native-library projects where source is in parent directory.'
+            'Root directory for coverage instrumentation in monorepo setups. ' +
+            'Specifies the directory from which coverage data should be collected. ' +
+            'Use ".." for create-react-native-library projects where tests run from example/ ' +
+            'but source files are in parent directory. Passed to babel-plugin-istanbul\'s cwd option.'
           ),
       })
       .optional(),
