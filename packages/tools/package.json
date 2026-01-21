@@ -15,7 +15,7 @@
     }
   },
   "dependencies": {
-    "@clack/prompts": "1.0.0-alpha.5",
+    "@clack/prompts": "1.0.0-alpha.9",
     "is-unicode-supported": "^0.1.0",
     "nano-spawn": "^1.0.2",
     "picocolors": "^1.1.1",

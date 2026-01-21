@@ -6,3 +6,4 @@ export * from './spawn.js';
 export * from './react-native.js';
 export * from './error.js';
 export * from './events.js';
+export * from './packages.js';

@@ -4,6 +4,18 @@
   "include": [],
   "references": [
     {
+      "path": "../platform-ios"
+    },
+    {
+      "path": "../platform-android"
+    },
+    {
+      "path": "../tools"
+    },
+    {
+      "path": "../platforms"
+    },
+    {
       "path": "../config"
     },
     {

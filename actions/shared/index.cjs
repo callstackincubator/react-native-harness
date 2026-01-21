@@ -110,14 +110,14 @@ var require_src = __commonJS({
     var CSI = `${ESC}[`;
     var beep = "\x07";
     var cursor = {
-      to(x, y) {
-        if (!y) return `${CSI}${x + 1}G`;
-        return `${CSI}${y + 1};${x + 1}H`;
+      to(x2, y) {
+        if (!y) return `${CSI}${x2 + 1}G`;
+        return `${CSI}${y + 1};${x2 + 1}H`;
       },
-      move(x, y) {
+      move(x2, y) {
         let ret = "";
-        if (x < 0) ret += `${CSI}${-x}D`;
-        else if (x > 0) ret += `${CSI}${x}C`;
+        if (x2 < 0) ret += `${CSI}${-x2}D`;
+        else if (x2 > 0) ret += `${CSI}${x2}C`;
         if (y < 0) ret += `${CSI}${-y}A`;
         else if (y > 0) ret += `${CSI}${y}B`;
         return ret;
@@ -287,7 +287,7 @@ __export(external_exports, {
 // ../../node_modules/zod/dist/esm/v3/helpers/util.js
 var util;
 (function(util3) {
-  util3.assertEqual = (_) => {
+  util3.assertEqual = (_2) => {
   };
   function assertIs(_arg) {
   }
@@ -304,10 +304,10 @@ var util;
     return obj;
   };
   util3.getValidEnumValues = (obj) => {
-    const validKeys = util3.objectKeys(obj).filter((k) => typeof obj[obj[k]] !== "number");
+    const validKeys = util3.objectKeys(obj).filter((k3) => typeof obj[obj[k3]] !== "number");
     const filtered = {};
-    for (const k of validKeys) {
-      filtered[k] = obj[k];
+    for (const k3 of validKeys) {
+      filtered[k3] = obj[k3];
     }
     return util3.objectValues(filtered);
   };
@@ -337,7 +337,7 @@ var util;
     return array.map((val) => typeof val === "string" ? `'${val}'` : val).join(separator);
   }
   util3.joinValues = joinValues;
-  util3.jsonStringifyReplacer = (_, value) => {
+  util3.jsonStringifyReplacer = (_2, value) => {
     if (typeof value === "bigint") {
       return value.toString();
     }
@@ -647,8 +647,8 @@ function getErrorMap() {
 
 // ../../node_modules/zod/dist/esm/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path4, errorMaps, issueData } = params;
-  const fullPath = [...path4, ...issueData.path || []];
+  const { data, path: path5, errorMaps, issueData } = params;
+  const fullPath = [...path5, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -687,7 +687,7 @@ function addIssueToContext(ctx, issueData) {
       // then global override map
       overrideMap === en_default ? void 0 : en_default
       // then global default map
-    ].filter((x) => !!x)
+    ].filter((x2) => !!x2)
   });
   ctx.common.issues.push(issue);
 }
@@ -750,10 +750,10 @@ var INVALID = Object.freeze({
 });
 var DIRTY = (value) => ({ status: "dirty", value });
 var OK = (value) => ({ status: "valid", value });
-var isAborted = (x) => x.status === "aborted";
-var isDirty = (x) => x.status === "dirty";
-var isValid = (x) => x.status === "valid";
-var isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
+var isAborted = (x2) => x2.status === "aborted";
+var isDirty = (x2) => x2.status === "dirty";
+var isValid = (x2) => x2.status === "valid";
+var isAsync = (x2) => typeof Promise !== "undefined" && x2 instanceof Promise;
 
 // ../../node_modules/zod/dist/esm/v3/helpers/errorUtil.js
 var errorUtil;
@@ -764,11 +764,11 @@ var errorUtil;
 
 // ../../node_modules/zod/dist/esm/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path4, key) {
+  constructor(parent, value, path5, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path4;
+    this._path = path5;
     this._key = key;
   }
   get path() {
@@ -3071,17 +3071,17 @@ var ZodDiscriminatedUnion = class _ZodDiscriminatedUnion extends ZodType {
     });
   }
 };
-function mergeValues(a, b2) {
+function mergeValues(a, b) {
   const aType = getParsedType(a);
-  const bType = getParsedType(b2);
-  if (a === b2) {
+  const bType = getParsedType(b);
+  if (a === b) {
     return { valid: true, data: a };
   } else if (aType === ZodParsedType.object && bType === ZodParsedType.object) {
-    const bKeys = util.objectKeys(b2);
+    const bKeys = util.objectKeys(b);
     const sharedKeys = util.objectKeys(a).filter((key) => bKeys.indexOf(key) !== -1);
-    const newObj = { ...a, ...b2 };
+    const newObj = { ...a, ...b };
     for (const key of sharedKeys) {
-      const sharedValue = mergeValues(a[key], b2[key]);
+      const sharedValue = mergeValues(a[key], b[key]);
       if (!sharedValue.valid) {
         return { valid: false };
       }
@@ -3089,13 +3089,13 @@ function mergeValues(a, b2) {
     }
     return { valid: true, data: newObj };
   } else if (aType === ZodParsedType.array && bType === ZodParsedType.array) {
-    if (a.length !== b2.length) {
+    if (a.length !== b.length) {
       return { valid: false };
     }
     const newArray = [];
     for (let index = 0; index < a.length; index++) {
       const itemA = a[index];
-      const itemB = b2[index];
+      const itemB = b[index];
       const sharedValue = mergeValues(itemA, itemB);
       if (!sharedValue.valid) {
         return { valid: false };
@@ -3103,7 +3103,7 @@ function mergeValues(a, b2) {
       newArray.push(sharedValue.data);
     }
     return { valid: true, data: newArray };
-  } else if (aType === ZodParsedType.date && bType === ZodParsedType.date && +a === +b2) {
+  } else if (aType === ZodParsedType.date && bType === ZodParsedType.date && +a === +b) {
     return { valid: true, data: a };
   } else {
     return { valid: false };
@@ -3199,7 +3199,7 @@ var ZodTuple = class _ZodTuple extends ZodType {
       if (!schema)
         return null;
       return schema._parse(new ParseInputLazyPath(ctx, item, ctx.path, itemIndex));
-    }).filter((x) => !!x);
+    }).filter((x2) => !!x2);
     if (ctx.common.async) {
       return Promise.all(items).then((results) => {
         return ParseStatus.mergeArray(status, results);
@@ -3452,7 +3452,7 @@ var ZodFunction = class _ZodFunction extends ZodType {
       return makeIssue({
         data: args,
         path: ctx.path,
-        errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap(), en_default].filter((x) => !!x),
+        errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap(), en_default].filter((x2) => !!x2),
         issueData: {
           code: ZodIssueCode.invalid_arguments,
           argumentsError: error
@@ -3463,7 +3463,7 @@ var ZodFunction = class _ZodFunction extends ZodType {
       return makeIssue({
         data: returns,
         path: ctx.path,
-        errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap(), en_default].filter((x) => !!x),
+        errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap(), en_default].filter((x2) => !!x2),
         issueData: {
           code: ZodIssueCode.invalid_return_type,
           returnTypeError: error
@@ -3473,29 +3473,29 @@ var ZodFunction = class _ZodFunction extends ZodType {
     const params = { errorMap: ctx.common.contextualErrorMap };
     const fn = ctx.data;
     if (this._def.returns instanceof ZodPromise) {
-      const me = this;
+      const me2 = this;
       return OK(async function(...args) {
         const error = new ZodError([]);
-        const parsedArgs = await me._def.args.parseAsync(args, params).catch((e) => {
+        const parsedArgs = await me2._def.args.parseAsync(args, params).catch((e) => {
           error.addIssue(makeArgsIssue(args, e));
           throw error;
         });
         const result = await Reflect.apply(fn, this, parsedArgs);
-        const parsedReturns = await me._def.returns._def.type.parseAsync(result, params).catch((e) => {
+        const parsedReturns = await me2._def.returns._def.type.parseAsync(result, params).catch((e) => {
           error.addIssue(makeReturnsIssue(result, e));
           throw error;
         });
         return parsedReturns;
       });
     } else {
-      const me = this;
+      const me2 = this;
       return OK(function(...args) {
-        const parsedArgs = me._def.args.safeParse(args, params);
+        const parsedArgs = me2._def.args.safeParse(args, params);
         if (!parsedArgs.success) {
           throw new ZodError([makeArgsIssue(args, parsedArgs.error)]);
         }
         const result = Reflect.apply(fn, this, parsedArgs.data);
-        const parsedReturns = me._def.returns.safeParse(result, params);
+        const parsedReturns = me2._def.returns.safeParse(result, params);
         if (!parsedReturns.success) {
           throw new ZodError([makeReturnsIssue(result, parsedReturns.error)]);
         }
@@ -4057,10 +4057,10 @@ var ZodPipeline = class _ZodPipeline extends ZodType {
       }
     }
   }
-  static create(a, b2) {
+  static create(a, b) {
     return new _ZodPipeline({
       in: a,
-      out: b2,
+      out: b,
       typeName: ZodFirstPartyTypeKind.ZodPipeline
     });
   }
@@ -4209,16 +4209,25 @@ var coerce = {
 var NEVER = INVALID;
 
 // ../config/dist/types.js
+var RunnerSchema = external_exports.object({
+  name: external_exports.string().min(1, "Runner name is required").regex(/^[a-zA-Z0-9._-]+$/, "Runner name can only contain alphanumeric characters, dots, underscores, and hyphens"),
+  config: external_exports.record(external_exports.any()),
+  runner: external_exports.string()
+});
 var ConfigSchema = external_exports.object({
   entryPoint: external_exports.string().min(1, "Entry point is required"),
   appRegistryComponentName: external_exports.string().min(1, "App registry component name is required"),
-  runners: external_exports.array(external_exports.any()).min(1, "At least one runner is required"),
+  runners: external_exports.array(RunnerSchema).min(1, "At least one runner is required"),
   defaultRunner: external_exports.string().optional(),
   webSocketPort: external_exports.number().optional().default(3001),
   bridgeTimeout: external_exports.number().min(1e3, "Bridge timeout must be at least 1 second").default(6e4),
+  bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(15e3),
+  maxAppRestarts: external_exports.number().min(0, "Max app restarts must be non-negative").default(2),
   resetEnvironmentBetweenTestFiles: external_exports.boolean().optional().default(true),
   unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().default(false),
   unstable__enableMetroCache: external_exports.boolean().optional().default(false),
+  detectNativeCrashes: external_exports.boolean().optional().default(true),
+  crashDetectionInterval: external_exports.number().min(100, "Crash detection interval must be at least 100ms").default(500),
   // Deprecated property - used for migration detection
   include: external_exports.array(external_exports.string()).optional()
 }).refine((config) => {
@@ -4236,21 +4245,21 @@ var import_node_util2 = __toESM(require("util"), 1);
 
 // ../../node_modules/@clack/core/dist/index.mjs
 var import_node_process = require("process");
-var V = __toESM(require("readline"), 1);
+var k = __toESM(require("readline"), 1);
 var import_node_readline = __toESM(require("readline"), 1);
 var import_sisteransi = __toESM(require_src(), 1);
 var import_node_tty = require("tty");
-var lt = { limit: 1 / 0, ellipsis: "" };
-var ht = { limit: 1 / 0, ellipsis: "", ellipsisWidth: 0 };
-var P = "\x07";
-var X = "[";
-var Ft = "]";
-var O = `${Ft}8;;`;
-var Q = new RegExp(`(?:\\${X}(?<code>\\d+)m|\\${O}(?<uri>.*)${P})`, "y");
-var gt = ["up", "down", "left", "right", "space", "enter", "cancel"];
-var C = { actions: new Set(gt), aliases: /* @__PURE__ */ new Map([["k", "up"], ["j", "down"], ["h", "left"], ["l", "right"], ["", "cancel"], ["escape", "cancel"]]), messages: { cancel: "Canceled", error: "Something went wrong" } };
-var At = globalThis.process.platform.startsWith("win");
-var G = Symbol("clack:cancel");
+var Ft = { limit: 1 / 0, ellipsis: "" };
+var ft = { limit: 1 / 0, ellipsis: "", ellipsisWidth: 0 };
+var j = "\x07";
+var Q = "[";
+var dt = "]";
+var U = `${dt}8;;`;
+var et = new RegExp(`(?:\\${Q}(?<code>\\d+)m|\\${U}(?<uri>.*)${j})`, "y");
+var At = ["up", "down", "left", "right", "space", "enter", "cancel"];
+var _ = { actions: new Set(At), aliases: /* @__PURE__ */ new Map([["k", "up"], ["j", "down"], ["h", "left"], ["l", "right"], ["", "cancel"], ["escape", "cancel"]]), messages: { cancel: "Canceled", error: "Something went wrong" }, withGuide: true };
+var bt = globalThis.process.platform.startsWith("win");
+var z = Symbol("clack:cancel");
 
 // ../../node_modules/@clack/prompts/dist/index.mjs
 var import_picocolors = __toESM(require_picocolors(), 1);
@@ -4259,50 +4268,51 @@ var import_node_fs = require("fs");
 var import_node_path = require("path");
 var import_sisteransi2 = __toESM(require_src(), 1);
 var import_node_util = require("util");
-function ot() {
+function ht() {
   return import_node_process2.default.platform !== "win32" ? import_node_process2.default.env.TERM !== "linux" : !!import_node_process2.default.env.CI || !!import_node_process2.default.env.WT_SESSION || !!import_node_process2.default.env.TERMINUS_SUBLIME || import_node_process2.default.env.ConEmuTask === "{cmd::Cmder}" || import_node_process2.default.env.TERM_PROGRAM === "Terminus-Sublime" || import_node_process2.default.env.TERM_PROGRAM === "vscode" || import_node_process2.default.env.TERM === "xterm-256color" || import_node_process2.default.env.TERM === "alacritty" || import_node_process2.default.env.TERMINAL_EMULATOR === "JetBrains-JediTerm";
 }
-var J = ot();
-var S = (e, r) => J ? e : r;
-var we = S("\u25C6", "*");
-var ie = S("\u25A0", "x");
-var ne = S("\u25B2", "x");
-var W = S("\u25C7", "o");
-var ae = S("\u250C", "T");
-var c = S("\u2502", "|");
-var b = S("\u2514", "\u2014");
-var Be = S("\u2510", "T");
-var xe = S("\u2518", "\u2014");
-var U = S("\u25CF", ">");
-var K = S("\u25CB", " ");
-var X2 = S("\u25FB", "[\u2022]");
-var P2 = S("\u25FC", "[+]");
-var Y2 = S("\u25FB", "[ ]");
-var be = S("\u25AA", "\u2022");
-var z2 = S("\u2500", "-");
-var oe = S("\u256E", "+");
-var _e = S("\u251C", "+");
-var le = S("\u256F", "+");
-var De = S("\u2570", "+");
-var Te = S("\u256D", "+");
-var ue = S("\u25CF", "\u2022");
-var ce = S("\u25C6", "*");
-var $e = S("\u25B2", "!");
-var de = S("\u25A0", "x");
-var dt = { limit: 1 / 0, ellipsis: "" };
-var ht2 = { limit: 1 / 0, ellipsis: "", ellipsisWidth: 0 };
-var pe = "\x07";
-var Oe = "[";
-var pt = "]";
-var ge = `${pt}8;;`;
-var Le = new RegExp(`(?:\\${Oe}(?<code>\\d+)m|\\${ge}(?<uri>.*)${pe})`, "y");
-var He = { light: S("\u2500", "-"), heavy: S("\u2501", "="), block: S("\u2588", "#") };
-var Ue = `${import_picocolors.default.gray(c)}  `;
+var ee = ht();
+var w = (e, r) => ee ? e : r;
+var Me = w("\u25C6", "*");
+var ce = w("\u25A0", "x");
+var de = w("\u25B2", "x");
+var V = w("\u25C7", "o");
+var $e = w("\u250C", "T");
+var h = w("\u2502", "|");
+var x = w("\u2514", "\u2014");
+var Re = w("\u2510", "T");
+var Oe = w("\u2518", "\u2014");
+var Y = w("\u25CF", ">");
+var K = w("\u25CB", " ");
+var te = w("\u25FB", "[\u2022]");
+var k2 = w("\u25FC", "[+]");
+var z2 = w("\u25FB", "[ ]");
+var Pe = w("\u25AA", "\u2022");
+var se = w("\u2500", "-");
+var he = w("\u256E", "+");
+var Ne = w("\u251C", "+");
+var me = w("\u256F", "+");
+var pe = w("\u2570", "+");
+var We = w("\u256D", "+");
+var ge = w("\u25CF", "\u2022");
+var fe = w("\u25C6", "*");
+var Fe = w("\u25B2", "!");
+var ye = w("\u25A0", "x");
+var Ft2 = { limit: 1 / 0, ellipsis: "" };
+var yt2 = { limit: 1 / 0, ellipsis: "", ellipsisWidth: 0 };
+var Ce = "\x07";
+var Ve = "[";
+var vt = "]";
+var we = `${vt}8;;`;
+var Ge = new RegExp(`(?:\\${Ve}(?<code>\\d+)m|\\${we}(?<uri>.*)${Ce})`, "y");
+var Ut = import_picocolors.default.magenta;
+var Ye = { light: w("\u2500", "-"), heavy: w("\u2501", "="), block: w("\u2588", "#") };
+var ze = `${import_picocolors.default.gray(h)}  `;
 
 // ../tools/dist/logger.js
 var import_is_unicode_supported = __toESM(require_is_unicode_supported(), 1);
 var unicode = (0, import_is_unicode_supported.default)();
-var unicodeWithFallback = (c2, fallback) => unicode ? c2 : fallback;
+var unicodeWithFallback = (c, fallback) => unicode ? c : fallback;
 var SYMBOL_DEBUG = unicodeWithFallback("\u25CF", "\u2022");
 var verbose = !!process.env.HARNESS_DEBUG;
 
@@ -4314,6 +4324,10 @@ var import_node_fs2 = __toESM(require("fs"), 1);
 // ../tools/dist/error.js
 var HarnessError = class extends Error {
 };
+
+// ../tools/dist/packages.js
+var import_node_path3 = __toESM(require("path"), 1);
+var import_node_fs3 = __toESM(require("fs"), 1);
 
 // ../config/dist/errors.js
 var ConfigValidationError = class extends HarnessError {
@@ -4382,16 +4396,16 @@ var ConfigLoadError = class extends HarnessError {
 };
 
 // ../config/dist/reader.js
-var import_node_path3 = __toESM(require("path"), 1);
-var import_node_fs3 = __toESM(require("fs"), 1);
+var import_node_path4 = __toESM(require("path"), 1);
+var import_node_fs4 = __toESM(require("fs"), 1);
 var import_node_module2 = require("module");
 var import_meta = {};
 var extensions = [".js", ".mjs", ".cjs", ".json"];
 var importUp = async (dir, name) => {
-  const filePath = import_node_path3.default.join(dir, name);
+  const filePath = import_node_path4.default.join(dir, name);
   for (const ext of extensions) {
     const filePathWithExt = `${filePath}${ext}`;
-    if (import_node_fs3.default.existsSync(filePathWithExt)) {
+    if (import_node_fs4.default.existsSync(filePathWithExt)) {
       let rawConfig;
       try {
         if (ext === ".mjs") {
@@ -4409,8 +4423,8 @@ var importUp = async (dir, name) => {
       } catch (error) {
         if (error instanceof ZodError) {
           const validationErrors = error.errors.map((err) => {
-            const path4 = err.path.length > 0 ? ` at "${err.path.join(".")}"` : "";
-            return `${err.message}${path4}`;
+            const path5 = err.path.length > 0 ? ` at "${err.path.join(".")}"` : "";
+            return `${err.message}${path5}`;
           });
           throw new ConfigValidationError(filePathWithExt, validationErrors);
         }
@@ -4418,7 +4432,7 @@ var importUp = async (dir, name) => {
       }
     }
   }
-  const parentDir = import_node_path3.default.dirname(dir);
+  const parentDir = import_node_path4.default.dirname(dir);
   if (parentDir === dir) {
     throw new ConfigNotFoundError(dir);
   }
@@ -4433,8 +4447,8 @@ var getConfig = async (dir) => {
 };
 
 // src/shared/index.ts
-var import_node_path4 = __toESM(require("path"));
-var import_node_fs4 = __toESM(require("fs"));
+var import_node_path5 = __toESM(require("path"));
+var import_node_fs5 = __toESM(require("fs"));
 var run = async () => {
   try {
     const projectRootInput = process.env.INPUT_PROJECTROOT;
@@ -4442,7 +4456,7 @@ var run = async () => {
     if (!runnerInput) {
       throw new Error("Runner input is required");
     }
-    const projectRoot = projectRootInput ? import_node_path4.default.resolve(projectRootInput) : process.cwd();
+    const projectRoot = projectRootInput ? import_node_path5.default.resolve(projectRootInput) : process.cwd();
     console.info(`Loading React Native Harness config from: ${projectRoot}`);
     const { config } = await getConfig(projectRoot);
     const runner = config.runners.find((runner2) => runner2.name === runnerInput);
@@ -4455,7 +4469,7 @@ var run = async () => {
     }
     const output = `config=${JSON.stringify(runner)}
 `;
-    import_node_fs4.default.appendFileSync(githubOutput, output);
+    import_node_fs5.default.appendFileSync(githubOutput, output);
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.message);

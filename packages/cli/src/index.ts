@@ -1,12 +1,18 @@
 import { run, yargsOptions } from 'jest-cli';
 import { getConfig } from '@react-native-harness/config';
+import { runInitWizard } from './wizard/index.js';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const JEST_CONFIG_EXTENSIONS = ['.mjs', '.js', '.cjs'];
+const JEST_HARNESS_CONFIG_BASE = 'jest.harness.config';
 
 const checkForOldConfig = async () => {
   try {
     const { config } = await getConfig(process.cwd());
 
     if (config.include) {
-      console.error('\n❌ Migration Required\n');
+      console.error('\n❌ Migration required\n');
       console.error('React Native Harness has migrated to the Jest CLI.');
       console.error(
         'The "include" property in your rn-harness.config file is no longer supported.\n'
@@ -27,7 +33,7 @@ const checkForOldConfig = async () => {
 const patchYargsOptions = () => {
   yargsOptions.harnessRunner = {
     type: 'string',
-    description: 'Specify which Harness runner to use',
+    description: 'Specify which harness runner to use',
     requiresArg: true,
   };
 
@@ -67,5 +73,28 @@ const patchYargsOptions = () => {
   delete yargsOptions.logHeapUsage;
 };
 
-patchYargsOptions();
-checkForOldConfig().then(() => run());
+if (process.argv.includes('init')) {
+  runInitWizard();
+} else {
+  patchYargsOptions();
+
+  const hasConfigArg =
+    process.argv.includes('--config') || process.argv.includes('-c');
+
+  if (!hasConfigArg) {
+    const existingConfigExt = JEST_CONFIG_EXTENSIONS.find((ext) =>
+      fs.existsSync(
+        path.join(process.cwd(), `${JEST_HARNESS_CONFIG_BASE}${ext}`)
+      )
+    );
+
+    if (existingConfigExt) {
+      process.argv.push(
+        '--config',
+        `${JEST_HARNESS_CONFIG_BASE}${existingConfigExt}`
+      );
+    }
+  }
+
+  checkForOldConfig().then(() => run());
+}

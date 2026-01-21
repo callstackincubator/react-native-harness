@@ -1,4 +1,8 @@
-export type { HarnessPlatform, HarnessPlatformRunner } from './types.js';
+export type {
+  HarnessPlatform,
+  HarnessPlatformRunner,
+  RunTarget,
+} from './types.js';
 export {
   AppNotInstalledError,
   DeviceNotFoundError,

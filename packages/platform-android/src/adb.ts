@@ -122,3 +122,53 @@ export const isAppRunning = async (
   ]);
   return stdout.trim() !== '';
 };
+
+export const getAvds = async (): Promise<string[]> => {
+  try {
+    const { stdout } = await spawn('emulator', ['-list-avds']);
+    return stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '');
+  } catch {
+    return [];
+  }
+};
+
+export type AdbDevice = {
+  id: string;
+  model: string;
+  manufacturer: string;
+};
+
+export const getConnectedDevices = async (): Promise<AdbDevice[]> => {
+  const { stdout } = await spawn('adb', ['devices', '-l']);
+  const lines = stdout.split('\n').slice(1);
+  const devices: AdbDevice[] = [];
+
+  for (const line of lines) {
+    if (line.trim() === '') continue;
+
+    const parts = line.split(/\s+/);
+    const id = parts[0];
+
+    // If it's an emulator, we skip it here as we handle emulators via AVDs
+    if (id.startsWith('emulator-')) continue;
+
+    // Parse model and manufacturer from 'adb devices -l' output
+    // Example: 0123456789ABCDEF device usb:337641472X product:sdk_gphone64_arm64 model:Pixel_6 device:oriole transport_id:1
+    const modelMatch = line.match(/model:(\S+)/);
+    const model = modelMatch ? modelMatch[1].replace(/_/g, ' ') : 'Unknown';
+
+    const manufacturer =
+      (await getShellProperty(id, 'ro.product.manufacturer')) ?? 'Unknown';
+
+    devices.push({
+      id,
+      model,
+      manufacturer,
+    });
+  }
+
+  return devices;
+};

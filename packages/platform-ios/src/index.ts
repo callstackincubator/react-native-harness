@@ -4,3 +4,4 @@ export {
   applePhysicalDevice,
 } from './factory.js';
 export type { ApplePlatformConfig } from './config.js';
+export { getRunTargets } from './targets.js';

@@ -13,6 +13,18 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
+      "path": "../platform-ios/tsconfig.lib.json"
+    },
+    {
+      "path": "../platform-android/tsconfig.lib.json"
+    },
+    {
+      "path": "../tools/tsconfig.lib.json"
+    },
+    {
+      "path": "../platforms/tsconfig.lib.json"
+    },
+    {
       "path": "../config/tsconfig.lib.json"
     },
     {

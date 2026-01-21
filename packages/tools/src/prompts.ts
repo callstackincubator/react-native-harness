@@ -82,6 +82,28 @@ export const promptMultiselect = async <T>(
   return result as T[];
 };
 
+export const promptGroupMultiselect = async <T>(
+  options: clack.GroupMultiSelectOptions<T>
+): Promise<T[]> => {
+  const result = await clack.groupMultiselect<T>(options);
+  if (clack.isCancel(result)) {
+    cancelPromptAndExit();
+  }
+
+  return result as T[];
+};
+
+export const promptAutocompleteMultiselect = async <T>(
+  options: clack.AutocompleteMultiSelectOptions<T>
+): Promise<T[]> => {
+  const result = await clack.autocompleteMultiselect<T>(options);
+  if (clack.isCancel(result)) {
+    cancelPromptAndExit();
+  }
+
+  return result as T[];
+};
+
 export const promptGroup = async <T>(
   prompts: clack.PromptGroup<T>,
   options?: clack.PromptGroupOptions<T> | undefined
@@ -111,8 +133,12 @@ export const spinner = (options?: clack.SpinnerOptions) => {
     start: (message?: string) => {
       clackSpinner.start(message);
     },
-    stop: (message?: string, code?: number) => {
-      clackSpinner.stop(message, code);
+    stop: (message?: string, code = 0) => {
+      if (code === 0) {
+        clackSpinner.stop(message);
+      } else {
+        clackSpinner.error(message);
+      }
     },
     message: (message?: string) => {
       clackSpinner.message(message);
@@ -144,7 +170,11 @@ export const progress = (options?: clack.ProgressOptions) => {
       clackProgress.advance(value, message);
     },
     stop: (message?: string, code = 0) => {
-      clackProgress.stop(message, code);
+      if (code === 0) {
+        clackProgress.stop(message);
+      } else {
+        clackProgress.error(message);
+      }
     },
     message: (message?: string) => {
       clackProgress.message(message);

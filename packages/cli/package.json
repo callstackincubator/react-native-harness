@@ -23,10 +23,14 @@
   "dependencies": {
     "@react-native-harness/bridge": "workspace:*",
     "@react-native-harness/config": "workspace:*",
+    "@react-native-harness/platforms": "workspace:*",
+    "@react-native-harness/tools": "workspace:*",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "jest-cli": "^30.2.0"
+    "jest-cli": "^30.2.0",
+    "@react-native-harness/platform-android": "workspace:*",
+    "@react-native-harness/platform-apple": "workspace:*"
   },
   "peerDependencies": {
     "jest-cli": "*"

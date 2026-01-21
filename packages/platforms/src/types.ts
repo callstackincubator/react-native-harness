@@ -11,3 +11,11 @@ export type HarnessPlatform<TConfig = Record<string, unknown>> = {
   config: TConfig;
   runner: string;
 };
+
+export type RunTarget = {
+  type: 'emulator' | 'physical';
+  name: string;
+  platform: string;
+  description?: string;
+  device: Record<string, any>;
+};
