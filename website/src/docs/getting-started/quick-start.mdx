@@ -18,13 +18,42 @@ Install React Native Harness as a development dependency:
 
 ## Configuration
 
-### 1. Install Platform Packages
+The easiest way to get started is with our interactive setup wizard! It will guide you through the configuration process and handle most of the setup automatically.
 
-First, install the platform packages you need:
+Run the wizard from your project root:
+
+<PackageManagerTabs
+  command={{
+    npm: 'npx react-native-harness@latest init',
+    yarn: 'yarn dlx react-native-harness@latest init',
+    pnpm: 'pnpm dlx react-native-harness@latest init',
+    bun: 'bunx react-native-harness@latest init',
+  }}
+/>
+
+The wizard will:
+- Ask for your project type (Expo or React Native CLI)
+- Help you select platforms (Android/iOS)
+- Find available devices and simulators
+- Generate bundle IDs and create configuration files
+- Install required platform packages
+- Set up Jest configuration
+
+:::tip Wizard Benefits
+The wizard handles the complex configuration details for you, making setup much faster and less error-prone than manual configuration.
+:::
+
+### Manual Configuration (if wizard fails)
+
+If the wizard doesn't work for your setup, you can configure Harness manually:
+
+#### 1. Install Platform Packages
+
+Install the platform packages you need:
 
 <PackageManagerTabs command="install @react-native-harness/platform-android @react-native-harness/platform-apple" />
 
-### 2. Create Harness Configuration
+#### 2. Create Harness Configuration
 
 Create a `rn-harness.config.mjs` file in your project root:
 
@@ -67,9 +96,9 @@ The `entryPoint` and `appRegistryComponentName` properties tell React Native Har
 For Expo projects, the `entryPoint` should be set to the path specified in the `main` property of package.json. The `appRegistryComponentName` is typically set to `main` for Expo apps.
 :::
 
-### 3. Update Metro Configuration
+### 3. Update Metro Configuration (Required)
 
-Update your `metro.config.js` so React Native Harness will be able to use it to bundle its tests:
+Whether you use the wizard or manual setup, you still need to update your Metro configuration so React Native Harness can bundle its tests:
 
 ```javascript
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
@@ -88,9 +117,9 @@ module.exports = withRnHarness(mergeConfig(defaultConfig, customConfig));
 The `withRnHarness` function is a noop when you're not running Harness tests, so you don't need to worry about it affecting your app in production. It only kicks in when running tests!
 :::
 
-### 4. Configure Jest
+#### 3. Configure Jest
 
-Update your `jest.config.js` to use the React Native Harness preset:
+The wizard creates a dedicated `jest.harness.config.mjs` file for your Harness tests. If you prefer manual setup, update your `jest.config.js`:
 
 ```javascript
 module.exports = {
@@ -99,7 +128,7 @@ module.exports = {
 ```
 
 :::tip Running Both Classic and Harness Tests
-If you want to run both traditional Jest tests and Harness tests in the same app, you can use Jest's `projects` feature. This lets you separate your regular unit tests from your in-app Harness tests:
+If you want to run both traditional Jest tests and Harness tests in the same app, you can use Jest's `projects` feature. The wizard creates a separate Jest config for Harness tests, but you can also configure this manually:
 
 ```javascript
 module.exports = {
