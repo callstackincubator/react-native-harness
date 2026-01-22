@@ -4,6 +4,7 @@ import type {
 } from './shared/test-runner.js';
 import type { TestCollectorEvents } from './shared/test-collector.js';
 import type { BundlerEvents } from './shared/bundler.js';
+import type { ConsoleEvent } from './shared/console.js';
 import type { HarnessPlatform } from '@react-native-harness/platforms';
 
 export type FileReference = {
@@ -103,6 +104,7 @@ export type {
   SetupFileBundlingFailedEvent,
   BundlerEvents,
 } from './shared/bundler.js';
+export type { ConsoleEvent, ConsoleLevel } from './shared/console.js';
 
 export type DeviceDescriptor = {
   platform: 'ios' | 'android' | 'vega';
@@ -114,7 +116,8 @@ export type DeviceDescriptor = {
 export type BridgeEvents =
   | TestCollectorEvents
   | TestRunnerEvents
-  | BundlerEvents;
+  | BundlerEvents
+  | ConsoleEvent;
 
 export type BridgeEventsMap = {
   [K in BridgeEvents['type']]: (

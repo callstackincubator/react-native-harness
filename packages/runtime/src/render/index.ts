@@ -1,5 +1,7 @@
 import React from 'react';
 import { store } from '../ui/state.js';
+import { batchedUpdate } from '../utils/batchedUpdate.js';
+import { resetRenderState } from './utils.js';
 import type { RenderResult, RenderOptions } from './types.js';
 
 const wrapElement = (
@@ -20,9 +22,7 @@ export const render = async (
 
   // If an element is already rendered, unmount it first
   if (store.getState().renderedElement !== null) {
-    store.getState().setRenderedElement(null);
-    store.getState().setOnLayoutCallback(null);
-    store.getState().setOnRenderCallback(null);
+    resetRenderState();
   }
 
   // Create a promise that resolves when the element is rendered.
@@ -36,15 +36,19 @@ export const render = async (
       );
     }, timeout);
 
-    store.getState().setOnRenderCallback(() => {
-      clearTimeout(timeoutId);
-      resolve();
+    batchedUpdate(() => {
+      store.getState().setOnRenderCallback(() => {
+        clearTimeout(timeoutId);
+        resolve();
+      });
     });
   });
 
   // Wrap and set the element in state (key is generated automatically)
   const wrappedElement = wrapElement(element, wrapper);
-  store.getState().setRenderedElement(wrappedElement);
+  batchedUpdate(() => {
+    store.getState().setRenderedElement(wrappedElement);
+  });
 
   // Wait for useEffect to fire, ensuring all children are committed
   await renderPromise;
@@ -65,14 +69,18 @@ export const render = async (
         );
       }, timeout);
 
-      store.getState().setOnRenderCallback(() => {
-        clearTimeout(timeoutId);
-        resolve();
+      batchedUpdate(() => {
+        store.getState().setOnRenderCallback(() => {
+          clearTimeout(timeoutId);
+          resolve();
+        });
       });
     });
 
     const wrappedNewElement = wrapElement(newElement, wrapper);
-    store.getState().updateRenderedElement(wrappedNewElement);
+    batchedUpdate(() => {
+      store.getState().updateRenderedElement(wrappedNewElement);
+    });
 
     // Wait for render
     await renderPromise;
@@ -82,10 +90,7 @@ export const render = async (
     if (store.getState().renderedElement === null) {
       return;
     }
-
-    store.getState().setRenderedElement(null);
-    store.getState().setOnLayoutCallback(null);
-    store.getState().setOnRenderCallback(null);
+    resetRenderState();
   };
 
   return {

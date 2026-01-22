@@ -1,7 +1,5 @@
-import { store } from '../ui/state.js';
+import { resetRenderState } from './utils.js';
 
 export const cleanup = (): void => {
-  store.getState().setRenderedElement(null);
-  store.getState().setOnLayoutCallback(null);
-  store.getState().setOnRenderCallback(null);
+  resetRenderState();
 };

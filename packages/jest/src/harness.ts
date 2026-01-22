@@ -1,6 +1,7 @@
 import {
   getBridgeServer,
   BridgeServer,
+  BridgeServerEvents,
 } from '@react-native-harness/bridge/server';
 import {
   HarnessContext,
@@ -31,6 +32,14 @@ export type Harness = {
   restart: () => Promise<void>;
   dispose: () => Promise<void>;
   crashMonitor: CrashMonitor;
+  on: <T extends keyof BridgeServerEvents>(
+    event: T,
+    handler: BridgeServerEvents[T]
+  ) => void;
+  off: <T extends keyof BridgeServerEvents>(
+    event: T,
+    handler: BridgeServerEvents[T]
+  ) => void;
 };
 
 export const waitForAppReady = async (options: {
@@ -205,6 +214,8 @@ const getHarnessInternal = async (
     restart,
     dispose,
     crashMonitor,
+    on: (event, handler) => serverBridge.on(event, handler),
+    off: (event, handler) => serverBridge.off(event, handler),
   };
 };
 

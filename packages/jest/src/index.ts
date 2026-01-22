@@ -9,6 +9,7 @@ import type {
   TestWatcher,
 } from 'jest-runner';
 import pLimit from 'p-limit';
+import chalk from 'chalk';
 import { runHarnessTestFile } from './run.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
 import { type Harness } from './harness.js';
@@ -18,6 +19,72 @@ import { HarnessError } from '@react-native-harness/tools';
 import { getErrorMessage } from './logs.js';
 import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
 import { NativeCrashError } from './errors.js';
+import { ConsoleEvent } from '@react-native-harness/bridge';
+
+// Printf-style string interpolation for console messages
+const formatConsoleMessage = (args: string[]): string => {
+  if (!args || args.length === 0) return '';
+  if (args.length === 1) return args[0];
+
+  let template = String(args[0]);
+  let argIndex = 1;
+
+  // Replace %s, %d, %i, %o, %O, %j with corresponding arguments
+  template = template.replace(/%[sdioOj]/g, (match) => {
+    if (argIndex >= args.length) return match;
+    const arg = args[argIndex++];
+    switch (match) {
+      case '%s':
+        return String(arg);
+      case '%d':
+        return String(Number(arg));
+      case '%i':
+        return String(parseInt(String(arg), 10));
+      case '%o':
+      case '%O':
+      case '%j':
+        return typeof arg === 'string' ? arg : JSON.stringify(arg);
+      default:
+        return String(arg);
+    }
+  });
+
+  // Append remaining arguments
+  const remaining = args.slice(argIndex);
+  if (remaining.length > 0) {
+    template += ' ' + remaining.join(' ');
+  }
+
+  return template;
+};
+
+// Console event handler - prints console messages from device
+const createConsoleEventHandler = (): ((event: ConsoleEvent) => void) => {
+  return (event: ConsoleEvent) => {
+    if (event.type === 'console') {
+      const message = formatConsoleMessage(event.args);
+      const tags: Record<string, string> = {
+        log: chalk.supportsColor
+          ? chalk.reset.inverse.bold.cyan(' LOG ')
+          : 'LOG',
+        warn: chalk.supportsColor
+          ? chalk.reset.inverse.bold.yellow(' WARN ')
+          : 'WARN',
+        error: chalk.supportsColor
+          ? chalk.reset.inverse.bold.red(' ERROR ')
+          : 'ERROR',
+        info: chalk.supportsColor
+          ? chalk.reset.inverse.bold.blue(' INFO ')
+          : 'INFO',
+        debug: chalk.supportsColor
+          ? chalk.reset.inverse.bold.gray(' DEBUG ')
+          : 'DEBUG',
+      };
+      const tag = tags[event.level] || tags.log;
+      process.stderr.write(`${tag} ${message}\n`);
+    }
+  };
+};
 
 class CancelRun extends Error {
   constructor(message?: string) {
@@ -47,12 +114,20 @@ export default class JestHarness implements CallbackTestRunnerInterface {
       throw new Error('Parallel test running is not supported');
     }
 
+    let consoleHandler: ((event: ConsoleEvent) => void) | null = null;
+
     try {
       // This is necessary as Harness may throw and we want to catch it and display a helpful error message.
       await setup(this.#globalConfig);
 
       const harness = global.HARNESS;
       const harnessConfig = global.HARNESS_CONFIG;
+
+      // Setup console forwarding if not in silent mode
+      if (!this.#globalConfig.silent) {
+        consoleHandler = createConsoleEventHandler();
+        harness.on('event', consoleHandler);
+      }
 
       return await this._createInBandTestRun(
         tests,
@@ -71,6 +146,10 @@ export default class JestHarness implements CallbackTestRunnerInterface {
 
       throw error;
     } finally {
+      // Cleanup console handler
+      if (consoleHandler && global.HARNESS) {
+        global.HARNESS.off('event', consoleHandler);
+      }
       // This is necessary as Harness may throw and we want to catch it and display a helpful error message.
       await teardown(this.#globalConfig);
     }
