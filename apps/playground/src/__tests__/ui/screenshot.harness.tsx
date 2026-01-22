@@ -25,7 +25,7 @@ describe('Screenshot', () => {
               alignItems: 'center',
             }}
           >
-            <Text style={{ color: 'white' }}>Target</Text>
+            <View style={{ width: 50, height: 50, backgroundColor: 'white' }} />
           </View>
         </View>
       </View>
