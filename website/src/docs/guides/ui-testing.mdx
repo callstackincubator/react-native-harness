@@ -7,7 +7,9 @@ React Native Harness provides powerful UI testing capabilities that allow you to
 :::warning
 UI testing is an **opt-in feature** that requires installing an additional package. The `@react-native-harness/ui` package is not included by default and must be explicitly installed to use these features.
 
-This package contains **native code** and requires rebuilding your app after installation. Additionally, this code is **automatically excluded from release builds** and is only available in debug builds.
+For **iOS and Android**, this package contains **native code** and requires rebuilding your app after installation. This code is **automatically excluded from release builds** and is only available in debug builds.
+
+For **Web**, this package uses standard DOM APIs for interactions and a Playwright-based bridge for capturing screenshots.
 :::
 
 ## Installation
@@ -61,15 +63,15 @@ describe('Element Queries', () => {
 
 ### Available query methods
 
-| Method | Description |
-|--------|-------------|
-| `findByTestId(testId)` | Find single element by testID (throws if not found) |
-| `findAllByTestId(testId)` | Find all elements by testID (throws if none found) |
-| `queryByTestId(testId)` | Find single element by testID (returns null if not found) |
-| `queryAllByTestId(testId)` | Find all elements by testID (returns empty array if none found) |
-| `findByAccessibilityLabel(label)` | Find single element by accessibility label (throws if not found) |
-| `findAllByAccessibilityLabel(label)` | Find all elements by accessibility label (throws if none found) |
-| `queryByAccessibilityLabel(label)` | Find single element by accessibility label (returns null if not found) |
+| Method                                | Description                                                                  |
+| ------------------------------------- | ---------------------------------------------------------------------------- |
+| `findByTestId(testId)`                | Find single element by testID (throws if not found)                          |
+| `findAllByTestId(testId)`             | Find all elements by testID (throws if none found)                           |
+| `queryByTestId(testId)`               | Find single element by testID (returns null if not found)                    |
+| `queryAllByTestId(testId)`            | Find all elements by testID (returns empty array if none found)              |
+| `findByAccessibilityLabel(label)`     | Find single element by accessibility label (throws if not found)             |
+| `findAllByAccessibilityLabel(label)`  | Find all elements by accessibility label (throws if none found)              |
+| `queryByAccessibilityLabel(label)`    | Find single element by accessibility label (returns null if not found)       |
 | `queryAllByAccessibilityLabel(label)` | Find all elements by accessibility label (returns empty array if none found) |
 
 ## Screenshot testing
@@ -133,16 +135,16 @@ test('screenshot with custom options', async () => {
 
 ### Screenshot options reference
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `name` | `string` | - | **Required.** Unique name for the snapshot |
-| `threshold` | `number` | `0.1` | Matching threshold for pixelmatch (0-1). Smaller values are more sensitive |
-| `failureThreshold` | `number` | - | Minimum difference required to fail the test |
-| `failureThresholdType` | `'pixel' \| 'percent'` | `'pixel'` | How to interpret the failure threshold |
-| `comparisonMethod` | `'pixelmatch' \| 'ssim'` | `'pixelmatch'` | Algorithm used for image comparison |
-| `ssimThreshold` | `number` | `0.95` | Minimum similarity for SSIM comparison (0-1) |
-| `diffColor` | `[number, number, number]` | `[255, 0, 0]` | RGB color for highlighting differences |
-| `ignoreRegions` | `Array<{x,y,width,height}>` | `[]` | Regions to exclude from comparison |
+| Option                 | Type                        | Default        | Description                                                                |
+| ---------------------- | --------------------------- | -------------- | -------------------------------------------------------------------------- |
+| `name`                 | `string`                    | -              | **Required.** Unique name for the snapshot                                 |
+| `threshold`            | `number`                    | `0.1`          | Matching threshold for pixelmatch (0-1). Smaller values are more sensitive |
+| `failureThreshold`     | `number`                    | -              | Minimum difference required to fail the test                               |
+| `failureThresholdType` | `'pixel' \| 'percent'`      | `'pixel'`      | How to interpret the failure threshold                                     |
+| `comparisonMethod`     | `'pixelmatch' \| 'ssim'`    | `'pixelmatch'` | Algorithm used for image comparison                                        |
+| `ssimThreshold`        | `number`                    | `0.95`         | Minimum similarity for SSIM comparison (0-1)                               |
+| `diffColor`            | `[number, number, number]`  | `[255, 0, 0]`  | RGB color for highlighting differences                                     |
+| `ignoreRegions`        | `Array<{x,y,width,height}>` | `[]`           | Regions to exclude from comparison                                         |
 
 ### Element-specific screenshots
 
@@ -165,7 +167,7 @@ test('capture specific element', async () => {
   const headerScreenshot = await screen.screenshot(headerElement);
 
   await expect(headerScreenshot).toMatchImageSnapshot({
-    name: 'header-element'
+    name: 'header-element',
   });
 });
 ```
@@ -190,7 +192,7 @@ test('multiple screenshots', async () => {
 
 The `userEvent` API allows you to simulate user interactions with your components:
 
-```typescript
+````typescript
 import { describe, test, render, expect, fn } from 'react-native-harness';
 import { screen, userEvent } from '@react-native-harness/ui';
 
@@ -220,12 +222,41 @@ describe('User Interactions', () => {
     expect(input.props.value).toBe('testuser');
   });
 });
-```
+
+## Web Support
+
+React Native Harness supports UI testing on the web using Playwright. When running tests on the web platform, the interaction logic is handled by a Playwright bridge that simulates real user events at the browser level.
+
+### Interaction logic
+
+- **Pressing**: Simulates a real mouse click at the element's coordinates using Playwright's mouse API.
+- **Typing**: Simulates real keyboard input using Playwright's keyboard API. This ensures that all browser events (keydown, keypress, input, keyup) are fired correctly and picked up by React Native Web.
+- **Blurring**: Supports blurring the active element, with an option to trigger "Submit" (Enter key) before blurring.
+
+### Configuration
+
+To use UI testing on web, make sure you have the `@react-native-harness/platform-web` package installed and configured in your `rn-harness.config.mjs`.
+
+```javascript
+import { webPlatform, chromium } from '@react-native-harness/platform-web';
+
+export default {
+  // ...
+  runners: [
+    webPlatform({
+      name: 'web',
+      browser: chromium('http://localhost:3000'),
+    }),
+  ],
+};
+````
 
 ## Troubleshooting
 
 ### Anti-aliased text differences
+
 Small differences in text rendering can cause false positives. Increase the `threshold` value for less sensitive comparison.
 
 ### Dynamic content
+
 For components with dynamic content (dates, random values), use `ignoreRegions` to exclude those areas from comparison.

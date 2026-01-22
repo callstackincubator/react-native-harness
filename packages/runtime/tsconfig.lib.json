@@ -8,7 +8,8 @@
     "emitDeclarationOnly": false,
     "forceConsistentCasingInFileNames": true,
     "types": ["node"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "lib": ["DOM", "ESNext"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "references": [

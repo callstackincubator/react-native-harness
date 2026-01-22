@@ -27,7 +27,7 @@ export const physicalAndroidDevice = (
 export const androidPlatform = (
   config: AndroidPlatformConfig
 ): HarnessPlatform<AndroidPlatformConfig> => ({
-  name: 'android',
+  name: config.name,
   config,
   runner: import.meta.resolve('./runner.js'),
 });

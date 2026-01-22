@@ -1,9 +1,17 @@
+import { Platform } from "react-native";
+
 export function disableHMRWhenReady(
   disable: () => void,
   retriesLeft: number,
   retryDelay = 10
 ) {
   return new Promise<void>((resolve, reject) => {
+    if (Platform.OS === 'web') {
+      // No HMR on web
+      resolve();
+      return;
+    }
+
     function attempt(remaining: number) {
       try {
         disable();

@@ -1,5 +1,3 @@
-import { TurboModuleRegistry, type TurboModule } from 'react-native';
-
 /**
  * Represents the position and dimensions of a view in screen coordinates (points/dp).
  */
@@ -10,7 +8,7 @@ export interface ViewInfo {
   height: number;
 }
 
-interface Spec extends TurboModule {
+export interface HarnessUIModule {
   /**
    * Simulates a native press at the specified screen coordinates.
    * Returns a promise that resolves when the press action is complete.
@@ -60,7 +58,3 @@ interface Spec extends TurboModule {
    */
   blur(options: { submitEditing?: boolean }): Promise<void>;
 }
-
-export type HarnessUIModule = Spec;
-
-export default TurboModuleRegistry.getEnforcing<Spec>('HarnessUI');

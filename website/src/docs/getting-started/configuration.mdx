@@ -194,6 +194,40 @@ vegaPlatform({
 });
 ```
 
+### Web Runner
+
+:::danger Experimental
+Web support is currently an **experimental feature**. It may not work in all scenarios and the API is subject to change. Use with caution.
+:::
+
+Install the Web platform package:
+
+<PackageManagerTabs command="install @react-native-harness/platform-web" />
+
+**Usage:**
+
+```javascript
+import {
+  webPlatform,
+  chromium,
+  chrome,
+  firefox,
+  webkit,
+} from '@react-native-harness/platform-web';
+
+// Using Chromium (headless by default)
+webPlatform({
+  name: 'web',
+  browser: chromium('http://localhost:3000'),
+});
+
+// Using a specific browser channel or non-headless mode
+webPlatform({
+  name: 'chrome',
+  browser: chrome('http://localhost:3000', { headless: false }),
+});
+```
+
 ## Default Runner
 
 When you have multiple runners configured, you can specify which one to use by default when no runner is explicitly specified in the CLI command.

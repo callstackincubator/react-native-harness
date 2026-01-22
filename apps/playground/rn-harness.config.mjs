@@ -12,6 +12,7 @@ import {
   vegaPlatform,
   vegaEmulator,
 } from '@react-native-harness/platform-vega';
+import { webPlatform, chrome } from '@react-native-harness/platform-web';
 
 const config = {
   entryPoint: './index.js',
@@ -47,6 +48,10 @@ const config = {
       name: 'vega',
       device: vegaEmulator('VegaTV_1'),
       bundleId: 'com.playground',
+    }),
+    webPlatform({
+      name: 'web',
+      browser: chrome('http://localhost:8081/index.html', { headless: false }),
     }),
   ],
   defaultRunner: 'android',

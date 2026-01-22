@@ -4,6 +4,9 @@
   "include": [],
   "references": [
     {
+      "path": "../../packages/platform-web"
+    },
+    {
       "path": "../../packages/platform-vega"
     },
     {
