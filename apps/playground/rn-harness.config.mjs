@@ -12,7 +12,11 @@ import {
   vegaPlatform,
   vegaEmulator,
 } from '@react-native-harness/platform-vega';
-import { webPlatform, chrome } from '@react-native-harness/platform-web';
+import {
+  webPlatform,
+  chromium,
+  chrome,
+} from '@react-native-harness/platform-web';
 
 const config = {
   entryPoint: './index.js',
@@ -52,6 +56,10 @@ const config = {
     webPlatform({
       name: 'web',
       browser: chrome('http://localhost:8081/index.html', { headless: false }),
+    }),
+    webPlatform({
+      name: 'chromium',
+      browser: chromium('http://localhost:8081/index.html', { headless: true }),
     }),
   ],
   defaultRunner: 'android',
