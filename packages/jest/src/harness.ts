@@ -19,6 +19,7 @@ import {
 import { InitializationTimeoutError, MaxAppRestartsError } from './errors.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
 import { createCrashMonitor, CrashMonitor } from './crash-monitor.js';
+import { createClientLogListener } from './client-log-handler.js';
 
 export type HarnessRunTestsOptions = Exclude<TestExecutionOptions, 'platform'>;
 
@@ -144,7 +145,17 @@ const getHarnessInternal = async (
     }),
   ]);
 
+  // Forward client logs to console if enabled
+  const clientLogListener = createClientLogListener();
+
+  if (config.server?.forwardClientLogs) {
+    metroInstance.events.addListener(clientLogListener);
+  }
+
   const dispose = async () => {
+    if (config.server?.forwardClientLogs) {
+      metroInstance.events.removeListener(clientLogListener);
+    }
     await Promise.all([
       serverBridge.dispose(),
       platformInstance.dispose(),

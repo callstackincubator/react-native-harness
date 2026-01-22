@@ -104,8 +104,17 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
   // Optional: Reset environment between test files (default: true)
   resetEnvironmentBetweenTestFiles?: boolean;
 
-  // Optional: Root directory for coverage instrumentation in monorepos (default: process.cwd())
-  coverageRoot?: string;
+  // Optional: Coverage configuration
+  coverage?: {
+    // Root directory for coverage instrumentation in monorepos (default: process.cwd())
+    root?: string;
+  };
+
+  // Optional: Server configuration
+  server?: {
+    // Forward console.log/warn/error/etc from the app to the terminal (default: false)
+    forwardClientLogs?: boolean;
+  };
 }
 ```
 
@@ -384,6 +393,30 @@ Without specifying `coverageRoot`, babel-plugin-istanbul may skip instrumenting 
 :::tip When to use coverageRoot
 Set `coverageRoot` when you notice 0% coverage in your reports or when source files are not being instrumented for coverage. This commonly occurs in create-react-native-library projects and other monorepo setups.
 :::
+
+## Log Forwarding
+
+React Native Harness can forward `console.log`, `console.warn`, `console.error`, and other console method calls from your app to the terminal output. This is useful for debugging tests and understanding what your app is doing during test execution.
+
+```javascript
+{
+  server: {
+    forwardClientLogs: true,
+  },
+}
+```
+
+**Default:** `false`
+
+When enabled, you'll see logs in your terminal with styled level indicators:
+
+```
+ LOG  Hello from the app!
+ WARN  This is a warning
+ ERROR  Something went wrong
+ INFO  Informational message
+ DEBUG  Debug details
+```
 
 ## Finding Device and Simulator IDs
 

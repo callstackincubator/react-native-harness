@@ -60,6 +60,19 @@ export const ConfigSchema = z
       })
       .optional(),
 
+    server: z
+      .object({
+        forwardClientLogs: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe(
+            'Enable forwarding of client_log events from the device to the Metro reporter. ' +
+            'When enabled, console.log statements from the React Native app will be forwarded to Metro.'
+          ),
+      })
+      .optional(),
+
     // Deprecated property - used for migration detection
     include: z.array(z.string()).optional(),
   })

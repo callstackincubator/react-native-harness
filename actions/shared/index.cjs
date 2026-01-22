@@ -3995,7 +3995,7 @@ ZodNaN.create = (params) => {
     ...processCreateParams(params)
   });
 };
-var BRAND = Symbol("zod_brand");
+var BRAND = /* @__PURE__ */ Symbol("zod_brand");
 var ZodBranded = class extends ZodType {
   _parse(input) {
     const { ctx } = this._processInputParams(input);
@@ -4231,6 +4231,9 @@ var ConfigSchema = external_exports.object({
   coverage: external_exports.object({
     root: external_exports.string().optional().describe(`Root directory for coverage instrumentation in monorepo setups. Specifies the directory from which coverage data should be collected. Use ".." for create-react-native-library projects where tests run from example/ but source files are in parent directory. Passed to babel-plugin-istanbul's cwd option.`)
   }).optional(),
+  server: external_exports.object({
+    forwardClientLogs: external_exports.boolean().optional().default(false).describe("Enable forwarding of client_log events from the device to the Metro reporter. When enabled, console.log statements from the React Native app will be forwarded to Metro.")
+  }).optional(),
   // Deprecated property - used for migration detection
   include: external_exports.array(external_exports.string()).optional()
 }).refine((config) => {
@@ -4262,7 +4265,6 @@ var et = new RegExp(`(?:\\${Q}(?<code>\\d+)m|\\${U}(?<uri>.*)${j})`, "y");
 var At = ["up", "down", "left", "right", "space", "enter", "cancel"];
 var _ = { actions: new Set(At), aliases: /* @__PURE__ */ new Map([["k", "up"], ["j", "down"], ["h", "left"], ["l", "right"], ["", "cancel"], ["escape", "cancel"]]), messages: { cancel: "Canceled", error: "Something went wrong" }, withGuide: true };
 var bt = globalThis.process.platform.startsWith("win");
-var z = Symbol("clack:cancel");
 
 // ../../node_modules/@clack/prompts/dist/index.mjs
 var import_picocolors = __toESM(require_picocolors(), 1);
@@ -4289,7 +4291,7 @@ var Y = w("\u25CF", ">");
 var K = w("\u25CB", " ");
 var te = w("\u25FB", "[\u2022]");
 var k2 = w("\u25FC", "[+]");
-var z2 = w("\u25FB", "[ ]");
+var z = w("\u25FB", "[ ]");
 var Pe = w("\u25AA", "\u2022");
 var se = w("\u2500", "-");
 var he = w("\u256E", "+");

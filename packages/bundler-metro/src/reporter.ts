@@ -7,6 +7,11 @@ export type ReportableEvent =
   | MetroReportableEvent
   | {
       type: 'initialize_done';
+    }
+  | {
+      type: 'client_log';
+      level: 'trace' | 'info' | 'warn' | 'log' | 'group' | 'groupCollapsed' | 'groupEnd' | 'debug' | 'error';
+      data: unknown[];
     };
 
 export type Reporter = EventEmitter<ReportableEvent>;

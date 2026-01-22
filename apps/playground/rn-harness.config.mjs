@@ -24,9 +24,9 @@ export default {
 
   runners: [
     androidPlatform({
-      name: 'pixel_8_api_33',
-      device: androidEmulator('Pixel_8_API_33'),
-      bundleId: 'com.example',
+      name: 'pixel_8_api_35',
+      device: androidEmulator('Pixel_8_API_35'),
+      bundleId: 'com.harnessplayground',
     }),
     applePlatform({
       name: 'iphone-16-pro-max',
@@ -42,5 +42,8 @@ export default {
       browser: chromium('http://localhost:8081/index.html', { headless: true }),
     }),
   ],
-  defaultRunner: 'pixel_8_api_33',
+  defaultRunner: 'pixel_8_api_35',
+  server: {
+    forwardClientLogs: true,
+  },
 };
