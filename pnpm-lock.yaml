@@ -430,15 +430,9 @@ importers:
 
   packages/platform-web:
     dependencies:
-      '@react-native-harness/config':
-        specifier: workspace:*
-        version: link:../config
       '@react-native-harness/platforms':
         specifier: workspace:*
         version: link:../platforms
-      '@react-native-harness/tools':
-        specifier: workspace:*
-        version: link:../tools
       playwright:
         specifier: ^1.50.0
         version: 1.57.0
