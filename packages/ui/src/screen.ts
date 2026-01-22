@@ -1,6 +1,6 @@
 import { type ViewInfo } from './types.js';
 import { waitFor } from '@react-native-harness/runtime';
-import HarnessUI from './harness/index.js';
+import HarnessUI from './harness.js';
 
 /**
  * Represents an element found on screen with its position and dimensions.

@@ -1,4 +1,4 @@
-import { type HarnessUIModule, type ViewInfo } from '../types.js';
+import { type HarnessUIModule, type ViewInfo } from './types.js';
 
 declare global {
   interface Window {

@@ -1,4 +1,4 @@
-import HarnessUI from './harness/index.js';
+import HarnessUI from './harness.js';
 import type { ElementReference } from './screen.js';
 
 /**

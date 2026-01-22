@@ -1,5 +1,12 @@
 import { TurboModuleRegistry, type TurboModule } from 'react-native';
-import { type ViewInfo } from '../types.js';
+
+// This interface needs to be there for Codegen to work.
+export interface ViewInfo {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 interface Spec extends TurboModule {
   simulatePress(x: number, y: number): Promise<void>;
