@@ -42,8 +42,11 @@ export default {
       browser: chromium('http://localhost:8081/index.html', { headless: true }),
     }),
   ],
-  defaultRunner: 'pixel_8_api_35',
-  server: {
-    forwardClientLogs: true,
-  },
+  defaultRunner: 'android',
+  bridgeTimeout: 120000,
+  webSocketPort: 3002,
+
+  resetEnvironmentBetweenTestFiles: true,
+  unstable__skipAlreadyIncludedModules: false,
+  forwardClientLogs: true,
 };
