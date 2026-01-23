@@ -24,9 +24,9 @@ export default {
 
   runners: [
     androidPlatform({
-      name: 'pixel_8_api_35',
-      device: androidEmulator('Pixel_8_API_35'),
-      bundleId: 'com.harnessplayground',
+      name: 'pixel_8_api_33',
+      device: androidEmulator('Pixel_8_API_33'),
+      bundleId: 'com.example',
     }),
     applePlatform({
       name: 'iphone-16-pro-max',
