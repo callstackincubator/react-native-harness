@@ -13,10 +13,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../platform-ios/tsconfig.lib.json"
-    },
-    {
-      "path": "../platform-android/tsconfig.lib.json"
+      "path": "../platform-web/tsconfig.lib.json"
     },
     {
       "path": "../tools/tsconfig.lib.json"
@@ -29,6 +26,12 @@
     },
     {
       "path": "../bridge/tsconfig.lib.json"
+    },
+    {
+      "path": "../platform-ios/tsconfig.lib.json"
+    },
+    {
+      "path": "../platform-android/tsconfig.lib.json"
     }
   ]
 }

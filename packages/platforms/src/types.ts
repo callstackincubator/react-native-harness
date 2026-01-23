@@ -13,7 +13,7 @@ export type HarnessPlatform<TConfig = Record<string, unknown>> = {
 };
 
 export type RunTarget = {
-  type: 'emulator' | 'physical';
+  type: 'emulator' | 'physical' | 'browser';
   name: string;
   platform: string;
   description?: string;

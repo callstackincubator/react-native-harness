@@ -4,10 +4,7 @@
   "include": [],
   "references": [
     {
-      "path": "../platform-ios"
-    },
-    {
-      "path": "../platform-android"
+      "path": "../platform-web"
     },
     {
       "path": "../tools"
@@ -20,6 +17,12 @@
     },
     {
       "path": "../bridge"
+    },
+    {
+      "path": "../platform-ios"
+    },
+    {
+      "path": "../platform-android"
     },
     {
       "path": "./tsconfig.lib.json"

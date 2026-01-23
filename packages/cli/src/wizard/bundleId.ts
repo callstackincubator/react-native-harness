@@ -49,5 +49,22 @@ export const getBundleIds = async (
     });
   }
 
+  if (selectedPlatforms.includes('web')) {
+    bundleIds.web = await promptText({
+      message: 'Enter application URL',
+      initialValue: 'http://localhost:8081/index.html',
+      placeholder: 'http://localhost:8081/index.html',
+      validate: (value: string | undefined) => {
+        if (!value) return 'URL is required';
+        try {
+          new URL(value);
+          return;
+        } catch (e) {
+          return 'Please enter a valid URL';
+        }
+      },
+    });
+  }
+
   return bundleIds;
 };

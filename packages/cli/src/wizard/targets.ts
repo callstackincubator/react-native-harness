@@ -36,6 +36,16 @@ export const discoverTargets = async (
     }
   }
 
+  if (selectedPlatforms.includes('web')) {
+    try {
+      const webPlatform = await import('@react-native-harness/platform-web');
+      const targets: RunTarget[] = await webPlatform.getRunTargets();
+      allTargets.push(...targets);
+    } catch (e) {
+      console.error('Failed to load Web targets:', e);
+    }
+  }
+
   targetSpinner.stop('Target discovery complete.');
 
   if (allTargets.length === 0) {
@@ -43,7 +53,11 @@ export const discoverTargets = async (
   }
 
   const options = allTargets.map((target, index) => {
-    const platformLabel = target.platform === 'android' ? 'Android' : 'iOS';
+    let platformLabel = 'Unknown';
+    if (target.platform === 'android') platformLabel = 'Android';
+    else if (target.platform === 'ios') platformLabel = 'iOS';
+    else if (target.platform === 'web') platformLabel = 'Web';
+
     return {
       value: index,
       label: `[${platformLabel}] ${target.name} (${target.type})`,

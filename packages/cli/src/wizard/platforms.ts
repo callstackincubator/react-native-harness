@@ -12,6 +12,7 @@ export const installPlatforms = async (): Promise<string[]> => {
     options: [
       { value: 'android', label: 'Android' },
       { value: 'ios', label: 'iOS' },
+      { value: 'web', label: 'Web' },
     ],
   });
 
@@ -27,6 +28,8 @@ export const installPlatforms = async (): Promise<string[]> => {
     packagesToInstall.push('@react-native-harness/platform-android');
   if (selectedPlatforms.includes('ios'))
     packagesToInstall.push('@react-native-harness/platform-apple');
+  if (selectedPlatforms.includes('web'))
+    packagesToInstall.push('@react-native-harness/platform-web');
 
   try {
     await installDevDependency(projectRoot, packagesToInstall);

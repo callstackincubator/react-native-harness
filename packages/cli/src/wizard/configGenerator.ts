@@ -36,7 +36,7 @@ export const generateConfig = (
   selectedTargets: RunTarget[],
   bundleIds: Record<string, string>
 ) => {
-  const imports = [];
+  const imports: string[] = [];
   if (selectedPlatforms.includes('android')) {
     const androidFactories = ['androidPlatform'];
     if (
@@ -75,11 +75,38 @@ export const generateConfig = (
       )} } from "@react-native-harness/platform-apple";`
     );
   }
+  if (selectedPlatforms.includes('web')) {
+    const webFactories = ['webPlatform'];
+    const browsers = new Set(
+      selectedTargets
+        .filter((t) => t.platform === 'web')
+        .map((t) => t.device.browserType)
+    );
+    for (const browser of browsers) {
+      if (browser) webFactories.push(browser);
+    }
+
+    imports.push(
+      `import { ${webFactories.join(
+        ', '
+      )} } from "@react-native-harness/platform-web";`
+    );
+  }
 
   const runnerConfigs = selectedTargets.map((target) => {
     const platformFn = getPlatformFn(target.platform);
-    const bundleId = bundleIds[target.platform];
     const name = target.name.toLowerCase().replace(/\s+/g, '-');
+
+    if (target.platform === 'web') {
+      const url = bundleIds[target.platform];
+      const browserCall = `${target.device.browserType}(${q(url)})`;
+      return `    ${platformFn}({
+      name: ${q(name)},
+      browser: ${browserCall},
+    }),`;
+    }
+
+    const bundleId = bundleIds[target.platform];
     const deviceCall = getDeviceCall(target);
 
     return `    ${platformFn}({

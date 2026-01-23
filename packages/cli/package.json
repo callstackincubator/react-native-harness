@@ -30,7 +30,8 @@
   "devDependencies": {
     "jest-cli": "^30.2.0",
     "@react-native-harness/platform-android": "workspace:*",
-    "@react-native-harness/platform-apple": "workspace:*"
+    "@react-native-harness/platform-apple": "workspace:*",
+    "@react-native-harness/platform-web": "workspace:*"
   },
   "peerDependencies": {
     "jest-cli": "*"
