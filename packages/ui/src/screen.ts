@@ -1,5 +1,6 @@
-import NativeHarnessUI, { type ViewInfo } from './NativeHarnessUI.js';
+import { type ViewInfo } from './types.js';
 import { waitFor } from '@react-native-harness/runtime';
+import HarnessUI from './harness.js';
 
 /**
  * Represents an element found on screen with its position and dimensions.
@@ -80,7 +81,7 @@ const createScreen = (): Screen => {
   return {
     findByTestId: async (testId: string): Promise<ElementReference> => {
       return waitFor(() => {
-        const result = NativeHarnessUI.queryByTestId(testId);
+        const result = HarnessUI.queryByTestId(testId);
         if (!result) {
           throw new Error(`Unable to find element with testID: ${testId}`);
         }
@@ -90,7 +91,7 @@ const createScreen = (): Screen => {
 
     findAllByTestId: async (testId: string): Promise<ElementReference[]> => {
       return waitFor(() => {
-        const results = NativeHarnessUI.queryAllByTestId(testId);
+        const results = HarnessUI.queryAllByTestId(testId);
         if (results.length === 0) {
           throw new Error(`Unable to find any elements with testID: ${testId}`);
         }
@@ -99,18 +100,18 @@ const createScreen = (): Screen => {
     },
 
     queryByTestId: (testId: string): ElementReference | null => {
-      return NativeHarnessUI.queryByTestId(testId);
+      return HarnessUI.queryByTestId(testId);
     },
 
     queryAllByTestId: (testId: string): ElementReference[] => {
-      return NativeHarnessUI.queryAllByTestId(testId);
+      return HarnessUI.queryAllByTestId(testId);
     },
 
     findByAccessibilityLabel: async (
       label: string
     ): Promise<ElementReference> => {
       return waitFor(() => {
-        const result = NativeHarnessUI.queryByAccessibilityLabel(label);
+        const result = HarnessUI.queryByAccessibilityLabel(label);
         if (!result) {
           throw new Error(
             `Unable to find element with accessibility label: ${label}`
@@ -124,7 +125,7 @@ const createScreen = (): Screen => {
       label: string
     ): Promise<ElementReference[]> => {
       return waitFor(() => {
-        const results = NativeHarnessUI.queryAllByAccessibilityLabel(label);
+        const results = HarnessUI.queryAllByAccessibilityLabel(label);
         if (results.length === 0) {
           throw new Error(
             `Unable to find any elements with accessibility label: ${label}`
@@ -135,18 +136,18 @@ const createScreen = (): Screen => {
     },
 
     queryByAccessibilityLabel: (label: string): ElementReference | null => {
-      return NativeHarnessUI.queryByAccessibilityLabel(label);
+      return HarnessUI.queryByAccessibilityLabel(label);
     },
 
     queryAllByAccessibilityLabel: (label: string): ElementReference[] => {
-      return NativeHarnessUI.queryAllByAccessibilityLabel(label);
+      return HarnessUI.queryAllByAccessibilityLabel(label);
     },
 
     screenshot: async (
       element?: ElementReference
     ): Promise<ScreenshotResult | null> => {
       const bounds = element ?? null;
-      const base64String = await NativeHarnessUI.captureScreenshot(bounds);
+      const base64String = await HarnessUI.captureScreenshot(bounds);
 
       if (!base64String) {
         return null;

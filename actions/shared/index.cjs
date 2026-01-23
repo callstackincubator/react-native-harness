@@ -4228,6 +4228,9 @@ var ConfigSchema = external_exports.object({
   unstable__enableMetroCache: external_exports.boolean().optional().default(false),
   detectNativeCrashes: external_exports.boolean().optional().default(true),
   crashDetectionInterval: external_exports.number().min(100, "Crash detection interval must be at least 100ms").default(500),
+  coverage: external_exports.object({
+    root: external_exports.string().optional().describe(`Root directory for coverage instrumentation in monorepo setups. Specifies the directory from which coverage data should be collected. Use ".." for create-react-native-library projects where tests run from example/ but source files are in parent directory. Passed to babel-plugin-istanbul's cwd option.`)
+  }).optional(),
   // Deprecated property - used for migration detection
   include: external_exports.array(external_exports.string()).optional()
 }).refine((config) => {

@@ -1,4 +1,4 @@
-import NativeHarnessUI from './NativeHarnessUI.js';
+import HarnessUI from './harness.js';
 import type { ElementReference } from './screen.js';
 
 /**
@@ -66,13 +66,13 @@ const createUserEvent = (): UserEvent => {
       // Calculate center point of the element
       const centerX = element.x + element.width / 2;
       const centerY = element.y + element.height / 2;
-      await NativeHarnessUI.simulatePress(centerX, centerY);
+      await HarnessUI.simulatePress(centerX, centerY);
       // Flush pending events to ensure onPress and other callbacks are processed
       await flushEvents();
     },
 
     pressAt: async (x: number, y: number): Promise<void> => {
-      await NativeHarnessUI.simulatePress(x, y);
+      await HarnessUI.simulatePress(x, y);
       // Flush pending events to ensure onPress and other callbacks are processed
       await flushEvents();
     },
@@ -93,26 +93,26 @@ const createUserEvent = (): UserEvent => {
         // Calculate center point of the element
         const centerX = element.x + element.width / 2;
         const centerY = element.y + element.height / 2;
-        await NativeHarnessUI.simulatePress(centerX, centerY);
+        await HarnessUI.simulatePress(centerX, centerY);
         await flushEvents();
       } else {
         // Still need to press to focus, but ideally without press events
         // For now, we press anyway - future enhancement could add a focusOnly method
         const centerX = element.x + element.width / 2;
         const centerY = element.y + element.height / 2;
-        await NativeHarnessUI.simulatePress(centerX, centerY);
+        await HarnessUI.simulatePress(centerX, centerY);
         await flushEvents();
       }
 
       // Type each character one by one
       for (const char of text) {
-        await NativeHarnessUI.typeChar(char);
+        await HarnessUI.typeChar(char);
         await flushEvents(); // Let onChangeText fire
       }
 
       // Blur (triggers endEditing and blur unless skipBlur)
       if (!options?.skipBlur) {
-        await NativeHarnessUI.blur({
+        await HarnessUI.blur({
           submitEditing: options?.submitEditing ?? false,
         });
         await flushEvents();

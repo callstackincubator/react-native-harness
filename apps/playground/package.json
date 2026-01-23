@@ -6,8 +6,10 @@
     "test:harness": "jest --selectProjects react-native-harness"
   },
   "dependencies": {
-    "react": "19.1.1",
-    "react-native": "0.82.1"
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.82.1",
+    "react-native-web": "^0.21.2"
   },
   "devDependencies": {
     "react-native-harness": "workspace:*",
@@ -24,6 +26,7 @@
     "jest": "^30.2.0",
     "@react-native-harness/platform-android": "workspace:*",
     "@react-native-harness/platform-apple": "workspace:*",
-    "@react-native-harness/platform-vega": "workspace:*"
+    "@react-native-harness/platform-vega": "workspace:*",
+    "@react-native-harness/platform-web": "workspace:*"
   }
 }

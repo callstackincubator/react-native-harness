@@ -49,6 +49,9 @@
       "path": "./packages/platform-vega"
     },
     {
+      "path": "./packages/platform-web"
+    },
+    {
       "path": "./packages/bundler-metro"
     },
     {

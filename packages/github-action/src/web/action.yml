@@ -1,0 +1,44 @@
+name: React Native Harness for Web
+description: Run React Native Harness tests on Web
+inputs:
+  runner:
+    description: The runner to use
+    required: true
+    type: string
+  projectRoot:
+    description: The project root directory
+    required: false
+    type: string
+  uploadVisualTestArtifacts:
+    description: Whether to upload visual test diff and actual images as artifacts
+    required: false
+    type: boolean
+    default: 'true'
+runs:
+  using: 'composite'
+  steps:
+    - name: Load React Native Harness configuration
+      id: load-config
+      shell: bash
+      env:
+        INPUT_RUNNER: ${{ inputs.runner }}
+        INPUT_PROJECTROOT: ${{ inputs.projectRoot }}
+      run: |
+        node ${{ github.action_path }}/../shared/index.cjs
+    - name: Install Playwright Browsers
+      shell: bash
+      run: npx playwright install --with-deps chromium
+    - name: Run E2E tests
+      shell: bash
+      working-directory: ${{ inputs.projectRoot }}
+      run: |
+        pnpm react-native-harness --harnessRunner ${{ inputs.runner }}
+    - name: Upload visual test artifacts
+      if: always() && inputs.uploadVisualTestArtifacts == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: visual-test-diffs-chromium
+        path: |
+          ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
+          ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
+        if-no-files-found: ignore

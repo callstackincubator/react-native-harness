@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const OUT_DIR = path.resolve('../../actions');
-const TARGETS = ['ios', 'android'];
+const TARGETS = ['ios', 'android', 'web'];
 
 const packageJson = JSON.parse(
   fs.readFileSync(path.resolve('./package.json'), 'utf8')

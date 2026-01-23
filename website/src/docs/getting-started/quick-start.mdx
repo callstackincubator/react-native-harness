@@ -51,7 +51,7 @@ If the wizard doesn't work for your setup, you can configure Harness manually:
 
 Install the platform packages you need:
 
-<PackageManagerTabs command="install @react-native-harness/platform-android @react-native-harness/platform-apple" />
+<PackageManagerTabs command="install @react-native-harness/platform-android @react-native-harness/platform-apple @react-native-harness/platform-web" />
 
 #### 2. Create Harness Configuration
 
@@ -66,6 +66,7 @@ import {
   applePlatform,
   appleSimulator,
 } from '@react-native-harness/platform-apple';
+import { webPlatform, chromium } from '@react-native-harness/platform-web';
 
 const config = {
   entryPoint: './index.js',
@@ -81,6 +82,10 @@ const config = {
       name: 'ios',
       device: appleSimulator('iPhone 16 Pro', '18.0'), // Your iOS simulator name and version
       bundleId: 'com.yourapp', // Your iOS bundle ID
+    }),
+    webPlatform({
+      name: 'web',
+      browser: chromium('http://localhost:3000'), // Your web app URL
     }),
   ],
 };
@@ -257,6 +262,8 @@ Now you're ready to run your tests! Use the `react-native-harness` command with 
 <PackageManagerTabs command="react-native-harness --harnessRunner android" />
 
 <PackageManagerTabs command="react-native-harness --harnessRunner ios" />
+
+<PackageManagerTabs command="react-native-harness --harnessRunner web" />
 
 :::tip Default Runner
 If you don't provide the `--harnessRunner` flag, React Native Harness will use the runner specified in the `defaultRunner` property of your `rn-harness.config.mjs` file. If no `defaultRunner` is configured, you must explicitly provide the `--harnessRunner` flag.

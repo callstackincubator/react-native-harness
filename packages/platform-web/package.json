@@ -1,0 +1,25 @@
+{
+  "name": "@react-native-harness/platform-web",
+  "description": "Web platform for React Native Harness using Playwright",
+  "version": "1.0.0-alpha.23",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@react-native-harness/platforms": "workspace:*",
+    "playwright": "^1.50.0",
+    "zod": "^3.25.67",
+    "tslib": "^2.3.0"
+  },
+  "license": "MIT"
+}

@@ -105,7 +105,7 @@ export type {
 } from './shared/bundler.js';
 
 export type DeviceDescriptor = {
-  platform: 'ios' | 'android' | 'vega';
+  platform: 'ios' | 'android' | 'vega' | 'web';
   manufacturer: string;
   model: string;
   osVersion: string;

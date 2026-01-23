@@ -46,6 +46,20 @@ export const ConfigSchema = z
       .min(100, 'Crash detection interval must be at least 100ms')
       .default(500),
 
+    coverage: z
+      .object({
+        root: z
+          .string()
+          .optional()
+          .describe(
+            'Root directory for coverage instrumentation in monorepo setups. ' +
+            'Specifies the directory from which coverage data should be collected. ' +
+            'Use ".." for create-react-native-library projects where tests run from example/ ' +
+            'but source files are in parent directory. Passed to babel-plugin-istanbul\'s cwd option.'
+          ),
+      })
+      .optional(),
+
     // Deprecated property - used for migration detection
     include: z.array(z.string()).optional(),
   })

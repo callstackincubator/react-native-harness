@@ -12,6 +12,7 @@ on:
           - all
           - android
           - ios
+          - web
   pull_request:
     types: [ready_for_review]
     branches:
@@ -188,4 +189,51 @@ jobs:
         with:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           runner: ios
+          projectRoot: apps/playground
+
+  e2e-web:
+    name: E2E Web
+    runs-on: ubuntu-22.04
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'web')) }}
+    env:
+      HARNESS_DEBUG: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.10.0'
+          cache: 'pnpm'
+
+      - name: Metro cache
+        uses: actions/cache@v4
+        with:
+          path: apps/playground/node_modules/.cache/rn-harness/metro-cache
+          key: metro-cache-${{ hashFiles('apps/playground/node_modules/.cache/rn-harness/metro-cache/**/*') }}
+          restore-keys: |
+            metro-cache
+
+      - name: Install dependencies
+        run: |
+          pnpm install
+
+      - name: Build packages
+        run: |
+          pnpm nx run-many -t build --projects="packages/*"
+
+      - name: Run React Native Harness
+        uses: ./actions/web
+        with:
+          runner: chromium
           projectRoot: apps/playground
