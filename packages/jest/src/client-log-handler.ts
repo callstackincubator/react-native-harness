@@ -1,7 +1,7 @@
 import type { ReportableEvent } from '@react-native-harness/bundler-metro';
 import chalk from 'chalk';
 import util from 'node:util';
-import { log } from './logs.js';
+import { logClientLog } from './logs.js';
 
 export type ClientLogEvent = Extract<ReportableEvent, { type: 'client_log' }>;
 
@@ -87,7 +87,7 @@ export const handleClientLogEvent = (event: ReportableEvent): boolean => {
   }
 
   const logLine = formatClientLogLine(event);
-  log(logLine);
+  logClientLog(logLine);
   return true;
 };
 

@@ -148,12 +148,12 @@ const getHarnessInternal = async (
   // Forward client logs to console if enabled
   const clientLogListener = createClientLogListener();
 
-  if (config.server?.forwardClientLogs) {
+  if (config.forwardClientLogs) {
     metroInstance.events.addListener(clientLogListener);
   }
 
   const dispose = async () => {
-    if (config.server?.forwardClientLogs) {
+    if (config.forwardClientLogs) {
       metroInstance.events.removeListener(clientLogListener);
     }
     await Promise.all([

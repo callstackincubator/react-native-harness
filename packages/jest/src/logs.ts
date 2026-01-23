@@ -25,6 +25,10 @@ export const logTestEnvironmentReady = (runner: HarnessPlatform): void => {
   log(`${TAG} Runner ${chalk.bold(runner.name)} ready\n`);
 };
 
+export const logClientLog = (message: string): void => {
+  log(`${TAG} ${message}`);
+};
+
 export const getErrorMessage = (error: HarnessError): string => {
   return `${ERROR_TAG} ${error.message}\n`;
 };

@@ -34,7 +34,7 @@ export const withRnHarness = <T extends MetroConfig>(
       cacheVersion: 'react-native-harness',
       server: {
         ...metroConfig.server,
-        forwardClientLogs: harnessConfig.server?.forwardClientLogs ?? false,
+        forwardClientLogs: harnessConfig.forwardClientLogs ?? false,
       },
       serializer: {
         ...metroConfig.serializer,

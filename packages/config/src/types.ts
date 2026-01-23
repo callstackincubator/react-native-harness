@@ -60,16 +60,17 @@ export const ConfigSchema = z
       })
       .optional(),
 
+    forwardClientLogs: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        'Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app to the terminal. ' +
+        'When enabled, all console output from your app will be displayed in the test runner terminal with styled level indicators (log, warn, error).'
+      ),
+
     server: z
       .object({
-        forwardClientLogs: z
-          .boolean()
-          .optional()
-          .default(false)
-          .describe(
-            'Enable forwarding of client_log events from the device to the Metro reporter. ' +
-            'When enabled, console.log statements from the React Native app will be forwarded to Metro.'
-          ),
       })
       .optional(),
 

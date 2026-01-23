@@ -110,11 +110,8 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
     root?: string;
   };
 
-  // Optional: Server configuration
-  server?: {
-    // Forward console.log/warn/error/etc from the app to the terminal (default: false)
-    forwardClientLogs?: boolean;
-  };
+  // Forward console.log/warn/error/etc from the app to the terminal (default: false)
+  forwardClientLogs?: boolean;
 }
 ```
 
@@ -400,9 +397,7 @@ React Native Harness can forward `console.log`, `console.warn`, `console.error`,
 
 ```javascript
 {
-  server: {
-    forwardClientLogs: true,
-  },
+  forwardClientLogs: true,
 }
 ```
 
