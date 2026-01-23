@@ -69,11 +69,6 @@ export const ConfigSchema = z
         'When enabled, all console output from your app will be displayed in the test runner terminal with styled level indicators (log, warn, error).'
       ),
 
-    server: z
-      .object({
-      })
-      .optional(),
-
     // Deprecated property - used for migration detection
     include: z.array(z.string()).optional(),
   })
