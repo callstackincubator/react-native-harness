@@ -13,7 +13,7 @@ export default [
             '{projectRoot}/vite.config.{js,cjs,mjs,ts,cts,mts}',
           ],
           // jest-runner: we only ingest types
-          ignoredDependencies: ['@react-native-harness/cli', 'jest-runner'],
+          ignoredDependencies: ['@react-native-harness/cli', 'jest-runner', 'vitest'],
         },
       ],
     },
