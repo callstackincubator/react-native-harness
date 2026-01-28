@@ -1,4 +1,5 @@
 #import "ViewQueryHelper.h"
+#import "ViewRegistry.h"
 
 // =============================================================================
 // ViewQueryResult Implementation
@@ -11,7 +12,8 @@
         @"x": @(self.x),
         @"y": @(self.y),
         @"width": @(self.width),
-        @"height": @(self.height)
+        @"height": @(self.height),
+        @"nativeId": self.nativeId ?: @""
     };
 }
 
@@ -119,6 +121,7 @@
     result.y = frameInWindow.origin.y;
     result.width = frameInWindow.size.width;
     result.height = frameInWindow.size.height;
+    result.nativeId = [ViewRegistry registerView:view];
     return result;
 }
 

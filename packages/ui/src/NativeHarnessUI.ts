@@ -6,10 +6,11 @@ export interface ViewInfo {
   y: number;
   width: number;
   height: number;
+  nativeId: string;
 }
 
 interface Spec extends TurboModule {
-  simulatePress(x: number, y: number): Promise<void>;
+  simulatePress(nativeId: string, x: number, y: number): Promise<void>;
   queryByTestId(testId: string): ViewInfo | null;
   queryAllByTestId(testId: string): ViewInfo[];
   queryByAccessibilityLabel(label: string): ViewInfo | null;

@@ -20,11 +20,12 @@ const getElementViewInfo = (element: Element): ViewInfo => {
     y: rect.top,
     width: rect.width,
     height: rect.height,
+    nativeId: '',
   };
 };
 
 const WebHarnessUI: HarnessUIModule = {
-  simulatePress: async (x, y) => {
+  simulatePress: async (_nativeId, x, y) => {
     await window.__RN_HARNESS_SIMULATE_PRESS__(x, y);
   },
 

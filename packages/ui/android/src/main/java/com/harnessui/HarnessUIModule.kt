@@ -12,9 +12,9 @@ import com.facebook.react.module.annotations.ReactModule
  * Includes touch simulation and view querying.
  */
 @ReactModule(name = HarnessUIModule.NAME)
-class HarnessUIModule(reactContext: ReactApplicationContext) :
-    NativeHarnessUISpec(reactContext) {
-
+class HarnessUIModule(
+    reactContext: ReactApplicationContext,
+) : NativeHarnessUISpec(reactContext) {
     companion object {
         const val NAME = "HarnessUI"
     }
@@ -23,31 +23,41 @@ class HarnessUIModule(reactContext: ReactApplicationContext) :
 
     override fun getName(): String = NAME
 
-    override fun simulatePress(x: Double, y: Double, promise: Promise) {
-        helper.simulatePress(x, y, promise)
+    override fun simulatePress(
+        nativeId: String,
+        x: Double,
+        y: Double,
+        promise: Promise,
+    ) {
+        helper.simulatePress(nativeId, x, y, promise)
     }
 
-    override fun queryByTestId(testId: String): WritableMap? =
-        helper.queryByTestId(testId)
+    override fun queryByTestId(testId: String): WritableMap? = helper.queryByTestId(testId)
 
-    override fun queryByAccessibilityLabel(label: String): WritableMap? =
-        helper.queryByAccessibilityLabel(label)
+    override fun queryByAccessibilityLabel(label: String): WritableMap? = helper.queryByAccessibilityLabel(label)
 
-    override fun queryAllByTestId(testId: String): WritableArray =
-        helper.queryAllByTestId(testId)
+    override fun queryAllByTestId(testId: String): WritableArray = helper.queryAllByTestId(testId)
 
-    override fun queryAllByAccessibilityLabel(label: String): WritableArray =
-        helper.queryAllByAccessibilityLabel(label)
+    override fun queryAllByAccessibilityLabel(label: String): WritableArray = helper.queryAllByAccessibilityLabel(label)
 
-    override fun captureScreenshot(bounds: ReadableMap?, promise: Promise) {
+    override fun captureScreenshot(
+        bounds: ReadableMap?,
+        promise: Promise,
+    ) {
         helper.captureScreenshot(bounds, promise)
     }
 
-    override fun typeChar(character: String, promise: Promise) {
+    override fun typeChar(
+        character: String,
+        promise: Promise,
+    ) {
         helper.typeChar(character, promise)
     }
 
-    override fun blur(options: ReadableMap, promise: Promise) {
+    override fun blur(
+        options: ReadableMap,
+        promise: Promise,
+    ) {
         helper.blur(options, promise)
     }
 }

@@ -1,5 +1,6 @@
 #import "HarnessUI.h"
 #import "ViewQueryHelper.h"
+#import "ViewRegistry.h"
 #import <QuartzCore/QuartzCore.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTLog.h>
@@ -231,16 +232,33 @@ static NSTimeInterval _lastTapTime = 0;
   [self executeTapAtPoint:point retryCount:0 completion:completion];
 }
 
-- (void)simulatePress:(double)x
-                  y:(double)y
-            resolve:(RCTPromiseResolveBlock)resolve
-             reject:(RCTPromiseRejectBlock)reject {
-  RCTLogInfo(@"[HarnessUI] simulatePress called with x:%.2f y:%.2f", x, y);
+- (void)simulatePress:(NSString *)nativeId
+                    x:(double)x
+                    y:(double)y
+              resolve:(RCTPromiseResolveBlock)resolve
+               reject:(RCTPromiseRejectBlock)reject {
+  RCTLogInfo(@"[HarnessUI] simulatePress called with nativeId:%@ x:%.2f y:%.2f", nativeId, x, y);
 
   dispatch_async(dispatch_get_main_queue(), ^{
     NSTimeInterval now = CACurrentMediaTime();
     NSTimeInterval timeSinceLastTap = now - _lastTapTime;
     CGPoint point = CGPointMake(x, y);
+
+    if (nativeId && nativeId.length > 0) {
+        UIView *view = [ViewRegistry getView:nativeId];
+        if (view) {
+             UIWindow *window = [self getActiveWindow]; // Or view.window? view.window is safer if attached.
+             if (!window) window = view.window;
+             
+             if (window) {
+                CGRect frameInWindow = [view convertRect:view.bounds toView:window];
+                point = CGPointMake(CGRectGetMidX(frameInWindow), CGRectGetMidY(frameInWindow));
+                RCTLogInfo(@"[HarnessUI] Resolved view %@ to point (%.2f, %.2f)", nativeId, point.x, point.y);
+             }
+        } else {
+             RCTLogWarn(@"[HarnessUI] View with nativeId %@ not found or collected. Using provided coordinates.", nativeId);
+        }
+    }
 
     // Completion block that actually resolves the promise
     void (^completionBlock)(void) = ^{

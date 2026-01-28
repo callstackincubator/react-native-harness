@@ -20,6 +20,7 @@ typedef NS_ENUM(NSInteger, ViewQueryType) {
 @property (nonatomic, assign) CGFloat y;
 @property (nonatomic, assign) CGFloat width;
 @property (nonatomic, assign) CGFloat height;
+@property (nonatomic, copy) NSString *nativeId;
 
 - (NSDictionary *)toDictionary;
 

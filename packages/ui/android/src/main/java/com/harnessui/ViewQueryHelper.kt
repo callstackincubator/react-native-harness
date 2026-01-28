@@ -11,7 +11,7 @@ import com.facebook.react.bridge.WritableMap
  */
 enum class ViewQueryType {
     TEST_ID,
-    ACCESSIBILITY_LABEL
+    ACCESSIBILITY_LABEL,
 }
 
 /**
@@ -21,16 +21,17 @@ data class ViewQueryResult(
     val x: Float,
     val y: Float,
     val width: Float,
-    val height: Float
+    val height: Float,
+    val nativeId: String,
 ) {
-    fun toWritableMap(): WritableMap {
-        return Arguments.createMap().apply {
+    fun toWritableMap(): WritableMap =
+        Arguments.createMap().apply {
             putDouble("x", x.toDouble())
             putDouble("y", y.toDouble())
             putDouble("width", width.toDouble())
             putDouble("height", height.toDouble())
+            putString("nativeId", nativeId)
         }
-    }
 }
 
 /**
@@ -38,7 +39,6 @@ data class ViewQueryResult(
  * Provides reusable query logic for finding views by various criteria.
  */
 object ViewQueryHelper {
-
     /**
      * Finds the first view matching the query criteria.
      * @param activity The current activity.
@@ -46,7 +46,11 @@ object ViewQueryHelper {
      * @param value The value to match against.
      * @return ViewQueryResult if found, null otherwise.
      */
-    fun query(activity: Activity, queryType: ViewQueryType, value: String): ViewQueryResult? {
+    fun query(
+        activity: Activity,
+        queryType: ViewQueryType,
+        value: String,
+    ): ViewQueryResult? {
         val root = activity.window.decorView
         val density = root.resources.displayMetrics.density
         val found = findViewInView(root, queryType, value) ?: return null
@@ -60,7 +64,11 @@ object ViewQueryHelper {
      * @param value The value to match against.
      * @return List of ViewQueryResult objects.
      */
-    fun queryAll(activity: Activity, queryType: ViewQueryType, value: String): List<ViewQueryResult> {
+    fun queryAll(
+        activity: Activity,
+        queryType: ViewQueryType,
+        value: String,
+    ): List<ViewQueryResult> {
         val root = activity.window.decorView
         val density = root.resources.displayMetrics.density
         val views = mutableListOf<View>()
@@ -71,17 +79,24 @@ object ViewQueryHelper {
     /**
      * Checks if a view matches the given query criteria.
      */
-    private fun viewMatches(view: View, queryType: ViewQueryType, value: String): Boolean {
-        return when (queryType) {
+    private fun viewMatches(
+        view: View,
+        queryType: ViewQueryType,
+        value: String,
+    ): Boolean =
+        when (queryType) {
             ViewQueryType.TEST_ID -> view.tag == value
             ViewQueryType.ACCESSIBILITY_LABEL -> view.contentDescription?.toString() == value
         }
-    }
 
     /**
      * Recursively finds the first view matching the query criteria.
      */
-    private fun findViewInView(view: View, queryType: ViewQueryType, value: String): View? {
+    private fun findViewInView(
+        view: View,
+        queryType: ViewQueryType,
+        value: String,
+    ): View? {
         if (viewMatches(view, queryType, value)) {
             return view
         }
@@ -104,7 +119,7 @@ object ViewQueryHelper {
         view: View,
         queryType: ViewQueryType,
         value: String,
-        results: MutableList<View>
+        results: MutableList<View>,
     ) {
         if (viewMatches(view, queryType, value)) {
             results.add(view)
@@ -120,7 +135,10 @@ object ViewQueryHelper {
     /**
      * Converts a View to a ViewQueryResult with screen coordinates in dp.
      */
-    private fun resultFromView(view: View, density: Float): ViewQueryResult {
+    private fun resultFromView(
+        view: View,
+        density: Float,
+    ): ViewQueryResult {
         val location = IntArray(2)
         view.getLocationOnScreen(location)
 
@@ -130,6 +148,9 @@ object ViewQueryHelper {
         val width = view.width / density
         val height = view.height / density
 
-        return ViewQueryResult(x, y, width, height)
+        // Register the view and get its ID
+        val nativeId = ViewRegistry.register(view)
+
+        return ViewQueryResult(x, y, width, height, nativeId)
     }
 }
