@@ -5,7 +5,8 @@ import { Config as HarnessConfig } from '@react-native-harness/config';
 const getManifestContent = (harnessConfig: HarnessConfig): string => {
   return `global.RN_HARNESS = { 
     appRegistryComponentName: '${harnessConfig.appRegistryComponentName}',
-    webSocketPort: ${harnessConfig.webSocketPort}
+    webSocketPort: ${harnessConfig.webSocketPort},
+    disableViewFlattening: ${harnessConfig.disableViewFlattening},
   };`;
 };
 

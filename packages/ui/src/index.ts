@@ -15,4 +15,4 @@ export {
   type ScreenshotResult,
 } from './screen.js';
 export { userEvent, type UserEvent } from './userEvent.js';
-export type { ViewInfo, ElementBoundingBox } from './types.js';
+export type { ViewInfo, BoundingBox } from './types.js';

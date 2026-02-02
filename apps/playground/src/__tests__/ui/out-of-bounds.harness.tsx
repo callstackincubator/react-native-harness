@@ -8,7 +8,7 @@ describe('Out of bounds', () => {
   	test('should screenshot specific element only', async () => {
 		await render(
 		<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-			<View collapsable={false} testID="out-of-bounds" style={{ width: 1000, height: 100, backgroundColor: 'yellow', flexDirection: 'row' }}>
+			<View testID="out-of-bounds" style={{ width: 1000, height: 100, backgroundColor: 'yellow', flexDirection: 'row' }}>
 				{Array.from({ length: 10 }).map((_, index) => (
 					<View key={index} style={{ width: 100, height: 100, backgroundColor: COLORS[index % COLORS.length] }} />
 				))}

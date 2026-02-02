@@ -14,7 +14,24 @@ export const getHarnessResolver = (
     paths: [process.cwd()],
   });
 
+  const resolvedJsxRuntimePath = require.resolve('@react-native-harness/runtime/jsx-runtime');
+  const resolvedJsxDevRuntimePath = require.resolve('@react-native-harness/runtime/jsx-dev-runtime');
+
   return (context, moduleName, platform) => {
+    if (moduleName === '@react-native-harness/runtime/jsx-runtime') {
+      return {
+        type: 'sourceFile',
+        filePath: resolvedJsxRuntimePath,
+      };
+    }
+
+    if (moduleName === '@react-native-harness/runtime/jsx-dev-runtime') {
+      return {
+        type: 'sourceFile',
+        filePath: resolvedJsxDevRuntimePath,
+      };
+    }
+
     const existingResolver =
       metroConfig.resolver?.resolveRequest ?? context.resolveRequest;
     const resolvedModule = existingResolver(context, moduleName, platform);

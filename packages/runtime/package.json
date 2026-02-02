@@ -23,6 +23,16 @@
       "types": "./dist/entry-point.d.ts",
       "import": "./dist/entry-point.js",
       "default": "./dist/entry-point.js"
+    },
+    "./jsx-runtime": {
+      "development": "./src/jsx/jsx-runtime.ts",
+      "import": "./dist/jsx/jsx-runtime.js",
+      "default": "./dist/jsx/jsx-runtime.js"
+    },
+    "./jsx-dev-runtime": {
+      "development": "./src/jsx/jsx-dev-runtime.ts",
+      "import": "./dist/jsx/jsx-dev-runtime.js",
+      "default": "./dist/jsx/jsx-dev-runtime.js"
     }
   },
   "peerDependencies": {

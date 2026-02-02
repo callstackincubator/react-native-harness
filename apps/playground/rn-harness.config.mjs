@@ -69,4 +69,5 @@ export default {
   resetEnvironmentBetweenTestFiles: true,
   unstable__skipAlreadyIncludedModules: false,
   forwardClientLogs: true,
+  disableViewFlattening: true,
 };
