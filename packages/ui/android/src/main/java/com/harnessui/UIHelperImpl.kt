@@ -3,6 +3,7 @@ package com.harnessui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -263,12 +264,25 @@ class UIHelperImpl(
                         val height = targetView.height
 
                         if (width > 0 && height > 0) {
-                            Log.i(TAG, "Capturing view $nativeId: w=$width h=$height")
+                            val location = IntArray(2)
+                            targetView.getLocationOnScreen(location)
+                            val viewRect = Rect(location[0], location[1], location[0] + width, location[1] + height)
+                            val rootRect = Rect(0, 0, root.width, root.height)
+
+                            val isFullyOnScreen = rootRect.contains(viewRect)
                             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                             val canvas = Canvas(bitmap)
 
-                            // Draw the specific view
-                            targetView.draw(canvas)
+                            if (isFullyOnScreen) {
+                                Log.i(TAG, "View $nativeId is fully on screen. Using screen-based screenshotting.")
+                                // Translate canvas to capture the view from the root view hierarchy
+                                canvas.translate(-location[0].toFloat(), -location[1].toFloat())
+                                root.draw(canvas)
+                            } else {
+                                Log.i(TAG, "View $nativeId is partially/fully off screen. Using direct view render.")
+                                // Draw the specific view directly
+                                targetView.draw(canvas)
+                            }
 
                             val outputStream = ByteArrayOutputStream()
                             bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)

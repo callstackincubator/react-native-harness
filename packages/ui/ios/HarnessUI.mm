@@ -446,8 +446,22 @@ static NSTimeInterval _lastTapTime = 0;
     if (nativeId) {
         UIView *targetView = [ViewRegistry getView:nativeId];
         if (targetView) {
-             RCTLogInfo(@"[HarnessUI] Found view for nativeId: %@. Capturing direct view render.", nativeId);
-             pngData = [ViewQueryHelper captureScreenshotOfView:targetView];
+             UIWindow *window = [self getActiveWindow];
+             if (window) {
+                 CGRect frameInWindow = [targetView convertRect:targetView.bounds toView:window];
+                 BOOL isFullyOnScreen = CGRectContainsRect(window.bounds, frameInWindow);
+                 
+                 if (isFullyOnScreen) {
+                     RCTLogInfo(@"[HarnessUI] View %@ is fully on screen. Using screen-based screenshotting.", nativeId);
+                     pngData = [ViewQueryHelper captureScreenshotWithBounds:frameInWindow];
+                 } else {
+                     RCTLogInfo(@"[HarnessUI] View %@ is partially/fully off screen. Using direct view render.", nativeId);
+                     pngData = [ViewQueryHelper captureScreenshotOfView:targetView];
+                 }
+             } else {
+                 RCTLogWarn(@"[HarnessUI] No active window found for nativeId: %@. Using direct view render.", nativeId);
+                 pngData = [ViewQueryHelper captureScreenshotOfView:targetView];
+             }
         } else {
              RCTLogWarn(@"[HarnessUI] View with nativeId %@ not found. Falling back to window bounds capture.", nativeId);
              pngData = [ViewQueryHelper captureScreenshotWithBounds:captureRect];
