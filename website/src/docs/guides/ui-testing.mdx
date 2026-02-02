@@ -150,6 +150,12 @@ test('screenshot with custom options', async () => {
 
 You can capture screenshots of specific elements instead of the entire screen:
 
+:::warning
+If you are capturing screenshots of elements that extend beyond the screen boundaries, you must disable view flattening in your configuration to ensure the entire element can be rendered.
+
+This can be done by setting `disableViewFlattening: true` in your `rn-harness.config.mjs` file.
+:::
+
 ```typescript
 test('capture specific element', async () => {
   await render(

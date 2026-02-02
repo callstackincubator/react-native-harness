@@ -101,6 +101,8 @@ Queries for all elements by accessibility label without throwing. Returns an emp
 Captures a screenshot of the entire app window, a specific element, or a custom region.
 Returns a ScreenshotResult with PNG data, or null if capture fails.
 
+> **Warning**: If you are capturing screenshots of elements that extend beyond the screen boundaries (e.g., large scroll views or absolutely positioned views that are partially off-screen), you must disable view flattening in your configuration by setting `disableViewFlattening: true` in your `rn-harness.config.mjs` file.
+
 ### `userEvent`
 
 Provides methods to simulate user interactions.

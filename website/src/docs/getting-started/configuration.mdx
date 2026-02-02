@@ -78,23 +78,23 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 
 ## All Configuration Options
 
-| Option | Description |
-| :--- | :--- |
-| `entryPoint` | **Required.** Path to your React Native app's entry point file. |
-| `appRegistryComponentName` | **Required.** Name of the component registered with AppRegistry. |
-| `runners` | **Required.** Array of test runners (at least one required). |
-| `defaultRunner` | Default runner to use when none specified. |
-| `bridgeTimeout` | Bridge timeout in milliseconds (default: `60000`). |
-| `bundleStartTimeout` | Bundle start timeout in milliseconds (default: `15000`). |
-| `maxAppRestarts` | Maximum number of app restarts when app fails to report ready (default: `2`). |
-| `resetEnvironmentBetweenTestFiles` | Reset environment between test files (default: `true`). |
-| `webSocketPort` | Web socket port for bridge communication (default: `3001`). |
-| `detectNativeCrashes` | Detect native app crashes during test execution (default: `true`). |
-| `crashDetectionInterval` | Interval in milliseconds to check for native crashes (default: `500`). |
-| `coverage` | Coverage configuration object. |
-| `coverage.root` | Root directory for coverage instrumentation (default: `process.cwd()`). |
-| `forwardClientLogs` | Forward console logs from the app to the terminal (default: `false`). |
-
+| Option                             | Description                                                                   |
+| :--------------------------------- | :---------------------------------------------------------------------------- |
+| `entryPoint`                       | **Required.** Path to your React Native app's entry point file.               |
+| `appRegistryComponentName`         | **Required.** Name of the component registered with AppRegistry.              |
+| `runners`                          | **Required.** Array of test runners (at least one required).                  |
+| `defaultRunner`                    | Default runner to use when none specified.                                    |
+| `bridgeTimeout`                    | Bridge timeout in milliseconds (default: `60000`).                            |
+| `bundleStartTimeout`               | Bundle start timeout in milliseconds (default: `15000`).                      |
+| `maxAppRestarts`                   | Maximum number of app restarts when app fails to report ready (default: `2`). |
+| `resetEnvironmentBetweenTestFiles` | Reset environment between test files (default: `true`).                       |
+| `webSocketPort`                    | Web socket port for bridge communication (default: `3001`).                   |
+| `detectNativeCrashes`              | Detect native app crashes during test execution (default: `true`).            |
+| `crashDetectionInterval`           | Interval in milliseconds to check for native crashes (default: `500`).        |
+| `disableViewFlattening`            | Disable view flattening in React Native (default: `false`).                   |
+| `coverage`                         | Coverage configuration object.                                                |
+| `coverage.root`                    | Root directory for coverage instrumentation (default: `process.cwd()`).       |
+| `forwardClientLogs`                | Forward console logs from the app to the terminal (default: `false`).         |
 
 ## Test Runners
 
@@ -276,5 +276,3 @@ Without specifying `coverageRoot`, babel-plugin-istanbul may skip instrumenting 
 :::tip When to use coverageRoot
 Set `coverageRoot` when you notice 0% coverage in your reports or when source files are not being instrumented for coverage. This commonly occurs in create-react-native-library projects and other monorepo setups.
 :::
-
-
