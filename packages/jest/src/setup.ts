@@ -74,6 +74,10 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
     }
   }
 
+  if (harnessConfig.disableViewFlattening) {
+    process.env.RN_HARNESS_VIEW_FLATTENING = 'false';
+  }
+
   logTestRunHeader(selectedRunner);
   const harness = await getHarness(
     harnessConfig,

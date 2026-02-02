@@ -1,4 +1,5 @@
 import resolveWeakPlugin from './resolve-weak-plugin';
+import collapsiblePlugin from './collapsible-plugin';
 import path from 'path';
 
 const getIstanbulPlugin = (): string | [string, object] | null => {
@@ -20,6 +21,7 @@ const getIstanbulPlugin = (): string | [string, object] | null => {
 export const rnHarnessPlugins = [
   '@babel/plugin-transform-class-static-block',
   resolveWeakPlugin,
+  process.env.RN_HARNESS_VIEW_FLATTENING === 'false' ? collapsiblePlugin : null,
   getIstanbulPlugin(),
 ].filter((plugin) => plugin !== null);
 
