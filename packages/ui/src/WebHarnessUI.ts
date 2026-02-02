@@ -10,17 +10,32 @@ declare global {
     __RN_HARNESS_BLUR__: (options: {
       submitEditing?: boolean;
     }) => Promise<void>;
+    __RN_HARNESS_VIEW_REGISTRY__: Map<string, Element>;
   }
 }
 
+if (!window.__RN_HARNESS_VIEW_REGISTRY__) {
+  window.__RN_HARNESS_VIEW_REGISTRY__ = new Map();
+}
+
+let nextId = 1;
+
 const getElementViewInfo = (element: Element): ViewInfo => {
   const rect = element.getBoundingClientRect();
+
+  let nativeId = (element as any).__harnessId;
+  if (!nativeId) {
+    nativeId = `view_${nextId++}`;
+    (element as any).__harnessId = nativeId;
+    window.__RN_HARNESS_VIEW_REGISTRY__.set(nativeId, element);
+  }
+
   return {
     x: rect.left,
     y: rect.top,
     width: rect.width,
     height: rect.height,
-    nativeId: '',
+    nativeId,
   };
 };
 

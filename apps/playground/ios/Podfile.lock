@@ -5,7 +5,7 @@ PODS:
   - FBLazyVector (0.82.1)
   - fmt (11.0.2)
   - glog (0.3.5)
-  - HarnessUI (1.0.0-alpha.20):
+  - HarnessUI (1.0.0-alpha.24):
     - boost
     - DoubleConversion
     - fast_float
@@ -2592,7 +2592,7 @@ SPEC CHECKSUMS:
   FBLazyVector: 0aa6183b9afe3c31fc65b5d1eeef1f3c19b63bfa
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
-  HarnessUI: 2957b94c9c4a7e6e54b636229f4aa5e3809936bf
+  HarnessUI: 9593f42f9c8f68200ccd07a6ed64d02de42637b1
   hermes-engine: 273e30e7fb618279934b0b95ffab60ecedb7acf5
   RCT-Folly: 846fda9475e61ec7bcbf8a3fe81edfcaeb090669
   RCTDeprecation: f17e2ebc07876ca9ab8eb6e4b0a4e4647497ae3a

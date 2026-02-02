@@ -420,23 +420,41 @@ static NSTimeInterval _lastTapTime = 0;
   RCTLogInfo(@"[HarnessUI] captureScreenshot called");
 
   CGRect captureRect = CGRectNull;
+  NSString *nativeId = nil;
 
   if (bounds) {
+      if (bounds->nativeId().length > 0) {
+          nativeId = bounds->nativeId();
+      }
+    
     double width = bounds->width();
     double height = bounds->height();
 
     if (width > 0 && height > 0) {
       captureRect = CGRectMake(bounds->x(), bounds->y(), width, height);
-      RCTLogInfo(@"[HarnessUI] Capturing region: x=%.2f y=%.2f w=%.2f h=%.2f",
+      RCTLogInfo(@"[HarnessUI] Capturing region: x=%.2f y=%.2f w=%.2f h=%.2f nativeId=%@",
                  captureRect.origin.x, captureRect.origin.y,
-                 captureRect.size.width, captureRect.size.height);
+                 captureRect.size.width, captureRect.size.height, nativeId);
     }
   } else {
     RCTLogInfo(@"[HarnessUI] Capturing full window");
   }
 
   dispatch_async(dispatch_get_main_queue(), ^{
-    NSData *pngData = [ViewQueryHelper captureScreenshotWithBounds:captureRect];
+    NSData *pngData = nil;
+    
+    if (nativeId) {
+        UIView *targetView = [ViewRegistry getView:nativeId];
+        if (targetView) {
+             RCTLogInfo(@"[HarnessUI] Found view for nativeId: %@. Capturing direct view render.", nativeId);
+             pngData = [ViewQueryHelper captureScreenshotOfView:targetView];
+        } else {
+             RCTLogWarn(@"[HarnessUI] View with nativeId %@ not found. Falling back to window bounds capture.", nativeId);
+             pngData = [ViewQueryHelper captureScreenshotWithBounds:captureRect];
+        }
+    } else {
+        pngData = [ViewQueryHelper captureScreenshotWithBounds:captureRect];
+    }
 
     if (pngData) {
       // Return Base64 string for efficiency

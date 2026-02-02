@@ -60,6 +60,14 @@ typedef NS_ENUM(NSInteger, ViewQueryType) {
  */
 + (nullable NSData *)captureScreenshotWithBounds:(CGRect)bounds;
 
+/**
+ * Captures a screenshot of a specific view, rendering its layer directly.
+ * This allows capturing content that might be off-screen or larger than the window.
+ * @param view The view to capture.
+ * @return NSData containing PNG image data, or nil on failure.
+ */
++ (nullable NSData *)captureScreenshotOfView:(UIView *)view;
+
 @end
 
 NS_ASSUME_NONNULL_END

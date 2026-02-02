@@ -30,9 +30,37 @@ const getWebRunner = async (
     await page.exposeFunction(
       '__RN_HARNESS_CAPTURE_SCREENSHOT__',
       async (
-        bounds: { x: number; y: number; width: number; height: number } | null
+        bounds: {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+          nativeId: string;
+        } | null
       ) => {
         if (!page) return null;
+
+        if (bounds?.nativeId) {
+          try {
+            const elementHandle = await page.evaluateHandle((id) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              return (window as any).__RN_HARNESS_VIEW_REGISTRY__?.get(id);
+            }, bounds.nativeId);
+
+            const element = elementHandle.asElement();
+            if (element) {
+              const buffer = await element.screenshot();
+              return buffer.toString('base64');
+            }
+          } catch (e) {
+            // Fallback to page screenshot if element screenshot fails
+            console.warn(
+              `Failed to capture element screenshot for ${bounds.nativeId}, falling back to clip`,
+              e
+            );
+          }
+        }
+
         const buffer = await page.screenshot({
           clip: bounds
             ? {

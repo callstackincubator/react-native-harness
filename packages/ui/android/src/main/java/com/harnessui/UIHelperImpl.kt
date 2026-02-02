@@ -253,6 +253,37 @@ class UIHelperImpl(
             val density = root.resources.displayMetrics.density
 
             try {
+                // Check if we have a specific view to capture via nativeId
+                val nativeId = if (bounds != null && bounds.hasKey("nativeId")) bounds.getString("nativeId") else null
+
+                if (!nativeId.isNullOrEmpty()) {
+                    val targetView = ViewRegistry.get(nativeId)
+                    if (targetView != null) {
+                        val width = targetView.width
+                        val height = targetView.height
+
+                        if (width > 0 && height > 0) {
+                            Log.i(TAG, "Capturing view $nativeId: w=$width h=$height")
+                            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                            val canvas = Canvas(bitmap)
+
+                            // Draw the specific view
+                            targetView.draw(canvas)
+
+                            val outputStream = ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                            val pngBytes = outputStream.toByteArray()
+                            bitmap.recycle()
+
+                            val base64String = android.util.Base64.encodeToString(pngBytes, android.util.Base64.NO_WRAP)
+                            promise.resolve(base64String)
+                            return@runOnUiThread
+                        }
+                    } else {
+                        Log.w(TAG, "View with nativeId $nativeId not found for screenshot, falling back to window screenshot")
+                    }
+                }
+
                 // Determine capture dimensions
                 val captureX: Int
                 val captureY: Int
