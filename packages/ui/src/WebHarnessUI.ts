@@ -40,8 +40,20 @@ const getElementViewInfo = (element: Element): ViewInfo => {
 };
 
 const WebHarnessUI: HarnessUIModule = {
-  simulatePress: async (_nativeId, x, y) => {
-    await window.__RN_HARNESS_SIMULATE_PRESS__(x, y);
+  simulatePress: async (nativeId, x, y) => {
+    let targetX = x;
+    let targetY = y;
+
+    if (nativeId) {
+      const element = window.__RN_HARNESS_VIEW_REGISTRY__.get(nativeId);
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        targetX = rect.left + rect.width / 2;
+        targetY = rect.top + rect.height / 2;
+      }
+    }
+
+    await window.__RN_HARNESS_SIMULATE_PRESS__(targetX, targetY);
   },
 
   queryByTestId: (testId) => {
@@ -65,7 +77,14 @@ const WebHarnessUI: HarnessUIModule = {
   },
 
   captureScreenshot: async (bounds) => {
-    return await window.__RN_HARNESS_CAPTURE_SCREENSHOT__(bounds);
+    let captureBounds = bounds;
+    if (bounds?.nativeId && bounds.width === 0 && bounds.height === 0) {
+      const element = window.__RN_HARNESS_VIEW_REGISTRY__.get(bounds.nativeId);
+      if (element) {
+        captureBounds = getElementViewInfo(element);
+      }
+    }
+    return await window.__RN_HARNESS_CAPTURE_SCREENSHOT__(captureBounds);
   },
 
   typeChar: async (character) => {

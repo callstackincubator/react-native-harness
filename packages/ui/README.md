@@ -13,7 +13,7 @@ Native UI testing module for React Native Harness that provides view queries and
 
 - **View Queries**: Find elements by testID or accessibility label
 - **Touch Simulation**: Simulate user presses and text input
-- **Screenshot Capture**: Capture screenshots of the entire screen or specific elements
+- **Screenshot Capture**: Capture screenshots of the entire screen, specific elements, or custom regions
 - **Debug-Only**: Automatically excluded from release builds, only available in debug builds
 
 ## Installation
@@ -45,6 +45,14 @@ describe('My Component', () => {
 
     // Take screenshots for debugging
     const screenshot = await screen.screenshot();
+
+    // Or capture a specific region
+    const regionScreenshot = await screen.screenshot({
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+    });
   });
 });
 ```
@@ -88,9 +96,9 @@ Queries for an element by accessibility label without throwing. Returns null if 
 
 Queries for all elements by accessibility label without throwing. Returns an empty array if none found.
 
-#### `screenshot(element?: ElementReference): Promise<ScreenshotResult | null>`
+#### `screenshot(target?: ElementReference | BoundingBox): Promise<ScreenshotResult | null>`
 
-Captures a screenshot of the entire app window or a specific element.
+Captures a screenshot of the entire app window, a specific element, or a custom region.
 Returns a ScreenshotResult with PNG data, or null if capture fails.
 
 ### `userEvent`
@@ -110,6 +118,7 @@ Simulates a press at the specified screen coordinates.
 Simulates typing text into a text input element. Focuses the element, types each character, and blurs the element.
 
 **TypeOptions:**
+
 - `skipPress?: boolean` - If true, pressIn and pressOut events will not be triggered
 - `skipBlur?: boolean` - If true, endEditing and blur events will not be triggered
 - `submitEditing?: boolean` - If true, submitEditing event will be triggered after typing
@@ -118,16 +127,19 @@ Simulates typing text into a text input element. Focuses the element, types each
 
 ### `ElementReference`
 
-Represents an element found on screen with its position and dimensions.
+An opaque reference to an element found on screen.
+
+### `BoundingBox`
+
+Represents a region on screen.
 
 ```typescript
-type ElementReference = {
+interface BoundingBox {
   x: number;
   y: number;
   width: number;
   height: number;
-  // ... additional view info
-};
+}
 ```
 
 ### `ScreenshotResult`
@@ -136,9 +148,9 @@ Screenshot result containing PNG image data.
 
 ```typescript
 interface ScreenshotResult {
-  data: Uint8Array;  // PNG image data
-  width: number;     // Width in logical pixels
-  height: number;    // Height in logical pixels
+  data: Uint8Array; // PNG image data
+  width: number; // Width in logical pixels
+  height: number; // Height in logical pixels
 }
 ```
 

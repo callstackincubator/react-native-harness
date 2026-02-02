@@ -63,10 +63,9 @@ export type UserEvent = {
 const createUserEvent = (): UserEvent => {
   return {
     press: async (element: ElementReference): Promise<void> => {
-      // Calculate center point of the element
-      const centerX = element.x + element.width / 2;
-      const centerY = element.y + element.height / 2;
-      await HarnessUI.simulatePress(element.nativeId, centerX, centerY);
+      // We pass 0, 0 as coordinates when nativeId is provided.
+      // Native side will resolve the view and calculate the center.
+      await HarnessUI.simulatePress(element.nativeId, 0, 0);
       // Flush pending events to ensure onPress and other callbacks are processed
       await flushEvents();
     },
@@ -87,20 +86,12 @@ const createUserEvent = (): UserEvent => {
       }
     ): Promise<void> => {
       // Press to focus the element (triggers pressIn/pressOut unless skipPress is true)
-      // Note: Currently we always press to focus, the skipPress option would need
-      // additional implementation in simulatePress to avoid firing press events
       if (!options?.skipPress) {
-        // Calculate center point of the element
-        const centerX = element.x + element.width / 2;
-        const centerY = element.y + element.height / 2;
-        await HarnessUI.simulatePress(element.nativeId, centerX, centerY);
+        await HarnessUI.simulatePress(element.nativeId, 0, 0);
         await flushEvents();
       } else {
-        // Still need to press to focus, but ideally without press events
-        // For now, we press anyway - future enhancement could add a focusOnly method
-        const centerX = element.x + element.width / 2;
-        const centerY = element.y + element.height / 2;
-        await HarnessUI.simulatePress(element.nativeId, centerX, centerY);
+        // Still need to press to focus
+        await HarnessUI.simulatePress(element.nativeId, 0, 0);
         await flushEvents();
       }
 

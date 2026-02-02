@@ -1,12 +1,18 @@
-import { type ViewInfo } from './types.js';
+import { type ViewInfo, type BoundingBox } from './types.js';
 import { waitFor } from '@react-native-harness/runtime';
 import HarnessUI from './harness.js';
 
 /**
- * Represents an element found on screen with its position and dimensions.
- * This can be used with userEvent.press() to interact with the element.
+ * Represents an element found on screen.
+ * This is an opaque reference that can be used with userEvent or screenshot.
  */
-export type ElementReference = ViewInfo;
+export type ElementReference = {
+  readonly nativeId: string;
+};
+
+const wrapElement = (viewInfo: ViewInfo): ElementReference => ({
+  nativeId: viewInfo.nativeId,
+});
 
 /**
  * Screenshot result containing PNG image data.
@@ -70,11 +76,13 @@ export type Screen = {
   queryAllByAccessibilityLabel: (label: string) => ElementReference[];
 
   /**
-   * Captures a screenshot of the entire app window or a specific element.
-   * @param element Optional element reference to capture. If not provided, captures the entire window.
+   * Captures a screenshot of the entire app window, a specific element, or a region.
+   * @param target Optional element reference or bounding box to capture. If not provided, captures the entire window.
    * @returns Promise resolving to ScreenshotResult with PNG data, or null if capture fails.
    */
-  screenshot: (element?: ElementReference) => Promise<ScreenshotResult | null>;
+  screenshot: (
+    target?: ElementReference | BoundingBox
+  ) => Promise<ScreenshotResult | null>;
 };
 
 const createScreen = (): Screen => {
@@ -85,7 +93,7 @@ const createScreen = (): Screen => {
         if (!result) {
           throw new Error(`Unable to find element with testID: ${testId}`);
         }
-        return result;
+        return wrapElement(result);
       });
     },
 
@@ -95,16 +103,17 @@ const createScreen = (): Screen => {
         if (results.length === 0) {
           throw new Error(`Unable to find any elements with testID: ${testId}`);
         }
-        return results;
+        return results.map(wrapElement);
       });
     },
 
     queryByTestId: (testId: string): ElementReference | null => {
-      return HarnessUI.queryByTestId(testId);
+      const result = HarnessUI.queryByTestId(testId);
+      return result ? wrapElement(result) : null;
     },
 
     queryAllByTestId: (testId: string): ElementReference[] => {
-      return HarnessUI.queryAllByTestId(testId);
+      return HarnessUI.queryAllByTestId(testId).map(wrapElement);
     },
 
     findByAccessibilityLabel: async (
@@ -117,7 +126,7 @@ const createScreen = (): Screen => {
             `Unable to find element with accessibility label: ${label}`
           );
         }
-        return result;
+        return wrapElement(result);
       });
     },
 
@@ -131,30 +140,52 @@ const createScreen = (): Screen => {
             `Unable to find any elements with accessibility label: ${label}`
           );
         }
-        return results;
+        return results.map(wrapElement);
       });
     },
 
     queryByAccessibilityLabel: (label: string): ElementReference | null => {
-      return HarnessUI.queryByAccessibilityLabel(label);
+      const result = HarnessUI.queryByAccessibilityLabel(label);
+      return result ? wrapElement(result) : null;
     },
 
     queryAllByAccessibilityLabel: (label: string): ElementReference[] => {
-      return HarnessUI.queryAllByAccessibilityLabel(label);
+      return HarnessUI.queryAllByAccessibilityLabel(label).map(wrapElement);
     },
 
     screenshot: async (
-      element?: ElementReference
+      target?: ElementReference | BoundingBox
     ): Promise<ScreenshotResult | null> => {
-      const bounds = element ?? null;
-      const base64String = await HarnessUI.captureScreenshot(bounds);
+      let captureBounds: ViewInfo | null = null;
+      let targetWidth = 0;
+      let targetHeight = 0;
+
+      if (target) {
+        if ('nativeId' in target) {
+          // ElementReference
+          captureBounds = {
+            nativeId: target.nativeId,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+          };
+        } else {
+          // BoundingBox
+          captureBounds = {
+            nativeId: '',
+            ...target,
+          };
+          targetWidth = target.width;
+          targetHeight = target.height;
+        }
+      }
+
+      const base64String = await HarnessUI.captureScreenshot(captureBounds);
 
       if (!base64String) {
         return null;
       }
-
-      const width = element?.width ?? 0;
-      const height = element?.height ?? 0;
 
       // Decode Base64 string to Uint8Array
       const binaryString = atob(base64String);
@@ -164,10 +195,15 @@ const createScreen = (): Screen => {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
+      // If we captured by nativeId, we might not know the width/height beforehand in JS.
+      // But the native side returns the actual captured PNG.
+      // Ideally we'd get the size from the native side, but currently the bridge doesn't return it.
+      // For now we use the provided target size or 0.
+
       return {
         data: bytes,
-        width,
-        height,
+        width: targetWidth,
+        height: targetHeight,
       };
     },
   };
