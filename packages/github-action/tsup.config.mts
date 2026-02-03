@@ -6,15 +6,16 @@ const OUT_DIR = path.resolve('../../actions');
 const TARGETS = ['ios', 'android', 'web'];
 
 const packageJson = JSON.parse(
-  fs.readFileSync(path.resolve('./package.json'), 'utf8')
+  fs.readFileSync(path.resolve('./package.json'), 'utf8'),
 );
 
 export default defineConfig({
   entry: {
     ...Object.fromEntries(
-      TARGETS.map((target) => [`${target}/index`, `src/${target}/index.ts`])
+      TARGETS.map((target) => [`${target}/index`, `src/${target}/index.ts`]),
     ),
     'shared/index': 'src/shared/index.ts',
+    'shared/run-harness': 'src/shared/run-harness.ts',
   },
   outDir: OUT_DIR,
   format: 'cjs',
@@ -28,7 +29,7 @@ export default defineConfig({
     TARGETS.forEach((target) => {
       fs.copyFileSync(
         path.resolve(`./src/${target}/action.yml`),
-        path.resolve(OUT_DIR, `./${target}/action.yml`)
+        path.resolve(OUT_DIR, `./${target}/action.yml`),
       );
     });
   },
