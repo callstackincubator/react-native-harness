@@ -26,6 +26,7 @@ Runs React Native Harness tests on Android emulators. This action handles:
 
 - `app` (required): Path to your built Android app (`.apk` file)
 - `runner` (required): The runner name from your configuration
+- `packager` (optional): Package manager to use (`pnpm`, `npm`, `yarn`, `bun`, or `deno`. Defaults to `pnpm`)
 - `projectRoot` (optional): The project root directory (defaults to repository root)
 
 **Requirements:**
@@ -43,6 +44,7 @@ Runs React Native Harness tests on Android emulators. This action handles:
   with:
     app: './android/app/build/outputs/apk/debug/app-debug.apk'
     runner: 'android'
+    packager: 'pnpm'
     projectRoot: './apps/my-app'
 ```
 
@@ -59,6 +61,7 @@ Runs React Native Harness tests on iOS simulators. This action handles:
 
 - `app` (required): Path to your built iOS app (`.app` bundle)
 - `runner` (required): The runner name from your configuration
+- `packager` (optional): Package manager to use (`pnpm`, `npm`, `yarn`, `bun` or `deno`. Defaults to `pnpm`)
 - `projectRoot` (optional): The project root directory (defaults to repository root)
 
 **Requirements:**
@@ -74,6 +77,7 @@ Runs React Native Harness tests on iOS simulators. This action handles:
   with:
     app: './ios/build/Build/Products/Debug-iphonesimulator/MyApp.app'
     runner: 'ios'
+    packager: 'pnpm'
     projectRoot: './apps/my-app'
 ```
 
