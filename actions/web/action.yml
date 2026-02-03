@@ -5,6 +5,11 @@ inputs:
     description: The runner to use
     required: true
     type: string
+  packager:
+    description: The package manager to use (pnpm, npm, yarn, bun, deno)
+    required: false
+    type: string
+    default: 'pnpm'
   projectRoot:
     description: The project root directory
     required: false
@@ -32,7 +37,7 @@ runs:
       shell: bash
       working-directory: ${{ inputs.projectRoot }}
       run: |
-        pnpm react-native-harness --harnessRunner ${{ inputs.runner }}
+        node ${{ github.action_path }}/../shared/run-harness.cjs "${{ inputs.packager }}" "${{ inputs.runner }}"
     - name: Upload visual test artifacts
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
       uses: actions/upload-artifact@v4
