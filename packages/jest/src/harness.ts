@@ -13,6 +13,7 @@ import {
 } from '@react-native-harness/platforms';
 import {
   getMetroInstance,
+  prewarmMetroBundle,
   Reporter,
   ReportableEvent,
 } from '@react-native-harness/bundler-metro';
@@ -20,6 +21,7 @@ import { InitializationTimeoutError, MaxAppRestartsError } from './errors.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
 import { createCrashMonitor, CrashMonitor } from './crash-monitor.js';
 import { createClientLogListener } from './client-log-handler.js';
+import { logMetroPrewarmCompleted } from './logs.js';
 
 export type HarnessRunTestsOptions = Exclude<TestExecutionOptions, 'platform'>;
 
@@ -176,6 +178,16 @@ const getHarnessInternal = async (
   }
 
   try {
+    await prewarmMetroBundle({
+      projectRoot,
+      entryPoint: config.entryPoint,
+      platform: platform.platformId,
+      dev: true,
+      minify: false,
+      signal,
+    });
+    logMetroPrewarmCompleted(platform);
+
     await waitForAppReady({
       metroEvents: metroInstance.events,
       serverBridge,

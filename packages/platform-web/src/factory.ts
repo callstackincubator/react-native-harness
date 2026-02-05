@@ -7,6 +7,7 @@ export const webPlatform = (
   name: config.name,
   config,
   runner: import.meta.resolve('./runner.js'),
+  platformId: 'web',
 });
 
 export const chromium = (

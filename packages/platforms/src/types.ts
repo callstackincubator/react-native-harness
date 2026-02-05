@@ -10,6 +10,7 @@ export type HarnessPlatform<TConfig = Record<string, unknown>> = {
   name: string;
   config: TConfig;
   runner: string;
+  platformId: string;
 };
 
 export type RunTarget = {
