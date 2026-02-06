@@ -12,4 +12,5 @@ export const vegaPlatform = (
   name: config.name,
   config,
   runner: import.meta.resolve('./runner.js'),
+  platformId: 'vega',
 });

@@ -25,4 +25,5 @@ export const applePlatform = (
   name: config.name,
   config,
   runner: import.meta.resolve('./runner.js'),
+  platformId: 'ios',
 });

@@ -1,6 +1,6 @@
 import type { MetroConfig } from 'metro-config';
 import { getConfig } from '@react-native-harness/config';
-import { getHarnessResolver } from './resolver';
+import { getHarnessResolver } from './resolvers/resolver';
 import { getHarnessManifest } from './manifest';
 import { getHarnessBabelTransformerPath } from './babel-transformer';
 import { getHarnessCacheStores } from './metro-cache';

@@ -10,6 +10,7 @@ const RunnerSchema = z.object({
     ),
   config: z.record(z.any()),
   runner: z.string(),
+  platformId: z.string(),
 });
 
 export const ConfigSchema = z

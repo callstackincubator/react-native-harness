@@ -25,6 +25,12 @@ export const logTestEnvironmentReady = (runner: HarnessPlatform): void => {
   log(`${TAG} Runner ${chalk.bold(runner.name)} ready\n`);
 };
 
+export const logMetroPrewarmCompleted = (runner: HarnessPlatform): void => {
+  log(
+    `${TAG} Metro pre-warm for ${chalk.bold(runner.name)} completed\n`
+  );
+};
+
 export const getErrorMessage = (error: HarnessError): string => {
   return `${ERROR_TAG} ${error.message}\n`;
 };

@@ -30,4 +30,5 @@ export const androidPlatform = (
   name: config.name,
   config,
   runner: import.meta.resolve('./runner.js'),
+  platformId: 'android',
 });
