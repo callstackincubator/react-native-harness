@@ -38,7 +38,6 @@ Both actions accept the following inputs:
 
 - `app` (required): Path to your built app (`.apk` for Android, `.app` for iOS)
 - `runner` (required): The runner name (e.g., `"android"` or `"ios"`)
-- `packager` (optional): Package manager to use (`pnpm`, `npm`, `yarn`, `bun` or `deno`. Defaults to `pnpm`)
 - `projectRoot` (optional): The project root directory (defaults to the repository root)
 
 ## GitHub Actions Example

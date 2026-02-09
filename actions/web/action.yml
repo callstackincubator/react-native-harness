@@ -5,11 +5,6 @@ inputs:
     description: The runner to use
     required: true
     type: string
-  packager:
-    description: The package manager to use (pnpm, npm, yarn, bun, deno)
-    required: false
-    type: string
-    default: 'pnpm'
   projectRoot:
     description: The project root directory
     required: false

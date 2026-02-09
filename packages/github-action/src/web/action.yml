@@ -5,11 +5,6 @@ inputs:
     description: The runner to use
     required: true
     type: string
-  packager:
-    description: The package manager to use (pnpm, npm, yarn, bun, deno)
-    required: false
-    type: string
-    default: 'pnpm'
   projectRoot:
     description: The project root directory
     required: false
@@ -33,11 +28,30 @@ runs:
     - name: Install Playwright Browsers
       shell: bash
       run: npx playwright install --with-deps chromium
+    - name: Detect Package Manager
+      id: detect-pm
+      run: |
+        if [ -f "pnpm-lock.yaml" ]; then
+          echo "manager=pnpm" >> $GITHUB_OUTPUT
+          echo "runner=pnpm exec" >> $GITHUB_OUTPUT
+        elif [ -f "yarn.lock" ]; then
+          echo "manager=yarn" >> $GITHUB_OUTPUT
+          echo "runner=yarn" >> $GITHUB_OUTPUT
+        elif [ -f "bun.lockb" ]; then
+          echo "manager=bun" >> $GITHUB_OUTPUT
+          echo "runner=bunx" >> $GITHUB_OUTPUT
+        elif [ -f "deno.lock" ]; then
+          echo "manager=deno" >> $GITHUB_OUTPUT
+          echo "runner=dx" >> $GITHUB_OUTPUT
+        else
+          echo "manager=npm" >> $GITHUB_OUTPUT
+          echo "runner=npx" >> $GITHUB_OUTPUT
+        fi
     - name: Run E2E tests
       shell: bash
       working-directory: ${{ inputs.projectRoot }}
       run: |
-        node ${{ github.action_path }}/../shared/run-harness.cjs "${{ inputs.packager }}" "${{ inputs.runner }}"
+        ${{ steps.detect-pm.outputs.runner }} react-native-harness "${{ inputs.runner }}"
     - name: Upload visual test artifacts
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
       uses: actions/upload-artifact@v4
