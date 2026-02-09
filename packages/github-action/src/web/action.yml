@@ -51,7 +51,7 @@ runs:
       shell: bash
       working-directory: ${{ inputs.projectRoot }}
       run: |
-        ${{ steps.detect-pm.outputs.runner }} react-native-harness "${{ inputs.runner }}"
+        ${{ steps.detect-pm.outputs.runner }} react-native-harness
     - name: Upload visual test artifacts
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
       uses: actions/upload-artifact@v4
