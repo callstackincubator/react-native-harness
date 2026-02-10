@@ -42,6 +42,7 @@ runs:
         xcrun simctl install booted ${{ inputs.app }}
     - name: Detect Package Manager
       id: detect-pm
+      shell: bash
       run: |
         if [ -f "pnpm-lock.yaml" ]; then
           echo "manager=pnpm" >> $GITHUB_OUTPUT
