@@ -136,7 +136,7 @@ runs:
         script: |
           echo $(pwd)
           adb install -r ${{ inputs.app }}
-          ${{ steps.detect-pm.outputs.runner }} react-native-harness
+          ${{ steps.detect-pm.outputs.runner }} react-native-harness --harnessRunner ${{ inputs.runner }}
     - name: Upload visual test artifacts
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
       uses: actions/upload-artifact@v4
