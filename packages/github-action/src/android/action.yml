@@ -108,19 +108,19 @@ runs:
       run: |
         if [ -f "pnpm-lock.yaml" ]; then
           echo "manager=pnpm" >> $GITHUB_OUTPUT
-          echo "runner=pnpm exec" >> $GITHUB_OUTPUT
+          echo "runner=pnpm exec " >> $GITHUB_OUTPUT
         elif [ -f "yarn.lock" ]; then
           echo "manager=yarn" >> $GITHUB_OUTPUT
-          echo "runner=yarn" >> $GITHUB_OUTPUT
+          echo "runner=yarn " >> $GITHUB_OUTPUT
         elif [ -f "bun.lockb" ]; then
           echo "manager=bun" >> $GITHUB_OUTPUT
-          echo "runner=bunx" >> $GITHUB_OUTPUT
+          echo "runner=bunx " >> $GITHUB_OUTPUT
         elif [ -f "deno.lock" ]; then
           echo "manager=deno" >> $GITHUB_OUTPUT
-          echo "runner=dx" >> $GITHUB_OUTPUT
+          echo "runner=deno run -A npm:" >> $GITHUB_OUTPUT
         else
           echo "manager=npm" >> $GITHUB_OUTPUT
-          echo "runner=npx" >> $GITHUB_OUTPUT
+          echo "runner=npx " >> $GITHUB_OUTPUT
         fi
     - name: Run E2E tests
       id: run-tests
@@ -136,7 +136,7 @@ runs:
         script: |
           echo $(pwd)
           adb install -r ${{ inputs.app }}
-          ${{ steps.detect-pm.outputs.runner }} react-native-harness --harnessRunner ${{ inputs.runner }}
+          ${{ steps.detect-pm.outputs.runner }}react-native-harness --harnessRunner ${{ inputs.runner }}
     - name: Upload visual test artifacts
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
       uses: actions/upload-artifact@v4
