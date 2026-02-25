@@ -1,48 +1,41 @@
 import type { MetroConfig } from '@react-native/metro-config';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
+import path from 'node:path';
 import { createHarnessResolver } from './composite-resolver';
 import { createTsConfigResolver } from './tsconfig-resolver';
 import type { HarnessResolver, MetroResolver } from './types';
 
-export const createHarnessEntryPointResolver = (
-  harnessConfig: HarnessConfig
-): HarnessResolver => {
-  // Can be relative to the project root or absolute, need to normalize it
-  const resolvedEntryPointPath = require.resolve(harnessConfig.entryPoint, {
-    paths: [process.cwd()],
-  });
+// Safely resolves a path and strips its extension
+const getExtensionlessAbsolutePath = (basePath: string, relativePath = ''): string => {
+  const fullPath = path.resolve(basePath, relativePath);
+  const parsed = path.parse(fullPath);
+  return path.join(parsed.dir, parsed.name);
+}
 
-  return (_context, moduleName, _platform) => {
-    if (moduleName === resolvedEntryPointPath) {
-      return {
-        type: 'sourceFile',
-        filePath: require.resolve('@react-native-harness/runtime/entry-point'),
-      };
+export const createHarnessEntryPointResolver = (harnessConfig: HarnessConfig): HarnessResolver => {
+  const rootPath = path.resolve(process.cwd());
+  const expectedEntryPoint = getExtensionlessAbsolutePath(rootPath, harnessConfig.entryPoint);
+  const resolvedHarnessPath = require.resolve('@react-native-harness/runtime/entry-point');
+
+  return (context, moduleName, _platform) => {
+    // 1. Resolve the origin path of the file making the import
+    const currentOrigin = path.resolve(context.originModulePath);
+
+    // Fast Fail: If the import isn't happening from the root directory, skip it immediately
+    if (currentOrigin !== rootPath) {
+      return null;
     }
 
-    if (moduleName === harnessConfig.entryPoint) {
+    // 2. Resolve the module being imported and strip its extension
+    // This safely normalizes './index', './index.js', 'index.js', etc.
+    const requestedModule = getExtensionlessAbsolutePath(currentOrigin, moduleName);
+
+    // 3. String comparison
+    if (requestedModule === expectedEntryPoint) {
       return {
         type: 'sourceFile',
-        filePath: require.resolve('@react-native-harness/runtime/entry-point'),
+        filePath: resolvedHarnessPath,
       };
-    }
-
-    if (typeof moduleName === 'string') {
-      try {
-        const resolvedModuleName = require.resolve(moduleName, {
-          paths: [process.cwd()],
-        });
-        if (resolvedModuleName === resolvedEntryPointPath) {
-          return {
-            type: 'sourceFile',
-            filePath: require.resolve(
-              '@react-native-harness/runtime/entry-point'
-            ),
-          };
-        }
-      } catch {
-        // Ignore and fall through
-      }
     }
 
     return null;
