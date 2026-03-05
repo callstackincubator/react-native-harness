@@ -66,9 +66,15 @@ export const getMetroInstance = async (
     .use('/status', getStatusMiddleware(projectRoot));
 
   const ready = waitForBundler(reporter, abortSignal);
+  const metroBindHost = process.env.HARNESS_METRO_BIND_HOST?.trim();
+  if (metroBindHost) {
+    logger.debug(`Binding Metro server to host ${metroBindHost}`);
+  }
+
   const maybeServer = await Metro.runServer(config, {
     waitForBundler: true,
     unstable_extraMiddleware: [middleware],
+    ...(metroBindHost ? { host: metroBindHost } : {}),
   });
 
   // Metro <0.83 returns the server directly, while 0.83+ returns an object with the server as a property.
