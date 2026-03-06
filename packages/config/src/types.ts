@@ -21,6 +21,7 @@ export const ConfigSchema = z
       .min(1, 'App registry component name is required'),
     runners: z.array(RunnerSchema).min(1, 'At least one runner is required'),
     defaultRunner: z.string().optional(),
+    host: z.string().min(1, 'Host is required').optional(),
     webSocketPort: z.number().optional().default(3001),
     bridgeTimeout: z
       .number()

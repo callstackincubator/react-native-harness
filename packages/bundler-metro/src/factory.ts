@@ -66,7 +66,7 @@ export const getMetroInstance = async (
     .use('/status', getStatusMiddleware(projectRoot));
 
   const ready = waitForBundler(reporter, abortSignal);
-  const metroBindHost = process.env.HARNESS_METRO_BIND_HOST?.trim();
+  const metroBindHost = harnessConfig.host?.trim();
   if (metroBindHost) {
     logger.debug(`Binding Metro server to host ${metroBindHost}`);
   }
