@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+export const AndroidAppLaunchOptionsSchema = z.object({
+  extras: z
+    .record(z.union([z.string(), z.boolean(), z.number().int().safe()]))
+    .optional(),
+});
+
 export const AndroidEmulatorAVDConfigSchema = z.object({
   apiLevel: z.number().min(1, 'API level is required'),
   profile: z.string().min(1, 'Profile is required'),
@@ -32,12 +38,16 @@ export const AndroidPlatformConfigSchema = z.object({
     .string()
     .min(1, 'Activity name is required')
     .default('.MainActivity'),
+  appLaunchOptions: AndroidAppLaunchOptionsSchema.optional(),
 });
 
 export type AndroidEmulator = z.infer<typeof AndroidEmulatorSchema>;
 export type PhysicalAndroidDevice = z.infer<typeof PhysicalAndroidDeviceSchema>;
 export type AndroidDevice = z.infer<typeof AndroidDeviceSchema>;
 export type AndroidPlatformConfig = z.infer<typeof AndroidPlatformConfigSchema>;
+export type AndroidAppLaunchOptions = z.infer<
+  typeof AndroidAppLaunchOptionsSchema
+>;
 export type AndroidEmulatorAVDConfig = z.infer<
   typeof AndroidEmulatorAVDConfigSchema
 >;

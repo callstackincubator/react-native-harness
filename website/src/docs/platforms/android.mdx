@@ -37,6 +37,12 @@ androidPlatform({
   name: 'android',
   device: androidEmulator('Pixel_8_API_35'),
   bundleId: 'com.yourapp.debug',
+  appLaunchOptions: {
+    extras: {
+      launch_mode: 'test',
+      feature_enabled: true,
+    },
+  },
 })
 ```
 
@@ -61,6 +67,11 @@ androidPlatform({
   name: 'android-device',
   device: physicalAndroidDevice('Motorola', 'Moto G72'),
   bundleId: 'com.yourapp.debug',
+  appLaunchOptions: {
+    extras: {
+      launch_mode: 'test',
+    },
+  },
 })
 ```
 
@@ -70,3 +81,13 @@ The first argument is the manufacturer, and the second is the model name. These 
 
 - **ADB**: The Android Debug Bridge (`adb`) must be installed and in your system PATH.
 - **Development Build**: You must have a debug build of your app installed on the device/emulator (`adb install ...`). Harness does not build your app; it injects the test bundle into the existing installed app.
+
+## App Launch Options
+
+Android runners support `appLaunchOptions.extras`, which are passed as primitive extras to `adb shell am start`.
+
+Supported extra value types in v1:
+
+- `string`
+- `boolean`
+- safe integers

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const VegaAppLaunchOptionsSchema = z.object({});
+
 export const VegaEmulatorSchema = z.object({
   type: z.literal('emulator'),
   deviceId: z
@@ -18,6 +20,7 @@ export const VegaPlatformConfigSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   device: VegaDeviceSchema,
   bundleId: z.string().min(1, 'Bundle ID is required'),
+  appLaunchOptions: VegaAppLaunchOptionsSchema.optional(),
 });
 
 export type VegaEmulator = z.infer<typeof VegaEmulatorSchema>;

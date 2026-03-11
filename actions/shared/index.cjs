@@ -647,8 +647,8 @@ function getErrorMap() {
 
 // ../../node_modules/zod/dist/esm/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path5, errorMaps, issueData } = params;
-  const fullPath = [...path5, ...issueData.path || []];
+  const { data, path: path6, errorMaps, issueData } = params;
+  const fullPath = [...path6, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -764,11 +764,11 @@ var errorUtil;
 
 // ../../node_modules/zod/dist/esm/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path5, key) {
+  constructor(parent, value, path6, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path5;
+    this._path = path6;
     this._key = key;
   }
   get path() {
@@ -4220,10 +4220,13 @@ var ConfigSchema = external_exports.object({
   appRegistryComponentName: external_exports.string().min(1, "App registry component name is required"),
   runners: external_exports.array(RunnerSchema).min(1, "At least one runner is required"),
   defaultRunner: external_exports.string().optional(),
+  host: external_exports.string().min(1, "Host is required").optional(),
   webSocketPort: external_exports.number().optional().default(3001),
   bridgeTimeout: external_exports.number().min(1e3, "Bridge timeout must be at least 1 second").default(6e4),
-  bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(15e3),
-  maxAppRestarts: external_exports.number().min(0, "Max app restarts must be non-negative").default(2),
+  /** @deprecated Removed in favor of crash supervisor. Accepted for backwards compatibility. */
+  bundleStartTimeout: external_exports.number().optional(),
+  /** @deprecated Removed in favor of crash supervisor. Accepted for backwards compatibility. */
+  maxAppRestarts: external_exports.number().optional(),
   resetEnvironmentBetweenTestFiles: external_exports.boolean().optional().default(true),
   unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().default(false),
   unstable__enableMetroCache: external_exports.boolean().optional().default(false),
@@ -4334,6 +4337,11 @@ var HarnessError = class extends Error {
 var import_node_path3 = __toESM(require("path"), 1);
 var import_node_fs3 = __toESM(require("fs"), 1);
 
+// ../tools/dist/crash-artifacts.js
+var import_node_fs4 = __toESM(require("fs"), 1);
+var import_node_path4 = __toESM(require("path"), 1);
+var DEFAULT_ARTIFACT_ROOT = import_node_path4.default.join(process.cwd(), ".harness", "crash-reports");
+
 // ../config/dist/errors.js
 var ConfigValidationError = class extends HarnessError {
   filePath;
@@ -4401,16 +4409,30 @@ var ConfigLoadError = class extends HarnessError {
 };
 
 // ../config/dist/reader.js
-var import_node_path4 = __toESM(require("path"), 1);
-var import_node_fs4 = __toESM(require("fs"), 1);
+var import_node_path5 = __toESM(require("path"), 1);
+var import_node_fs5 = __toESM(require("fs"), 1);
 var import_node_module2 = require("module");
 var import_meta = {};
+var DEPRECATED_PROPERTIES = {
+  bundleStartTimeout: '"bundleStartTimeout" is no longer used and can be removed from your config. Startup crash detection is now handled automatically by the crash supervisor.',
+  maxAppRestarts: '"maxAppRestarts" is no longer used and can be removed from your config. Startup crash detection is now handled automatically by the crash supervisor.'
+};
+var warnDeprecatedProperties = (rawConfig) => {
+  if (typeof rawConfig !== "object" || rawConfig === null) {
+    return;
+  }
+  for (const [key, message] of Object.entries(DEPRECATED_PROPERTIES)) {
+    if (key in rawConfig) {
+      console.warn(`[react-native-harness] Deprecation warning: ${message}`);
+    }
+  }
+};
 var extensions = [".js", ".mjs", ".cjs", ".json"];
 var importUp = async (dir, name) => {
-  const filePath = import_node_path4.default.join(dir, name);
+  const filePath = import_node_path5.default.join(dir, name);
   for (const ext of extensions) {
     const filePathWithExt = `${filePath}${ext}`;
-    if (import_node_fs4.default.existsSync(filePathWithExt)) {
+    if (import_node_fs5.default.existsSync(filePathWithExt)) {
       let rawConfig;
       try {
         if (ext === ".mjs") {
@@ -4423,13 +4445,14 @@ var importUp = async (dir, name) => {
         throw new ConfigLoadError(filePathWithExt, error instanceof Error ? error : void 0);
       }
       try {
+        warnDeprecatedProperties(rawConfig);
         const config = ConfigSchema.parse(rawConfig);
         return { config, filePathWithExt, configDir: dir };
       } catch (error) {
         if (error instanceof ZodError) {
           const validationErrors = error.errors.map((err) => {
-            const path5 = err.path.length > 0 ? ` at "${err.path.join(".")}"` : "";
-            return `${err.message}${path5}`;
+            const path6 = err.path.length > 0 ? ` at "${err.path.join(".")}"` : "";
+            return `${err.message}${path6}`;
           });
           throw new ConfigValidationError(filePathWithExt, validationErrors);
         }
@@ -4437,7 +4460,7 @@ var importUp = async (dir, name) => {
       }
     }
   }
-  const parentDir = import_node_path4.default.dirname(dir);
+  const parentDir = import_node_path5.default.dirname(dir);
   if (parentDir === dir) {
     throw new ConfigNotFoundError(dir);
   }
@@ -4452,8 +4475,8 @@ var getConfig = async (dir) => {
 };
 
 // src/shared/index.ts
-var import_node_path5 = __toESM(require("path"));
-var import_node_fs5 = __toESM(require("fs"));
+var import_node_path6 = __toESM(require("path"));
+var import_node_fs6 = __toESM(require("fs"));
 var run = async () => {
   try {
     const projectRootInput = process.env.INPUT_PROJECTROOT;
@@ -4461,7 +4484,7 @@ var run = async () => {
     if (!runnerInput) {
       throw new Error("Runner input is required");
     }
-    const projectRoot = projectRootInput ? import_node_path5.default.resolve(projectRootInput) : process.cwd();
+    const projectRoot = projectRootInput ? import_node_path6.default.resolve(projectRootInput) : process.cwd();
     console.info(`Loading React Native Harness config from: ${projectRoot}`);
     const { config } = await getConfig(projectRoot);
     const runner = config.runners.find((runner2) => runner2.name === runnerInput);
@@ -4474,7 +4497,7 @@ var run = async () => {
     }
     const output = `config=${JSON.stringify(runner)}
 `;
-    import_node_fs5.default.appendFileSync(githubOutput, output);
+    import_node_fs6.default.appendFileSync(githubOutput, output);
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.message);

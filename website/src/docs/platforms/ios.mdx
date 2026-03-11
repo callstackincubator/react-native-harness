@@ -37,6 +37,12 @@ applePlatform({
   name: 'ios',
   device: appleSimulator('iPhone 16 Pro', '18.0'),
   bundleId: 'com.yourapp',
+  appLaunchOptions: {
+    arguments: ['--mode=test'],
+    environment: {
+      FEATURE_X: '1',
+    },
+  },
 })
 ```
 
@@ -60,6 +66,12 @@ applePlatform({
   name: 'ios-device',
   device: applePhysicalDevice('iPhone (Your Name)'),
   bundleId: 'com.yourapp',
+  appLaunchOptions: {
+    arguments: ['--mode=test'],
+    environment: {
+      FEATURE_X: '1',
+    },
+  },
 })
 ```
 
@@ -67,4 +79,23 @@ applePlatform({
 
 - **Xcode**: Xcode must be installed on your system.
 - **xcrun**: Harness uses `xcrun simctl` for simulators and `xcrun devicectl` for physical devices.
+- **libimobiledevice**: `idevicesyslog`, `idevicecrashreport`, and `idevice_id` must be installed and available in `PATH` for physical-device crash diagnostics.
 - **Development Build**: A debug build of your app must be installed on the simulator or device.
+
+## App Launch Options
+
+Apple runners support `appLaunchOptions.arguments` and `appLaunchOptions.environment`.
+
+Harness maps them differently depending on the target:
+
+- iOS Simulator: arguments are passed to `simctl launch`, and environment variables are passed through `SIMCTL_CHILD_*`
+- iOS physical device: arguments are passed to `devicectl device process launch`, and environment variables are passed with `--environment-variables`
+
+## Native Crash Details
+
+Harness uses separate crash-monitoring implementations by target:
+
+- iOS simulators use `simctl` for live log streaming and also scan local crash reports in `~/Library/Logs/DiagnosticReports`. When Harness finds a matching simulator `.ips` report, it attaches the parsed crash metadata and the crashing thread stack trace.
+- iOS physical devices use `libimobiledevice` to stream logs and pull `.crash` reports from the device.
+
+Native crash details are attached to startup and execution failures when Harness can match the failing process from these sources. When the report contains it, Harness prints the extracted crashing-thread stack trace in the failure output.

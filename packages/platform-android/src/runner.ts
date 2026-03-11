@@ -1,6 +1,7 @@
 import {
   DeviceNotFoundError,
   AppNotInstalledError,
+  CreateAppMonitorOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import { Config } from '@react-native-harness/config';
@@ -11,6 +12,7 @@ import {
 import { getAdbId } from './adb-id.js';
 import * as adb from './adb.js';
 import { getDeviceName } from './utils.js';
+import { createAndroidAppMonitor } from './app-monitor.js';
 
 const getAndroidRunner = async (
   config: AndroidPlatformConfig,
@@ -36,22 +38,28 @@ const getAndroidRunner = async (
     adb.reversePort(adbId, 8081),
     adb.reversePort(adbId, 8080),
     adb.reversePort(adbId, harnessConfig.webSocketPort),
+    adb.setHideErrorDialogs(adbId, true),
   ]);
+  const appUid = await adb.getAppUid(adbId, parsedConfig.bundleId);
 
   return {
-    startApp: async () => {
+    startApp: async (options) => {
       await adb.startApp(
         adbId,
         parsedConfig.bundleId,
-        parsedConfig.activityName
+        parsedConfig.activityName,
+        (options as typeof parsedConfig.appLaunchOptions | undefined) ??
+          parsedConfig.appLaunchOptions
       );
     },
-    restartApp: async () => {
+    restartApp: async (options) => {
       await adb.stopApp(adbId, parsedConfig.bundleId);
       await adb.startApp(
         adbId,
         parsedConfig.bundleId,
-        parsedConfig.activityName
+        parsedConfig.activityName,
+        (options as typeof parsedConfig.appLaunchOptions | undefined) ??
+          parsedConfig.appLaunchOptions
       );
     },
     stopApp: async () => {
@@ -59,10 +67,18 @@ const getAndroidRunner = async (
     },
     dispose: async () => {
       await adb.stopApp(adbId, parsedConfig.bundleId);
+      await adb.setHideErrorDialogs(adbId, false);
     },
     isAppRunning: async () => {
       return await adb.isAppRunning(adbId, parsedConfig.bundleId);
     },
+    createAppMonitor: (options?: CreateAppMonitorOptions) =>
+      createAndroidAppMonitor({
+        adbId,
+        bundleId: parsedConfig.bundleId,
+        appUid,
+        crashArtifactWriter: options?.crashArtifactWriter,
+      }),
   };
 };
 

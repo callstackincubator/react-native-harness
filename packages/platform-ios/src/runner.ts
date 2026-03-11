@@ -1,4 +1,5 @@
 import { HarnessPlatformRunner } from '@react-native-harness/platforms';
+import { Config } from '@react-native-harness/config';
 import {
   ApplePlatformConfigSchema,
   type ApplePlatformConfig,
@@ -10,7 +11,8 @@ import {
 } from './instance.js';
 
 const getAppleRunner = async (
-  config: ApplePlatformConfig
+  config: ApplePlatformConfig,
+  harnessConfig: Config
 ): Promise<HarnessPlatformRunner> => {
   const parsedConfig = ApplePlatformConfigSchema.parse(config);
 

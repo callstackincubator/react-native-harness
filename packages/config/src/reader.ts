@@ -9,6 +9,25 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { ZodError } from 'zod';
 
+const DEPRECATED_PROPERTIES: Record<string, string> = {
+  bundleStartTimeout:
+    '"bundleStartTimeout" is no longer used and can be removed from your config. Startup crash detection is now handled automatically by the crash supervisor.',
+  maxAppRestarts:
+    '"maxAppRestarts" is no longer used and can be removed from your config. Startup crash detection is now handled automatically by the crash supervisor.',
+};
+
+const warnDeprecatedProperties = (rawConfig: unknown) => {
+  if (typeof rawConfig !== 'object' || rawConfig === null) {
+    return;
+  }
+
+  for (const [key, message] of Object.entries(DEPRECATED_PROPERTIES)) {
+    if (key in rawConfig) {
+      console.warn(`[react-native-harness] Deprecation warning: ${message}`);
+    }
+  }
+};
+
 const extensions = ['.js', '.mjs', '.cjs', '.json'];
 
 const importUp = async (
@@ -43,6 +62,7 @@ const importUp = async (
       }
 
       try {
+        warnDeprecatedProperties(rawConfig);
         const config = ConfigSchema.parse(rawConfig);
         return { config, filePathWithExt, configDir: dir };
       } catch (error) {

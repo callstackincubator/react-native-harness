@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@react-native-harness/platforms": "workspace:*",
+    "@react-native-harness/tools": "workspace:*",
     "playwright": "^1.50.0",
     "zod": "^3.25.67",
     "tslib": "^2.3.0"

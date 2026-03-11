@@ -1,20 +1,126 @@
-import { spawn, spawnAndForget } from '@react-native-harness/tools';
+import {
+  type AppleAppLaunchOptions,
+  type CrashArtifactWriter,
+} from '@react-native-harness/platforms';
+import { escapeRegExp, spawn, spawnAndForget } from '@react-native-harness/tools';
+import fs from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { iosCrashParser } from '../crash-parser.js';
 
-const plistToJson = async (plistOutput: string): Promise<any> => {
+const plistToJson = async (
+  plistOutput: string
+): Promise<Record<string, unknown>> => {
   const { stdout: jsonOutput } = await spawn(
     'plutil',
     ['-convert', 'json', '-o', '-', '-'],
     { stdin: { string: plistOutput } }
   );
-  return JSON.parse(jsonOutput);
+  return JSON.parse(jsonOutput) as Record<string, unknown>;
 };
 
 export type AppleAppInfo = {
   Bundle: string;
   CFBundleIdentifier: string;
+  CFBundleExecutable: string;
   CFBundleName: string;
   CFBundleDisplayName: string;
   Path: string;
+};
+
+export type AppleSimulatorCrashReport = {
+  artifactType: 'ios-simulator-crash-report';
+  artifactPath: string;
+  occurredAt: number;
+  summary?: string;
+  rawLines: string[];
+  processName?: string;
+  pid?: number;
+  signal?: string;
+  exceptionType?: string;
+  stackTrace?: string[];
+};
+
+const getDiagnosticReportsDir = () =>
+  join(homedir(), 'Library', 'Logs', 'DiagnosticReports');
+
+export const collectCrashReports = async ({
+  udid,
+  bundleId,
+  processNames,
+  crashArtifactWriter,
+  minOccurredAt,
+}: {
+  udid: string;
+  bundleId: string;
+  processNames: string[];
+  crashArtifactWriter?: CrashArtifactWriter;
+  minOccurredAt?: number;
+}): Promise<AppleSimulatorCrashReport[]> => {
+  const diagnosticReportsDir = getDiagnosticReportsDir();
+
+  if (!fs.existsSync(diagnosticReportsDir)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(diagnosticReportsDir)
+    .filter((entry) => entry.endsWith('.ips'))
+    .map((entry) => join(diagnosticReportsDir, entry))
+    .map((path) => ({
+      path,
+      contents: fs.readFileSync(path, 'utf8'),
+    }))
+    .filter(({ path, contents }) => {
+      if (!contents.includes(bundleId) && !path.includes(bundleId)) {
+        const matchesProcessName = processNames.some((processName) =>
+          new RegExp(`\\b${escapeRegExp(processName)}\\b`).test(contents)
+        );
+
+        if (!matchesProcessName) {
+          return false;
+        }
+      }
+
+      return contents.includes(udid);
+    })
+    .map(({ path, contents }) => ({
+      path,
+      report: iosCrashParser.parse({
+        path,
+        contents,
+      }),
+    }))
+    .filter(
+      (
+        entry
+      ): entry is { path: string; report: Omit<AppleSimulatorCrashReport, 'artifactPath' | 'artifactType'> } =>
+        entry.report !== null
+    )
+    .filter(
+      ({ report }) => minOccurredAt === undefined || report.occurredAt >= minOccurredAt
+    )
+    .map(({ path, report }) => {
+      if (!crashArtifactWriter) {
+        return {
+          artifactType: 'ios-simulator-crash-report',
+          artifactPath: path,
+          ...report,
+        };
+      }
+
+      return {
+        artifactType: 'ios-simulator-crash-report',
+        ...report,
+        artifactPath: crashArtifactWriter.persistArtifact({
+          artifactKind: 'ios-simulator-crash-report',
+          source: {
+            kind: 'file',
+            path,
+          },
+        }),
+      };
+    });
 };
 
 export const getAppInfo = async (
@@ -37,7 +143,7 @@ export const getAppInfo = async (
     return null;
   }
 
-  return json;
+  return json as AppleAppInfo;
 };
 
 export const isAppInstalled = async (
@@ -94,11 +200,27 @@ export const getSimulatorStatus = async (
   return simulator.state;
 };
 
+export const getSimctlChildEnvironment = (
+  options?: AppleAppLaunchOptions
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(options?.environment ?? {}).map(([key, value]) => [
+      `SIMCTL_CHILD_${key}`,
+      value,
+    ])
+  );
+
 export const startApp = async (
   udid: string,
-  bundleId: string
+  bundleId: string,
+  options?: AppleAppLaunchOptions
 ): Promise<void> => {
-  await spawn('xcrun', ['simctl', 'launch', udid, bundleId]);
+  const environment = getSimctlChildEnvironment(options);
+  const argumentsList = options?.arguments ?? [];
+
+  await spawn('xcrun', ['simctl', 'launch', udid, bundleId, ...argumentsList], {
+    env: environment,
+  });
 };
 
 export const stopApp = async (

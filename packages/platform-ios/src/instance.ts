@@ -1,5 +1,6 @@
 import {
   AppNotInstalledError,
+  CreateAppMonitorOptions,
   DeviceNotFoundError,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
@@ -11,6 +12,11 @@ import {
 import * as simctl from './xcrun/simctl.js';
 import * as devicectl from './xcrun/devicectl.js';
 import { getDeviceName } from './utils.js';
+import {
+  createIosDeviceAppMonitor,
+  createIosSimulatorAppMonitor,
+} from './app-monitor.js';
+import { assertLibimobiledeviceInstalled } from './libimobiledevice.js';
 
 export const getAppleSimulatorPlatformInstance = async (
   config: ApplePlatformConfig
@@ -42,12 +48,22 @@ export const getAppleSimulatorPlatformInstance = async (
   }
 
   return {
-    startApp: async () => {
-      await simctl.startApp(udid, config.bundleId);
+    startApp: async (options) => {
+      await simctl.startApp(
+        udid,
+        config.bundleId,
+        (options as typeof config.appLaunchOptions | undefined) ??
+          config.appLaunchOptions
+      );
     },
-    restartApp: async () => {
+    restartApp: async (options) => {
       await simctl.stopApp(udid, config.bundleId);
-      await simctl.startApp(udid, config.bundleId);
+      await simctl.startApp(
+        udid,
+        config.bundleId,
+        (options as typeof config.appLaunchOptions | undefined) ??
+          config.appLaunchOptions
+      );
     },
     stopApp: async () => {
       await simctl.stopApp(udid, config.bundleId);
@@ -58,6 +74,12 @@ export const getAppleSimulatorPlatformInstance = async (
     isAppRunning: async () => {
       return await simctl.isAppRunning(udid, config.bundleId);
     },
+    createAppMonitor: (options?: CreateAppMonitorOptions) =>
+      createIosSimulatorAppMonitor({
+        udid,
+        bundleId: config.bundleId,
+        crashArtifactWriter: options?.crashArtifactWriter,
+      }),
   };
 };
 
@@ -65,6 +87,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
   config: ApplePlatformConfig
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDevicePhysical(config.device);
+  await assertLibimobiledeviceInstalled();
 
   const deviceId = await devicectl.getDeviceId(config.device.name);
 
@@ -82,12 +105,22 @@ export const getApplePhysicalDevicePlatformInstance = async (
   }
 
   return {
-    startApp: async () => {
-      await devicectl.startApp(deviceId, config.bundleId);
+    startApp: async (options) => {
+      await devicectl.startApp(
+        deviceId,
+        config.bundleId,
+        (options as typeof config.appLaunchOptions | undefined) ??
+          config.appLaunchOptions
+      );
     },
-    restartApp: async () => {
+    restartApp: async (options) => {
       await devicectl.stopApp(deviceId, config.bundleId);
-      await devicectl.startApp(deviceId, config.bundleId);
+      await devicectl.startApp(
+        deviceId,
+        config.bundleId,
+        (options as typeof config.appLaunchOptions | undefined) ??
+          config.appLaunchOptions
+      );
     },
     stopApp: async () => {
       await devicectl.stopApp(deviceId, config.bundleId);
@@ -98,5 +131,11 @@ export const getApplePhysicalDevicePlatformInstance = async (
     isAppRunning: async () => {
       return await devicectl.isAppRunning(deviceId, config.bundleId);
     },
+    createAppMonitor: (options?: CreateAppMonitorOptions) =>
+      createIosDeviceAppMonitor({
+        deviceId,
+        bundleId: config.bundleId,
+        crashArtifactWriter: options?.crashArtifactWriter,
+      }),
   };
 };

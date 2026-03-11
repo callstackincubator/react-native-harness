@@ -169,6 +169,9 @@ export const getBridgeServer = async ({
   });
 
   const dispose = () => {
+    for (const client of wss.clients) {
+      client.terminate();
+    }
     wss.close();
     emitter.removeAllListeners();
     binaryStore.dispose();

@@ -97,16 +97,17 @@ export default class JestHarness implements CallbackTestRunnerInterface {
                 throw new CancelRun();
               }
 
-              if (
-                harnessConfig.resetEnvironmentBetweenTestFiles &&
-                !isFirstTest
-              ) {
-                await harness.restart();
-              }
-              isFirstTest = false;
+                if (
+                  harnessConfig.resetEnvironmentBetweenTestFiles &&
+                  !isFirstTest
+                ) {
+                  await harness.restart(test.path);
+                }
+                isFirstTest = false;
 
               return onStart(test).then(async () => {
                 if (!harnessConfig.detectNativeCrashes) {
+                  await harness.ensureAppReady(test.path);
                   return runHarnessTestFile({
                     testPath: test.path,
                     harness,
@@ -115,10 +116,9 @@ export default class JestHarness implements CallbackTestRunnerInterface {
                   });
                 }
 
-                // Start crash monitoring
-                const crashPromise = harness.crashMonitor.startMonitoring(
-                  test.path
-                );
+                await harness.ensureAppReady(test.path);
+                harness.crashSupervisor.beginTestRun(test.path);
+                const crashPromise = harness.crashSupervisor.waitForCrash(test.path);
 
                 try {
                   const result = await Promise.race([
@@ -133,20 +133,18 @@ export default class JestHarness implements CallbackTestRunnerInterface {
 
                   return result;
                 } finally {
-                  harness.crashMonitor.stopMonitoring();
+                  harness.crashSupervisor.cancelCrashWaiters();
                 }
               });
             })
             .then((result) => onResult(test, result))
             .catch(async (err) => {
               if (err instanceof NativeCrashError) {
+                harness.crashSupervisor.reset();
                 onFailure(test, {
                   message: err.message,
                   stack: '',
                 });
-
-                // Restart the app for the next test file
-                await harness.restart();
 
                 return;
               }

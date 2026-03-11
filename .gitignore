@@ -111,6 +111,7 @@ yarn-error.log
 
 # testing
 /coverage
+.harness/
 vite.config.*.timestamp*
 vitest.config.*.timestamp*
 
@@ -128,4 +129,3 @@ npm-debug.*
 *.orig.*
 web-build/
 cache/
-

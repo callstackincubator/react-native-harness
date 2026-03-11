@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+export const AppleAppLaunchOptionsSchema = z.object({
+  arguments: z.array(z.string()).optional(),
+  environment: z.record(z.string()).optional(),
+});
+
 export const AppleSimulatorSchema = z.object({
   type: z.literal('simulator'),
   name: z.string().min(1, 'Name is required'),
@@ -20,12 +25,14 @@ export const ApplePlatformConfigSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   device: AppleDeviceSchema,
   bundleId: z.string().min(1, 'Bundle ID is required'),
+  appLaunchOptions: AppleAppLaunchOptionsSchema.optional(),
 });
 
 export type AppleSimulator = z.infer<typeof AppleSimulatorSchema>;
 export type ApplePhysicalDevice = z.infer<typeof ApplePhysicalDeviceSchema>;
 export type AppleDevice = z.infer<typeof AppleDeviceSchema>;
 export type ApplePlatformConfig = z.infer<typeof ApplePlatformConfigSchema>;
+export type AppleAppLaunchOptions = z.infer<typeof AppleAppLaunchOptionsSchema>;
 
 export const isAppleDeviceSimulator = (
   device: AppleDevice

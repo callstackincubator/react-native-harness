@@ -61,3 +61,10 @@ runs:
           ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
           ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
         if-no-files-found: ignore
+    - name: Upload crash report artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: harness-crash-reports-web
+        path: ${{ inputs.projectRoot }}/.harness/crash-reports/**/*
+        if-no-files-found: ignore

@@ -1,3 +1,4 @@
+import { type AppleAppLaunchOptions } from '@react-native-harness/platforms';
 import { spawn } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -87,15 +88,27 @@ export const isAppInstalled = async (
 
 export const startApp = async (
   identifier: string,
-  bundleId: string
+  bundleId: string,
+  options?: AppleAppLaunchOptions
 ): Promise<void> => {
-  await devicectl('device', [
-    'process',
-    'launch',
-    '--device',
-    identifier,
-    bundleId,
-  ]);
+  await devicectl('device', getDeviceCtlLaunchArgs(identifier, bundleId, options));
+};
+
+export const getDeviceCtlLaunchArgs = (
+  identifier: string,
+  bundleId: string,
+  options?: AppleAppLaunchOptions
+): string[] => {
+  const args = ['process', 'launch', '--device', identifier];
+  const environment = options?.environment;
+
+  if (environment && Object.keys(environment).length > 0) {
+    args.push('--environment-variables', JSON.stringify(environment));
+  }
+
+  args.push(bundleId, ...(options?.arguments ?? []));
+
+  return args;
 };
 
 export type AppleProcessInfo = {

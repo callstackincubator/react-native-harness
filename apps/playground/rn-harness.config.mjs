@@ -34,6 +34,36 @@ export default {
       bundleId: 'com.harnessplayground',
     }),
     androidPlatform({
+      name: 'android-crash-pre-rn',
+      device: androidEmulator('Pixel_8_API_35', {
+        apiLevel: 35,
+        profile: 'pixel_6',
+        diskSize: '1G',
+        heapSize: '1G',
+      }),
+      bundleId: 'com.harnessplayground',
+      appLaunchOptions: {
+        extras: {
+          harness_crash_mode: 'pre_rn',
+        },
+      },
+    }),
+    androidPlatform({
+      name: 'android-crash-delayed',
+      device: androidEmulator('Pixel_8_API_35', {
+        apiLevel: 35,
+        profile: 'pixel_6',
+        diskSize: '1G',
+        heapSize: '1G',
+      }),
+      bundleId: 'com.harnessplayground',
+      appLaunchOptions: {
+        extras: {
+          harness_crash_mode: 'delayed_pre_ready',
+        },
+      },
+    }),
+    androidPlatform({
       name: 'moto-g72',
       device: physicalAndroidDevice('Motorola', 'Moto G72'),
       bundleId: 'com.harnessplayground',
@@ -47,6 +77,26 @@ export default {
       name: 'ios',
       device: appleSimulator('iPhone 16 Pro', '18.6'),
       bundleId: 'com.harnessplayground',
+    }),
+    applePlatform({
+      name: 'ios-crash-pre-rn',
+      device: appleSimulator('iPhone 16 Pro', '18.6'),
+      bundleId: 'com.harnessplayground',
+      appLaunchOptions: {
+        environment: {
+          HARNESS_CRASH_MODE: 'pre_rn',
+        },
+      },
+    }),
+    applePlatform({
+      name: 'ios-crash-delayed',
+      device: appleSimulator('iPhone 16 Pro', '18.6'),
+      bundleId: 'com.harnessplayground',
+      appLaunchOptions: {
+        environment: {
+          HARNESS_CRASH_MODE: 'delayed_pre_ready',
+        },
+      },
     }),
     vegaPlatform({
       name: 'vega',

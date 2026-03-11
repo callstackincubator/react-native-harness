@@ -1,4 +1,47 @@
-import { spawn } from '@react-native-harness/tools';
+import { type AndroidAppLaunchOptions } from '@react-native-harness/platforms';
+import { spawn, SubprocessError } from '@react-native-harness/tools';
+
+export const getStartAppArgs = (
+  bundleId: string,
+  activityName: string,
+  options?: AndroidAppLaunchOptions
+): string[] => {
+  const args = [
+    'shell',
+    'am',
+    'start',
+    '-a',
+    'android.intent.action.MAIN',
+    '-c',
+    'android.intent.category.LAUNCHER',
+    '-n',
+    `${bundleId}/${activityName}`,
+  ];
+
+  const extras = options?.extras ?? {};
+
+  for (const [key, value] of Object.entries(extras)) {
+    if (typeof value === 'string') {
+      args.push('--es', key, value);
+      continue;
+    }
+
+    if (typeof value === 'boolean') {
+      args.push('--ez', key, value ? 'true' : 'false');
+      continue;
+    }
+
+    if (!Number.isSafeInteger(value)) {
+      throw new Error(
+        `Android app launch option "${key}" must be a safe integer.`
+      );
+    }
+
+    args.push('--ei', key, value.toString());
+  }
+
+  return args;
+};
 
 export const isAppInstalled = async (
   adbId: string,
@@ -40,21 +83,10 @@ export const stopApp = async (
 export const startApp = async (
   adbId: string,
   bundleId: string,
-  activityName: string
+  activityName: string,
+  options?: AndroidAppLaunchOptions
 ): Promise<void> => {
-  await spawn('adb', [
-    '-s',
-    adbId,
-    'shell',
-    'am',
-    'start',
-    '-a',
-    'android.intent.action.MAIN',
-    '-c',
-    'android.intent.category.LAUNCHER',
-    '-n',
-    `${bundleId}/${activityName}`,
-  ]);
+  await spawn('adb', ['-s', adbId, ...getStartAppArgs(bundleId, activityName, options)]);
 };
 
 export const getDeviceIds = async (): Promise<string[]> => {
@@ -113,14 +145,75 @@ export const isAppRunning = async (
   adbId: string,
   bundleId: string
 ): Promise<boolean> => {
+  try {
+    const { stdout } = await spawn('adb', [
+      '-s',
+      adbId,
+      'shell',
+      'pidof',
+      bundleId,
+    ]);
+    return stdout.trim() !== '';
+  } catch (error) {
+    if (error instanceof SubprocessError && error.exitCode === 1) {
+      return false;
+    }
+
+    throw error;
+  }
+};
+
+export const getAppUid = async (
+  adbId: string,
+  bundleId: string
+): Promise<number> => {
   const { stdout } = await spawn('adb', [
     '-s',
     adbId,
     'shell',
-    'pidof',
-    bundleId,
+    'pm',
+    'list',
+    'packages',
+    '-U',
   ]);
-  return stdout.trim() !== '';
+  const line = stdout
+    .split('\n')
+    .find((entry) => entry.includes(`package:${bundleId}`));
+  const match = line?.match(/\buid:(\d+)\b/);
+
+  if (!match) {
+    throw new Error(`Failed to resolve Android app UID for "${bundleId}".`);
+  }
+
+  return Number(match[1]);
+};
+
+export const setHideErrorDialogs = async (
+  adbId: string,
+  hide: boolean
+): Promise<void> => {
+  await spawn('adb', [
+    '-s',
+    adbId,
+    'shell',
+    'settings',
+    'put',
+    'global',
+    'hide_error_dialogs',
+    hide ? '1' : '0',
+  ]);
+};
+
+export const getLogcatTimestamp = async (adbId: string): Promise<string> => {
+  const { stdout } = await spawn('adb', [
+    '-s',
+    adbId,
+    'shell',
+    'date',
+    "+'%m-%d %H:%M:%S.000'",
+  ]);
+
+  return stdout.trim().replace(/^'+|'+$/g, '');
 };
 
 export const getAvds = async (): Promise<string[]> => {

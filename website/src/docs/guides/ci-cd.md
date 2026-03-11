@@ -29,6 +29,7 @@ Both actions automatically:
 - Set up and configure the emulator/simulator based on your config
 - Install your app
 - Run the tests
+- Upload persisted crash artifacts from `.harness/crash-reports` when the run produces them
 
 The actions read your `rn-harness.config.mjs` file to determine the device configuration, so you don't need to hardcode emulator settings in your workflow.
 
@@ -39,6 +40,12 @@ Both actions accept the following inputs:
 - `app` (required): Path to your built app (`.apk` for Android, `.app` for iOS)
 - `runner` (required): The runner name (e.g., `"android"` or `"ios"`)
 - `projectRoot` (optional): The project root directory (defaults to the repository root)
+
+## Crash Artifacts
+
+When Harness resolves a crash artifact, it persists a copy under `.harness/crash-reports/` in the current working directory. Filenames include the Harness run timestamp and selected runner name so CI downloads stay easy to correlate.
+
+The official GitHub Actions upload `.harness/crash-reports/**/*` automatically with `if-no-files-found: ignore`, so crash reports are available as workflow artifacts whenever a run produces them.
 
 ## GitHub Actions Example
 

@@ -48,11 +48,6 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
     // Do not setup again if HARNESS is already initialized
     // This is useful when running tests in watch mode
 
-    if (harnessConfig.resetEnvironmentBetweenTestFiles) {
-      // In watch mode, we want to restart the environment before each test run
-      await global.HARNESS.restart();
-    }
-
     return;
   }
 

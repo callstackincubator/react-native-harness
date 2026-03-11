@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const WebAppLaunchOptionsSchema = z.object({});
+
 export const WebBrowserConfigSchema = z.object({
   type: z.enum(['chromium', 'firefox', 'webkit']),
   url: z.string().url('A valid URL is required'),
@@ -11,6 +13,7 @@ export const WebBrowserConfigSchema = z.object({
 export const WebPlatformConfigSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   browser: WebBrowserConfigSchema,
+  appLaunchOptions: WebAppLaunchOptionsSchema.optional(),
 });
 
 export type WebBrowserConfig = z.infer<typeof WebBrowserConfigSchema>;

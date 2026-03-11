@@ -10,6 +10,35 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   var reactNativeDelegate: ReactNativeDelegate?
   var reactNativeFactory: RCTReactNativeFactory?
 
+  #if DEBUG
+  private func startupCrashMode() -> String {
+    let processInfo = ProcessInfo.processInfo
+
+    if let mode = processInfo.environment["HARNESS_CRASH_MODE"], !mode.isEmpty {
+      return mode
+    }
+
+    if let argument = processInfo.arguments.first(where: { $0.hasPrefix("--harness-crash-mode=") }) {
+      return String(argument.dropFirst("--harness-crash-mode=".count))
+    }
+
+    return "none"
+  }
+
+  private func crashIfRequested() {
+    switch startupCrashMode() {
+    case "pre_rn":
+      fatalError("Intentional pre-RN startup crash")
+    case "delayed_pre_ready":
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        fatalError("Intentional delayed startup crash")
+      }
+    default:
+      break
+    }
+  }
+  #endif
+
   func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -22,6 +51,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     reactNativeFactory = factory
 
     window = UIWindow(frame: UIScreen.main.bounds)
+
+    #if DEBUG
+    crashIfRequested()
+    #endif
 
     factory.startReactNative(
       withModuleName: "HarnessPlayground",

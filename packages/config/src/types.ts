@@ -28,15 +28,10 @@ export const ConfigSchema = z
       .min(1000, 'Bridge timeout must be at least 1 second')
       .default(60000),
 
-    bundleStartTimeout: z
-      .number()
-      .min(1000, 'Bundle start timeout must be at least 1 second')
-      .default(15000),
-
-    maxAppRestarts: z
-      .number()
-      .min(0, 'Max app restarts must be non-negative')
-      .default(2),
+    /** @deprecated Removed in favor of crash supervisor. Accepted for backwards compatibility. */
+    bundleStartTimeout: z.number().optional(),
+    /** @deprecated Removed in favor of crash supervisor. Accepted for backwards compatibility. */
+    maxAppRestarts: z.number().optional(),
 
     resetEnvironmentBetweenTestFiles: z.boolean().optional().default(true),
     unstable__skipAlreadyIncludedModules: z.boolean().optional().default(false),

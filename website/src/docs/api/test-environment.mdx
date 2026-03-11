@@ -79,7 +79,7 @@ Testing native modules often involves calling code that might cause the host app
 
 Harness includes a built-in **Native Crash Monitor**:
 
-- **`detectNativeCrashes`**: (Default: `true`) When enabled, Harness actively monitors the native process. If the app crashes, Harness catches the failure, reports a `NativeCrashError` for the current test, and automatically restarts the app to continue with the remaining test files.
+- **`detectNativeCrashes`**: (Default: `true`) When enabled, Harness actively monitors the native process during both startup and test execution. If the app crashes, Harness reports a `NativeCrashError` for the current test file, restarts the app, and continues with the remaining test files.
 - **`crashDetectionInterval`**: (Default: `500ms`) How often the CLI polls the device to ensure the app is still alive.
 
 ---

@@ -26,10 +26,10 @@ jobs:
   e2e-android:
     name: E2E Android
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android')) }}
     env:
       HARNESS_DEBUG: true
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -108,6 +108,7 @@ jobs:
   e2e-ios:
     name: E2E iOS
     runs-on: macos-latest
+    timeout-minutes: 30
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios')) }}
     steps:
       - name: Checkout code
@@ -194,10 +195,10 @@ jobs:
   e2e-web:
     name: E2E Web
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'web')) }}
     env:
       HARNESS_DEBUG: true
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -237,3 +238,221 @@ jobs:
         with:
           runner: chromium
           projectRoot: apps/playground
+
+  crash-validate-android:
+    name: Crash Validation Android
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android') }}
+    env:
+      HARNESS_DEBUG: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Reclaim disk space
+        uses: AdityaGarg8/remove-unwanted-software@v5
+        with:
+          remove-dotnet: true
+          remove-haskell: true
+          remove-codeql: true
+          remove-docker-images: true
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.10.0'
+          cache: 'pnpm'
+
+      - name: Metro cache
+        uses: actions/cache@v4
+        with:
+          path: apps/playground/node_modules/.cache/rn-harness/metro-cache
+          key: metro-cache-${{ hashFiles('apps/playground/node_modules/.cache/rn-harness/metro-cache/**/*') }}
+          restore-keys: |
+            metro-cache
+
+      - name: Install dependencies
+        run: |
+          pnpm install
+
+      - name: Build packages
+        run: |
+          pnpm nx run-many -t build --projects="packages/*"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Restore APK from cache
+        id: cache-apk-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
+          key: apk-playground
+
+      - name: Build Android app
+        if: steps.cache-apk-restore.outputs.cache-hit != 'true'
+        working-directory: apps/playground
+        run: |
+          pnpm nx run @react-native-harness/playground:build-android --tasks=assembleDebug
+
+      - name: Save APK to cache
+        if: steps.cache-apk-restore.outputs.cache-hit != 'true' && success()
+        uses: actions/cache/save@v4
+        with:
+          path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
+          key: apk-playground
+
+      - name: Run React Native Harness (expect crash)
+        id: crash-test
+        continue-on-error: true
+        uses: ./actions/android
+        with:
+          app: android/app/build/outputs/apk/debug/app-debug.apk
+          runner: android-crash-pre-rn
+          projectRoot: apps/playground
+          harnessArgs: --testPathPattern smoke
+
+      - name: Verify crash was detected
+        shell: bash
+        run: |
+          if [ "${{ steps.crash-test.outcome }}" != "failure" ]; then
+            echo "ERROR: Expected harness to fail (crash not detected)"
+            exit 1
+          fi
+          echo "Crash was correctly detected by the harness"
+
+      - name: Verify crash artifacts exist
+        shell: bash
+        run: |
+          CRASH_DIR="apps/playground/.harness/crash-reports"
+          if [ -d "$CRASH_DIR" ] && [ "$(ls -A "$CRASH_DIR" 2>/dev/null)" ]; then
+            echo "Crash report artifacts found:"
+            ls -la "$CRASH_DIR"
+          else
+            echo "ERROR: No crash report artifacts found in $CRASH_DIR"
+            exit 1
+          fi
+
+  crash-validate-ios:
+    name: Crash Validation iOS
+    runs-on: macos-latest
+    timeout-minutes: 30
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.10.0'
+          cache: 'pnpm'
+
+      - name: Metro cache
+        uses: actions/cache@v4
+        with:
+          path: apps/playground/node_modules/.cache/rn-harness/metro-cache
+          key: metro-cache-${{ hashFiles('apps/playground/node_modules/.cache/rn-harness/metro-cache/**/*') }}
+          restore-keys: |
+            metro-cache
+
+      - name: Install Watchman
+        run: brew install watchman
+
+      - name: Install dependencies
+        run: |
+          pnpm install
+
+      - name: Build packages
+        run: |
+          pnpm nx run-many -t build --projects="packages/*"
+
+      - name: Restore app from cache
+        id: cache-app-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
+          key: ios-app-playground
+
+      - name: CocoaPods cache
+        if: steps.cache-app-restore.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ./apps/playground/ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: playground-${{ runner.os }}-pods-${{ hashFiles('./apps/playground/ios/Podfile.lock') }}
+          restore-keys: |
+            playground-${{ runner.os }}-pods-
+
+      - name: Install CocoaPods
+        if: steps.cache-app-restore.outputs.cache-hit != 'true'
+        working-directory: apps/playground/ios
+        run: |
+          pod install
+
+      - name: Build iOS app
+        if: steps.cache-app-restore.outputs.cache-hit != 'true'
+        working-directory: apps/playground
+        run: |
+          pnpm react-native build-ios --buildFolder ./build --verbose
+
+      - name: Save app to cache
+        if: steps.cache-app-restore.outputs.cache-hit != 'true' && success()
+        uses: actions/cache/save@v4
+        with:
+          path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
+          key: ios-app-playground
+
+      - name: Run React Native Harness (expect crash)
+        id: crash-test
+        continue-on-error: true
+        uses: ./actions/ios
+        with:
+          app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
+          runner: ios-crash-pre-rn
+          projectRoot: apps/playground
+          harnessArgs: --testPathPattern smoke
+
+      - name: Verify crash was detected
+        shell: bash
+        run: |
+          if [ "${{ steps.crash-test.outcome }}" != "failure" ]; then
+            echo "ERROR: Expected harness to fail (crash not detected)"
+            exit 1
+          fi
+          echo "Crash was correctly detected by the harness"
+
+      - name: Verify crash artifacts exist
+        shell: bash
+        run: |
+          CRASH_DIR="apps/playground/.harness/crash-reports"
+          if [ -d "$CRASH_DIR" ] && [ "$(ls -A "$CRASH_DIR" 2>/dev/null)" ]; then
+            echo "Crash report artifacts found:"
+            ls -la "$CRASH_DIR"
+          else
+            echo "ERROR: No crash report artifacts found in $CRASH_DIR"
+            exit 1
+          fi
