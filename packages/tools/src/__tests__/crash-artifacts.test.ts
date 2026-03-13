@@ -26,7 +26,7 @@ describe('createCrashArtifactWriter', () => {
     });
 
     const persistedPath = writer.persistArtifact({
-      artifactKind: 'ios-libimobiledevice-crash-report',
+      artifactKind: 'ios-crash-report',
       source: {
         kind: 'file',
         path: sourcePath,
@@ -34,7 +34,7 @@ describe('createCrashArtifactWriter', () => {
     });
 
     expect(path.basename(persistedPath)).toBe(
-      '2026-03-12T11-35-08-000Z--ios-simulator--ios--ios-libimobiledevice-crash-report--Harness-Playground-01.crash'
+      '2026-03-12T11-35-08-000Z--ios-simulator--ios--ios-crash-report--Harness-Playground-01.crash'
     );
     expect(fs.readFileSync(persistedPath, 'utf8')).toBe('crash data');
     expect(writer.runTimestamp).toBe('2026-03-12T11-35-08-000Z');
@@ -74,14 +74,14 @@ describe('createCrashArtifactWriter', () => {
     });
 
     const firstPath = writer.persistArtifact({
-      artifactKind: 'ios-libimobiledevice-crash-report',
+      artifactKind: 'ios-crash-report',
       source: {
         kind: 'file',
         path: sourcePath,
       },
     });
     const secondPath = writer.persistArtifact({
-      artifactKind: 'ios-libimobiledevice-crash-report',
+      artifactKind: 'ios-crash-report',
       source: {
         kind: 'file',
         path: sourcePath,

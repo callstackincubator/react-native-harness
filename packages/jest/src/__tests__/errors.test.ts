@@ -26,7 +26,7 @@ describe('NativeCrashError', () => {
   it('omits single-line iOS summaries from the rendered error message', () => {
     const error = new NativeCrashError('/tmp/crash.harness.ts', {
       phase: 'startup',
-      artifactType: 'ios-simulator-crash-report',
+      artifactType: 'ios-crash-report',
       summary:
         '2026-03-12 13:46:18.154 Df HarnessPlayground[18007:65e716] [com.apple.dt.xctest:Default] notify_get_state check indicated test daemon not ready.',
       processName: 'HarnessPlayground',

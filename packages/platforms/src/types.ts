@@ -9,8 +9,7 @@ export type AppCrashDetails = {
   rawLines?: string[];
   artifactType?:
     | 'logcat'
-    | 'ios-libimobiledevice-crash-report'
-    | 'ios-simulator-crash-report';
+    | 'ios-crash-report';
   artifactPath?: string;
 };
 

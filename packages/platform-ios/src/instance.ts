@@ -89,11 +89,14 @@ export const getApplePhysicalDevicePlatformInstance = async (
   assertAppleDevicePhysical(config.device);
   await assertLibimobiledeviceInstalled();
 
-  const deviceId = await devicectl.getDeviceId(config.device.name);
+  const device = await devicectl.getDevice(config.device.name);
 
-  if (!deviceId) {
+  if (!device) {
     throw new DeviceNotFoundError(getDeviceName(config.device));
   }
+
+  const deviceId = device.identifier;
+  const hardwareUdid = device.hardwareProperties.udid;
 
   const isAvailable = await devicectl.isAppInstalled(deviceId, config.bundleId);
 
@@ -134,6 +137,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
     createAppMonitor: (options?: CreateAppMonitorOptions) =>
       createIosDeviceAppMonitor({
         deviceId,
+        libimobiledeviceUdid: hardwareUdid,
         bundleId: config.bundleId,
         crashArtifactWriter: options?.crashArtifactWriter,
       }),

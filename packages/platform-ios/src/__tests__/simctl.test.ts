@@ -88,7 +88,7 @@ describe('simctl collectCrashReports', () => {
 
     expect(reports).toEqual([
       {
-        artifactType: 'ios-simulator-crash-report',
+        artifactType: 'ios-crash-report',
         artifactPath: join(
           diagnosticReportsDir,
           'HarnessPlayground-2026-03-12-122756.ips'

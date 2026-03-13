@@ -48,8 +48,7 @@ const buildNativeCrashMessage = ({
     Boolean(summary) &&
     !(
       !hasCrashBlock &&
-      (artifactType === 'ios-libimobiledevice-crash-report' ||
-        artifactType === 'ios-simulator-crash-report')
+      artifactType === 'ios-crash-report'
     );
 
   if (shouldRenderSummary && summary) {

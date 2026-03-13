@@ -56,7 +56,7 @@ const getProcessName = (line: string, processNames: string[]) =>
 const getPid = (line: string, processNames: string[]) => {
   for (const processName of processNames) {
     const match = line.match(
-      new RegExp(`\\b${escapeRegExp(processName)}\\[(\\d+)(?::[^\\]]+)?\\]`)
+      new RegExp(`\\b${escapeRegExp(processName)}(?:\\([^)]*\\))?\\[(\\d+)(?::[^\\]]+)?\\]`)
     );
 
     if (match) {
@@ -80,13 +80,13 @@ const isRelevantProcessLine = (line: string, processNames: string[]) =>
 
 const isRelevantProcessLogLine = (line: string, processNames: string[]) =>
   processNames.some((processName) =>
-    new RegExp(`\\b${escapeRegExp(processName)}\\[`).test(line)
+    new RegExp(`\\b${escapeRegExp(processName)}(?:\\([^)]*\\))?\\[`).test(line)
   );
 
 const isCrashSignal = (line: string) =>
-  /uncaught exception|terminating app due to|fatal error|EXC_[A-Z_]+|SIG[A-Z0-9]+|termination reason/i.test(
+  /uncaught exception|terminating app due to|fatal error|EXC_[A-Z_]+|termination reason/i.test(
     line
-  );
+  ) || /\bSIG[A-Z]{2,}\b/.test(line);
 
 const getIosLogCrashDetails = ({
   line,
@@ -180,8 +180,7 @@ const createAppMonitorBase = () => {
           : recentCrashArtifacts;
     const preferredCandidates = candidates.filter(
       (artifact) =>
-        artifact.artifactType === 'ios-libimobiledevice-crash-report' ||
-        artifact.artifactType === 'ios-simulator-crash-report'
+        artifact.artifactType === 'ios-crash-report'
     );
     const prioritizedCandidates =
       preferredCandidates.length > 0 ? preferredCandidates : candidates;
@@ -418,7 +417,7 @@ export const createIosSimulatorAppMonitor = ({
       const artifact = base.getLatestCrashArtifact(options);
 
       if (artifact) {
-        if (artifact.artifactType === 'ios-simulator-crash-report') {
+        if (artifact.artifactType === 'ios-crash-report') {
           return artifact;
         }
 
@@ -449,7 +448,7 @@ export const createIosSimulatorAppMonitor = ({
         return null;
       }
 
-      if (artifact.artifactType === 'ios-simulator-crash-report') {
+      if (artifact.artifactType === 'ios-crash-report') {
         return artifact;
       }
 
@@ -475,10 +474,12 @@ export const createIosSimulatorAppMonitor = ({
 
 export const createIosDeviceAppMonitor = ({
   deviceId,
+  libimobiledeviceUdid,
   bundleId,
   crashArtifactWriter,
 }: {
   deviceId: string;
+  libimobiledeviceUdid: string;
   bundleId: string;
   crashArtifactWriter?: CrashArtifactWriter;
 }): IosAppMonitor => {
@@ -495,9 +496,9 @@ export const createIosDeviceAppMonitor = ({
       (value): value is string => Boolean(value)
     );
 
-    await libimobiledevice.assertLibimobiledeviceTargetAvailable(deviceId);
+    await libimobiledevice.assertLibimobiledeviceTargetAvailable(libimobiledeviceUdid);
     logProcess = libimobiledevice.createSyslogProcess({
-      targetId: deviceId,
+      targetId: libimobiledeviceUdid,
       processNames,
     });
 
@@ -537,7 +538,7 @@ export const createIosDeviceAppMonitor = ({
 
     do {
       const collectedArtifacts = await libimobiledevice.collectCrashReports({
-        targetId: deviceId,
+        targetId: libimobiledeviceUdid,
         bundleId,
         processNames,
         crashArtifactWriter,
@@ -551,7 +552,7 @@ export const createIosDeviceAppMonitor = ({
       const artifact = base.getLatestCrashArtifact(options);
 
       if (artifact) {
-        if (artifact.artifactType === 'ios-libimobiledevice-crash-report') {
+        if (artifact.artifactType === 'ios-crash-report') {
           return artifact;
         }
 

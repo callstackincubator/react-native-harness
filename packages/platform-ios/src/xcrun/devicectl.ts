@@ -156,12 +156,17 @@ export const stopApp = async (
   ]);
 };
 
-export const getDeviceId = async (name: string): Promise<string | null> => {
+export const getDevice = async (
+  name: string
+): Promise<AppleDeviceInfo | null> => {
   const devices = await listDevices();
-  const device = devices.find(
-    (device) => device.deviceProperties.name === name
+  return (
+    devices.find((device) => device.deviceProperties.name === name) ?? null
   );
+};
 
+export const getDeviceId = async (name: string): Promise<string | null> => {
+  const device = await getDevice(name);
   return device?.identifier ?? null;
 };
 

@@ -18,7 +18,7 @@ const INSTALL_INSTRUCTIONS =
   'Install libimobiledevice and ensure idevicesyslog, idevicecrashreport, and idevice_id are available in PATH.';
 
 export type IosCrashArtifact = {
-  artifactType: 'ios-libimobiledevice-crash-report';
+  artifactType: 'ios-crash-report';
   artifactPath: string;
   summary?: string;
   rawLines: string[];
@@ -90,6 +90,14 @@ export const createSyslogProcess = ({
     }
   );
 
+const getCrashReportFilterName = (
+  processNames: string[],
+  bundleId: string
+) => processNames.find((name) => name !== bundleId) ?? processNames[0];
+
+const isCrashReportFile = (entry: string) =>
+  entry.endsWith('.crash') || entry.endsWith('.ips');
+
 export const collectCrashReports = async ({
   targetId,
   bundleId,
@@ -103,22 +111,23 @@ export const collectCrashReports = async ({
   crashArtifactWriter?: CrashArtifactWriter;
   minOccurredAt?: number;
 }): Promise<IosCrashArtifact[]> => {
-  const crashRootDir = fs.mkdtempSync(join(tmpdir(), 'rn-harness-ios-crashes-'));
-  const crashDir = join(crashRootDir, 'reports');
-  fs.mkdirSync(crashDir, { recursive: true });
+  const crashDir = fs.mkdtempSync(join(tmpdir(), 'rn-harness-ios-crashes-'));
 
   try {
+    const filterName = getCrashReportFilterName(processNames, bundleId);
+
     await spawn('idevicecrashreport', [
       '-u',
       targetId,
       '--keep',
       '--extract',
+      ...(filterName ? ['--filter', filterName] : []),
       crashDir,
     ]);
 
     const reportPaths = fs
       .readdirSync(crashDir)
-      .filter((entry) => entry.endsWith('.crash'))
+      .filter(isCrashReportFile)
       .map((entry) => join(crashDir, entry));
 
     return reportPaths
@@ -150,17 +159,17 @@ export const collectCrashReports = async ({
 
         if (!crashArtifactWriter) {
           return {
-            artifactType: 'ios-libimobiledevice-crash-report',
+            artifactType: 'ios-crash-report',
             artifactPath: path,
             ...report,
           };
         }
 
         return {
-          artifactType: 'ios-libimobiledevice-crash-report',
+          artifactType: 'ios-crash-report',
           ...report,
           artifactPath: crashArtifactWriter.persistArtifact({
-            artifactKind: 'ios-libimobiledevice-crash-report',
+            artifactKind: 'ios-crash-report',
             source: {
               kind: 'file',
               path,

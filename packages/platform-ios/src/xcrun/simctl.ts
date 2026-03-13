@@ -29,7 +29,7 @@ export type AppleAppInfo = {
 };
 
 export type AppleSimulatorCrashReport = {
-  artifactType: 'ios-simulator-crash-report';
+  artifactType: 'ios-crash-report';
   artifactPath: string;
   occurredAt: number;
   summary?: string;
@@ -103,17 +103,17 @@ export const collectCrashReports = async ({
     .map(({ path, report }) => {
       if (!crashArtifactWriter) {
         return {
-          artifactType: 'ios-simulator-crash-report',
+          artifactType: 'ios-crash-report',
           artifactPath: path,
           ...report,
         };
       }
 
       return {
-        artifactType: 'ios-simulator-crash-report',
+        artifactType: 'ios-crash-report',
         ...report,
         artifactPath: crashArtifactWriter.persistArtifact({
-          artifactKind: 'ios-simulator-crash-report',
+          artifactKind: 'ios-crash-report',
           source: {
             kind: 'file',
             path,

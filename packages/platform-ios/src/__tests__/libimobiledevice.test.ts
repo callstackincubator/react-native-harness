@@ -40,16 +40,19 @@ describe('assertLibimobiledeviceInstalled', () => {
 
 describe('collectCrashReports', () => {
   const workDir = fs.mkdtempSync(join(tmpdir(), 'rn-harness-ios-crash-tests-'));
+  const artifactRoot = fs.mkdtempSync(join(tmpdir(), 'rn-harness-ios-crash-artifacts-'));
 
   afterEach(() => {
     vi.restoreAllMocks();
     fs.rmSync(workDir, { recursive: true, force: true });
     fs.mkdirSync(workDir, { recursive: true });
+    fs.rmSync(artifactRoot, { recursive: true, force: true });
+    fs.mkdirSync(artifactRoot, { recursive: true });
   });
 
   it('extracts matching crash reports with artifact metadata', async () => {
     vi.spyOn(fs, 'mkdtempSync').mockReturnValue(workDir);
-    vi.spyOn(tools, 'spawn').mockImplementation(
+    const spawnSpy = vi.spyOn(tools, 'spawn').mockImplementation(
       (async (file: string, args?: readonly string[]) => {
         if (file === 'idevicecrashreport') {
           const targetDir = args?.[args.length - 1];
@@ -86,9 +89,18 @@ describe('collectCrashReports', () => {
       processNames: ['HarnessPlayground'],
     });
 
+    expect(spawnSpy).toHaveBeenCalledWith('idevicecrashreport', [
+      '-u',
+      'device-udid',
+      '--keep',
+      '--extract',
+      '--filter',
+      'HarnessPlayground',
+      expect.any(String),
+    ]);
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({
-      artifactType: 'ios-libimobiledevice-crash-report',
+      artifactType: 'ios-crash-report',
       processName: 'HarnessPlayground',
       pid: 1234,
       signal: 'SIGABRT',
@@ -97,6 +109,88 @@ describe('collectCrashReports', () => {
         '0   HarnessPlayground                  0x0000000100000000 AppDelegate.crashIfRequested() + 20',
         '1   HarnessPlayground                  0x0000000100000014 AppDelegate.application(_:didFinishLaunchingWithOptions:) + 40',
       ],
+    });
+  });
+
+  it('filters by executable name rather than bundle id', async () => {
+    vi.spyOn(fs, 'mkdtempSync').mockReturnValue(workDir);
+    const spawnSpy = vi.spyOn(tools, 'spawn').mockResolvedValue({
+      stdout: '',
+    } as Awaited<ReturnType<typeof tools.spawn>>);
+
+    await collectCrashReports({
+      targetId: 'device-udid',
+      bundleId: 'com.harnessplayground',
+      processNames: ['com.harnessplayground', 'HarnessPlayground'],
+    });
+
+    expect(spawnSpy).toHaveBeenCalledWith('idevicecrashreport', [
+      '-u',
+      'device-udid',
+      '--keep',
+      '--extract',
+      '--filter',
+      'HarnessPlayground',
+      expect.any(String),
+    ]);
+  });
+
+  it('parses .ips crash reports from the device', async () => {
+    vi.spyOn(fs, 'mkdtempSync').mockReturnValue(workDir);
+    vi.spyOn(tools, 'spawn').mockImplementation(
+      (async (file: string, args?: readonly string[]) => {
+        if (file === 'idevicecrashreport') {
+          const targetDir = args?.[args.length - 1];
+
+          if (!targetDir) {
+            throw new Error('missing target dir');
+          }
+
+          const header = JSON.stringify({
+            app_name: 'HarnessPlayground',
+            bundleID: 'com.harnessplayground',
+          });
+          const body = JSON.stringify({
+            pid: 21675,
+            procName: 'HarnessPlayground',
+            faultingThread: 0,
+            exception: { type: 'EXC_BREAKPOINT', signal: 'SIGTRAP' },
+            threads: [
+              {
+                frames: [
+                  { imageIndex: 0, symbol: 'AppDelegate.crashIfRequested()', symbolLocation: 20 },
+                ],
+              },
+            ],
+            usedImages: [{ name: 'HarnessPlayground' }],
+          });
+
+          fs.writeFileSync(
+            join(targetDir, 'HarnessPlayground-2026-03-12-113508.ips'),
+            `${header}\n${body}`
+          );
+        }
+
+        return {
+          stdout: '',
+        } as Awaited<ReturnType<typeof tools.spawn>>;
+      }) as typeof tools.spawn
+    );
+
+    const reports = await collectCrashReports({
+      targetId: 'device-udid',
+      bundleId: 'com.harnessplayground',
+      processNames: ['HarnessPlayground'],
+    });
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({
+      artifactType: 'ios-crash-report',
+      processName: 'HarnessPlayground',
+      pid: 21675,
+      signal: 'SIGTRAP',
+      exceptionType: 'EXC_BREAKPOINT',
+      stackTrace: ['0 AppDelegate.crashIfRequested() (+ 20)'],
     });
   });
 
@@ -126,11 +220,11 @@ describe('collectCrashReports', () => {
         } as Awaited<ReturnType<typeof tools.spawn>>;
       }) as typeof tools.spawn
     );
-    const artifactRoot = join(workDir, '.harness', 'crash-reports');
+    const crashReportDir = join(artifactRoot, '.harness', 'crash-reports');
     const writer = createCrashArtifactWriter({
       runnerName: 'ios-device',
       platformId: 'ios',
-      rootDir: artifactRoot,
+      rootDir: crashReportDir,
       runTimestamp: '2026-03-12T11-35-08-000Z',
     });
 
@@ -143,9 +237,7 @@ describe('collectCrashReports', () => {
 
     expect(reports[0]?.artifactPath).toContain('/.harness/crash-reports/');
     expect(fs.existsSync(reports[0]!.artifactPath)).toBe(true);
-    expect(fs.existsSync(join(workDir, 'HarnessPlayground-2026-03-12-113508.crash'))).toBe(
-      false
-    );
+    expect(fs.existsSync(workDir)).toBe(false);
   });
 
   it('returns an empty list when no matching crash reports are found', async () => {

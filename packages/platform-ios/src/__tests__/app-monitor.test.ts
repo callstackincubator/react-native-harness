@@ -56,7 +56,25 @@ describe('createUnifiedLogEvent', () => {
     });
   });
 
-  it('detects Swift fatal errors as crash signals', () => {
+  it('detects Swift fatal errors from idevicesyslog with library-qualified process name', () => {
+    const event = createUnifiedLogEvent({
+      line: 'Mar 13 12:27:13.724837 HarnessPlayground(libswiftCore.dylib)[21675] <Notice>: HarnessPlayground/AppDelegate.swift:31: Fatal error: Intentional pre-RN startup crash',
+      processNames: ['HarnessPlayground', 'com.harnessplayground'],
+    });
+
+    expect(event).toMatchObject({
+      type: 'possible_crash',
+      source: 'logs',
+      isConfirmed: true,
+      crashDetails: {
+        source: 'logs',
+        processName: 'HarnessPlayground',
+        pid: 21675,
+      },
+    });
+  });
+
+  it('detects Swift fatal errors from simulator logs', () => {
     const event = createUnifiedLogEvent({
       line: '2026-03-13 10:29:13.868 Df HarnessPlayground[34784:8f92b3] (libswiftCore.dylib) HarnessPlayground/AppDelegate.swift:31: Fatal error: Intentional pre-RN startup crash',
       processNames: ['HarnessPlayground', 'com.harnessplayground'],
@@ -201,10 +219,10 @@ describe('createIosSimulatorAppMonitor', () => {
     vi.spyOn(simctl, 'collectCrashReports').mockImplementation(
       async ({ crashArtifactWriter }) => [
         {
-          artifactType: 'ios-simulator-crash-report',
+          artifactType: 'ios-crash-report',
           artifactPath:
             crashArtifactWriter?.persistArtifact({
-              artifactKind: 'ios-simulator-crash-report',
+              artifactKind: 'ios-crash-report',
               source: {
                 kind: 'file',
                 path: sourcePath,
@@ -251,7 +269,7 @@ describe('createIosSimulatorAppMonitor', () => {
     await monitor.stop();
 
     expect(details).toMatchObject({
-      artifactType: 'ios-simulator-crash-report',
+      artifactType: 'ios-crash-report',
       summary: 'simulator crash report',
     });
     expect(details?.artifactPath).toContain('/.harness/crash-reports/');
@@ -285,7 +303,7 @@ describe('createIosSimulatorAppMonitor', () => {
 
       return [
         {
-          artifactType: 'ios-simulator-crash-report',
+          artifactType: 'ios-crash-report',
           artifactPath: '/tmp/HarnessPlayground.ips',
           occurredAt: Date.now(),
           processName: 'HarnessPlayground',
@@ -315,7 +333,7 @@ describe('createIosSimulatorAppMonitor', () => {
 
     expect(calls).toBe(2);
     expect(details).toMatchObject({
-      artifactType: 'ios-simulator-crash-report',
+      artifactType: 'ios-crash-report',
       stackTrace: ['0 AppDelegate.crashIfRequested() (AppDelegate.swift:31)'],
     });
   });
@@ -402,16 +420,64 @@ describe('createIosDeviceAppMonitor', () => {
 
     const monitor = createIosDeviceAppMonitor({
       deviceId: 'device-udid',
+      libimobiledeviceUdid: 'hardware-udid',
       bundleId: 'com.harnessplayground',
     });
 
     await monitor.start();
     await monitor.stop();
 
-    expect(targetSpy).toHaveBeenCalledWith('device-udid');
+    expect(targetSpy).toHaveBeenCalledWith('hardware-udid');
     expect(syslogSpy).toHaveBeenCalledWith({
-      targetId: 'device-udid',
+      targetId: 'hardware-udid',
       processNames: ['com.harnessplayground', 'HarnessPlayground'],
+    });
+  });
+
+  it('detects idevicesyslog crash lines with library-qualified process names', async () => {
+    vi.spyOn(libimobiledevice, 'assertLibimobiledeviceTargetAvailable').mockResolvedValue(
+      undefined
+    );
+    vi.spyOn(libimobiledevice, 'createSyslogProcess').mockReturnValue(
+      createStreamingSubprocess([
+        {
+          line: 'Mar 13 12:27:13.724837 HarnessPlayground(libswiftCore.dylib)[21675] <Notice>: HarnessPlayground/AppDelegate.swift:31: Fatal error: Intentional pre-RN startup crash',
+        },
+      ])
+    );
+    vi.spyOn(libimobiledevice, 'collectCrashReports').mockResolvedValue([]);
+    vi.spyOn(devicectl, 'getAppInfo').mockResolvedValue({
+      bundleIdentifier: 'com.harnessplayground',
+      name: 'HarnessPlayground',
+      version: '1.0',
+      url: '/private/var/HarnessPlayground.app',
+    });
+
+    const events: Array<{ type: string }> = [];
+    const monitor = createIosDeviceAppMonitor({
+      deviceId: 'device-udid',
+      libimobiledeviceUdid: 'hardware-udid',
+      bundleId: 'com.harnessplayground',
+    });
+    monitor.addListener((event) => {
+      events.push(event);
+    });
+
+    await monitor.start();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const details = await monitor.getCrashDetails({
+      pid: 21675,
+      occurredAt: Date.now(),
+    });
+
+    await monitor.stop();
+
+    expect(events.some((event) => event.type === 'possible_crash')).toBe(true);
+    expect(details).toMatchObject({
+      source: 'logs',
+      processName: 'HarnessPlayground',
+      pid: 21675,
     });
   });
 
@@ -431,10 +497,10 @@ describe('createIosDeviceAppMonitor', () => {
     vi.spyOn(libimobiledevice, 'collectCrashReports').mockImplementation(
       async ({ crashArtifactWriter }) => [
         {
-          artifactType: 'ios-libimobiledevice-crash-report',
+          artifactType: 'ios-crash-report',
           artifactPath:
             crashArtifactWriter?.persistArtifact({
-              artifactKind: 'ios-libimobiledevice-crash-report',
+              artifactKind: 'ios-crash-report',
               source: {
                 kind: 'file',
                 path: sourcePath,
@@ -459,6 +525,7 @@ describe('createIosDeviceAppMonitor', () => {
 
     const monitor = createIosDeviceAppMonitor({
       deviceId: 'device-udid',
+      libimobiledeviceUdid: 'hardware-udid',
       bundleId: 'com.harnessplayground',
       crashArtifactWriter: createCrashArtifactWriter({
         runnerName: 'ios-device',
@@ -479,7 +546,7 @@ describe('createIosDeviceAppMonitor', () => {
     await monitor.stop();
 
     expect(details).toMatchObject({
-      artifactType: 'ios-libimobiledevice-crash-report',
+      artifactType: 'ios-crash-report',
       summary: 'full crash report',
     });
     expect(details?.artifactPath).toContain('/.harness/crash-reports/');
