@@ -236,6 +236,7 @@ describe('collectCrashReports', () => {
     });
 
     expect(reports[0]?.artifactPath).toContain('/.harness/crash-reports/');
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(fs.existsSync(reports[0]!.artifactPath)).toBe(true);
     expect(fs.existsSync(workDir)).toBe(false);
   });

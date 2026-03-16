@@ -1,5 +1,5 @@
 import { describe, test, render, expect } from 'react-native-harness';
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
 import { screen } from '@react-native-harness/ui';
 
 describe('Screenshot', () => {

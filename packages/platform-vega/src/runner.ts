@@ -101,6 +101,7 @@ const getVegaRunner = async (
     isAppRunning: async () => {
       return await kepler.isAppRunning(deviceId, bundleId);
     },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     createAppMonitor: (_options?: CreateAppMonitorOptions) =>
       createPollingAppMonitor({
         interval: 250,

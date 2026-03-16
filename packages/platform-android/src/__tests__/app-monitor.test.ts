@@ -11,6 +11,7 @@ const createMockSubprocess = (): tools.Subprocess =>
     nodeChildProcess: Promise.resolve({
       kill: vi.fn(),
     }),
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     [Symbol.asyncIterator]: async function* () {},
   }) as unknown as tools.Subprocess;
 
@@ -216,6 +217,7 @@ describe('createAndroidLogEvent', () => {
     await monitor.stop();
 
     expect(details?.artifactPath).toContain('/.harness/crash-reports/');
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(fs.readFileSync(details!.artifactPath!, 'utf8')).toContain(
       'RuntimeException: boom'
     );

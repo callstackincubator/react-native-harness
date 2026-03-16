@@ -442,6 +442,7 @@ export const createIosSimulatorAppMonitor = ({
       await new Promise((resolve) =>
         setTimeout(resolve, CRASH_ARTIFACT_POLL_INTERVAL_MS)
       );
+      // eslint-disable-next-line no-constant-condition
     } while (true);
   };
 
@@ -582,6 +583,7 @@ export const createIosDeviceAppMonitor = ({
       await new Promise((resolve) =>
         setTimeout(resolve, CRASH_ARTIFACT_POLL_INTERVAL_MS)
       );
+      // eslint-disable-next-line no-constant-condition
     } while (true);
   };
 

@@ -19,7 +19,6 @@ describe('Hooks', () => {
   let suiteSetupComplete = false;
   let testCounter = 0;
   let beforeEachCounter = 0;
-  let afterEachCounter = 0;
 
   beforeAll(() => {
     // This should run once before all tests in this suite
@@ -42,7 +41,6 @@ describe('Hooks', () => {
 
   afterEach(() => {
     // This should run after each individual test
-    afterEachCounter++;
     executionLog.push(`afterEach: Test ${testCounter} cleanup`);
   });
 
@@ -114,6 +112,7 @@ describe('Hooks', () => {
   });
 
   describe('State management', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let localState: Record<string, any> = {};
 
     beforeEach(() => {
@@ -156,6 +155,7 @@ describe('Hooks', () => {
 
   describe('Async operations', () => {
     let asyncSetupComplete = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let asyncData: any = null;
 
     beforeAll(async () => {

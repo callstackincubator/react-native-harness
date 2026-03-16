@@ -63,6 +63,7 @@ describe('Module mocking', () => {
       const mockedPlatform = {
         OS: 'mockOS',
         Version: 999,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         select: fn().mockImplementation((options: Record<string, any>) => {
           return options.mockOS || options.default;
         }),

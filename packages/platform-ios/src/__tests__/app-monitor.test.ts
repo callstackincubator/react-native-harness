@@ -273,6 +273,7 @@ describe('createIosSimulatorAppMonitor', () => {
       summary: 'simulator crash report',
     });
     expect(details?.artifactPath).toContain('/.harness/crash-reports/');
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(fs.existsSync(details!.artifactPath!)).toBe(true);
   });
 
@@ -383,6 +384,7 @@ describe('createIosSimulatorAppMonitor', () => {
     const kill = vi.fn();
     vi.spyOn(tools, 'spawn').mockReturnValue({
       nodeChildProcess: Promise.resolve({ kill }),
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
       [Symbol.asyncIterator]: async function* () {},
     } as unknown as Subprocess);
     vi.spyOn(simctl, 'getAppInfo').mockResolvedValue(null);
@@ -550,6 +552,7 @@ describe('createIosDeviceAppMonitor', () => {
       summary: 'full crash report',
     });
     expect(details?.artifactPath).toContain('/.harness/crash-reports/');
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     expect(fs.existsSync(details!.artifactPath!)).toBe(true);
   });
 });

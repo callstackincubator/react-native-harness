@@ -12,7 +12,7 @@ import {
 
 const getAppleRunner = async (
   config: ApplePlatformConfig,
-  harnessConfig: Config
+  _harnessConfig: Config
 ): Promise<HarnessPlatformRunner> => {
   const parsedConfig = ApplePlatformConfigSchema.parse(config);
 

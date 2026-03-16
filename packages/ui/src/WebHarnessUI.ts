@@ -20,13 +20,18 @@ if (!window.__RN_HARNESS_VIEW_REGISTRY__) {
 
 let nextId = 1;
 
+interface HarnessElement extends Element {
+  __harnessId?: string;
+}
+
 const getElementViewInfo = (element: Element): ViewInfo => {
   const rect = element.getBoundingClientRect();
+  const harnessElement = element as HarnessElement;
 
-  let nativeId = (element as any).__harnessId;
+  let nativeId = harnessElement.__harnessId;
   if (!nativeId) {
     nativeId = `view_${nextId++}`;
-    (element as any).__harnessId = nativeId;
+    harnessElement.__harnessId = nativeId;
     window.__RN_HARNESS_VIEW_REGISTRY__.set(nativeId, element);
   }
 
