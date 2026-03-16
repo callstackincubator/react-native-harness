@@ -225,6 +225,18 @@ If you're using frameworks like **Expo** or **Rock**, you'll benefit from sophis
 
 This makes caching much more reliable and reduces the need for manual cache management.
 
+## Metro Networking in CI
+
+When running in CI (i.e. the `CI` environment variable is set), React Native Harness automatically binds the Metro server to `0.0.0.0` (all network interfaces) instead of the default `localhost`. This works around intermittent connectivity issues on macOS runners where the iOS Simulator cannot reach Metro when it is bound to `localhost` only.
+
+If you need Metro to bind to a specific interface, set the `host` option in your config — it always takes precedence over the CI default:
+
+```js
+const config = {
+  host: '192.168.1.100',
+};
+```
+
 ## Adapting for Your Project
 
 ### React Native Community CLI Projects

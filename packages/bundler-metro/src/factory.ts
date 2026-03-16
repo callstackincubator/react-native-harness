@@ -66,9 +66,16 @@ export const getMetroInstance = async (
     .use('/status', getStatusMiddleware(projectRoot));
 
   const ready = waitForBundler(reporter, abortSignal);
-  const metroBindHost = harnessConfig.host?.trim();
+  const metroBindHost =
+    harnessConfig.host?.trim() ??
+    (process.env.CI ? '0.0.0.0' : undefined);
+
+  // In CI, bind to all interfaces to avoid connectivity issues on macOS runners
+  // where Metro is intermittently unreachable from the iOS simulator when bound
+  // to localhost only.
   if (metroBindHost) {
-    logger.debug(`Binding Metro server to host ${metroBindHost}`);
+    const source = harnessConfig.host?.trim() ? 'config' : 'CI default';
+    logger.debug(`Binding Metro server to host ${metroBindHost} (${source})`);
   }
 
   const maybeServer = await Metro.runServer(config, {
