@@ -29,7 +29,7 @@ Both actions automatically:
 - Set up and configure the emulator/simulator based on your config
 - Install your app
 - Run the tests
-- Upload persisted crash artifacts from `.harness/crash-reports` when the run produces them
+- Upload crash reports from `.harness/crash-reports/` as workflow artifacts whenever a run produces them
 
 The actions read your `rn-harness.config.mjs` file to determine the device configuration, so you don't need to hardcode emulator settings in your workflow.
 
@@ -43,9 +43,15 @@ Both actions accept the following inputs:
 
 ## Crash Artifacts
 
-When Harness resolves a crash artifact, it persists a copy under `.harness/crash-reports/` in the current working directory. Filenames include the Harness run timestamp and selected runner name so CI downloads stay easy to correlate.
+Harness monitors native crashes throughout the entire test lifecycle — including during **app startup**, before any test code runs. When the app crashes on launch (or at any point during the run), Harness captures the crash report and attaches a parsed stack trace to the failing test or startup error output.
 
-The official GitHub Actions upload `.harness/crash-reports/**/*` automatically with `if-no-files-found: ignore`, so crash reports are available as workflow artifacts whenever a run produces them.
+Crash reports are persisted under `.harness/crash-reports/` in the current working directory. Filenames include the Harness run timestamp and selected runner name so CI downloads are easy to correlate with a specific workflow run.
+
+The official GitHub Actions upload `.harness/crash-reports/**/*` automatically (with `if-no-files-found: ignore`), so crash reports appear as downloadable workflow artifacts whenever a run produces them — no extra configuration needed.
+
+:::tip
+Startup crashes are treated as a first-class failure. If your app crashes before the bridge connects, Harness immediately reports it with the native crash details rather than timing out.
+:::
 
 ## GitHub Actions Example
 
