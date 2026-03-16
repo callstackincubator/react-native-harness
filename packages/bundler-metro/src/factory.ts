@@ -75,6 +75,7 @@ export const getMetroInstance = async (
     waitForBundler: true,
     unstable_extraMiddleware: [middleware],
     ...(metroBindHost ? { host: metroBindHost } : {}),
+    watch: process.env.CI ? false : undefined,
   });
 
   // Metro <0.83 returns the server directly, while 0.83+ returns an object with the server as a property.
