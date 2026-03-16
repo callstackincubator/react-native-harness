@@ -400,8 +400,12 @@ export const createIosSimulatorAppMonitor = ({
   ): Promise<AppCrashDetails | null> => {
     let fallbackArtifact: AppCrashDetails | null = null;
     const deadline = Date.now() + CRASH_ARTIFACT_WAIT_TIMEOUT_MS;
+    let pollCount = 0;
 
     do {
+      pollCount += 1;
+      logger.debug(`[app-monitor] waitForCrashArtifact poll #${pollCount}`, { pid: options.pid, processName: options.processName });
+
       const collectedArtifacts = await simctl.collectCrashReports({
         udid,
         bundleId,
@@ -410,6 +414,8 @@ export const createIosSimulatorAppMonitor = ({
         minOccurredAt: monitorStartedAt,
       });
 
+      logger.debug(`[app-monitor] poll #${pollCount}: collected ${collectedArtifacts.length} crash artifact(s) from DiagnosticReports`);
+
       for (const artifact of collectedArtifacts) {
         base.recordCrashArtifact(artifact);
       }
@@ -417,14 +423,19 @@ export const createIosSimulatorAppMonitor = ({
       const artifact = base.getLatestCrashArtifact(options);
 
       if (artifact) {
+        logger.debug(`[app-monitor] poll #${pollCount}: found artifact`, { artifactType: artifact.artifactType, artifactPath: artifact.artifactPath, pid: artifact.pid, processName: artifact.processName });
+
         if (artifact.artifactType === 'ios-crash-report') {
           return artifact;
         }
 
         fallbackArtifact = artifact;
+      } else {
+        logger.debug(`[app-monitor] poll #${pollCount}: no matching artifact yet`);
       }
 
       if (Date.now() >= deadline) {
+        logger.debug(`[app-monitor] waitForCrashArtifact deadline reached, returning ${fallbackArtifact ? 'fallback log-based artifact' : 'null'}`);
         return fallbackArtifact;
       }
 
@@ -438,6 +449,7 @@ export const createIosSimulatorAppMonitor = ({
     startLogMonitor,
     stopLogMonitor,
     getCrashDetails: async (options) => {
+      logger.debug('[app-monitor] getCrashDetails called (simulator)', { pid: options.pid, processName: options.processName });
       await new Promise((resolve) =>
         setTimeout(resolve, CRASH_ARTIFACT_SETTLE_DELAY_MS)
       );
@@ -445,10 +457,12 @@ export const createIosSimulatorAppMonitor = ({
       const artifact = await waitForCrashArtifact(options);
 
       if (!artifact) {
+        logger.debug('[app-monitor] getCrashDetails: no artifact found, returning null');
         return null;
       }
 
       if (artifact.artifactType === 'ios-crash-report') {
+        logger.debug('[app-monitor] getCrashDetails: returning ios-crash-report artifact', { artifactPath: artifact.artifactPath });
         return artifact;
       }
 
@@ -456,6 +470,8 @@ export const createIosSimulatorAppMonitor = ({
         recentLogLines: base.getRecentLogLines(),
         occurredAt: options.occurredAt,
       });
+
+      logger.debug(`[app-monitor] getCrashDetails: returning log-based artifact (${relatedLogLines.length} related log lines)`);
 
       return {
         ...artifact,

@@ -2,7 +2,7 @@ import {
   type AppleAppLaunchOptions,
   type CrashArtifactWriter,
 } from '@react-native-harness/platforms';
-import { escapeRegExp, spawn, spawnAndForget } from '@react-native-harness/tools';
+import { logger, spawn, spawnAndForget } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -46,12 +46,12 @@ const getDiagnosticReportsDir = () =>
 
 export const collectCrashReports = async ({
   udid,
-  bundleId,
   processNames,
   crashArtifactWriter,
   minOccurredAt,
 }: {
   udid: string;
+  /** Kept for API compatibility; no longer used for content-based filtering. */
   bundleId: string;
   processNames: string[];
   crashArtifactWriter?: CrashArtifactWriter;
@@ -59,68 +59,87 @@ export const collectCrashReports = async ({
 }): Promise<AppleSimulatorCrashReport[]> => {
   const diagnosticReportsDir = getDiagnosticReportsDir();
 
+  logger.debug('[simctl] collectCrashReports', { udid, processNames, minOccurredAt, diagnosticReportsDir });
+
   if (!fs.existsSync(diagnosticReportsDir)) {
+    logger.debug('[simctl] DiagnosticReports directory does not exist, skipping');
     return [];
   }
 
-  return fs
-    .readdirSync(diagnosticReportsDir)
-    .filter((entry) => entry.endsWith('.ips'))
-    .map((entry) => join(diagnosticReportsDir, entry))
-    .map((path) => ({
-      path,
-      contents: fs.readFileSync(path, 'utf8'),
-    }))
-    .filter(({ path, contents }) => {
-      if (!contents.includes(bundleId) && !path.includes(bundleId)) {
-        const matchesProcessName = processNames.some((processName) =>
-          new RegExp(`\\b${escapeRegExp(processName)}\\b`).test(contents)
-        );
+  const allEntries = fs.readdirSync(diagnosticReportsDir);
+  const ipsEntries = allEntries.filter((entry) => entry.endsWith('.ips'));
+  logger.debug(`[simctl] Found ${allEntries.length} total entries, ${ipsEntries.length} .ips files in DiagnosticReports`);
 
-        if (!matchesProcessName) {
-          return false;
-        }
-      }
+  // Crash files are named {ProcessName}-YYYY-MM-DD-HHMMSS.ips, so filter by filename prefix.
+  const matchingEntries = ipsEntries.filter((entry) =>
+    processNames.some((name) => entry.startsWith(`${name}-`))
+  );
+  logger.debug(`[simctl] ${matchingEntries.length} file(s) match process names by filename prefix`);
 
-      return contents.includes(udid);
-    })
-    .map(({ path, contents }) => ({
-      path,
-      report: iosCrashParser.parse({
-        path,
-        contents,
-      }),
-    }))
-    .filter(
-      (
-        entry
-      ): entry is { path: string; report: Omit<AppleSimulatorCrashReport, 'artifactPath' | 'artifactType'> } =>
-        entry.report !== null
-    )
-    .filter(
-      ({ report }) => minOccurredAt === undefined || report.occurredAt >= minOccurredAt
-    )
-    .map(({ path, report }) => {
-      if (!crashArtifactWriter) {
-        return {
-          artifactType: 'ios-crash-report',
-          artifactPath: path,
-          ...report,
-        };
-      }
+  type CrashCandidate = AppleSimulatorCrashReport & { contents: string };
+  const candidates: CrashCandidate[] = [];
 
-      return {
-        artifactType: 'ios-crash-report',
-        ...report,
-        artifactPath: crashArtifactWriter.persistArtifact({
-          artifactKind: 'ios-crash-report',
-          source: {
-            kind: 'file',
-            path,
-          },
-        }),
-      };
+  for (const entry of matchingEntries) {
+    const path = join(diagnosticReportsDir, entry);
+    const contents = fs.readFileSync(path, 'utf8');
+    const report = iosCrashParser.parse({ path, contents });
+
+    if (!report) {
+      logger.debug(`[simctl] Skipping ${entry}: failed to parse crash report`);
+      continue;
+    }
+
+    if (minOccurredAt !== undefined && report.occurredAt < minOccurredAt) {
+      logger.debug(`[simctl] Skipping ${entry}: occurredAt ${report.occurredAt} is older than minOccurredAt ${minOccurredAt}`);
+      continue;
+    }
+
+    logger.debug(`[simctl] Candidate crash report: ${entry}`, { occurredAt: report.occurredAt, processName: report.processName, pid: report.pid });
+    candidates.push({
+      ...report,
+      rawLines: report.rawLines ?? [],
+      artifactPath: path,
+      artifactType: 'ios-crash-report',
+      contents,
     });
+  }
+
+  if (candidates.length === 0) {
+    logger.debug('[simctl] No candidates after filtering');
+    return [];
+  }
+
+  // Walk from latest to oldest and return the first report that belongs to this simulator.
+  const sorted = candidates.sort((a, b) => b.occurredAt - a.occurredAt);
+
+  for (const candidate of sorted) {
+    if (!candidate.contents.includes(udid)) {
+      logger.debug(`[simctl] Skipping candidate (occurredAt=${candidate.occurredAt}): does not contain udid ${udid}`);
+      continue;
+    }
+
+    logger.debug(`[simctl] Matched crash report for simulator`, { occurredAt: candidate.occurredAt, processName: candidate.processName, pid: candidate.pid });
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { contents: _contents, ...report } = candidate;
+
+    if (!crashArtifactWriter) {
+      return [report];
+    }
+
+    const artifactPath = crashArtifactWriter.persistArtifact({
+      artifactKind: 'ios-crash-report',
+      source: {
+        kind: 'file',
+        path: report.artifactPath,
+      },
+    });
+    logger.debug(`[simctl] Persisted crash artifact to: ${artifactPath}`);
+    return [{ ...report, artifactPath }];
+  }
+
+  logger.debug('[simctl] No candidates matched the simulator udid');
+  return [];
 };
 
 export const getAppInfo = async (
