@@ -14,8 +14,8 @@ import * as libimobiledevice from './libimobiledevice.js';
 const MAX_RECENT_LOG_LINES = 200;
 const MAX_RECENT_CRASH_ARTIFACTS = 10;
 const CRASH_ARTIFACT_SETTLE_DELAY_MS = 100;
-const CRASH_ARTIFACT_WAIT_TIMEOUT_MS = 2000;
-const CRASH_ARTIFACT_POLL_INTERVAL_MS = 100;
+const CRASH_ARTIFACT_WAIT_TIMEOUT_MS = 10000;
+const CRASH_ARTIFACT_POLL_INTERVAL_MS = 1000;
 
 type TimedLogLine = {
   line: string;
@@ -169,8 +169,8 @@ const createAppMonitorBase = () => {
       : [];
     const matchingByProcess = options.processName
       ? recentCrashArtifacts.filter(
-          (artifact) => artifact.processName === options.processName
-        )
+        (artifact) => artifact.processName === options.processName
+      )
       : [];
     const candidates =
       matchingByPid.length > 0
