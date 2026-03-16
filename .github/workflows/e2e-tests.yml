@@ -323,7 +323,7 @@ jobs:
           app: android/app/build/outputs/apk/debug/app-debug.apk
           runner: android-crash-pre-rn
           projectRoot: apps/playground
-          harnessArgs: --testPathPattern smoke
+          harnessArgs: --testPathPatterns smoke
 
       - name: Verify crash was detected
         shell: bash
@@ -434,7 +434,7 @@ jobs:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           runner: ios-crash-pre-rn
           projectRoot: apps/playground
-          harnessArgs: --testPathPattern smoke
+          harnessArgs: --testPathPatterns smoke
 
       - name: Verify crash was detected
         shell: bash
