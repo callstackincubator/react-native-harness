@@ -117,6 +117,7 @@ export default {
   webSocketPort: 3002,
 
   resetEnvironmentBetweenTestFiles: true,
+  unstable__enableMetroCache: true,
   unstable__skipAlreadyIncludedModules: false,
   forwardClientLogs: true,
   disableViewFlattening: true,
