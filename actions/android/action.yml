@@ -117,7 +117,7 @@ runs:
         elif [ -f "yarn.lock" ]; then
           echo "manager=yarn" >> $GITHUB_OUTPUT
           echo "runner=yarn " >> $GITHUB_OUTPUT
-        elif [ -f "bun.lockb" ]; then
+        elif [ -f "bun.lock" ] || [ -f "bun.lockb" ]; then
           echo "manager=bun" >> $GITHUB_OUTPUT
           echo "runner=bunx " >> $GITHUB_OUTPUT
         elif [ -f "deno.lock" ]; then

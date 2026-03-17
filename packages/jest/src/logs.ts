@@ -31,6 +31,10 @@ export const logMetroPrewarmCompleted = (runner: HarnessPlatform): void => {
   );
 };
 
+export const logMetroCacheReused = (runner: HarnessPlatform): void => {
+  log(`${TAG} Reusing Metro cache for ${chalk.bold(runner.name)}\n`);
+};
+
 export const getErrorMessage = (error: HarnessError): string => {
   return `${ERROR_TAG} ${error.message}\n`;
 };

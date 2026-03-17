@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { Config as HarnessConfig } from '@react-native-harness/config';
+import { getHarnessManifestPath } from './paths';
 
 const getManifestContent = (harnessConfig: HarnessConfig): string => {
   return `global.RN_HARNESS = { 
@@ -12,10 +13,7 @@ const getManifestContent = (harnessConfig: HarnessConfig): string => {
 
 export const getHarnessManifest = (harnessConfig: HarnessConfig): string => {
   const manifestContent = getManifestContent(harnessConfig);
-  const manifestPath = path.resolve(
-    process.cwd(),
-    'node_modules/.cache/rn-harness/manifest.js'
-  );
+  const manifestPath = getHarnessManifestPath();
 
   fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
   fs.writeFileSync(manifestPath, manifestContent);

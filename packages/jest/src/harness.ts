@@ -16,6 +16,7 @@ import {
   getMetroInstance,
   prewarmMetroBundle,
 } from '@react-native-harness/bundler-metro';
+import { isMetroCacheReusable } from '@react-native-harness/metro';
 import { createCrashArtifactWriter } from '@react-native-harness/tools';
 import { InitializationTimeoutError } from './errors.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
@@ -24,7 +25,7 @@ import {
   type CrashSupervisor,
 } from './crash-supervisor.js';
 import { createClientLogListener } from './client-log-handler.js';
-import { logMetroPrewarmCompleted } from './logs.js';
+import { logMetroCacheReused, logMetroPrewarmCompleted } from './logs.js';
 
 export type HarnessRunTestsOptions = Exclude<TestExecutionOptions, 'platform'>;
 
@@ -38,6 +39,19 @@ export type Harness = {
   restart: (testFilePath?: string) => Promise<void>;
   dispose: () => Promise<void>;
   crashSupervisor: CrashSupervisor;
+};
+
+export const maybeLogMetroCacheReuse = (
+  config: HarnessConfig,
+  platform: HarnessPlatform,
+  projectRoot: string
+): void => {
+  if (
+    config.unstable__enableMetroCache &&
+    isMetroCacheReusable(projectRoot)
+  ) {
+    logMetroCacheReused(platform);
+  }
 };
 
 export const waitForAppReady = async (options: {
@@ -105,6 +119,7 @@ const getHarnessInternal = async (
   const context: HarnessContext = {
     platform,
   };
+  maybeLogMetroCacheReuse(config, platform, projectRoot);
 
   const [metroInstance, platformInstance, serverBridge] = await Promise.all([
     getMetroInstance({ projectRoot, harnessConfig: config }, signal),
