@@ -30,6 +30,7 @@ jobs:
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android')) }}
     env:
       HARNESS_DEBUG: true
+      DEBUG: 'Metro:*'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -110,6 +111,8 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios')) }}
+    env:
+      DEBUG: 'Metro:*'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -199,6 +202,7 @@ jobs:
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'web')) }}
     env:
       HARNESS_DEBUG: true
+      DEBUG: 'Metro:*'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -246,6 +250,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android') }}
     env:
       HARNESS_DEBUG: true
+      DEBUG: 'Metro:*'
 
     steps:
       - name: Checkout code
@@ -351,6 +356,8 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios') }}
+    env:
+      DEBUG: 'Metro:*'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
