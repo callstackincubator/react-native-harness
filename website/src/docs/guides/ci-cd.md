@@ -211,6 +211,22 @@ jobs:
           runner: ios
 ```
 
+## Metro cache (optional)
+
+React Native Harness can persist Metro's transformation cache under `.harness/metro-cache` in your project root. Enabling it in config (`unstable__enableMetroCache: true`) speeds up repeated Metro runs. In CI, you can cache this directory to avoid re-transforming unchanged files between workflow runs:
+
+```yaml
+- name: Metro cache
+  uses: actions/cache@v4
+  with:
+    path: .harness/metro-cache
+    key: ${{ runner.os }}-metro-cache-${{ hashFiles('**/pnpm-lock.yaml', '**/yarn.lock', '**/package-lock.json', '**/metro.config.js', '**/metro.config.mjs', '**/babel.config.js', '**/babel.config.mjs') }}
+    restore-keys: |
+      ${{ runner.os }}-metro-cache-
+```
+
+Use a key that includes your lockfile and Metro/Babel config paths so the cache invalidates when dependencies or bundler config change.
+
 ## Build Artifact Caching
 
 The workflow includes build artifact caching to significantly reduce CI execution times. When native modules haven't changed, you can reuse the same debug builds instead of rebuilding from scratch.
