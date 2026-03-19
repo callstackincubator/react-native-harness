@@ -1,5 +1,5 @@
 name: React Native Harness for Web
-description: Run React Native Harness tests on Web
+description: '[Deprecated] Use callstackincubator/react-native-harness instead. Run React Native Harness tests on Web'
 inputs:
   runner:
     description: The runner to use

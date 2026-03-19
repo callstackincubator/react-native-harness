@@ -1,5 +1,5 @@
 name: React Native Harness for Android
-description: Run React Native Harness tests on Android
+description: '[Deprecated] Use callstackincubator/react-native-harness instead. Run React Native Harness tests on Android'
 inputs:
   app:
     description: The path to the Android app (.apk)

@@ -31,5 +31,9 @@ export default defineConfig({
         path.resolve(OUT_DIR, `./${target}/action.yml`)
       );
     });
+    fs.copyFileSync(
+      path.resolve('./src/action.yml'),
+      path.resolve(OUT_DIR, '../action.yml')
+    );
   },
 });

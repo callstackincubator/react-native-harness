@@ -100,7 +100,7 @@ jobs:
           key: apk-playground
 
       - name: Run React Native Harness
-        uses: ./actions/android
+        uses: ./
         with:
           app: android/app/build/outputs/apk/debug/app-debug.apk
           runner: android
@@ -189,7 +189,7 @@ jobs:
           key: ios-app-playground
 
       - name: Run React Native Harness
-        uses: ./actions/ios
+        uses: ./
         with:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           runner: ios
@@ -238,7 +238,7 @@ jobs:
           pnpm nx run-many -t build --projects="packages/*"
 
       - name: Run React Native Harness
-        uses: ./actions/web
+        uses: ./
         with:
           runner: chromium
           projectRoot: apps/playground
@@ -323,7 +323,7 @@ jobs:
       - name: Run React Native Harness (expect crash)
         id: crash-test
         continue-on-error: true
-        uses: ./actions/android
+        uses: ./
         with:
           app: android/app/build/outputs/apk/debug/app-debug.apk
           runner: android-crash-pre-rn
@@ -436,7 +436,7 @@ jobs:
       - name: Run React Native Harness (expect crash)
         id: crash-test
         continue-on-error: true
-        uses: ./actions/ios
+        uses: ./
         with:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           runner: ios-crash-pre-rn

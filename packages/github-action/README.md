@@ -1,87 +1,88 @@
 ![harness-banner](https://react-native-harness.dev/harness-banner.jpg)
 
-### GitHub Actions for React Native Harness
+### GitHub Action for React Native Harness
 
 [![mit licence][license-badge]][license]
 [![Chat][chat-badge]][chat]
 [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-GitHub Actions that simplify running React Native Harness tests in CI/CD environments. These actions handle the complex setup of emulators, simulators, and test execution automatically.
+GitHub Action that simplifies running React Native Harness tests in CI/CD environments. It lives at the repository root and handles the setup of emulators, simulators, browsers, and test execution automatically based on the selected Harness runner.
 
-## Available Actions
+## Action
 
-This package provides two GitHub Actions:
-
-### `android`
-
-Runs React Native Harness tests on Android emulators. This action handles:
-
-- Loading and validating your Harness configuration
-- Setting up Android emulator with proper architecture detection
-- Caching AVD snapshots for faster subsequent runs
-- Installing your app on the emulator
-- Running the Harness tests
-
-**Inputs:**
-
-- `app` (required): Path to your built Android app (`.apk` file)
-- `runner` (required): The runner name from your configuration
-- `projectRoot` (optional): The project root directory (defaults to repository root)
-- Crash artifacts persisted to `.harness/crash-reports/` are uploaded automatically when present
-
-**Requirements:**
-
-- Your runner configuration must include an `avd` property with:
-  - `apiLevel`: Android API level
-  - `profile`: AVD profile name
-  - `diskSize`: Disk size for the AVD
-  - `heapSize`: Heap size for the emulator
-
-**Example:**
+Use:
 
 ```yaml
-- uses: callstackincubator/react-native-harness/actions/android@main
+- uses: callstackincubator/react-native-harness@main
+```
+
+The action reads your `rn-harness.config.mjs` file, resolves the `runner` you pass in, and uses that runner's `platformId` to decide which platform-specific setup to execute.
+
+## Inputs
+
+- `runner` (required): The runner name from your Harness configuration
+- `app` (optional): Path to your built app. Required for native runs (`.apk` for Android, `.app` for iOS), not needed for web
+- `projectRoot` (optional): The project root directory (defaults to repository root)
+- `uploadVisualTestArtifacts` (optional): Whether to upload visual test diff and actual images as artifacts
+- `harnessArgs` (optional): Additional arguments to pass to the Harness CLI
+- Crash artifacts persisted to `.harness/crash-reports/` are uploaded automatically when present
+
+## Behavior
+
+Depending on the selected runner, the action:
+
+- For Android runners, loads and validates your Harness configuration, sets up the Android emulator with architecture detection, caches AVD snapshots, installs your app on the emulator, and runs the Harness tests
+- For iOS runners, loads and validates your Harness configuration, sets up the iOS simulator, installs your app on the simulator, and runs the Harness tests
+- For web runners, loads and validates your Harness configuration, installs Playwright Chromium, and runs the Harness tests
+
+Runner configuration requirements:
+
+- Android runners must include an `avd` property with:
+
+- `apiLevel`
+- `profile`
+- `diskSize`
+- `heapSize`
+
+- iOS runners must include a `device` property with:
+
+- `name`
+- `systemVersion`
+
+## Examples
+
+### Android runner
+
+```yaml
+- uses: callstackincubator/react-native-harness@main
   with:
     app: './android/app/build/outputs/apk/debug/app-debug.apk'
     runner: 'android'
     projectRoot: './apps/my-app'
 ```
 
-### `ios`
-
-Runs React Native Harness tests on iOS simulators. This action handles:
-
-- Loading and validating your Harness configuration
-- Setting up iOS simulator with the specified device and OS version
-- Installing your app on the simulator
-- Running the Harness tests
-
-**Inputs:**
-
-- `app` (required): Path to your built iOS app (`.app` bundle)
-- `runner` (required): The runner name from your configuration
-- `projectRoot` (optional): The project root directory (defaults to repository root)
-- Crash artifacts persisted to `.harness/crash-reports/` are uploaded automatically when present
-
-**Requirements:**
-
-- Your runner configuration must include a `device` property with:
-  - `name`: Simulator device name (e.g., "iPhone 15")
-  - `systemVersion`: iOS version (e.g., "17.0")
-
-**Example:**
+### iOS runner
 
 ```yaml
-- uses: callstackincubator/react-native-harness/actions/ios@main
+- uses: callstackincubator/react-native-harness@main
   with:
     app: './ios/build/Build/Products/Debug-iphonesimulator/MyApp.app'
     runner: 'ios'
     projectRoot: './apps/my-app'
 ```
 
+### Web runner
+
+```yaml
+- uses: callstackincubator/react-native-harness@main
+  with:
+    runner: 'chromium'
+    projectRoot: './apps/my-app'
+```
+
 ## Usage
 
-These actions are designed to work with your existing React Native Harness configuration. They automatically read your `rn-harness.config.mjs` file to determine device settings, so you don't need to hardcode emulator or simulator configurations in your workflow files.
+The action is designed to work with your existing React Native Harness configuration. It automatically reads `rn-harness.config.mjs` to determine device and platform settings, so you don't need to hardcode emulator or simulator configuration in workflow files.
 
 For complete workflow examples, see the [CI/CD documentation](https://react-native-harness.dev/docs/guides/ci-cd).
 

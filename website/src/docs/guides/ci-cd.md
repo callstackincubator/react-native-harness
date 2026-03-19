@@ -10,20 +10,19 @@ The amount of time needed to run Harness tests is typically around **5 minutes**
 React Native Harness doesn't require you to constantly rebuild the app from scratch. You can reuse the same debug build as long as your native modules stay the same, significantly reducing CI execution time through intelligent caching.
 :::
 
-## Official GitHub Actions
+## Official GitHub Action
 
-React Native Harness provides official GitHub Actions that simplify running tests in CI/CD environments. These actions handle the complex setup of emulators, simulators, and test execution automatically.
+React Native Harness provides an official GitHub Action that simplifies running tests in CI/CD environments. It handles the setup of emulators, simulators, browsers, and test execution automatically.
 
-### Available Actions
+### Action
 
-- **Android Action**: `callstackincubator/react-native-harness/actions/android`
-- **iOS Action**: `callstackincubator/react-native-harness/actions/ios`
+- `callstackincubator/react-native-harness`
 
 :::tip Versioning
 You can pin to a specific version by appending `@<version>` to the action path (e.g., `@main`, `@v1.0.0`). For production use, we recommend pinning to a specific release tag once available.
 :::
 
-Both actions automatically:
+The action automatically:
 
 - Load your React Native Harness configuration
 - Set up and configure the emulator/simulator based on your config
@@ -31,14 +30,14 @@ Both actions automatically:
 - Run the tests
 - Upload crash reports from `.harness/crash-reports/` as workflow artifacts whenever a run produces them
 
-The actions read your `rn-harness.config.mjs` file to determine the device configuration, so you don't need to hardcode emulator settings in your workflow.
+The action reads your `rn-harness.config.mjs` file to determine the selected runner's platform and device configuration, so you don't need to hardcode emulator or simulator settings in your workflow.
 
 ### Action Inputs
 
-Both actions accept the following inputs:
+The action accepts the following inputs:
 
-- `app` (required): Path to your built app (`.apk` for Android, `.app` for iOS)
-- `runner` (required): The runner name (e.g., `"android"` or `"ios"`)
+- `app` (optional): Path to your built app (`.apk` for Android, `.app` for iOS). Not needed for web runners
+- `runner` (required): The runner name from your Harness config (for example `"android"`, `"ios"`, or `"chromium"`)
 - `projectRoot` (optional): The project root directory (defaults to the repository root)
 
 ## Crash Artifacts
@@ -47,7 +46,7 @@ Harness monitors native crashes throughout the entire test lifecycle — includi
 
 Crash reports are persisted under `.harness/crash-reports/` in the current working directory. Filenames include the Harness run timestamp and selected runner name so CI downloads are easy to correlate with a specific workflow run.
 
-The official GitHub Actions upload `.harness/crash-reports/**/*` automatically (with `if-no-files-found: ignore`), so crash reports appear as downloadable workflow artifacts whenever a run produces them — no extra configuration needed.
+The official GitHub Action uploads `.harness/crash-reports/**/*` automatically (with `if-no-files-found: ignore`), so crash reports appear as downloadable workflow artifacts whenever a run produces them — no extra configuration needed.
 
 :::tip
 Startup crashes are treated as a first-class failure. If your app crashes before the bridge connects, Harness immediately reports it with the native crash details rather than timing out.
@@ -57,7 +56,7 @@ Startup crashes are treated as a first-class failure. If your app crashes before
 
 The example workflow shared below is designed for **React Native Community CLI** setups. If you're using **Expo** or **Rock**, the workflow will be simpler as these frameworks provide their own build and deployment mechanisms that integrate seamlessly with CI/CD environments.
 
-Here's a complete GitHub Actions workflow that demonstrates how to run React Native Harness tests on both Android and iOS platforms using the official actions:
+Here's a complete GitHub Actions workflow that demonstrates how to run React Native Harness tests on both Android and iOS platforms using the official action:
 
 ### Complete Workflow Configuration
 
@@ -134,7 +133,7 @@ jobs:
 
       # Step 3: Run Harness tests
       - name: Run React Native Harness
-        uses: callstackincubator/react-native-harness/actions/android@main
+        uses: callstackincubator/react-native-harness@main
         with:
           app: android/app/build/outputs/apk/debug/app-debug.apk
           runner: android
@@ -205,7 +204,7 @@ jobs:
 
       # Step 3: Run Harness tests
       - name: Run React Native Harness
-        uses: callstackincubator/react-native-harness/actions/ios@main
+        uses: callstackincubator/react-native-harness@main
         with:
           app: ios/build/Build/Products/Debug-iphonesimulator/YourApp.app
           runner: ios

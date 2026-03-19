@@ -1,5 +1,5 @@
 name: React Native Harness for iOS
-description: Run React Native Harness tests on iOS
+description: '[Deprecated] Use callstackincubator/react-native-harness instead. Run React Native Harness tests on iOS'
 inputs:
   app:
     description: The path to the iOS app (.app)

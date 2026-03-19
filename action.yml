@@ -1,12 +1,13 @@
-name: React Native Harness for Android
-description: '[Deprecated] Use callstackincubator/react-native-harness instead. Run React Native Harness tests on Android'
+name: React Native Harness
+description: Run React Native Harness tests on iOS, Android or Web
 inputs:
-  app:
-    description: The path to the Android app (.apk)
-    required: true
   runner:
-    description: The runner to use
+    description: The runner to use (must match a runner name defined in your harness config)
     required: true
+    type: string
+  app:
+    description: The path to the app (.app for iOS, .apk for Android). Not required for web.
+    required: false
     type: string
   projectRoot:
     description: The project root directory
@@ -32,8 +33,27 @@ runs:
         INPUT_RUNNER: ${{ inputs.runner }}
         INPUT_PROJECTROOT: ${{ inputs.projectRoot }}
       run: |
-        node ${{ github.action_path }}/../shared/index.cjs
+        node ${{ github.action_path }}/actions/shared/index.cjs
+
+    # ── iOS ──────────────────────────────────────────────────────────────────
+    - uses: futureware-tech/simulator-action@v4
+      if: fromJson(steps.load-config.outputs.config).platformId == 'ios'
+      with:
+        model: ${{ fromJson(steps.load-config.outputs.config).config.device.name }}
+        os: iOS
+        os_version: ${{ fromJson(steps.load-config.outputs.config).config.device.systemVersion }}
+        wait_for_boot: true
+        erase_before_boot: false
+    - name: Install app
+      if: fromJson(steps.load-config.outputs.config).platformId == 'ios'
+      shell: bash
+      working-directory: ${{ inputs.projectRoot }}
+      run: |
+        xcrun simctl install booted ${{ inputs.app }}
+
+    # ── Android ──────────────────────────────────────────────────────────────
     - name: Verify Android config
+      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
       shell: bash
       run: |
         CONFIG='${{ steps.load-config.outputs.config }}'
@@ -44,6 +64,7 @@ runs:
         fi
     - name: Get architecture of the runner
       id: arch
+      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
       shell: bash
       run: |
         case "${{ runner.arch }}" in
@@ -61,6 +82,7 @@ runs:
             ;;
         esac
     - name: Enable KVM group perms
+      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
       shell: bash
       run: |
         echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -69,6 +91,7 @@ runs:
         ls /dev/kvm
     - name: Compute AVD cache key
       id: avd-key
+      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
       shell: bash
       run: |
         CONFIG='${{ steps.load-config.outputs.config }}'
@@ -80,13 +103,14 @@ runs:
     - name: Restore AVD cache
       uses: actions/cache/restore@v4
       id: avd-cache
+      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
       with:
         path: |
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
     - name: Create AVD and generate snapshot for caching
-      if: steps.avd-cache.outputs.cache-hit != 'true'
+      if: fromJson(steps.load-config.outputs.config).platformId == 'android' && steps.avd-cache.outputs.cache-hit != 'true'
       uses: reactivecircus/android-emulator-runner@v2
       with:
         api-level: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.apiLevel }}
@@ -100,13 +124,21 @@ runs:
         emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
         script: echo "Generated AVD snapshot for caching."
     - name: Save AVD cache
-      if: steps.avd-cache.outputs.cache-hit != 'true'
+      if: fromJson(steps.load-config.outputs.config).platformId == 'android' && steps.avd-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: |
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
+
+    # ── Web ──────────────────────────────────────────────────────────────────
+    - name: Install Playwright Browsers
+      if: fromJson(steps.load-config.outputs.config).platformId == 'web'
+      shell: bash
+      run: npx playwright install --with-deps chromium
+
+    # ── Shared ───────────────────────────────────────────────────────────────
     - name: Detect Package Manager
       id: detect-pm
       shell: bash
@@ -128,7 +160,13 @@ runs:
           echo "runner=npx " >> $GITHUB_OUTPUT
         fi
     - name: Run E2E tests
+      if: fromJson(steps.load-config.outputs.config).platformId != 'android'
+      shell: bash
+      working-directory: ${{ inputs.projectRoot }}
+      run: ${{ steps.detect-pm.outputs.runner }}react-native-harness --harnessRunner ${{ inputs.runner }} ${{ inputs.harnessArgs }}
+    - name: Run E2E tests
       id: run-tests
+      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
       uses: reactivecircus/android-emulator-runner@v2
       with:
         working-directory: ${{ inputs.projectRoot }}
@@ -146,7 +184,7 @@ runs:
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: visual-test-diffs-android
+        name: visual-test-diffs-${{ fromJson(steps.load-config.outputs.config).platformId }}
         path: |
           ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
           ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
@@ -155,6 +193,6 @@ runs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: harness-crash-reports-android
+        name: harness-crash-reports-${{ fromJson(steps.load-config.outputs.config).platformId }}
         path: ${{ inputs.projectRoot }}/.harness/crash-reports/**/*
         if-no-files-found: ignore
