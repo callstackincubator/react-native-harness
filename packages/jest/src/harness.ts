@@ -14,9 +14,9 @@ import {
 } from '@react-native-harness/platforms';
 import {
   getMetroInstance,
+  isMetroCacheReusable,
   prewarmMetroBundle,
 } from '@react-native-harness/bundler-metro';
-import { isMetroCacheReusable } from '@react-native-harness/metro';
 import { createCrashArtifactWriter } from '@react-native-harness/tools';
 import { InitializationTimeoutError } from './errors.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';

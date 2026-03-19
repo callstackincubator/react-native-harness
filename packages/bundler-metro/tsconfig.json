@@ -4,13 +4,16 @@
   "include": [],
   "references": [
     {
+      "path": "../runtime"
+    },
+    {
       "path": "../config"
     },
     {
       "path": "../tools"
     },
     {
-      "path": "../metro"
+      "path": "../babel-preset"
     },
     {
       "path": "./tsconfig.lib.json"

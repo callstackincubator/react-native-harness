@@ -7,7 +7,12 @@
 [![Chat][chat-badge]][chat]
 [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-Metro bundler integration that patches Metro configuration to enable test file bundling and execution in React Native environments with custom module system support.
+Deprecated Metro compatibility package for React Native Harness.
+
+> [!WARNING]
+> `@react-native-harness/metro` is deprecated and will be removed in the next release.
+> React Native Harness now patches Metro internally through `@react-native-harness/bundler-metro`.
+> Do not add this package to new projects, and remove `withRnHarness` from your Metro config if you still use it.
 
 ## Made with ❤️ at Callstack
 

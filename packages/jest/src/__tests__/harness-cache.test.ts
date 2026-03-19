@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   logMetroPrewarmCompleted: vi.fn(),
 }));
 
-vi.mock('@react-native-harness/metro', () => ({
+vi.mock('@react-native-harness/bundler-metro', () => ({
   isMetroCacheReusable: mocks.isMetroCacheReusable,
 }));
 

@@ -1,7 +1,7 @@
-import path from 'node:path';
 import fs from 'node:fs';
+import path from 'node:path';
 import { Config as HarnessConfig } from '@react-native-harness/config';
-import { getHarnessManifestPath } from './paths';
+import { getHarnessManifestPath } from './paths.js';
 
 const getManifestContent = (harnessConfig: HarnessConfig): string => {
   return `global.RN_HARNESS = { 

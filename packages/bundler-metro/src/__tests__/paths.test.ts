@@ -12,7 +12,9 @@ import {
 const tempDirs: string[] = [];
 
 const createTempProjectRoot = (): string => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-harness-metro-'));
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'rn-harness-bundler-metro-')
+  );
   tempDirs.push(tempDir);
   return tempDir;
 };
@@ -23,7 +25,7 @@ afterEach(() => {
   }
 });
 
-describe('metro paths', () => {
+describe('bundler metro paths', () => {
   it('resolves the harness root under the project root', () => {
     const projectRoot = createTempProjectRoot();
 
