@@ -4223,10 +4223,8 @@ var ConfigSchema = external_exports.object({
   host: external_exports.string().min(1, "Host is required").optional(),
   webSocketPort: external_exports.number().optional().default(3001),
   bridgeTimeout: external_exports.number().min(1e3, "Bridge timeout must be at least 1 second").default(6e4),
-  /** @deprecated Removed in favor of crash supervisor. Accepted for backwards compatibility. */
-  bundleStartTimeout: external_exports.number().optional(),
-  /** @deprecated Removed in favor of crash supervisor. Accepted for backwards compatibility. */
-  maxAppRestarts: external_exports.number().optional(),
+  bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(15e3),
+  maxAppRestarts: external_exports.number().min(0, "Max app restarts must be at least 0").default(2),
   resetEnvironmentBetweenTestFiles: external_exports.boolean().optional().default(true),
   unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().default(false),
   unstable__enableMetroCache: external_exports.boolean().optional().default(false),
@@ -4413,20 +4411,6 @@ var import_node_path5 = __toESM(require("path"), 1);
 var import_node_fs5 = __toESM(require("fs"), 1);
 var import_node_module2 = require("module");
 var import_meta = {};
-var DEPRECATED_PROPERTIES = {
-  bundleStartTimeout: '"bundleStartTimeout" is no longer used and can be removed from your config. Startup crash detection is now handled automatically by the crash supervisor.',
-  maxAppRestarts: '"maxAppRestarts" is no longer used and can be removed from your config. Startup crash detection is now handled automatically by the crash supervisor.'
-};
-var warnDeprecatedProperties = (rawConfig) => {
-  if (typeof rawConfig !== "object" || rawConfig === null) {
-    return;
-  }
-  for (const [key, message] of Object.entries(DEPRECATED_PROPERTIES)) {
-    if (key in rawConfig) {
-      console.warn(`[react-native-harness] Deprecation warning: ${message}`);
-    }
-  }
-};
 var extensions = [".js", ".mjs", ".cjs", ".json"];
 var importUp = async (dir, name) => {
   const filePath = import_node_path5.default.join(dir, name);
@@ -4445,7 +4429,6 @@ var importUp = async (dir, name) => {
         throw new ConfigLoadError(filePathWithExt, error instanceof Error ? error : void 0);
       }
       try {
-        warnDeprecatedProperties(rawConfig);
         const config = ConfigSchema.parse(rawConfig);
         return { config, filePathWithExt, configDir: dir };
       } catch (error) {

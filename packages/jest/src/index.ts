@@ -17,7 +17,7 @@ import { teardown } from './teardown.js';
 import { HarnessError } from '@react-native-harness/tools';
 import { getErrorMessage } from './logs.js';
 import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
-import { NativeCrashError } from './errors.js';
+import { NativeCrashError, StartupStallError } from './errors.js';
 
 class CancelRun extends Error {
   constructor(message?: string) {
@@ -141,6 +141,15 @@ export default class JestHarness implements CallbackTestRunnerInterface {
             .catch(async (err) => {
               if (err instanceof NativeCrashError) {
                 harness.crashSupervisor.reset();
+                onFailure(test, {
+                  message: err.message,
+                  stack: '',
+                });
+
+                return;
+              }
+
+              if (err instanceof StartupStallError) {
                 onFailure(test, {
                   message: err.message,
                   stack: '',

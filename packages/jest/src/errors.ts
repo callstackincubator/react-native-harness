@@ -22,6 +22,20 @@ export class InitializationTimeoutError extends HarnessError {
   }
 }
 
+export class StartupStallError extends HarnessError {
+  constructor(
+    public readonly timeoutMs: number,
+    public readonly attempts: number
+  ) {
+    super(
+      `The app never became ready after ${attempts} launch attempt${
+        attempts === 1 ? '' : 's'
+      } with a startup stall timeout of ${timeoutMs}ms and no native crash signal.`
+    );
+    this.name = 'StartupStallError';
+  }
+}
+
 export type NativeCrashPhase = 'startup' | 'execution';
 
 export type NativeCrashDetails = AppCrashDetails & {
