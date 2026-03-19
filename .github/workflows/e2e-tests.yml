@@ -57,14 +57,6 @@ jobs:
           node-version: '24.10.0'
           cache: 'pnpm'
 
-      - name: Metro cache
-        uses: actions/cache@v4
-        with:
-          path: apps/playground/.harness/metro-cache
-          key: ${{ runner.os }}-metro-cache-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/metro.config.js', '**/metro.config.cjs', '**/metro.config.mjs', '**/metro.config.ts', '**/babel.config.js', '**/babel.config.cjs', '**/babel.config.mjs', '**/babel.config.ts', '**/babel.config.json') }}
-          restore-keys: |
-            ${{ runner.os }}-metro-cache-
-
       - name: Install dependencies
         run: |
           pnpm install
@@ -130,14 +122,6 @@ jobs:
         with:
           node-version: '24.10.0'
           cache: 'pnpm'
-
-      - name: Metro cache
-        uses: actions/cache@v4
-        with:
-          path: apps/playground/.harness/metro-cache
-          key: ${{ runner.os }}-metro-cache-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/metro.config.js', '**/metro.config.cjs', '**/metro.config.mjs', '**/metro.config.ts', '**/babel.config.js', '**/babel.config.cjs', '**/babel.config.mjs', '**/babel.config.ts', '**/babel.config.json') }}
-          restore-keys: |
-            ${{ runner.os }}-metro-cache-
 
       - name: Install Watchman
         run: brew install watchman
@@ -221,14 +205,6 @@ jobs:
           node-version: '24.10.0'
           cache: 'pnpm'
 
-      - name: Metro cache
-        uses: actions/cache@v4
-        with:
-          path: apps/playground/.harness/metro-cache
-          key: ${{ runner.os }}-metro-cache-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/metro.config.js', '**/metro.config.cjs', '**/metro.config.mjs', '**/metro.config.ts', '**/babel.config.js', '**/babel.config.cjs', '**/babel.config.mjs', '**/babel.config.ts', '**/babel.config.json') }}
-          restore-keys: |
-            ${{ runner.os }}-metro-cache-
-
       - name: Install dependencies
         run: |
           pnpm install
@@ -277,14 +253,6 @@ jobs:
         with:
           node-version: '24.10.0'
           cache: 'pnpm'
-
-      - name: Metro cache
-        uses: actions/cache@v4
-        with:
-          path: apps/playground/.harness/metro-cache
-          key: ${{ runner.os }}-metro-cache-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/metro.config.js', '**/metro.config.cjs', '**/metro.config.mjs', '**/metro.config.ts', '**/babel.config.js', '**/babel.config.cjs', '**/babel.config.mjs', '**/babel.config.ts', '**/babel.config.json') }}
-          restore-keys: |
-            ${{ runner.os }}-metro-cache-
 
       - name: Install dependencies
         run: |
@@ -375,14 +343,6 @@ jobs:
         with:
           node-version: '24.10.0'
           cache: 'pnpm'
-
-      - name: Metro cache
-        uses: actions/cache@v4
-        with:
-          path: apps/playground/.harness/metro-cache
-          key: ${{ runner.os }}-metro-cache-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/metro.config.js', '**/metro.config.cjs', '**/metro.config.mjs', '**/metro.config.ts', '**/babel.config.js', '**/babel.config.cjs', '**/babel.config.mjs', '**/babel.config.ts', '**/babel.config.json') }}
-          restore-keys: |
-            ${{ runner.os }}-metro-cache-
 
       - name: Install Watchman
         run: brew install watchman

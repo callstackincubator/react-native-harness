@@ -26,14 +26,15 @@ The action reads your `rn-harness.config.mjs` file, resolves the `runner` you pa
 - `uploadVisualTestArtifacts` (optional): Whether to upload visual test diff and actual images as artifacts
 - `harnessArgs` (optional): Additional arguments to pass to the Harness CLI
 - Crash artifacts persisted to `.harness/crash-reports/` are uploaded automatically when present
+- Metro cache persisted to `.harness/metro-cache/` is restored and saved automatically when present
 
 ## Behavior
 
 Depending on the selected runner, the action:
 
-- For Android runners, loads and validates your Harness configuration, sets up the Android emulator with architecture detection, caches AVD snapshots, installs your app on the emulator, and runs the Harness tests
-- For iOS runners, loads and validates your Harness configuration, sets up the iOS simulator, installs your app on the simulator, and runs the Harness tests
-- For web runners, loads and validates your Harness configuration, installs Playwright Chromium, and runs the Harness tests
+- For Android runners, loads and validates your Harness configuration, restores Metro cache, sets up the Android emulator with architecture detection, caches AVD snapshots, installs your app on the emulator, and runs the Harness tests
+- For iOS runners, loads and validates your Harness configuration, restores Metro cache, sets up the iOS simulator, installs your app on the simulator, and runs the Harness tests
+- For web runners, loads and validates your Harness configuration, restores Metro cache, installs Playwright Chromium, and runs the Harness tests
 
 Runner configuration requirements:
 

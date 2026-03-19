@@ -4486,7 +4486,7 @@ var run = async () => {
     }
     const projectRoot = projectRootInput ? import_node_path6.default.resolve(projectRootInput) : process.cwd();
     console.info(`Loading React Native Harness config from: ${projectRoot}`);
-    const { config } = await getConfig(projectRoot);
+    const { config, projectRoot: resolvedProjectRoot } = await getConfig(projectRoot);
     const runner = config.runners.find((runner2) => runner2.name === runnerInput);
     if (!runner) {
       throw new Error(`Runner ${runnerInput} not found in config`);
@@ -4495,7 +4495,9 @@ var run = async () => {
     if (!githubOutput) {
       throw new Error("GITHUB_OUTPUT environment variable is not set");
     }
+    const relativeProjectRoot = import_node_path6.default.relative(process.cwd(), resolvedProjectRoot) || ".";
     const output = `config=${JSON.stringify(runner)}
+projectRoot=${relativeProjectRoot}
 `;
     import_node_fs6.default.appendFileSync(githubOutput, output);
   } catch (error) {

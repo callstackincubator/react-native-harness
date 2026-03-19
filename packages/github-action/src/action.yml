@@ -34,6 +34,13 @@ runs:
         INPUT_PROJECTROOT: ${{ inputs.projectRoot }}
       run: |
         node ${{ github.action_path }}/actions/shared/index.cjs
+    - name: Metro cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/metro-cache
+        key: ${{ runner.os }}-metro-cache-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/metro.config.js', '**/metro.config.cjs', '**/metro.config.mjs', '**/metro.config.ts', '**/babel.config.js', '**/babel.config.cjs', '**/babel.config.mjs', '**/babel.config.ts', '**/babel.config.json') }}
+        restore-keys: |
+          ${{ runner.os }}-metro-cache-
 
     # ── iOS ──────────────────────────────────────────────────────────────────
     - uses: futureware-tech/simulator-action@v4
@@ -47,7 +54,7 @@ runs:
     - name: Install app
       if: fromJson(steps.load-config.outputs.config).platformId == 'ios'
       shell: bash
-      working-directory: ${{ inputs.projectRoot }}
+      working-directory: ${{ steps.load-config.outputs.projectRoot }}
       run: |
         xcrun simctl install booted ${{ inputs.app }}
 
@@ -162,14 +169,14 @@ runs:
     - name: Run E2E tests
       if: fromJson(steps.load-config.outputs.config).platformId != 'android'
       shell: bash
-      working-directory: ${{ inputs.projectRoot }}
+      working-directory: ${{ steps.load-config.outputs.projectRoot }}
       run: ${{ steps.detect-pm.outputs.runner }}react-native-harness --harnessRunner ${{ inputs.runner }} ${{ inputs.harnessArgs }}
     - name: Run E2E tests
       id: run-tests
       if: fromJson(steps.load-config.outputs.config).platformId == 'android'
       uses: reactivecircus/android-emulator-runner@v2
       with:
-        working-directory: ${{ inputs.projectRoot }}
+        working-directory: ${{ steps.load-config.outputs.projectRoot }}
         api-level: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.apiLevel }}
         arch: ${{ steps.arch.outputs.arch }}
         force-avd-creation: false
@@ -186,13 +193,13 @@ runs:
       with:
         name: visual-test-diffs-${{ fromJson(steps.load-config.outputs.config).platformId }}
         path: |
-          ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
-          ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
+          ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
+          ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
         if-no-files-found: ignore
     - name: Upload crash report artifacts
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: harness-crash-reports-${{ fromJson(steps.load-config.outputs.config).platformId }}
-        path: ${{ inputs.projectRoot }}/.harness/crash-reports/**/*
+        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/crash-reports/**/*
         if-no-files-found: ignore
