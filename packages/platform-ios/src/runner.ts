@@ -1,5 +1,4 @@
 import { HarnessPlatformRunner } from '@react-native-harness/platforms';
-import { Config } from '@react-native-harness/config';
 import {
   ApplePlatformConfigSchema,
   type ApplePlatformConfig,
@@ -12,15 +11,15 @@ import {
 
 const getAppleRunner = async (
   config: ApplePlatformConfig,
-  _harnessConfig: Config
+  harnessConfig: { metroPort: number }
 ): Promise<HarnessPlatformRunner> => {
   const parsedConfig = ApplePlatformConfigSchema.parse(config);
 
   if (isAppleDeviceSimulator(parsedConfig.device)) {
-    return getAppleSimulatorPlatformInstance(parsedConfig);
+    return getAppleSimulatorPlatformInstance(parsedConfig, harnessConfig.metroPort);
   }
 
-  return getApplePhysicalDevicePlatformInstance(parsedConfig);
+  return getApplePhysicalDevicePlatformInstance(parsedConfig, harnessConfig.metroPort);
 };
 
 export default getAppleRunner;

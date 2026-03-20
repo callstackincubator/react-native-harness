@@ -6,7 +6,6 @@ import connect from 'connect';
 import nocache from 'nocache';
 import { isPortAvailable, getMetroPackage } from './utils.js';
 import { MetroPortUnavailableError } from './errors.js';
-import { METRO_PORT } from './constants.js';
 import type { MetroInstance, MetroOptions } from './types.js';
 import {
   type Reporter,
@@ -41,10 +40,11 @@ export const getMetroInstance = async (
   abortSignal: AbortSignal
 ): Promise<MetroInstance> => {
   const { projectRoot, harnessConfig } = options;
-  const isDefaultPortAvailable = await isPortAvailable(METRO_PORT);
+  const metroPort = harnessConfig.metroPort;
+  const isMetroPortAvailable = await isPortAvailable(metroPort);
 
-  if (!isDefaultPortAvailable) {
-    throw new MetroPortUnavailableError(METRO_PORT);
+  if (!isMetroPortAvailable) {
+    throw new MetroPortUnavailableError(metroPort);
   }
 
   const Metro = getMetroPackage(projectRoot);
@@ -52,7 +52,7 @@ export const getMetroInstance = async (
   process.env.RN_HARNESS = 'true';
 
   const projectMetroConfig = await Metro.loadConfig({
-    port: METRO_PORT,
+    port: metroPort,
     projectRoot,
   });
   const config = await withRnHarness(projectMetroConfig, true)();
@@ -62,7 +62,7 @@ export const getMetroInstance = async (
 
   const middleware = connect()
     .use(nocache())
-    .use('/', getExpoMiddleware(projectRoot, harnessConfig.entryPoint))
+    .use('/', getExpoMiddleware(projectRoot, harnessConfig.entryPoint, metroPort))
     .use('/status', getStatusMiddleware(projectRoot));
 
   const ready = waitForBundler(reporter, abortSignal);

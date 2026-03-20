@@ -19,7 +19,8 @@ import {
 import { assertLibimobiledeviceInstalled } from './libimobiledevice.js';
 
 export const getAppleSimulatorPlatformInstance = async (
-  config: ApplePlatformConfig
+  config: ApplePlatformConfig,
+  metroPort: number
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDeviceSimulator(config.device);
 
@@ -46,6 +47,12 @@ export const getAppleSimulatorPlatformInstance = async (
   if (simulatorStatus !== 'Booted') {
     throw new Error('Simulator is not booted');
   }
+
+  await simctl.setJsLocation(
+    udid,
+    config.bundleId,
+    `localhost:${metroPort}`
+  );
 
   return {
     startApp: async (options) => {
@@ -84,10 +91,17 @@ export const getAppleSimulatorPlatformInstance = async (
 };
 
 export const getApplePhysicalDevicePlatformInstance = async (
-  config: ApplePlatformConfig
+  config: ApplePlatformConfig,
+  metroPort: number
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDevicePhysical(config.device);
   await assertLibimobiledeviceInstalled();
+
+  if (metroPort !== 8081) {
+    throw new Error(
+      `Custom Metro port ${metroPort} is not supported on physical iOS devices. Physical devices always connect to port 8081.`
+    );
+  }
 
   const device = await devicectl.getDevice(config.device.name);
 

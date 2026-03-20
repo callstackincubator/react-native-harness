@@ -280,6 +280,23 @@ export const isAppRunning = async (
   }
 };
 
+export const setJsLocation = async (
+  udid: string,
+  bundleId: string,
+  host: string
+): Promise<void> => {
+  await spawn('xcrun', [
+    'simctl',
+    'spawn',
+    udid,
+    'defaults',
+    'write',
+    bundleId,
+    'RCT_jsLocation',
+    host,
+  ]);
+};
+
 export const screenshot = async (
   udid: string,
   destination: string

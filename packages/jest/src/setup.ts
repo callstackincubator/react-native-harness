@@ -57,6 +57,11 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   });
 
   const cliArgs = getAdditionalCliArgs();
+
+  if (cliArgs.metroPort != null) {
+    harnessConfig.metroPort = cliArgs.metroPort;
+  }
+
   const selectedRunner = getHarnessRunner(harnessConfig, cliArgs);
 
   if (globalConfig.collectCoverage) {

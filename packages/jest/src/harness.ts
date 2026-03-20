@@ -182,6 +182,7 @@ const getHarnessInternal = async (
       dev: true,
       minify: false,
       signal,
+      metroPort: config.metroPort,
     });
     logMetroPrewarmCompleted(platform);
     await appMonitor.start();

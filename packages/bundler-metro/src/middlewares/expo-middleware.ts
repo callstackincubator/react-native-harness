@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { getResolvedEntryPointWithoutExtension } from '../entry-point-utils.js';
 
 export const getExpoMiddleware =
-  (projectRoot: string, entryPoint: string) =>
+  (projectRoot: string, entryPoint: string, metroPort: number) =>
   (req: IncomingMessage, res: ServerResponse, next: NextFunction) => {
     if (req.url !== '/') {
       next();
@@ -24,7 +24,7 @@ export const getExpoMiddleware =
       launchAsset: {
         key: 'bundle',
         contentType: 'application/javascript',
-        url: `http://localhost:8081/${resolvedEntryPoint}.bundle?platform=${platform}&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable`,
+        url: `http://localhost:${metroPort}/${resolvedEntryPoint}.bundle?platform=${platform}&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable`,
       },
       assets: [],
       metadata: {},
@@ -35,7 +35,7 @@ export const getExpoMiddleware =
           version: '1.0.0',
         },
         expoGo: {
-          debuggerHost: 'localhost:8081',
+          debuggerHost: `localhost:${metroPort}`,
           developer: {
             tool: 'expo-cli',
             projectRoot,

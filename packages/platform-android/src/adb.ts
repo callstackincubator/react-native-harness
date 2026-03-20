@@ -265,3 +265,19 @@ export const getConnectedDevices = async (): Promise<AdbDevice[]> => {
 
   return devices;
 };
+
+export const setDebugHttpHost = async (
+  adbId: string,
+  bundleId: string,
+  host: string
+): Promise<void> => {
+  const prefsPath = `shared_prefs/${bundleId}_preferences.xml`;
+  const prefsContent = `<?xml version=\\"1.0\\" encoding=\\"utf-8\\"?><map><string name=\\"debug_http_host\\">${host}</string></map>`;
+  await spawn('adb', [
+    '-s',
+    adbId,
+    'shell',
+    `run-as ${bundleId} sh -c 'mkdir -p shared_prefs && printf "${prefsContent}" > ${prefsPath}'`,
+  ]);
+};
+

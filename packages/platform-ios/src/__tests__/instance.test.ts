@@ -19,6 +19,7 @@ describe('iOS platform instance dependency validation', () => {
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'setJsLocation').mockResolvedValue(undefined);
 
     const config = {
       name: 'ios',
@@ -27,7 +28,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getAppleSimulatorPlatformInstance(config)
+      getAppleSimulatorPlatformInstance(config, 8081)
     ).resolves.toBeDefined();
     expect(assertInstalled).not.toHaveBeenCalled();
   });
@@ -44,7 +45,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getApplePhysicalDevicePlatformInstance(config)
+      getApplePhysicalDevicePlatformInstance(config, 8081)
     ).rejects.toThrow('missing');
     expect(assertInstalled).toHaveBeenCalled();
   });
@@ -58,6 +59,7 @@ describe('iOS platform instance dependency validation', () => {
     );
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'setJsLocation').mockResolvedValue(undefined);
 
     const config = {
       name: 'ios',
@@ -66,7 +68,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getAppleSimulatorPlatformInstance(config)
+      getAppleSimulatorPlatformInstance(config, 8081)
     ).resolves.toBeDefined();
     expect(getSimulatorId).toHaveBeenCalled();
   });
@@ -84,7 +86,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getApplePhysicalDevicePlatformInstance(config)
+      getApplePhysicalDevicePlatformInstance(config, 8081)
     ).rejects.toThrow('missing');
     expect(getDeviceId).not.toHaveBeenCalled();
   });

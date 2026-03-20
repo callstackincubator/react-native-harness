@@ -1,4 +1,3 @@
-import { METRO_PORT } from './constants.js';
 import { getResolvedEntryPointWithoutExtension } from './entry-point-utils.js';
 
 type PrewarmOptions = {
@@ -8,6 +7,7 @@ type PrewarmOptions = {
   dev: boolean;
   minify: boolean;
   signal: AbortSignal;
+  metroPort: number;
 };
 
 export const prewarmMetroBundle = async (
@@ -23,7 +23,7 @@ export const prewarmMetroBundle = async (
     dev: String(dev),
     minify: String(minify),
   });
-  const url = `http://localhost:${METRO_PORT}/${resolvedEntryPoint}.bundle?${searchParams.toString()}`;
+  const url = `http://localhost:${options.metroPort}/${resolvedEntryPoint}.bundle?${searchParams.toString()}`;
 
   const response = await fetch(url, { signal });
 
