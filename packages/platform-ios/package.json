@@ -16,6 +16,7 @@
     }
   },
   "dependencies": {
+    "@react-native-harness/config": "workspace:*",
     "@react-native-harness/platforms": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
     "zod": "^3.25.67",
