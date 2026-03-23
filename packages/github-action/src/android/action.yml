@@ -86,7 +86,7 @@ runs:
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
     - name: Create AVD and generate snapshot for caching
-      if: steps.avd-cache.outputs.cache-hit != 'true'
+      if: ${{ fromJSON(inputs.cacheAvd) && steps.avd-cache.outputs.cache-hit != 'true' }}
       uses: reactivecircus/android-emulator-runner@v2
       with:
         api-level: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.apiLevel }}
@@ -100,7 +100,7 @@ runs:
         emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
         script: echo "Generated AVD snapshot for caching."
     - name: Save AVD cache
-      if: steps.avd-cache.outputs.cache-hit != 'true'
+      if: ${{ fromJSON(inputs.cacheAvd) && steps.avd-cache.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v4
       with:
         path: |
