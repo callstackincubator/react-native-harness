@@ -5,6 +5,10 @@ import {
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import {
+  DEFAULT_METRO_PORT,
+  type Config as HarnessConfig,
+} from '@react-native-harness/config';
+import {
   ApplePlatformConfig,
   assertAppleDevicePhysical,
   assertAppleDeviceSimulator,
@@ -20,7 +24,7 @@ import { assertLibimobiledeviceInstalled } from './libimobiledevice.js';
 
 export const getAppleSimulatorPlatformInstance = async (
   config: ApplePlatformConfig,
-  metroPort: number
+  harnessConfig: HarnessConfig
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDeviceSimulator(config.device);
 
@@ -48,10 +52,10 @@ export const getAppleSimulatorPlatformInstance = async (
     throw new Error('Simulator is not booted');
   }
 
-  await simctl.setJsLocation(
+  await simctl.applyHarnessJsLocationOverride(
     udid,
     config.bundleId,
-    `localhost:${metroPort}`
+    `localhost:${harnessConfig.metroPort}`
   );
 
   return {
@@ -77,6 +81,7 @@ export const getAppleSimulatorPlatformInstance = async (
     },
     dispose: async () => {
       await simctl.stopApp(udid, config.bundleId);
+      await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
     },
     isAppRunning: async () => {
       return await simctl.isAppRunning(udid, config.bundleId);
@@ -92,14 +97,14 @@ export const getAppleSimulatorPlatformInstance = async (
 
 export const getApplePhysicalDevicePlatformInstance = async (
   config: ApplePlatformConfig,
-  metroPort: number
+  harnessConfig: HarnessConfig
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDevicePhysical(config.device);
   await assertLibimobiledeviceInstalled();
 
-  if (metroPort !== 8081) {
+  if (harnessConfig.metroPort !== DEFAULT_METRO_PORT) {
     throw new Error(
-      `Custom Metro port ${metroPort} is not supported on physical iOS devices. Physical devices always connect to port 8081.`
+      `Custom Metro port ${harnessConfig.metroPort} is not supported on physical iOS devices. Physical devices always connect to port ${DEFAULT_METRO_PORT}.`
     );
   }
 

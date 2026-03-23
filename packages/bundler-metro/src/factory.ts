@@ -62,7 +62,7 @@ export const getMetroInstance = async (
 
   const middleware = connect()
     .use(nocache())
-    .use('/', getExpoMiddleware(projectRoot, harnessConfig.entryPoint, metroPort))
+    .use('/', getExpoMiddleware(projectRoot, harnessConfig))
     .use('/status', getStatusMiddleware(projectRoot));
 
   const ready = waitForBundler(reporter, abortSignal);

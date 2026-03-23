@@ -16,6 +16,9 @@
       "path": "../tools/tsconfig.lib.json"
     },
     {
+      "path": "../config/tsconfig.lib.json"
+    },
+    {
       "path": "../platforms/tsconfig.lib.json"
     }
   ]
