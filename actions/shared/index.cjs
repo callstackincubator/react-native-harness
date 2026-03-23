@@ -4209,6 +4209,7 @@ var coerce = {
 var NEVER = INVALID;
 
 // ../config/dist/types.js
+var DEFAULT_METRO_PORT = 8081;
 var RunnerSchema = external_exports.object({
   name: external_exports.string().min(1, "Runner name is required").regex(/^[a-zA-Z0-9._-]+$/, "Runner name can only contain alphanumeric characters, dots, underscores, and hyphens"),
   config: external_exports.record(external_exports.any()),
@@ -4221,6 +4222,7 @@ var ConfigSchema = external_exports.object({
   runners: external_exports.array(RunnerSchema).min(1, "At least one runner is required"),
   defaultRunner: external_exports.string().optional(),
   host: external_exports.string().min(1, "Host is required").optional(),
+  metroPort: external_exports.number().int("Metro port must be an integer").min(1, "Metro port must be at least 1").max(65535, "Metro port must be at most 65535").optional().default(DEFAULT_METRO_PORT),
   webSocketPort: external_exports.number().optional().default(3001),
   bridgeTimeout: external_exports.number().min(1e3, "Bridge timeout must be at least 1 second").default(6e4),
   /** @deprecated Removed in favor of crash supervisor. Accepted for backwards compatibility. */
