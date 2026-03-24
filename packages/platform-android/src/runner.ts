@@ -4,19 +4,23 @@ import {
   CreateAppMonitorOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
-import { Config } from '@react-native-harness/config';
+import type { Config as HarnessConfig } from '@react-native-harness/config';
 import {
   AndroidPlatformConfigSchema,
   type AndroidPlatformConfig,
 } from './config.js';
 import { getAdbId } from './adb-id.js';
 import * as adb from './adb.js';
+import {
+  applyHarnessDebugHttpHost,
+  clearHarnessDebugHttpHost,
+} from './shared-prefs.js';
 import { getDeviceName } from './utils.js';
 import { createAndroidAppMonitor } from './app-monitor.js';
 
 const getAndroidRunner = async (
   config: AndroidPlatformConfig,
-  harnessConfig: Config
+  harnessConfig: HarnessConfig
 ): Promise<HarnessPlatformRunner> => {
   const parsedConfig = AndroidPlatformConfigSchema.parse(config);
   const adbId = await getAdbId(parsedConfig.device);
@@ -34,11 +38,14 @@ const getAndroidRunner = async (
     );
   }
 
+  const metroPort = harnessConfig.metroPort;
+
   await Promise.all([
-    adb.reversePort(adbId, 8081),
+    adb.reversePort(adbId, metroPort),
     adb.reversePort(adbId, 8080),
     adb.reversePort(adbId, harnessConfig.webSocketPort),
     adb.setHideErrorDialogs(adbId, true),
+    applyHarnessDebugHttpHost(adbId, parsedConfig.bundleId, `localhost:${metroPort}`),
   ]);
   const appUid = await adb.getAppUid(adbId, parsedConfig.bundleId);
 
@@ -67,6 +74,7 @@ const getAndroidRunner = async (
     },
     dispose: async () => {
       await adb.stopApp(adbId, parsedConfig.bundleId);
+      await clearHarnessDebugHttpHost(adbId, parsedConfig.bundleId);
       await adb.setHideErrorDialogs(adbId, false);
     },
     isAppRunning: async () => {

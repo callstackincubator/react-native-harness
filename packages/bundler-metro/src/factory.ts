@@ -1,4 +1,3 @@
-import { withRnHarness } from '@react-native-harness/metro';
 import { logger } from '@react-native-harness/tools';
 import type { Server as HttpServer } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
@@ -6,7 +5,6 @@ import connect from 'connect';
 import nocache from 'nocache';
 import { isPortAvailable, getMetroPackage } from './utils.js';
 import { MetroPortUnavailableError } from './errors.js';
-import { METRO_PORT } from './constants.js';
 import type { MetroInstance, MetroOptions } from './types.js';
 import {
   type Reporter,
@@ -15,6 +13,7 @@ import {
 } from './reporter.js';
 import { getExpoMiddleware } from './middlewares/expo-middleware.js';
 import { getStatusMiddleware } from './middlewares/status-middleware.js';
+import { withRnHarness } from './withRnHarness.js';
 
 const waitForBundler = async (
   reporter: Reporter,
@@ -41,10 +40,11 @@ export const getMetroInstance = async (
   abortSignal: AbortSignal
 ): Promise<MetroInstance> => {
   const { projectRoot, harnessConfig } = options;
-  const isDefaultPortAvailable = await isPortAvailable(METRO_PORT);
+  const metroPort = harnessConfig.metroPort;
+  const isMetroPortAvailable = await isPortAvailable(metroPort);
 
-  if (!isDefaultPortAvailable) {
-    throw new MetroPortUnavailableError(METRO_PORT);
+  if (!isMetroPortAvailable) {
+    throw new MetroPortUnavailableError(metroPort);
   }
 
   const Metro = getMetroPackage(projectRoot);
@@ -52,7 +52,7 @@ export const getMetroInstance = async (
   process.env.RN_HARNESS = 'true';
 
   const projectMetroConfig = await Metro.loadConfig({
-    port: METRO_PORT,
+    port: metroPort,
     projectRoot,
   });
   const config = await withRnHarness(projectMetroConfig, true)();
@@ -62,7 +62,7 @@ export const getMetroInstance = async (
 
   const middleware = connect()
     .use(nocache())
-    .use('/', getExpoMiddleware(projectRoot, harnessConfig.entryPoint))
+    .use('/', getExpoMiddleware(projectRoot, harnessConfig))
     .use('/status', getStatusMiddleware(projectRoot));
 
   const ready = waitForBundler(reporter, abortSignal);

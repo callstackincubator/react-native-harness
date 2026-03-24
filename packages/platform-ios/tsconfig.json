@@ -4,10 +4,10 @@
   "include": [],
   "references": [
     {
-      "path": "../config"
+      "path": "../tools"
     },
     {
-      "path": "../tools"
+      "path": "../config"
     },
     {
       "path": "../platforms"

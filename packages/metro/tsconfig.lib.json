@@ -9,16 +9,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"],
-  "references": [
-    {
-      "path": "../babel-preset/tsconfig.lib.json"
-    },
-    {
-      "path": "../config/tsconfig.lib.json"
-    },
-    {
-      "path": "../runtime/tsconfig.lib.json"
-    }
-  ]
+  "include": ["src/**/*.ts"]
 }

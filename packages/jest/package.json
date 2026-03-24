@@ -37,7 +37,6 @@
     "@react-native-harness/bridge": "workspace:*",
     "@react-native-harness/bundler-metro": "workspace:*",
     "@react-native-harness/config": "workspace:*",
-    "@react-native-harness/metro": "workspace:*",
     "@react-native-harness/platforms": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
     "chalk": "^4.1.2",

@@ -22,6 +22,11 @@ inputs:
     required: false
     type: string
     default: ''
+  cacheAvd:
+    description: Whether to cache the AVD
+    required: false
+    type: boolean
+    default: 'true'
 runs:
   using: 'composite'
   steps:
@@ -68,6 +73,7 @@ runs:
         sudo udevadm trigger --name-match=kvm
         ls /dev/kvm
     - name: Compute AVD cache key
+      if: ${{ fromJSON(inputs.cacheAvd) }}
       id: avd-key
       shell: bash
       run: |
@@ -78,6 +84,7 @@ runs:
         CACHE_KEY="avd-$ARCH-$AVD_CONFIG_HASH"
         echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
     - name: Restore AVD cache
+      if: ${{ fromJSON(inputs.cacheAvd) }}
       uses: actions/cache/restore@v4
       id: avd-cache
       with:
@@ -86,7 +93,7 @@ runs:
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
     - name: Create AVD and generate snapshot for caching
-      if: steps.avd-cache.outputs.cache-hit != 'true'
+      if: ${{ fromJSON(inputs.cacheAvd) && steps.avd-cache.outputs.cache-hit != 'true' }}
       uses: reactivecircus/android-emulator-runner@v2
       with:
         api-level: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.apiLevel }}
@@ -100,7 +107,7 @@ runs:
         emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
         script: echo "Generated AVD snapshot for caching."
     - name: Save AVD cache
-      if: steps.avd-cache.outputs.cache-hit != 'true'
+      if: ${{ fromJSON(inputs.cacheAvd) && steps.avd-cache.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v4
       with:
         path: |

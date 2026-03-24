@@ -1,10 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { NextFunction } from 'connect';
+import type { Config as HarnessConfig } from '@react-native-harness/config';
 import crypto from 'node:crypto';
 import { getResolvedEntryPointWithoutExtension } from '../entry-point-utils.js';
 
 export const getExpoMiddleware =
-  (projectRoot: string, entryPoint: string) =>
+  (projectRoot: string, harnessConfig: HarnessConfig) =>
   (req: IncomingMessage, res: ServerResponse, next: NextFunction) => {
     if (req.url !== '/') {
       next();
@@ -14,7 +15,7 @@ export const getExpoMiddleware =
     const platform = req.headers['expo-platform'] as string;
     const resolvedEntryPoint = getResolvedEntryPointWithoutExtension(
       projectRoot,
-      entryPoint
+      harnessConfig.entryPoint
     );
 
     const manifestJson = JSON.stringify({
@@ -24,7 +25,7 @@ export const getExpoMiddleware =
       launchAsset: {
         key: 'bundle',
         contentType: 'application/javascript',
-        url: `http://localhost:8081/${resolvedEntryPoint}.bundle?platform=${platform}&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable`,
+        url: `http://localhost:${harnessConfig.metroPort}/${resolvedEntryPoint}.bundle?platform=${platform}&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable`,
       },
       assets: [],
       metadata: {},
@@ -35,7 +36,7 @@ export const getExpoMiddleware =
           version: '1.0.0',
         },
         expoGo: {
-          debuggerHost: 'localhost:8081',
+          debuggerHost: `localhost:${harnessConfig.metroPort}`,
           developer: {
             tool: 'expo-cli',
             projectRoot,

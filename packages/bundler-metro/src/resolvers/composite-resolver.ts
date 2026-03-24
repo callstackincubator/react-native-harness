@@ -1,4 +1,4 @@
-import type { HarnessResolver, MetroResolver } from './types';
+import type { HarnessResolver, MetroResolver } from './types.js';
 
 export const createHarnessResolver = (
   resolvers: HarnessResolver[]

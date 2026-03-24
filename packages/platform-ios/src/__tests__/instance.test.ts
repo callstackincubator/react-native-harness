@@ -1,11 +1,19 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
+  DEFAULT_METRO_PORT,
+  type Config as HarnessConfig,
+} from '@react-native-harness/config';
+import {
   getApplePhysicalDevicePlatformInstance,
   getAppleSimulatorPlatformInstance,
 } from '../instance.js';
 import * as simctl from '../xcrun/simctl.js';
 import * as devicectl from '../xcrun/devicectl.js';
 import * as libimobiledevice from '../libimobiledevice.js';
+
+const harnessConfig = {
+  metroPort: DEFAULT_METRO_PORT,
+} as HarnessConfig;
 
 describe('iOS platform instance dependency validation', () => {
   beforeEach(() => {
@@ -19,6 +27,9 @@ describe('iOS platform instance dependency validation', () => {
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined
+    );
 
     const config = {
       name: 'ios',
@@ -27,7 +38,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getAppleSimulatorPlatformInstance(config)
+      getAppleSimulatorPlatformInstance(config, harnessConfig)
     ).resolves.toBeDefined();
     expect(assertInstalled).not.toHaveBeenCalled();
   });
@@ -44,7 +55,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getApplePhysicalDevicePlatformInstance(config)
+      getApplePhysicalDevicePlatformInstance(config, harnessConfig)
     ).rejects.toThrow('missing');
     expect(assertInstalled).toHaveBeenCalled();
   });
@@ -58,6 +69,9 @@ describe('iOS platform instance dependency validation', () => {
     );
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined
+    );
 
     const config = {
       name: 'ios',
@@ -66,7 +80,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getAppleSimulatorPlatformInstance(config)
+      getAppleSimulatorPlatformInstance(config, harnessConfig)
     ).resolves.toBeDefined();
     expect(getSimulatorId).toHaveBeenCalled();
   });
@@ -84,7 +98,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getApplePhysicalDevicePlatformInstance(config)
+      getApplePhysicalDevicePlatformInstance(config, harnessConfig)
     ).rejects.toThrow('missing');
     expect(getDeviceId).not.toHaveBeenCalled();
   });

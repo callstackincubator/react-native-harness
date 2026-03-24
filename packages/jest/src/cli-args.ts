@@ -3,6 +3,7 @@ import { hideBin } from 'yargs/helpers';
 
 export type HarnessCliArgs = {
   harnessRunner?: string;
+  metroPort?: number;
 };
 
 export const getAdditionalCliArgs = (): HarnessCliArgs => {
@@ -10,6 +11,10 @@ export const getAdditionalCliArgs = (): HarnessCliArgs => {
     .option('harnessRunner', {
       type: 'string',
       description: 'Specify which Harness runner to use',
+    })
+    .option('metroPort', {
+      type: 'number',
+      description: 'Override the Metro bundler port',
     })
     .strict(false)
     .help(false)
@@ -19,5 +24,6 @@ export const getAdditionalCliArgs = (): HarnessCliArgs => {
 
   return {
     harnessRunner: argv.harnessRunner,
+    metroPort: argv.metroPort,
   };
 };

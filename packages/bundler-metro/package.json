@@ -16,21 +16,27 @@
     }
   },
   "dependencies": {
-    "@react-native-harness/metro": "workspace:*",
+    "@react-native/metro-config": "*",
+    "@react-native-harness/babel-preset": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
     "@react-native-harness/config": "workspace:*",
+    "@react-native-harness/runtime": "workspace:*",
     "connect": "^3.7.0",
     "nocache": "^4.0.0",
     "tslib": "^2.3.0"
   },
   "peerDependencies": {
     "metro": "*",
-    "metro-config": "*"
+    "metro-cache": "*",
+    "metro-config": "*",
+    "metro-resolver": "*"
   },
   "devDependencies": {
     "@types/connect": "^3.4.38",
     "metro": "*",
-    "metro-config": "*"
+    "metro-cache": "*",
+    "metro-config": "*",
+    "metro-resolver": "*"
   },
   "license": "MIT"
 }

@@ -15,17 +15,12 @@
     }
   },
   "peerDependencies": {
-    "@react-native-harness/runtime": "workspace:*",
     "metro": "*"
   },
   "dependencies": {
-    "tslib": "^2.3.0",
-    "@react-native-harness/config": "workspace:*",
-    "@react-native-harness/babel-preset": "workspace:*"
+    "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@types/babel__core": "^7.20.5",
-    "@react-native-harness/runtime": "workspace:*",
     "metro": "*"
   },
   "license": "MIT"
