@@ -1,6 +1,7 @@
 import {
   getConfig,
   type Config as HarnessConfig,
+  ConfigSchema,
 } from '@react-native-harness/config';
 import type { Config as JestConfig } from 'jest-runner';
 import { getHarness } from './harness.js';
@@ -41,7 +42,7 @@ const getHarnessRunner = (
 
 export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   preRunMessage.remove(process.stderr);
-  const harnessConfig =
+  let harnessConfig =
     global.HARNESS_CONFIG ?? (await getHarnessConfig(globalConfig));
 
   if (global.HARNESS) {
@@ -57,6 +58,14 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   });
 
   const cliArgs = getAdditionalCliArgs();
+
+  if (cliArgs.metroPort != null) {
+    harnessConfig = ConfigSchema.parse({
+      ...harnessConfig,
+      metroPort: cliArgs.metroPort,
+    });
+  }
+
   const selectedRunner = getHarnessRunner(harnessConfig, cliArgs);
 
   if (globalConfig.collectCoverage) {

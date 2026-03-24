@@ -31,7 +31,7 @@ importers:
         version: 22.0.4(@babel/traverse@7.27.4)(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17))(nx@22.0.4(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17)))
       '@nx/react-native':
         specifier: 22.0.4
-        version: 22.0.4(@babel/core@7.27.4)(@babel/traverse@7.27.4)(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/helpers@0.5.17)(@types/babel__core@7.20.5)(@types/node@20.19.25)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(eslint@9.29.0(jiti@2.4.2))(metro-config@0.83.3)(metro-resolver@0.84.2)(nx@22.0.4(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(typescript@5.9.3)(vite@7.2.2(@types/node@20.19.25)(jiti@2.4.2)(terser@5.42.0)(yaml@2.8.0))(vitest@3.2.4)(webpack@5.102.1(@swc/core@1.5.29(@swc/helpers@0.5.17)))
+        version: 22.0.4(@babel/core@7.27.4)(@babel/traverse@7.27.4)(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/helpers@0.5.17)(@types/babel__core@7.20.5)(@types/node@20.19.25)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(eslint@9.29.0(jiti@2.4.2))(metro-config@0.83.3)(metro-resolver@0.83.3)(nx@22.0.4(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(typescript@5.9.3)(vite@7.2.2(@types/node@20.19.25)(jiti@2.4.2)(terser@5.42.0)(yaml@2.8.0))(vitest@3.2.4)(webpack@5.102.1(@swc/core@1.5.29(@swc/helpers@0.5.17)))
       '@nx/rollup':
         specifier: 22.0.4
         version: 22.0.4(@babel/core@7.27.4)(@babel/traverse@7.27.4)(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17))(@types/babel__core@7.20.5)(nx@22.0.4(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17)))(typescript@5.9.3)
@@ -278,13 +278,13 @@ importers:
         version: 0.83.3
       metro-cache:
         specifier: '*'
-        version: 0.84.2
+        version: 0.83.3
       metro-config:
         specifier: '*'
         version: 0.83.3
       metro-resolver:
         specifier: '*'
-        version: 0.84.2
+        version: 0.83.3
 
   packages/cli:
     dependencies:
@@ -6105,10 +6105,6 @@ packages:
     resolution: {integrity: sha512-3jo65X515mQJvKqK3vWRblxDEcgY55Sk3w4xa6LlfEXgQ9g1WgMh9m4qVZVwgcHoLy0a2HENTPCCX4Pk6s8c8Q==}
     engines: {node: '>=20.19.4'}
 
-  metro-cache@0.84.2:
-    resolution: {integrity: sha512-jPX2fwOc/MmP2KRScSg2jFtVN9BTd+QN6j/3qZ+HIbEAsePLONozbKR2kCIBGvVeBTe7js48WXziI4+AdfwfFQ==}
-    engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
-
   metro-config@0.83.3:
     resolution: {integrity: sha512-mTel7ipT0yNjKILIan04bkJkuCzUUkm2SeEaTads8VfEecCh+ltXchdq6DovXJqzQAXuR2P9cxZB47Lg4klriA==}
     engines: {node: '>=20.19.4'}
@@ -6116,10 +6112,6 @@ packages:
   metro-core@0.83.3:
     resolution: {integrity: sha512-M+X59lm7oBmJZamc96usuF1kusd5YimqG/q97g4Ac7slnJ3YiGglW5CsOlicTR5EWf8MQFxxjDoB6ytTqRe8Hw==}
     engines: {node: '>=20.19.4'}
-
-  metro-core@0.84.2:
-    resolution: {integrity: sha512-s9Ko372nzfbu5Y2uhWDlB/g3E6mba3Es95QzF/8IwNM4ynZgqM9rfnU0PR54onGvDGDfj44jbooSxaA1D09rDA==}
-    engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
   metro-file-map@0.83.3:
     resolution: {integrity: sha512-jg5AcyE0Q9Xbbu/4NAwwZkmQn7doJCKGW0SLeSJmzNB9Z24jBe0AL2PHNMy4eu0JiKtNWHz9IiONGZWq7hjVTA==}
@@ -6132,10 +6124,6 @@ packages:
   metro-resolver@0.83.3:
     resolution: {integrity: sha512-0js+zwI5flFxb1ktmR///bxHYg7OLpRpWZlBBruYG8OKYxeMP7SV0xQ/o/hUelrEMdK4LJzqVtHAhBm25LVfAQ==}
     engines: {node: '>=20.19.4'}
-
-  metro-resolver@0.84.2:
-    resolution: {integrity: sha512-2i6OQJIv18+olvLnmcM20uhi1T729+25izZozqOugSaV0YGzMV/EXkYFqxkXC9iNsantGcI/w9PgaI89wLK6JQ==}
-    engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
   metro-runtime@0.83.3:
     resolution: {integrity: sha512-JHCJb9ebr9rfJ+LcssFYA2x1qPYuSD/bbePupIGhpMrsla7RCwC/VL3yJ9cSU+nUhU4c9Ixxy8tBta+JbDeZWw==}
@@ -10333,7 +10321,7 @@ snapshots:
   '@nx/nx-win32-x64-msvc@22.0.4':
     optional: true
 
-  '@nx/react-native@22.0.4(@babel/core@7.27.4)(@babel/traverse@7.27.4)(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/helpers@0.5.17)(@types/babel__core@7.20.5)(@types/node@20.19.25)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(eslint@9.29.0(jiti@2.4.2))(metro-config@0.83.3)(metro-resolver@0.84.2)(nx@22.0.4(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(typescript@5.9.3)(vite@7.2.2(@types/node@20.19.25)(jiti@2.4.2)(terser@5.42.0)(yaml@2.8.0))(vitest@3.2.4)(webpack@5.102.1(@swc/core@1.5.29(@swc/helpers@0.5.17)))':
+  '@nx/react-native@22.0.4(@babel/core@7.27.4)(@babel/traverse@7.27.4)(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/helpers@0.5.17)(@types/babel__core@7.20.5)(@types/node@20.19.25)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(eslint@9.29.0(jiti@2.4.2))(metro-config@0.83.3)(metro-resolver@0.83.3)(nx@22.0.4(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17)))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(typescript@5.9.3)(vite@7.2.2(@types/node@20.19.25)(jiti@2.4.2)(terser@5.42.0)(yaml@2.8.0))(vitest@3.2.4)(webpack@5.102.1(@swc/core@1.5.29(@swc/helpers@0.5.17)))':
     dependencies:
       '@nx/devkit': 22.0.4(nx@22.0.4(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17)))
       '@nx/eslint': 22.0.4(@babel/traverse@7.27.4)(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17))(@zkochan/js-yaml@0.0.7)(eslint@9.29.0(jiti@2.4.2))(nx@22.0.4(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.23)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17)))
@@ -10343,7 +10331,7 @@ snapshots:
       enhanced-resolve: 5.18.3
       ignore: 5.3.2
       metro-config: 0.83.3
-      metro-resolver: 0.84.2
+      metro-resolver: 0.83.3
       picocolors: 1.1.1
       tinyglobby: 0.2.15
       tsconfig-paths: 4.2.0
@@ -10817,7 +10805,9 @@ snapshots:
       metro-config: 0.83.3
       metro-runtime: 0.83.3
     transitivePeerDependencies:
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 
@@ -15671,15 +15661,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  metro-cache@0.84.2:
-    dependencies:
-      exponential-backoff: 3.1.2
-      flow-enums-runtime: 0.0.6
-      https-proxy-agent: 7.0.6
-      metro-core: 0.84.2
-    transitivePeerDependencies:
-      - supports-color
-
   metro-config@0.83.3:
     dependencies:
       connect: 3.7.0
@@ -15701,12 +15682,6 @@ snapshots:
       lodash.throttle: 4.1.1
       metro-resolver: 0.83.3
 
-  metro-core@0.84.2:
-    dependencies:
-      flow-enums-runtime: 0.0.6
-      lodash.throttle: 4.1.1
-      metro-resolver: 0.84.2
-
   metro-file-map@0.83.3:
     dependencies:
       debug: 4.4.1
@@ -15727,10 +15702,6 @@ snapshots:
       terser: 5.42.0
 
   metro-resolver@0.83.3:
-    dependencies:
-      flow-enums-runtime: 0.0.6
-
-  metro-resolver@0.84.2:
     dependencies:
       flow-enums-runtime: 0.0.6
 

@@ -5,6 +5,10 @@ import {
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import {
+  DEFAULT_METRO_PORT,
+  type Config as HarnessConfig,
+} from '@react-native-harness/config';
+import {
   ApplePlatformConfig,
   assertAppleDevicePhysical,
   assertAppleDeviceSimulator,
@@ -19,7 +23,8 @@ import {
 import { assertLibimobiledeviceInstalled } from './libimobiledevice.js';
 
 export const getAppleSimulatorPlatformInstance = async (
-  config: ApplePlatformConfig
+  config: ApplePlatformConfig,
+  harnessConfig: HarnessConfig
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDeviceSimulator(config.device);
 
@@ -47,6 +52,12 @@ export const getAppleSimulatorPlatformInstance = async (
     throw new Error('Simulator is not booted');
   }
 
+  await simctl.applyHarnessJsLocationOverride(
+    udid,
+    config.bundleId,
+    `localhost:${harnessConfig.metroPort}`
+  );
+
   return {
     startApp: async (options) => {
       await simctl.startApp(
@@ -70,6 +81,7 @@ export const getAppleSimulatorPlatformInstance = async (
     },
     dispose: async () => {
       await simctl.stopApp(udid, config.bundleId);
+      await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
     },
     isAppRunning: async () => {
       return await simctl.isAppRunning(udid, config.bundleId);
@@ -84,10 +96,17 @@ export const getAppleSimulatorPlatformInstance = async (
 };
 
 export const getApplePhysicalDevicePlatformInstance = async (
-  config: ApplePlatformConfig
+  config: ApplePlatformConfig,
+  harnessConfig: HarnessConfig
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDevicePhysical(config.device);
   await assertLibimobiledeviceInstalled();
+
+  if (harnessConfig.metroPort !== DEFAULT_METRO_PORT) {
+    throw new Error(
+      `Custom Metro port ${harnessConfig.metroPort} is not supported on physical iOS devices. Physical devices always connect to port ${DEFAULT_METRO_PORT}.`
+    );
+  }
 
   const device = await devicectl.getDevice(config.device.name);
 

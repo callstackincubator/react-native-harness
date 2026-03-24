@@ -2,7 +2,12 @@ import {
   type AppleAppLaunchOptions,
   type CrashArtifactWriter,
 } from '@react-native-harness/platforms';
-import { logger, spawn, spawnAndForget } from '@react-native-harness/tools';
+import {
+  logger,
+  spawn,
+  spawnAndForget,
+  SubprocessError,
+} from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -278,6 +283,124 @@ export const isAppRunning = async (
   } catch {
     return false;
   }
+};
+
+const HARNESS_JS_LOCATION_BACKUP_KEY =
+  'react_native_harness_RCT_jsLocation_backup';
+const HARNESS_MISSING_VALUE = '__RN_HARNESS_MISSING__';
+
+const getDefaultsValue = async (
+  udid: string,
+  bundleId: string,
+  key: string
+): Promise<string | null> => {
+  try {
+    const { stdout } = await spawn('xcrun', [
+      'simctl',
+      'spawn',
+      udid,
+      'defaults',
+      'read',
+      bundleId,
+      key,
+    ]);
+    return stdout.trim() || null;
+  } catch (error) {
+    if (error instanceof SubprocessError && error.exitCode === 1) {
+      return null;
+    }
+
+    throw error;
+  }
+};
+
+const writeDefaultsValue = async (
+  udid: string,
+  bundleId: string,
+  key: string,
+  value: string
+): Promise<void> => {
+  await spawn('xcrun', [
+    'simctl',
+    'spawn',
+    udid,
+    'defaults',
+    'write',
+    bundleId,
+    key,
+    value,
+  ]);
+};
+
+const deleteDefaultsValue = async (
+  udid: string,
+  bundleId: string,
+  key: string
+): Promise<void> => {
+  try {
+    await spawn('xcrun', [
+      'simctl',
+      'spawn',
+      udid,
+      'defaults',
+      'delete',
+      bundleId,
+      key,
+    ]);
+  } catch (error) {
+    if (error instanceof SubprocessError && error.exitCode === 1) {
+      return;
+    }
+
+    throw error;
+  }
+};
+
+export const applyHarnessJsLocationOverride = async (
+  udid: string,
+  bundleId: string,
+  host: string
+): Promise<void> => {
+  const backupValue = await getDefaultsValue(
+    udid,
+    bundleId,
+    HARNESS_JS_LOCATION_BACKUP_KEY
+  );
+
+  if (backupValue === null) {
+    const existingValue = await getDefaultsValue(udid, bundleId, 'RCT_jsLocation');
+    await writeDefaultsValue(
+      udid,
+      bundleId,
+      HARNESS_JS_LOCATION_BACKUP_KEY,
+      existingValue ?? HARNESS_MISSING_VALUE
+    );
+  }
+
+  await writeDefaultsValue(udid, bundleId, 'RCT_jsLocation', host);
+};
+
+export const clearHarnessJsLocationOverride = async (
+  udid: string,
+  bundleId: string
+): Promise<void> => {
+  const backupValue = await getDefaultsValue(
+    udid,
+    bundleId,
+    HARNESS_JS_LOCATION_BACKUP_KEY
+  );
+
+  if (backupValue === null) {
+    return;
+  }
+
+  if (backupValue === HARNESS_MISSING_VALUE) {
+    await deleteDefaultsValue(udid, bundleId, 'RCT_jsLocation');
+  } else {
+    await writeDefaultsValue(udid, bundleId, 'RCT_jsLocation', backupValue);
+  }
+
+  await deleteDefaultsValue(udid, bundleId, HARNESS_JS_LOCATION_BACKUP_KEY);
 };
 
 export const screenshot = async (
