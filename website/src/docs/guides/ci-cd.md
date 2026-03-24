@@ -24,11 +24,11 @@ You can pin to a specific version by appending `@<version>` to the action path (
 
 The action automatically:
 
-- Load your React Native Harness configuration
-- Set up and configure the emulator/simulator based on your config
-- Install your app
-- Run the tests
-- Upload crash reports from `.harness/crash-reports/` as workflow artifacts whenever a run produces them
+- Loads your React Native Harness configuration
+- Sets up and configures the emulator, simulator, or browser based on your config
+- Installs your app for native runners
+- Runs the tests
+- Uploads crash reports from `.harness/crash-reports/` as workflow artifacts whenever a run produces them
 
 The action reads your `rn-harness.config.mjs` file to determine the selected runner's platform and device configuration, so you don't need to hardcode emulator or simulator settings in your workflow.
 
@@ -43,6 +43,8 @@ The action accepts the following inputs:
 - `harnessArgs` (optional): Additional arguments to pass to the Harness CLI
 - `packageManager` (optional): Override package manager auto-detection. Supported values: `npm`, `yarn`, `pnpm`, `bun`, `deno`
 - `cacheAvd` (optional, Android only): Whether to cache the Android Virtual Device snapshot. Defaults to `true`
+- `preRunHook` (optional): Inline shell script run in `bash` immediately before Harness starts
+- `afterRunHook` (optional): Inline shell script run in `bash` immediately after Harness finishes and before artifacts are uploaded
 
 ## Crash Artifacts
 
@@ -91,7 +93,6 @@ jobs:
     if: ${{ github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android' || github.event.inputs.platform == null }}
 
     steps:
-      # Step 1: Setup the environment
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -115,7 +116,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Step 2: Build optimization with caching
       - name: Restore APK from cache
         id: cache-apk-restore
         uses: actions/cache/restore@v4
@@ -135,7 +135,6 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           key: android-app-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
 
-      # Step 3: Run Harness tests
       - name: Run React Native Harness
         uses: callstackincubator/react-native-harness@main
         with:
@@ -143,6 +142,11 @@ jobs:
           runner: android
           packageManager: pnpm
           cacheAvd: false
+          preRunHook: |
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+          afterRunHook: |
+            echo "Harness finished with exit code: $HARNESS_EXIT_CODE"
 
   test-ios:
     name: Test iOS
@@ -152,7 +156,6 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_16.4.0.app/Contents/Developer
 
     steps:
-      # Step 1: Setup the environment
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -167,14 +170,12 @@ jobs:
           node-version: '18'
           cache: 'pnpm'
 
-      # Watchman dramatically speeds up file crawling for large projects
       - name: Install Watchman
         run: brew install watchman
 
       - name: Install dependencies
         run: pnpm install
 
-      # Step 2: iOS build optimization with caching
       - name: Restore app from cache
         id: cache-app-restore
         uses: actions/cache/restore@v4
@@ -208,13 +209,29 @@ jobs:
           path: ios/build/Build/Products/Debug-iphonesimulator/YourApp.app
           key: ios-app-${{ hashFiles('ios/Podfile.lock', 'ios/**/*.pbxproj') }}
 
-      # Step 3: Run Harness tests
       - name: Run React Native Harness
         uses: callstackincubator/react-native-harness@main
         with:
           app: ios/build/Build/Products/Debug-iphonesimulator/YourApp.app
           runner: ios
+          preRunHook: |
+            xcrun simctl privacy booted grant photos com.example.myapp
+          afterRunHook: |
+            echo "Harness finished with exit code: $HARNESS_EXIT_CODE"
 ```
+
+## Hook Scripts
+
+The official action can run optional shell hooks around the Harness invocation:
+
+- `preRunHook` runs in `bash` immediately before the Harness CLI command.
+- `afterRunHook` runs in `bash` immediately after the Harness CLI command and before artifact upload, even if Harness fails.
+- Both hooks receive `HARNESS_PROJECT_ROOT` and `HARNESS_RUNNER`.
+- `afterRunHook` also receives `HARNESS_EXIT_CODE`.
+- A non-zero exit from either hook fails the action.
+- `afterRunHook` runs only when execution reached the Harness command.
+
+On Android, both hooks execute inside the `android-emulator-runner` session, so they can safely use `adb` against the active emulator. On iOS, the hooks run after the simulator is booted and the app is installed. On web, the same inputs are available for consistency and run immediately before and after the Harness command.
 
 ## Metro cache
 
@@ -241,13 +258,7 @@ While caching is enabled in the workflow, **it may not always be correctly purge
 
 ### Advanced Frameworks
 
-If you're using frameworks like **Expo** or **Rock**, you'll benefit from sophisticated fingerprinting solutions that are guaranteed to correctly detect changes and rebuild when necessary. These frameworks include:
-
-- **Intelligent dependency tracking** that monitors all relevant files
-- **Granular cache invalidation** based on comprehensive file fingerprints
-- **Automated rebuild triggers** when native modules or configurations change
-
-This makes caching much more reliable and reduces the need for manual cache management.
+If you're using frameworks like **Expo** or **Rock**, you'll benefit from sophisticated fingerprinting solutions that are guaranteed to correctly detect changes and rebuild when necessary.
 
 ## Adapting for Your Project
 

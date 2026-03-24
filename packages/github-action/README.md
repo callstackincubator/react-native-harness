@@ -27,6 +27,8 @@ The action reads your `rn-harness.config.mjs` file, resolves the `runner` you pa
 - `harnessArgs` (optional): Additional arguments to pass to the Harness CLI
 - `packageManager` (optional): Override package manager auto-detection. Supported values: `npm`, `yarn`, `pnpm`, `bun`, `deno`
 - `cacheAvd` (optional, Android only): Whether to cache the Android Virtual Device snapshot. Defaults to `true`
+- `preRunHook` (optional): Inline shell script run in `bash` immediately before Harness starts
+- `afterRunHook` (optional): Inline shell script run in `bash` immediately after Harness finishes and before artifact upload
 - Crash artifacts persisted to `.harness/crash-reports/` are uploaded automatically when present
 - Metro cache persisted to `.harness/metro-cache/` is restored and saved automatically when present
 
@@ -34,23 +36,24 @@ The action reads your `rn-harness.config.mjs` file, resolves the `runner` you pa
 
 Depending on the selected runner, the action:
 
-- For Android runners, loads and validates your Harness configuration, restores Metro cache, sets up the Android emulator with architecture detection, caches AVD snapshots, installs your app on the emulator, and runs the Harness tests
-- For iOS runners, loads and validates your Harness configuration, restores Metro cache, sets up the iOS simulator, installs your app on the simulator, and runs the Harness tests
-- For web runners, loads and validates your Harness configuration, restores Metro cache, installs Playwright Chromium, and runs the Harness tests
+- For Android runners, loads and validates your Harness configuration, restores Metro cache, sets up the Android emulator with architecture detection, optionally caches AVD snapshots, installs your app on the emulator, runs the hooks inside the emulator session, and runs the Harness tests
+- For iOS runners, loads and validates your Harness configuration, restores Metro cache, sets up the iOS simulator, installs your app on the simulator, runs the hooks around the Harness invocation, and runs the Harness tests
+- For web runners, loads and validates your Harness configuration, restores Metro cache, installs Playwright Chromium, runs the hooks around the Harness invocation, and runs the Harness tests
+
+Hook behavior:
+
+- Hooks are optional; empty inputs disable them.
+- Hook inputs are treated as inline shell scripts, not file paths.
+- Hooks run in `bash` with `HARNESS_PROJECT_ROOT` and `HARNESS_RUNNER` exported.
+- `afterRunHook` also receives `HARNESS_EXIT_CODE`.
+- A non-zero exit from either hook fails the action.
+- `afterRunHook` runs only after the Harness command is invoked.
+- On Android, both hooks run inside the emulator-runner session so they can access `adb` and the booted emulator.
 
 Runner configuration requirements:
 
-- Android runners must include an `avd` property with:
-
-- `apiLevel`
-- `profile`
-- `diskSize`
-- `heapSize`
-
-- iOS runners must include a `device` property with:
-
-- `name`
-- `systemVersion`
+- Android runners must include an `avd` property with `apiLevel`, `profile`, `diskSize`, and `heapSize`
+- iOS runners must include a `device` property with `name` and `systemVersion`
 
 ## Examples
 
@@ -64,6 +67,11 @@ Runner configuration requirements:
     projectRoot: './apps/my-app'
     packageManager: 'pnpm'
     cacheAvd: false
+    preRunHook: |
+      adb shell settings put global window_animation_scale 0
+      adb shell settings put global transition_animation_scale 0
+    afterRunHook: |
+      echo "Harness finished with exit code: $HARNESS_EXIT_CODE"
 ```
 
 ### iOS runner
@@ -74,6 +82,10 @@ Runner configuration requirements:
     app: './ios/build/Build/Products/Debug-iphonesimulator/MyApp.app'
     runner: 'ios'
     projectRoot: './apps/my-app'
+    preRunHook: |
+      xcrun simctl privacy booted grant photos com.example.myapp
+    afterRunHook: |
+      echo "Harness finished with exit code: $HARNESS_EXIT_CODE"
 ```
 
 ### Web runner
@@ -83,6 +95,10 @@ Runner configuration requirements:
   with:
     runner: 'chromium'
     projectRoot: './apps/my-app'
+    preRunHook: |
+      echo "About to run Harness in $HARNESS_PROJECT_ROOT"
+    afterRunHook: |
+      echo "Harness finished with exit code: $HARNESS_EXIT_CODE"
 ```
 
 ## Usage

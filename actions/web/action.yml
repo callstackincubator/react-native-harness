@@ -19,6 +19,16 @@ inputs:
     required: false
     type: string
     default: ''
+  preRunHook:
+    description: Shell script to run in bash immediately before Harness starts
+    required: false
+    type: string
+    default: ''
+  afterRunHook:
+    description: Shell script to run in bash immediately after Harness finishes
+    required: false
+    type: string
+    default: ''
 runs:
   using: 'composite'
   steps:
@@ -54,9 +64,55 @@ runs:
           echo "runner=npx " >> $GITHUB_OUTPUT
         fi
     - name: Run E2E tests
+      id: run-tests
       shell: bash
       working-directory: ${{ inputs.projectRoot }}
-      run: ${{ steps.detect-pm.outputs.runner }}react-native-harness --harnessRunner ${{ inputs.runner }} ${{ inputs.harnessArgs }}
+      env:
+        PRE_RUN_HOOK: ${{ inputs.preRunHook }}
+        AFTER_RUN_HOOK: ${{ inputs.afterRunHook }}
+        HARNESS_RUNNER: ${{ inputs.runner }}
+      run: |
+        export HARNESS_PROJECT_ROOT="$PWD"
+
+        if [ -n "$PRE_RUN_HOOK" ]; then
+          pre_hook_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-pre-run.XXXXXX.sh")"
+          trap 'rm -f "$pre_hook_file"' EXIT
+          printf '%s\n' "$PRE_RUN_HOOK" > "$pre_hook_file"
+          chmod +x "$pre_hook_file"
+          bash "$pre_hook_file"
+          rm -f "$pre_hook_file"
+          trap - EXIT
+        fi
+
+        set +e
+        ${{ steps.detect-pm.outputs.runner }}react-native-harness --harnessRunner ${{ inputs.runner }} ${{ inputs.harnessArgs }}
+        harness_exit_code=$?
+        set -e
+
+        export HARNESS_EXIT_CODE="$harness_exit_code"
+        after_run_exit_code=0
+        if [ -n "$AFTER_RUN_HOOK" ]; then
+          after_hook_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-after-run.XXXXXX.sh")"
+          trap 'rm -f "$after_hook_file"' EXIT
+          printf '%s\n' "$AFTER_RUN_HOOK" > "$after_hook_file"
+          chmod +x "$after_hook_file"
+          set +e
+          bash "$after_hook_file"
+          after_run_exit_code=$?
+          set -e
+          rm -f "$after_hook_file"
+          trap - EXIT
+        fi
+
+        echo "harness_exit_code=$harness_exit_code" >> "$GITHUB_OUTPUT"
+
+        if [ "$harness_exit_code" -ne 0 ]; then
+          exit "$harness_exit_code"
+        fi
+
+        if [ "$after_run_exit_code" -ne 0 ]; then
+          exit "$after_run_exit_code"
+        fi
     - name: Upload visual test artifacts
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
       uses: actions/upload-artifact@v4

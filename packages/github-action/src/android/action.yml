@@ -27,6 +27,16 @@ inputs:
     required: false
     type: boolean
     default: 'true'
+  preRunHook:
+    description: Shell script to run in bash immediately before Harness starts
+    required: false
+    type: string
+    default: ''
+  afterRunHook:
+    description: Shell script to run in bash immediately after Harness finishes
+    required: false
+    type: string
+    default: ''
 runs:
   using: 'composite'
   steps:
@@ -137,6 +147,50 @@ runs:
     - name: Run E2E tests
       id: run-tests
       uses: reactivecircus/android-emulator-runner@v2
+      env:
+        PRE_RUN_HOOK: ${{ inputs.preRunHook }}
+        AFTER_RUN_HOOK: ${{ inputs.afterRunHook }}
+        HARNESS_RUNNER: ${{ inputs.runner }}
+        # android-emulator-runner executes each script line via `sh -c`, so multi-line
+        # shell control flow must live in a separate bash script instead of `with.script`.
+        HARNESS_ANDROID_SESSION_SCRIPT: |-
+          export HARNESS_PROJECT_ROOT="$PWD"
+
+          adb install -r "${{ inputs.app }}"
+
+          if [ -n "$PRE_RUN_HOOK" ]; then
+            pre_hook_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-pre-run.XXXXXX.sh")"
+            printf "%s\n" "$PRE_RUN_HOOK" > "$pre_hook_file"
+            chmod +x "$pre_hook_file"
+            bash "$pre_hook_file"
+            rm -f "$pre_hook_file"
+          fi
+
+          set +e
+          ${{ steps.detect-pm.outputs.runner }}react-native-harness --harnessRunner "${{ inputs.runner }}" ${{ inputs.harnessArgs }}
+          harness_exit_code=$?
+          set -e
+
+          export HARNESS_EXIT_CODE="$harness_exit_code"
+          after_run_exit_code=0
+          if [ -n "$AFTER_RUN_HOOK" ]; then
+            after_hook_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-after-run.XXXXXX.sh")"
+            printf "%s\n" "$AFTER_RUN_HOOK" > "$after_hook_file"
+            chmod +x "$after_hook_file"
+            set +e
+            bash "$after_hook_file"
+            after_run_exit_code=$?
+            set -e
+            rm -f "$after_hook_file"
+          fi
+
+          if [ "$harness_exit_code" -ne 0 ]; then
+            exit "$harness_exit_code"
+          fi
+
+          if [ "$after_run_exit_code" -ne 0 ]; then
+            exit "$after_run_exit_code"
+          fi
       with:
         working-directory: ${{ inputs.projectRoot }}
         api-level: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.apiLevel }}
@@ -145,10 +199,10 @@ runs:
         avd-name: ${{ fromJson(steps.load-config.outputs.config).config.device.name }}
         disable-animations: true
         emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-        script: |
-          echo $(pwd)
-          adb install -r ${{ inputs.app }}
-          ${{ steps.detect-pm.outputs.runner }}react-native-harness --harnessRunner ${{ inputs.runner }} ${{ inputs.harnessArgs }}
+        # Keep `script` to a single line so the emulator action does not split our bash
+        # session apart before the hooks and Harness command run.
+        script: >-
+          harness_script_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-android-run.XXXXXX.sh")"; printf '%s\n' "$HARNESS_ANDROID_SESSION_SCRIPT" > "$harness_script_file"; chmod +x "$harness_script_file"; bash "$harness_script_file"; status=$?; rm -f "$harness_script_file"; exit "$status"
     - name: Upload visual test artifacts
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
       uses: actions/upload-artifact@v4

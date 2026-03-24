@@ -97,6 +97,12 @@ jobs:
           app: android/app/build/outputs/apk/debug/app-debug.apk
           runner: android
           projectRoot: apps/playground
+          preRunHook: |
+            echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
+            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+          afterRunHook: |
+            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+            echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
 
   e2e-ios:
     name: E2E iOS
@@ -178,6 +184,12 @@ jobs:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           runner: ios
           projectRoot: apps/playground
+          preRunHook: |
+            echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
+            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+          afterRunHook: |
+            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+            echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
 
   e2e-web:
     name: E2E Web
@@ -218,6 +230,12 @@ jobs:
         with:
           runner: chromium
           projectRoot: apps/playground
+          preRunHook: |
+            echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
+            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+          afterRunHook: |
+            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+            echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
 
   crash-validate-android:
     name: Crash Validation Android
@@ -297,6 +315,12 @@ jobs:
           runner: android-crash-pre-rn
           projectRoot: apps/playground
           harnessArgs: --testPathPatterns smoke
+          preRunHook: |
+            echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
+            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+          afterRunHook: |
+            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+            echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
 
       - name: Verify crash was detected
         shell: bash
@@ -402,6 +426,12 @@ jobs:
           runner: ios-crash-pre-rn
           projectRoot: apps/playground
           harnessArgs: --testPathPatterns smoke
+          preRunHook: |
+            echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
+            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+          afterRunHook: |
+            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+            echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
 
       - name: Verify crash was detected
         shell: bash
