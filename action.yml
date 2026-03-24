@@ -23,6 +23,16 @@ inputs:
     required: false
     type: string
     default: ''
+  packageManager:
+    description: Package manager to use instead of auto-detection (npm, yarn, pnpm, bun, or deno)
+    required: false
+    type: string
+    default: ''
+  cacheAvd:
+    description: Whether to cache the AVD
+    required: false
+    type: boolean
+    default: 'true'
 runs:
   using: 'composite'
   steps:
@@ -34,6 +44,15 @@ runs:
         INPUT_PROJECTROOT: ${{ inputs.projectRoot }}
       run: |
         node ${{ github.action_path }}/actions/shared/index.cjs
+    - name: Verify native app input
+      if: fromJson(steps.load-config.outputs.config).platformId != 'web'
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.app }}" ]; then
+          echo "Error: app input is required for native runners"
+          echo "Please provide the path to the built app (.apk for Android, .app for iOS)"
+          exit 1
+        fi
     - name: Metro cache
       uses: actions/cache@v4
       with:
@@ -98,7 +117,7 @@ runs:
         ls /dev/kvm
     - name: Compute AVD cache key
       id: avd-key
-      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJSON(inputs.cacheAvd) }}
       shell: bash
       run: |
         CONFIG='${{ steps.load-config.outputs.config }}'
@@ -110,14 +129,14 @@ runs:
     - name: Restore AVD cache
       uses: actions/cache/restore@v4
       id: avd-cache
-      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJSON(inputs.cacheAvd) }}
       with:
         path: |
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
     - name: Create AVD and generate snapshot for caching
-      if: fromJson(steps.load-config.outputs.config).platformId == 'android' && steps.avd-cache.outputs.cache-hit != 'true'
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJSON(inputs.cacheAvd) && steps.avd-cache.outputs.cache-hit != 'true' }}
       uses: reactivecircus/android-emulator-runner@v2
       with:
         api-level: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.apiLevel }}
@@ -131,7 +150,7 @@ runs:
         emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
         script: echo "Generated AVD snapshot for caching."
     - name: Save AVD cache
-      if: fromJson(steps.load-config.outputs.config).platformId == 'android' && steps.avd-cache.outputs.cache-hit != 'true'
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJSON(inputs.cacheAvd) && steps.avd-cache.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v4
       with:
         path: |
@@ -149,8 +168,37 @@ runs:
     - name: Detect Package Manager
       id: detect-pm
       shell: bash
+      working-directory: ${{ steps.load-config.outputs.projectRoot }}
       run: |
-        if [ -f "pnpm-lock.yaml" ]; then
+        if [ -n "${{ inputs.packageManager }}" ]; then
+          case "${{ inputs.packageManager }}" in
+            pnpm)
+              echo "manager=pnpm" >> $GITHUB_OUTPUT
+              echo "runner=pnpm exec " >> $GITHUB_OUTPUT
+              ;;
+            yarn)
+              echo "manager=yarn" >> $GITHUB_OUTPUT
+              echo "runner=yarn " >> $GITHUB_OUTPUT
+              ;;
+            bun)
+              echo "manager=bun" >> $GITHUB_OUTPUT
+              echo "runner=bunx " >> $GITHUB_OUTPUT
+              ;;
+            deno)
+              echo "manager=deno" >> $GITHUB_OUTPUT
+              echo "runner=deno run -A npm:" >> $GITHUB_OUTPUT
+              ;;
+            npm)
+              echo "manager=npm" >> $GITHUB_OUTPUT
+              echo "runner=npx " >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "Error: Unsupported packageManager '${{ inputs.packageManager }}'"
+              echo "Supported values: npm, yarn, pnpm, bun, deno"
+              exit 1
+              ;;
+          esac
+        elif [ -f "pnpm-lock.yaml" ]; then
           echo "manager=pnpm" >> $GITHUB_OUTPUT
           echo "runner=pnpm exec " >> $GITHUB_OUTPUT
         elif [ -f "yarn.lock" ]; then

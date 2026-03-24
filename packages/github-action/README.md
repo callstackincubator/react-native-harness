@@ -25,6 +25,8 @@ The action reads your `rn-harness.config.mjs` file, resolves the `runner` you pa
 - `projectRoot` (optional): The project root directory (defaults to repository root)
 - `uploadVisualTestArtifacts` (optional): Whether to upload visual test diff and actual images as artifacts
 - `harnessArgs` (optional): Additional arguments to pass to the Harness CLI
+- `packageManager` (optional): Override package manager auto-detection. Supported values: `npm`, `yarn`, `pnpm`, `bun`, `deno`
+- `cacheAvd` (optional, Android only): Whether to cache the Android Virtual Device snapshot. Defaults to `true`
 - Crash artifacts persisted to `.harness/crash-reports/` are uploaded automatically when present
 - Metro cache persisted to `.harness/metro-cache/` is restored and saved automatically when present
 
@@ -60,6 +62,8 @@ Runner configuration requirements:
     app: './android/app/build/outputs/apk/debug/app-debug.apk'
     runner: 'android'
     projectRoot: './apps/my-app'
+    packageManager: 'pnpm'
+    cacheAvd: false
 ```
 
 ### iOS runner

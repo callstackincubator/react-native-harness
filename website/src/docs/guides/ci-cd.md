@@ -39,6 +39,10 @@ The action accepts the following inputs:
 - `app` (optional): Path to your built app (`.apk` for Android, `.app` for iOS). Not needed for web runners
 - `runner` (required): The runner name from your Harness config (for example `"android"`, `"ios"`, or `"chromium"`)
 - `projectRoot` (optional): The project root directory (defaults to the repository root)
+- `uploadVisualTestArtifacts` (optional): Whether to upload visual test diff and actual images as artifacts
+- `harnessArgs` (optional): Additional arguments to pass to the Harness CLI
+- `packageManager` (optional): Override package manager auto-detection. Supported values: `npm`, `yarn`, `pnpm`, `bun`, `deno`
+- `cacheAvd` (optional, Android only): Whether to cache the Android Virtual Device snapshot. Defaults to `true`
 
 ## Crash Artifacts
 
@@ -137,6 +141,8 @@ jobs:
         with:
           app: android/app/build/outputs/apk/debug/app-debug.apk
           runner: android
+          packageManager: pnpm
+          cacheAvd: false
 
   test-ios:
     name: Test iOS
