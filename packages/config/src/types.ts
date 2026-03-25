@@ -103,6 +103,23 @@ export const ConfigSchema = z
               'Use ".." for create-react-native-library projects where tests run from example/ ' +
               "but source files are in parent directory. Passed to babel-plugin-istanbul's cwd option."
           ),
+        native: z
+          .object({
+            ios: z
+              .object({
+                pods: z
+                  .array(z.string())
+                  .min(1, 'At least one pod name is required')
+                  .describe(
+                    'Pod names to instrument for native code coverage. ' +
+                    'Coverage flags are injected at pod install time via a CocoaPods hook. ' +
+                    'After tests, profraw data is collected and converted to lcov format.'
+                  ),
+              })
+              .optional(),
+          })
+          .optional()
+          .describe('Native code coverage configuration.'),
       })
       .optional(),
 

@@ -1,6 +1,7 @@
 import {
   AppMonitor,
   AppNotInstalledError,
+  type CollectNativeCoverageOptions,
   CreateAppMonitorOptions,
   DeviceNotFoundError,
   type HarnessPlatformInitOptions,
@@ -27,6 +28,7 @@ import { logger } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { createXCTestAgentController } from './xctest-agent.js';
 import { createPermissionPromptAutoAcceptCapability } from './xctest-agent-capabilities.js';
+import { collectNativeCoverage } from './coverage-collector.js';
 
 const iosInstanceLogger = logger.child('ios-instance');
 
@@ -191,6 +193,14 @@ export const getAppleSimulatorPlatformInstance = async (
         udid,
         bundleId: config.bundleId,
         crashArtifactWriter: options?.crashArtifactWriter,
+      });
+    },
+    collectNativeCoverage: async (options: CollectNativeCoverageOptions) => {
+      return await collectNativeCoverage({
+        udid,
+        bundleId: config.bundleId,
+        pods: options.pods,
+        outputDir: options.outputDir,
       });
     },
   };

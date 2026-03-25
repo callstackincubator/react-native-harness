@@ -12,6 +12,7 @@ export type {
   CreateAppMonitorOptions,
   HarnessPlatform,
   HarnessPlatformInitOptions,
+  CollectNativeCoverageOptions,
   HarnessPlatformRunner,
   RunTarget,
   VegaAppLaunchOptions,

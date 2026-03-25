@@ -98,6 +98,11 @@ export type AppLaunchOptions =
   | WebAppLaunchOptions
   | VegaAppLaunchOptions;
 
+export type CollectNativeCoverageOptions = {
+  pods: string[];
+  outputDir: string;
+};
+
 export type HarnessPlatformRunner = {
   startApp: (options?: AppLaunchOptions) => Promise<void>;
   restartApp: (options?: AppLaunchOptions) => Promise<void>;
@@ -108,6 +113,9 @@ export type HarnessPlatformRunner = {
   getCrashDetails?: (
     options: CrashDetailsLookupOptions,
   ) => Promise<AppCrashDetails | null>;
+  collectNativeCoverage?: (
+    options: CollectNativeCoverageOptions
+  ) => Promise<string | null>;
 };
 
 export type HarnessPlatformInitOptions = {

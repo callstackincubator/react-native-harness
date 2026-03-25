@@ -50,6 +50,7 @@ import path from 'node:path';
 import {
   logMetroCacheReused,
   logMetroPortFallback,
+  logNativeCoverageCollected,
   logRunnerStarting,
   logRunnerStillWaitingInQueue,
   logRunnerWaitingInQueue,
@@ -686,6 +687,24 @@ const getHarnessInternal = async (
       serverBridge.off('ready', onReady);
       serverBridge.off('disconnect', onDisconnect);
       serverBridge.off('event', bridgeEventListener);
+
+      const nativeCoverageConfig = runtimeConfig.coverage?.native?.ios;
+      if (nativeCoverageConfig?.pods?.length && platformInstance.collectNativeCoverage) {
+        try {
+          await platformInstance.stopApp();
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          const lcovPath = await platformInstance.collectNativeCoverage({
+            pods: nativeCoverageConfig.pods,
+            outputDir: projectRoot,
+          });
+          if (lcovPath) {
+            logNativeCoverageCollected(lcovPath);
+          }
+        } catch (error) {
+          harnessLogger.warn('failed to collect native coverage: %s', error);
+        }
+      }
+
       let cleanupError: unknown;
       try {
         await Promise.all([

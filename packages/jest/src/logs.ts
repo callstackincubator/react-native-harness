@@ -56,6 +56,10 @@ export const logMetroPortFallback = (
   );
 };
 
+export const logNativeCoverageCollected = (lcovPath: string): void => {
+  log(`${TAG} Native coverage written to ${chalk.bold(lcovPath)}\n`);
+};
+
 export const getErrorMessage = (error: HarnessError): string => {
   return `${ERROR_TAG} ${error.message}\n`;
 };

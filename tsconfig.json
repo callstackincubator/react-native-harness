@@ -59,6 +59,9 @@
     },
     {
       "path": "./packages/ui"
+    },
+    {
+      "path": "./packages/coverage-ios"
     }
   ]
 }

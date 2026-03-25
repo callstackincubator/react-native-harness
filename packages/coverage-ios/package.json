@@ -1,0 +1,49 @@
+{
+  "name": "@react-native-harness/coverage-ios",
+  "description": "Native iOS code coverage support for React Native Harness.",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "src",
+    "dist",
+    "ios",
+    "scripts",
+    "*.podspec",
+    "react-native.config.cjs",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__",
+    "!**/.*"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "peerDependencies": {
+    "react-native": "*"
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "react-native": "*"
+  },
+  "author": {
+    "name": "Margelo",
+    "email": "hello@margelo.com"
+  },
+  "homepage": "https://github.com/margelo/react-native-harness",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/margelo/react-native-harness.git"
+  },
+  "license": "MIT"
+}
