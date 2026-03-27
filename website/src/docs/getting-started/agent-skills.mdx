@@ -1,0 +1,43 @@
+import { PackageManagerTabs } from '@theme';
+
+# Agent Skills
+
+If you use Codex or another coding agent that supports the Vercel `skills` CLI, you can install the `react-native-harness` skill so the agent can author Harness tests more effectively.
+
+The skill gives the agent the expected React Native Harness workflow for writing tests, using module mocks, working with `render(...)`, and using the optional `@react-native-harness/ui` package correctly.
+
+The skill complements the `react-native-harness` package, it does not replace it. Your project still needs `react-native-harness` installed because the agent is ultimately writing and running real Harness tests in your app.
+
+## Install with the Vercel `skills` CLI
+
+Install the skill from this repository using the repo URL and the skill name:
+
+<PackageManagerTabs
+  command={{
+    npm: 'npx skills add https://github.com/callstackincubator/react-native-harness --skill react-native-harness',
+    yarn: 'yarn dlx skills add https://github.com/callstackincubator/react-native-harness --skill react-native-harness',
+    pnpm: 'pnpm dlx skills add https://github.com/callstackincubator/react-native-harness --skill react-native-harness',
+    bun: 'bunx skills add https://github.com/callstackincubator/react-native-harness --skill react-native-harness',
+  }}
+/>
+
+By default, the `skills` CLI installs project-local skills for the agents it supports in your project.
+
+To install it globally for all projects instead, use:
+
+<PackageManagerTabs
+  command={{
+    npm: 'npx skills add https://github.com/callstackincubator/react-native-harness --skill react-native-harness --global',
+    yarn: 'yarn dlx skills add https://github.com/callstackincubator/react-native-harness --skill react-native-harness --global',
+    pnpm: 'pnpm dlx skills add https://github.com/callstackincubator/react-native-harness --skill react-native-harness --global',
+    bun: 'bunx skills add https://github.com/callstackincubator/react-native-harness --skill react-native-harness --global',
+  }}
+/>
+
+After installation, ask your agent to use `react-native-harness` whenever it needs to write or debug Harness tests.
+
+## Next Steps
+
+- Go back to [Quick Start](/docs/getting-started/quick-start).
+- Read the [Configuration](/docs/getting-started/configuration) guide.
+- Browse the [API](/docs/api/defining-tests) docs for the public testing surface.

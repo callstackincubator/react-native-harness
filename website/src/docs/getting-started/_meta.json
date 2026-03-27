@@ -21,6 +21,11 @@
   },
   {
     "type": "file",
+    "name": "agent-skills",
+    "label": "Agent Skills"
+  },
+  {
+    "type": "file",
     "name": "configuration",
     "label": "Configuration"
   },
