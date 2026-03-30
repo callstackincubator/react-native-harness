@@ -15,6 +15,13 @@ type BundleRequestObservation = {
   sawPrewarmRequest: boolean;
 };
 
+class ReadyTimeoutError extends Error {
+  constructor() {
+    super('Timed out waiting for the app to become ready after Metro bundling.');
+    this.name = 'ReadyTimeoutError';
+  }
+}
+
 export type WaitForMetroBackedAppReadyOptions = {
   metro: MetroInstance;
   platformId: string;
@@ -98,6 +105,106 @@ const waitForBundleRequest = async ({
   });
 };
 
+const waitForReadyAfterBundleRequest = async (options: {
+  events: MetroInstance['events'];
+  readyTimeout: number;
+  signal: AbortSignal;
+  waitForReady: (signal: AbortSignal) => Promise<void>;
+}): Promise<void> => {
+  const { events, readyTimeout, signal, waitForReady } = options;
+
+  return await new Promise<void>((resolve, reject) => {
+    let bundlingInProgress = false;
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const readyController = new AbortController();
+    const readySignal = raceAbortSignals([signal, readyController.signal]);
+
+    const clearReadyTimer = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
+    const cleanup = () => {
+      clearReadyTimer();
+      events.removeListener(onMetroEvent);
+      signal.removeEventListener('abort', onAbort);
+    };
+
+    const resolveOnce = () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      resolve();
+    };
+
+    const rejectOnce = (error: unknown) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const startReadyTimer = () => {
+      clearReadyTimer();
+      timeoutId = setTimeout(() => {
+        readyController.abort(new DOMException('The operation was aborted', 'AbortError'));
+        rejectOnce(new ReadyTimeoutError());
+      }, readyTimeout);
+    };
+
+    const onAbort = () => {
+      rejectOnce(signal.reason ?? new DOMException('The operation was aborted', 'AbortError'));
+    };
+
+    const onMetroEvent = (event: ReportableEvent) => {
+      if (event.type === 'bundle_build_started') {
+        bundlingInProgress = true;
+        clearReadyTimer();
+        return;
+      }
+
+      if (
+        bundlingInProgress &&
+        (event.type === 'bundle_build_done' ||
+          event.type === 'bundle_build_failed')
+      ) {
+        bundlingInProgress = false;
+        startReadyTimer();
+      }
+    };
+
+    startReadyTimer();
+    events.addListener(onMetroEvent);
+    signal.addEventListener('abort', onAbort, { once: true });
+
+    void waitForReady(readySignal)
+      .then(() => {
+        resolveOnce();
+      })
+      .catch((error) => {
+        if (
+          readyController.signal.aborted &&
+          !signal.aborted &&
+          error instanceof DOMException &&
+          error.name === 'AbortError'
+        ) {
+          return;
+        }
+
+        rejectOnce(error);
+      });
+  });
+};
+
 export const waitForMetroBackedAppReady = async ({
   metro,
   platformId,
@@ -157,9 +264,12 @@ export const waitForMetroBackedAppReady = async ({
       ]);
       sawPrewarmRequest = bundleRequestResult.sawPrewarmRequest;
 
-      const readyPromise = waitForReady(
-        withAbortTimeout(attemptSignal, readyTimeout)
-      );
+      const readyPromise = waitForReadyAfterBundleRequest({
+        events: metro.events,
+        readyTimeout,
+        signal: attemptSignal,
+        waitForReady,
+      });
       await Promise.race([readyPromise, crashPromise]);
       attemptController.abort();
       onAttemptReset?.();
@@ -186,12 +296,16 @@ export const waitForMetroBackedAppReady = async ({
         continue;
       }
 
-      if (isAbortError(error)) {
+      if (error instanceof ReadyTimeoutError) {
         throw new StartupStallError(readyTimeout, attempt, {
           code: 'ready_not_reported',
           lastMetroStatus,
           sawPrewarmRequest,
         });
+      }
+
+      if (isAbortError(error)) {
+        throw error;
       }
 
       throw error;

@@ -47,6 +47,13 @@ const emitBundleRequestObserved = (
   });
 };
 
+const emitMetroEvent = (
+  metroInstance: MetroInstance,
+  event: ReportableEvent
+) => {
+  metroInstance.events.emit(event);
+};
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -135,7 +142,91 @@ describe('waitForMetroBackedAppReady', () => {
     expect(waitForReady).toHaveBeenCalledTimes(1);
   });
 
+  it('does not count Metro bundle build time against readyTimeout', async () => {
+    vi.useFakeTimers();
+
+    const metroInstance = createMetroInstance();
+    let resolveReady!: () => void;
+    const startAttempt = vi.fn(async () => {
+      emitBundleRequestObserved(metroInstance, 'app');
+      setTimeout(() => {
+        emitMetroEvent(metroInstance, { type: 'bundle_build_started' } as never);
+      }, 0);
+    });
+    const waitForReady = vi.fn(
+      async () =>
+        await new Promise<void>((resolve) => {
+          resolveReady = resolve;
+        })
+    );
+
+    let settled = false;
+    const promise = waitForMetroBackedAppReady({
+      metro: metroInstance,
+      platformId: 'ios',
+      bundleStartTimeout: 1_000,
+      readyTimeout: 2_000,
+      maxAppRestarts: 2,
+      signal: new AbortController().signal,
+      startAttempt,
+      waitForReady,
+      waitForCrash: async (signal) => await waitForAbort(signal),
+    }).finally(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(settled).toBe(false);
+
+    emitMetroEvent(metroInstance, { type: 'bundle_build_done' } as never);
+    await vi.advanceTimersByTimeAsync(1_500);
+
+    expect(settled).toBe(false);
+
+    resolveReady();
+    await promise;
+
+    expect(waitForReady).toHaveBeenCalledTimes(1);
+  });
+
   it('fails when the app requests its bundle but never reports ready', async () => {
+    vi.useFakeTimers();
+
+    const metroInstance = createMetroInstance();
+    const startAttempt = vi.fn(async () => {
+      emitBundleRequestObserved(metroInstance, 'app');
+      setTimeout(() => {
+        emitMetroEvent(metroInstance, { type: 'bundle_build_started' } as never);
+        emitMetroEvent(metroInstance, { type: 'bundle_build_done' } as never);
+      }, 0);
+    });
+
+    const promise = waitForMetroBackedAppReady({
+      metro: metroInstance,
+      platformId: 'ios',
+      bundleStartTimeout: 1_000,
+      readyTimeout: 2_000,
+      maxAppRestarts: 2,
+      signal: new AbortController().signal,
+      startAttempt,
+      waitForReady: async (signal) => await waitForAbort(signal),
+      waitForCrash: async (signal) => await waitForAbort(signal),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await expect(promise).rejects.toMatchObject({
+      name: 'StartupStallError',
+      code: 'ready_not_reported',
+      attempts: 1,
+    });
+    expect(startAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts readyTimeout immediately when Metro does not emit bundle build events', async () => {
     vi.useFakeTimers();
 
     const metroInstance = createMetroInstance();
