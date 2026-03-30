@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
+import { definePlugin } from '@react-native-harness/hooks';
 import type {
   AppMonitor,
   AppMonitorEvent,
@@ -75,6 +76,12 @@ const createBridgeServer = () => {
         model: 'Simulator',
         osVersion: '18.0',
       });
+    },
+    emitEvent: (event: unknown) => {
+      emitter.emit('event', event);
+    },
+    emitDisconnect: () => {
+      emitter.emit('disconnect');
     },
   };
 };
@@ -541,6 +548,128 @@ describe('restart(testFilePath)', () => {
     emitReady();
     await restartPromise;
     await harness.dispose();
+  });
+});
+
+describe('plugin hooks', () => {
+  it('invokes lifecycle and runtime hooks for configured plugins', async () => {
+    const { serverBridge, emitReady, emitEvent, emitDisconnect } =
+      createBridgeServer();
+    const appMonitor = createAppMonitor();
+    const platformInstance = createPlatformRunner({
+      createAppMonitor: () => appMonitor.appMonitor,
+    });
+    const observedHooks: string[] = [];
+
+    mocks.getBridgeServer.mockResolvedValue(serverBridge);
+    const metroReporter = createMetroReporter();
+    mocks.getMetroInstance.mockResolvedValue({
+      events: metroReporter.reporter,
+      dispose: vi.fn(async () => undefined),
+    });
+    mocks.prewarmMetroBundle.mockResolvedValue(undefined);
+
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = vi.fn(async () => platformInstance);
+
+    const plugin = definePlugin<
+      {
+        creationCount: number;
+      },
+      HarnessConfig,
+      HarnessPlatform
+    >({
+      name: 'test-plugin',
+      createState: () => ({
+        creationCount: 0,
+      }),
+      hooks: {
+        harness: {
+          beforeCreation: (ctx) => {
+            ctx.state.creationCount += 1;
+            observedHooks.push(
+              `beforeCreation:${ctx.platform.platformId}:${ctx.appLaunchOptions == null ? 'no-launch-options' : 'launch-options'}`
+            );
+          },
+          beforeDispose: (ctx) => {
+            observedHooks.push(
+              `beforeDispose:${ctx.state.creationCount}:${ctx.reason}`
+            );
+          },
+        },
+        runtime: {
+          ready: (ctx) => {
+            observedHooks.push(`runtime.ready:${ctx.runId}:${ctx.device.platform}`);
+          },
+          disconnected: (ctx) => {
+            observedHooks.push(`runtime.disconnected:${ctx.reason}`);
+          },
+        },
+        collection: {
+          started: (ctx) => {
+            observedHooks.push(`collection.started:${ctx.file}`);
+          },
+        },
+      },
+    });
+
+    const platform: HarnessPlatform = {
+      config: {
+        appLaunchOptions: {
+          environment: {
+            MODE: 'test',
+          },
+        },
+      },
+      name: 'ios',
+      platformId: 'ios',
+      runner: `data:text/javascript,${encodeURIComponent(
+        'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
+      )}`,
+    };
+
+    const harness = await getHarness(
+      createHarnessConfig({
+        plugins: [plugin],
+      }),
+      platform,
+      '/tmp/project'
+    );
+
+    harness.setRunState({
+      runId: 'run-1',
+      startTime: Date.now(),
+      testFiles: ['example.harness.ts'],
+      watchMode: false,
+      coverageEnabled: false,
+      summary: {
+        passed: 1,
+        failed: 0,
+        skipped: 0,
+        todo: 0,
+      },
+      status: 'passed',
+    });
+
+    emitReady();
+    emitEvent({
+      type: 'collection-started',
+      file: 'example.harness.ts',
+    });
+    emitDisconnect();
+
+    await harness.dispose();
+
+    expect(observedHooks).toEqual([
+      'beforeCreation:ios:launch-options',
+      'runtime.ready:run-1:ios',
+      'collection.started:example.harness.ts',
+      'runtime.disconnected:bridge-disconnected',
+      'beforeDispose:1:normal',
+    ]);
   });
 });
 
