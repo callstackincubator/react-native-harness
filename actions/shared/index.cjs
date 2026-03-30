@@ -158,20 +158,6 @@ var require_src = __commonJS({
   }
 });
 
-// ../../node_modules/is-unicode-supported/index.js
-var require_is_unicode_supported = __commonJS({
-  "../../node_modules/is-unicode-supported/index.js"(exports2, module2) {
-    "use strict";
-    module2.exports = () => {
-      if (process.platform !== "win32") {
-        return true;
-      }
-      return Boolean(process.env.CI) || Boolean(process.env.WT_SESSION) || // Windows Terminal
-      process.env.TERM_PROGRAM === "vscode" || process.env.TERM === "xterm-256color" || process.env.TERM === "alacritty";
-    };
-  }
-});
-
 // ../../node_modules/zod/dist/esm/v3/external.js
 var external_exports = {};
 __export(external_exports, {
@@ -4208,45 +4194,56 @@ var coerce = {
 };
 var NEVER = INVALID;
 
-// ../plugins/dist/utils.js
-var isHookTree = (value) => {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  for (const child of Object.values(value)) {
-    if (child === void 0) {
-      continue;
-    }
-    if (typeof child === "function") {
-      continue;
-    }
-    if (child == null || typeof child !== "object" || Array.isArray(child) || !isHookTree(child)) {
-      return false;
-    }
-  }
-  return true;
-};
-
-// ../plugins/dist/plugin.js
-var isHarnessPlugin = (value) => {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  const candidate = value;
-  if (typeof candidate.name !== "string" || candidate.name.length === 0) {
-    return false;
-  }
-  if (candidate.createState != null && typeof candidate.createState !== "function") {
-    return false;
-  }
-  if (candidate.hooks != null && !isHookTree(candidate.hooks)) {
-    return false;
-  }
-  return true;
-};
-
 // ../tools/dist/logger.js
-var import_node_util2 = __toESM(require("util"), 1);
+var import_node_util = __toESM(require("util"), 1);
+var verbose = !!process.env.HARNESS_DEBUG;
+var BASE_TAG = "[harness]";
+var getTimestamp = () => (/* @__PURE__ */ new Date()).toISOString();
+var normalizeScope = (scope) => scope.trim().replace(/^\[+|\]+$/g, "").replace(/\]\[/g, "][");
+var formatPrefix = (scopes) => {
+  const suffix = scopes.map((scope) => `[${normalizeScope(scope)}]`).join("");
+  return `${BASE_TAG}${suffix}`;
+};
+var mapLines = (text, prefix) => text.split("\n").map((line) => `${prefix} ${line}`).join("\n");
+var writeLog = (level, scopes, messages) => {
+  const method = level === "warn" ? console.warn : level === "error" ? console.error : level === "debug" ? console.debug : console.info;
+  const output = import_node_util.default.format(...messages);
+  const prefix = `${getTimestamp()} ${formatPrefix(scopes)}`;
+  method(mapLines(output, prefix));
+};
+var setVerbose = (level) => {
+  verbose = level;
+};
+var isVerbose = () => {
+  return verbose;
+};
+var createScopedLogger = (scopes = []) => ({
+  debug: (...messages) => {
+    if (!verbose) {
+      return;
+    }
+    writeLog("debug", scopes, messages);
+  },
+  info: (...messages) => {
+    writeLog("info", scopes, messages);
+  },
+  warn: (...messages) => {
+    writeLog("warn", scopes, messages);
+  },
+  error: (...messages) => {
+    writeLog("error", scopes, messages);
+  },
+  log: (...messages) => {
+    writeLog("log", scopes, messages);
+  },
+  success: (...messages) => {
+    writeLog("success", scopes, messages);
+  },
+  child: (scope) => createScopedLogger([...scopes, scope]),
+  setVerbose,
+  isVerbose
+});
+var logger = createScopedLogger();
 
 // ../../node_modules/@clack/core/dist/index.mjs
 var import_node_process = require("process");
@@ -4271,7 +4268,7 @@ var import_node_process2 = __toESM(require("process"), 1);
 var import_node_fs = require("fs");
 var import_node_path = require("path");
 var import_sisteransi2 = __toESM(require_src(), 1);
-var import_node_util = require("util");
+var import_node_util2 = require("util");
 function ht() {
   return import_node_process2.default.platform !== "win32" ? import_node_process2.default.env.TERM !== "linux" : !!import_node_process2.default.env.CI || !!import_node_process2.default.env.WT_SESSION || !!import_node_process2.default.env.TERMINUS_SUBLIME || import_node_process2.default.env.ConEmuTask === "{cmd::Cmder}" || import_node_process2.default.env.TERM_PROGRAM === "Terminus-Sublime" || import_node_process2.default.env.TERM_PROGRAM === "vscode" || import_node_process2.default.env.TERM === "xterm-256color" || import_node_process2.default.env.TERM === "alacritty" || import_node_process2.default.env.TERMINAL_EMULATOR === "JetBrains-JediTerm";
 }
@@ -4313,12 +4310,8 @@ var Ut = import_picocolors.default.magenta;
 var Ye = { light: w("\u2500", "-"), heavy: w("\u2501", "="), block: w("\u2588", "#") };
 var ze = `${import_picocolors.default.gray(h)}  `;
 
-// ../tools/dist/logger.js
-var import_is_unicode_supported = __toESM(require_is_unicode_supported(), 1);
-var unicode = (0, import_is_unicode_supported.default)();
-var unicodeWithFallback = (c, fallback) => unicode ? c : fallback;
-var SYMBOL_DEBUG = unicodeWithFallback("\u25CF", "\u2022");
-var verbose = !!process.env.HARNESS_DEBUG;
+// ../tools/dist/spawn.js
+var spawnLogger = logger.child("spawn");
 
 // ../tools/dist/react-native.js
 var import_node_module = require("module");
@@ -4337,6 +4330,46 @@ var import_node_fs3 = __toESM(require("fs"), 1);
 var import_node_fs4 = __toESM(require("fs"), 1);
 var import_node_path4 = __toESM(require("path"), 1);
 var DEFAULT_ARTIFACT_ROOT = import_node_path4.default.join(process.cwd(), ".harness", "crash-reports");
+
+// ../plugins/dist/utils.js
+var isHookTree = (value) => {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  for (const child of Object.values(value)) {
+    if (child === void 0) {
+      continue;
+    }
+    if (typeof child === "function") {
+      continue;
+    }
+    if (child == null || typeof child !== "object" || Array.isArray(child) || !isHookTree(child)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+// ../plugins/dist/plugin.js
+var isHarnessPlugin = (value) => {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value;
+  if (typeof candidate.name !== "string" || candidate.name.length === 0) {
+    return false;
+  }
+  if (candidate.createState != null && typeof candidate.createState !== "function") {
+    return false;
+  }
+  if (candidate.hooks != null && !isHookTree(candidate.hooks)) {
+    return false;
+  }
+  return true;
+};
+
+// ../plugins/dist/manager.js
+var pluginsLogger = logger.child("plugins");
 
 // ../config/dist/types.js
 var DEFAULT_METRO_PORT = 8081;

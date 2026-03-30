@@ -1,49 +1,59 @@
 import util from 'node:util';
-import { log as clackLog } from '@clack/prompts';
-import isUnicodeSupported from 'is-unicode-supported';
-import { color } from './color.js';
-
-const unicode = isUnicodeSupported();
-
-const unicodeWithFallback = (c: string, fallback: string) =>
-  unicode ? c : fallback;
-
-const SYMBOL_DEBUG = unicodeWithFallback('●', '•');
 
 let verbose = !!process.env.HARNESS_DEBUG;
 
-const success = (...messages: Array<unknown>) => {
-  const output = util.format(...messages);
-  clackLog.success(output);
+type LoggerLevel = 'debug' | 'info' | 'warn' | 'error' | 'log' | 'success';
+type LoggerMethod = (...messages: Array<unknown>) => void;
+
+export type HarnessLogger = {
+  debug: LoggerMethod;
+  info: LoggerMethod;
+  warn: LoggerMethod;
+  error: LoggerMethod;
+  log: LoggerMethod;
+  success: LoggerMethod;
+  child: (scope: string) => HarnessLogger;
+  setVerbose: (level: boolean) => void;
+  isVerbose: () => boolean;
 };
 
-const info = (...messages: Array<unknown>) => {
-  const output = util.format(...messages);
-  clackLog.info(output);
+const BASE_TAG = '[harness]';
+
+const getTimestamp = (): string => new Date().toISOString();
+
+const normalizeScope = (scope: string): string =>
+  scope
+    .trim()
+    .replace(/^\[+|\]+$/g, '')
+    .replace(/\]\[/g, '][');
+
+const formatPrefix = (scopes: readonly string[]): string => {
+  const suffix = scopes.map((scope) => `[${normalizeScope(scope)}]`).join('');
+  return `${BASE_TAG}${suffix}`;
 };
 
-const warn = (...messages: Array<unknown>) => {
-  const output = util.format(...messages);
-  clackLog.warn(mapLines(output, color.yellow));
-};
+const mapLines = (text: string, prefix: string) =>
+  text
+    .split('\n')
+    .map((line) => `${prefix} ${line}`)
+    .join('\n');
 
-const error = (...messages: Array<unknown>) => {
+const writeLog = (
+  level: LoggerLevel,
+  scopes: readonly string[],
+  messages: Array<unknown>
+) => {
+  const method =
+    level === 'warn'
+      ? console.warn
+      : level === 'error'
+        ? console.error
+        : level === 'debug'
+          ? console.debug
+          : console.info;
   const output = util.format(...messages);
-  clackLog.error(mapLines(output, color.red));
-};
-
-const log = (...messages: Array<unknown>) => {
-  const output = util.format(...messages);
-  clackLog.step(output);
-};
-
-const debug = (...messages: Array<unknown>) => {
-  if (verbose) {
-    const output = util.format(...messages);
-    clackLog.message(mapLines(output, color.dim), {
-      symbol: color.dim(SYMBOL_DEBUG),
-    });
-  }
+  const prefix = `${getTimestamp()} ${formatPrefix(scopes)}`;
+  method(mapLines(output, prefix));
 };
 
 const setVerbose = (level: boolean) => {
@@ -54,17 +64,35 @@ const isVerbose = () => {
   return verbose;
 };
 
-export const logger = {
-  success,
-  info,
-  warn,
-  error,
-  debug,
-  log,
+const createScopedLogger = (scopes: readonly string[] = []): HarnessLogger => ({
+  debug: (...messages) => {
+    if (!verbose) {
+      return;
+    }
+
+    writeLog('debug', scopes, messages);
+  },
+  info: (...messages) => {
+    writeLog('info', scopes, messages);
+  },
+  warn: (...messages) => {
+    writeLog('warn', scopes, messages);
+  },
+  error: (...messages) => {
+    writeLog('error', scopes, messages);
+  },
+  log: (...messages) => {
+    writeLog('log', scopes, messages);
+  },
+  success: (...messages) => {
+    writeLog('success', scopes, messages);
+  },
+  child: (scope) => createScopedLogger([...scopes, scope]),
   setVerbose,
   isVerbose,
-};
+});
 
-function mapLines(text: string, colorFn: (line: string) => string) {
-  return text.split('\n').map(colorFn).join('\n');
-}
+export const createLogger = (scope: string): HarnessLogger =>
+  createScopedLogger([scope]);
+
+export const logger = createScopedLogger();

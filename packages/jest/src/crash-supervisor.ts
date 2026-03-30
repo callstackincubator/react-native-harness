@@ -12,6 +12,8 @@ import {
 } from './errors.js';
 import { logger } from '@react-native-harness/tools';
 
+const crashLogger = logger.child('crash');
+
 export type CrashSupervisorState =
   | 'idle'
   | 'launching'
@@ -113,15 +115,20 @@ export const createCrashSupervisor = ({
     }
 
     if (!activeTestFilePath) {
-      logger.debug(`Ignoring crash signal without active test: ${reason}`);
+      crashLogger.debug('ignoring crash signal without active test: %s', reason);
       return;
     }
 
     isResolvingCrash = true;
-    logger.debug(`Native crash detected during ${activeTestFilePath} (state: ${state}, reason: ${reason || '(none)'})`);
+    crashLogger.debug(
+      'native crash detected during %s (state=%s reason=%s)',
+      activeTestFilePath,
+      state,
+      reason || '(none)'
+    );
 
     for (const line of details?.rawLines ?? []) {
-      logger.debug(line);
+      crashLogger.debug('%s', line);
     }
 
     const phase = getCrashPhase(state);
@@ -136,7 +143,7 @@ export const createCrashSupervisor = ({
       });
 
       const mergedDetails = mergeCrashDetails(phase, details, enrichedDetails, reason);
-      logger.debug('Crash details:', {
+      crashLogger.debug('crash details: %o', {
         phase: mergedDetails.phase,
         source: mergedDetails.source,
         summary: mergedDetails.summary,
@@ -160,10 +167,10 @@ export const createCrashSupervisor = ({
       const isRunning = await platformRunner.isAppRunning();
 
       if (!isRunning) {
-        handleCrash(reason, details);
+        void handleCrash(reason, details);
       }
     } catch (error) {
-      logger.debug('Crash confirmation failed', error);
+      crashLogger.debug('crash confirmation failed', error);
     }
   };
 

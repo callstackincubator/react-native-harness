@@ -20,10 +20,22 @@ export type MetroOptions = {
   websocketEndpoints?: Record<string, MetroWebSocketEndpoint>;
 };
 
+export type WaitForMetroHealthOptions = {
+  timeoutMs: number;
+  signal: AbortSignal;
+};
+
+export type PrewarmMetroBundleOptions = {
+  platform: string;
+  signal: AbortSignal;
+};
+
 export type MetroInstance = {
   events: Reporter;
   httpServer: HttpServer | HttpsServer;
   websocketEndpoints: Record<string, MetroWebSocketEndpoint>;
+  waitUntilHealthy: (options: WaitForMetroHealthOptions) => Promise<string>;
+  prewarm: (options: PrewarmMetroBundleOptions) => Promise<boolean>;
   dispose: () => Promise<void>;
 };
 

@@ -1,3 +1,4 @@
+import { createLogger } from '@react-native-harness/tools';
 import type { HookLogger } from './types.js';
 
 export const isHookTree = (value: unknown): boolean => {
@@ -28,13 +29,13 @@ export const isHookTree = (value: unknown): boolean => {
 };
 
 export const createPluginLogger = (pluginName: string): HookLogger => {
-  const prefix = `[plugin:${pluginName}]`;
+  const pluginLogger = createLogger(`plugin:${pluginName}`);
 
   return {
-    debug: (...messages) => console.debug(prefix, ...messages),
-    info: (...messages) => console.info(prefix, ...messages),
-    warn: (...messages) => console.warn(prefix, ...messages),
-    error: (...messages) => console.error(prefix, ...messages),
+    debug: (...messages) => pluginLogger.debug(...messages),
+    info: (...messages) => pluginLogger.info(...messages),
+    warn: (...messages) => pluginLogger.warn(...messages),
+    error: (...messages) => pluginLogger.error(...messages),
   };
 };
 

@@ -24,6 +24,7 @@ import { DeviceNotRespondingError } from './errors.js';
 import { matchImageSnapshot } from './image-snapshot.js';
 
 export { DeviceNotRespondingError } from './errors.js';
+const bridgeLogger = logger.child('bridge');
 
 type BridgeServerStandaloneOptions = {
   port: number;
@@ -100,6 +101,16 @@ export const getBridgeServer = async ({
                 noServer: true,
               }
         );
+  if ('port' in transport) {
+    bridgeLogger.debug('bridge server listening on port %d', transport.port);
+  } else if ('server' in transport) {
+    bridgeLogger.debug(
+      'bridge server attached to existing HTTP server at path %s',
+      transport.path ?? '/'
+    );
+  } else {
+    bridgeLogger.debug('bridge server created in noServer mode');
+  }
   const emitter = new EventEmitter();
   const clients = new Set<WebSocket>();
   const binaryStore = new BinaryStore();
@@ -158,7 +169,8 @@ export const getBridgeServer = async ({
     {
       timeout,
       onFunctionError: (error, functionName, args) => {
-        console.error('Function error', error, functionName, args);
+        bridgeLogger.error('rpc function failed: %s args=%o', functionName, args);
+        bridgeLogger.error(error);
         throw error;
       },
       onTimeoutError(functionName, args) {
@@ -168,9 +180,9 @@ export const getBridgeServer = async ({
   );
 
   wss.on('connection', (ws: WebSocket) => {
-    logger.debug('Client connected to the bridge');
+    bridgeLogger.debug('client connected');
     ws.on('close', () => {
-      logger.debug('Client disconnected from the bridge');
+      bridgeLogger.debug('client disconnected');
 
       // TODO: Remove channel when connection is closed.
       clients.delete(ws);
@@ -191,7 +203,7 @@ export const getBridgeServer = async ({
                   binaryStore.add(transferId, data);
                   return;
                 } catch (error) {
-                  logger.warn('Failed to parse binary frame', error);
+                  bridgeLogger.warn('failed to parse binary frame', error);
                 }
               }
               const message = event.toString();
@@ -206,6 +218,7 @@ export const getBridgeServer = async ({
   });
 
   const dispose = () => {
+    bridgeLogger.debug('disposing bridge server');
     for (const client of wss.clients) {
       client.terminate();
     }

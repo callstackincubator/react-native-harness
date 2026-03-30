@@ -3,6 +3,7 @@ import nanoSpawn, { SubprocessError } from 'nano-spawn';
 import { logger } from './logger.js';
 
 export type SpawnOptions = Options;
+const spawnLogger = logger.child('spawn');
 
 export const spawn = (
   file: string,
@@ -16,7 +17,8 @@ export const spawn = (
     // Always 'pipe' stderr to handle errors properly down the line
     stderr: 'pipe',
   };
-  logger.debug(`Running: ${file}`, ...(args ?? []));
+  const command = [file, ...(args ?? [])].join(' ');
+  spawnLogger.debug('running command: %s', command);
   const childProcess = nanoSpawn(file, args, { ...defaultOptions, ...options });
 
   setupChildProcessCleanup(childProcess);

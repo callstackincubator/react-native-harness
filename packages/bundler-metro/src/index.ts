@@ -5,6 +5,14 @@ export type {
   MetroOptions,
   MetroWebSocketEndpoint,
 } from './types.js';
-export { prewarmMetroBundle } from './prewarm.js';
 export type { Reporter, ReportableEvent } from './reporter.js';
 export { isMetroCacheReusable } from './paths.js';
+export {
+  StartupStallError,
+  type StartupStallCode,
+  type StartupStallDetails,
+} from './errors.js';
+export {
+  waitForMetroBackedAppReady,
+  type WaitForMetroBackedAppReadyOptions,
+} from './startup.js';

@@ -11,6 +11,8 @@ import * as devicectl from './xcrun/devicectl.js';
 import * as simctl from './xcrun/simctl.js';
 import * as libimobiledevice from './libimobiledevice.js';
 
+const iosAppMonitorLogger = logger.child('ios-app-monitor');
+
 const MAX_RECENT_LOG_LINES = 200;
 const MAX_RECENT_CRASH_ARTIFACTS = 10;
 const CRASH_ARTIFACT_SETTLE_DELAY_MS = 100;
@@ -379,7 +381,7 @@ export const createIosSimulatorAppMonitor = ({
           base.handleLogEvent(line, processNames);
         }
       } catch (error) {
-        logger.debug('iOS simulator log monitor stopped', error);
+        iosAppMonitorLogger.debug('iOS simulator log monitor stopped', error);
       }
     })();
   };
@@ -404,7 +406,10 @@ export const createIosSimulatorAppMonitor = ({
 
     do {
       pollCount += 1;
-      logger.debug(`[app-monitor] waitForCrashArtifact poll #${pollCount}`, { pid: options.pid, processName: options.processName });
+      iosAppMonitorLogger.debug('waitForCrashArtifact poll #%d %o', pollCount, {
+        pid: options.pid,
+        processName: options.processName,
+      });
 
       const collectedArtifacts = await simctl.collectCrashReports({
         udid,
@@ -414,7 +419,11 @@ export const createIosSimulatorAppMonitor = ({
         minOccurredAt: monitorStartedAt,
       });
 
-      logger.debug(`[app-monitor] poll #${pollCount}: collected ${collectedArtifacts.length} crash artifact(s) from DiagnosticReports`);
+      iosAppMonitorLogger.debug(
+        'poll #%d collected %d crash artifact(s) from DiagnosticReports',
+        pollCount,
+        collectedArtifacts.length
+      );
 
       for (const artifact of collectedArtifacts) {
         base.recordCrashArtifact(artifact);
@@ -423,7 +432,12 @@ export const createIosSimulatorAppMonitor = ({
       const artifact = base.getLatestCrashArtifact(options);
 
       if (artifact) {
-        logger.debug(`[app-monitor] poll #${pollCount}: found artifact`, { artifactType: artifact.artifactType, artifactPath: artifact.artifactPath, pid: artifact.pid, processName: artifact.processName });
+        iosAppMonitorLogger.debug('poll #%d found artifact %o', pollCount, {
+          artifactType: artifact.artifactType,
+          artifactPath: artifact.artifactPath,
+          pid: artifact.pid,
+          processName: artifact.processName,
+        });
 
         if (artifact.artifactType === 'ios-crash-report') {
           return artifact;
@@ -431,11 +445,17 @@ export const createIosSimulatorAppMonitor = ({
 
         fallbackArtifact = artifact;
       } else {
-        logger.debug(`[app-monitor] poll #${pollCount}: no matching artifact yet`);
+        iosAppMonitorLogger.debug(
+          'poll #%d found no matching crash artifact yet',
+          pollCount
+        );
       }
 
       if (Date.now() >= deadline) {
-        logger.debug(`[app-monitor] waitForCrashArtifact deadline reached, returning ${fallbackArtifact ? 'fallback log-based artifact' : 'null'}`);
+        iosAppMonitorLogger.debug(
+          'waitForCrashArtifact deadline reached, returning %s',
+          fallbackArtifact ? 'fallback log-based artifact' : 'null'
+        );
         return fallbackArtifact;
       }
 
@@ -450,7 +470,10 @@ export const createIosSimulatorAppMonitor = ({
     startLogMonitor,
     stopLogMonitor,
     getCrashDetails: async (options) => {
-      logger.debug('[app-monitor] getCrashDetails called (simulator)', { pid: options.pid, processName: options.processName });
+      iosAppMonitorLogger.debug('getCrashDetails called for simulator: %o', {
+        pid: options.pid,
+        processName: options.processName,
+      });
       await new Promise((resolve) =>
         setTimeout(resolve, CRASH_ARTIFACT_SETTLE_DELAY_MS)
       );
@@ -458,12 +481,15 @@ export const createIosSimulatorAppMonitor = ({
       const artifact = await waitForCrashArtifact(options);
 
       if (!artifact) {
-        logger.debug('[app-monitor] getCrashDetails: no artifact found, returning null');
+        iosAppMonitorLogger.debug('getCrashDetails found no artifact');
         return null;
       }
 
       if (artifact.artifactType === 'ios-crash-report') {
-        logger.debug('[app-monitor] getCrashDetails: returning ios-crash-report artifact', { artifactPath: artifact.artifactPath });
+        iosAppMonitorLogger.debug(
+          'getCrashDetails returning ios-crash-report artifact: %s',
+          artifact.artifactPath
+        );
         return artifact;
       }
 
@@ -472,7 +498,10 @@ export const createIosSimulatorAppMonitor = ({
         occurredAt: options.occurredAt,
       });
 
-      logger.debug(`[app-monitor] getCrashDetails: returning log-based artifact (${relatedLogLines.length} related log lines)`);
+      iosAppMonitorLogger.debug(
+        'getCrashDetails returning log-based artifact with %d related log lines',
+        relatedLogLines.length
+      );
 
       return {
         ...artifact,
@@ -531,7 +560,10 @@ export const createIosDeviceAppMonitor = ({
           base.handleLogEvent(line, processNames);
         }
       } catch (error) {
-        logger.debug('iOS libimobiledevice log monitor stopped', error);
+        iosAppMonitorLogger.debug(
+          'iOS libimobiledevice log monitor stopped',
+          error
+        );
       }
     })();
   };

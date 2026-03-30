@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Harness } from '../harness.js';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
-import type { Test } from 'jest-runner';
+import type { Config, Test, TestWatcher } from 'jest-runner';
 import JestHarness from '../index.js';
 import { StartupStallError } from '../errors.js';
 
 describe('JestHarness', () => {
   it('reports StartupStallError without a stack trace', async () => {
-    const runner = new JestHarness({} as any);
+    const runner = new JestHarness({} as Config.GlobalConfig);
     const onFailure = vi.fn();
 
     const harness = {
@@ -36,7 +36,7 @@ describe('JestHarness', () => {
       ],
       {
         isInterrupted: () => false,
-      } as any,
+      } as TestWatcher,
       harness,
       {
         detectNativeCrashes: true,
@@ -53,7 +53,7 @@ describe('JestHarness', () => {
       }),
       {
         message:
-          'The app never became ready after 3 launch attempts with a startup stall timeout of 1500ms and no native crash signal.',
+          'The app did not request its Metro bundle after 3 launch attempts within 1500ms. Last Metro status: unknown.',
         stack: '',
       }
     );
