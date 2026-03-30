@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
+import { definePlugin } from '@react-native-harness/plugins';
 import type {
   AppMonitor,
   AppMonitorEvent,
@@ -53,6 +54,7 @@ vi.mock('@react-native-harness/tools', async () => {
 });
 
 import { getHarness, waitForAppReady } from '../harness.js';
+import { StartupStallError } from '../errors.js';
 
 const createBridgeServer = () => {
   const emitter = new EventEmitter();
@@ -74,6 +76,12 @@ const createBridgeServer = () => {
         model: 'Simulator',
         osVersion: '18.0',
       });
+    },
+    emitEvent: (event: unknown) => {
+      emitter.emit('event', event);
+    },
+    emitDisconnect: () => {
+      emitter.emit('disconnect');
     },
   };
 };
@@ -345,6 +353,7 @@ describe('getHarness', () => {
     const platformInstance = createPlatformRunner({
       restartApp,
       stopApp,
+      isAppRunning: vi.fn(async () => false),
       createAppMonitor: () => appMonitor.appMonitor,
     });
     const metroInstance = createMetroInstance();
@@ -400,5 +409,131 @@ describe('getHarness', () => {
     });
 
     await harness.dispose();
+  });
+});
+
+describe('plugins', () => {
+  it('invokes lifecycle and runtime plugin handlers for configured plugins', async () => {
+    const { serverBridge, emitReady, emitEvent, emitDisconnect } =
+      createBridgeServer();
+    const appMonitor = createAppMonitor();
+    const platformInstance = createPlatformRunner({
+      createAppMonitor: () => appMonitor.appMonitor,
+    });
+    const observedHooks: string[] = [];
+
+    mocks.getBridgeServer.mockResolvedValue(serverBridge);
+    const metroInstance = createMetroInstance();
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
+
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = vi.fn(async () => platformInstance);
+
+    const plugin = definePlugin<
+      {
+        creationCount: number;
+      },
+      HarnessConfig,
+      HarnessPlatform
+    >({
+      name: 'test-plugin',
+      createState: () => ({
+        creationCount: 0,
+      }),
+      hooks: {
+        harness: {
+          beforeCreation: (ctx) => {
+            ctx.state.creationCount += 1;
+            observedHooks.push(
+              `beforeCreation:${ctx.platform.platformId}:${ctx.appLaunchOptions == null ? 'no-launch-options' : 'launch-options'}`
+            );
+          },
+          beforeDispose: (ctx) => {
+            observedHooks.push(
+              `beforeDispose:${ctx.state.creationCount}:${ctx.reason}`
+            );
+          },
+        },
+        runtime: {
+          ready: (ctx) => {
+            observedHooks.push(`runtime.ready:${ctx.runId}:${ctx.device.platform}`);
+          },
+          disconnected: (ctx) => {
+            observedHooks.push(`runtime.disconnected:${ctx.reason}`);
+          },
+        },
+        collection: {
+          started: (ctx) => {
+            observedHooks.push(`collection.started:${ctx.file}`);
+          },
+        },
+      },
+    });
+
+    const platform: HarnessPlatform = {
+      config: {
+        appLaunchOptions: {
+          environment: {
+            MODE: 'test',
+          },
+        },
+      },
+      name: 'ios',
+      platformId: 'ios',
+      runner: `data:text/javascript,${encodeURIComponent(
+        'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
+      )}`,
+    };
+
+    const harness = await getHarness(
+      createHarnessConfig({
+        plugins: [plugin],
+      }),
+      platform,
+      '/tmp/project'
+    );
+
+    harness.setRunState({
+      runId: 'run-1',
+      startTime: Date.now(),
+      testFiles: ['example.harness.ts'],
+      watchMode: false,
+      coverageEnabled: false,
+      summary: {
+        passed: 1,
+        failed: 0,
+        skipped: 0,
+        todo: 0,
+      },
+      status: 'passed',
+    });
+
+    emitReady();
+    emitEvent({
+      type: 'collection-started',
+      file: 'example.harness.ts',
+    });
+    emitDisconnect();
+
+    await harness.dispose();
+
+    expect(observedHooks).toEqual([
+      'beforeCreation:ios:launch-options',
+      'runtime.ready:run-1:ios',
+      'collection.started:example.harness.ts',
+      'runtime.disconnected:bridge-disconnected',
+      'beforeDispose:1:normal',
+    ]);
+  });
+});
+
+describe('StartupStallError', () => {
+  it('includes the configured timeout and attempt count', () => {
+    expect(new StartupStallError(1_500, 4).message).toBe(
+      'The app did not request its Metro bundle after 4 launch attempts within 1500ms. Last Metro status: unknown.'
+    );
   });
 });

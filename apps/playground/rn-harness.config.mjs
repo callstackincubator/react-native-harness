@@ -17,10 +17,12 @@ import {
   chromium,
   chrome,
 } from '@react-native-harness/platform-web';
+import { harnessLoggingPlugin } from './harness-logging-plugin.mjs';
 
 export default {
   entryPoint: './index.js',
   appRegistryComponentName: 'HarnessPlayground',
+  plugins: [harnessLoggingPlugin()],
 
   runners: [
     androidPlatform({
@@ -75,7 +77,7 @@ export default {
     }),
     applePlatform({
       name: 'ios',
-      device: appleSimulator('iPhone 16 Pro', '18.6'),
+      device: appleSimulator('iPhone 17 Pro', '26.2'),
       bundleId: 'com.harnessplayground',
     }),
     applePlatform({

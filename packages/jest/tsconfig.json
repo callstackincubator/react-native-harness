@@ -4,13 +4,13 @@
   "include": [],
   "references": [
     {
-      "path": "../cli"
-    },
-    {
       "path": "../tools"
     },
     {
       "path": "../platforms"
+    },
+    {
+      "path": "../plugins"
     },
     {
       "path": "../config"

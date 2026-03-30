@@ -1,0 +1,74 @@
+# Plugins
+
+Harness plugins are the way to extend Harness beyond what it offers out of the box.
+
+Use them to add project-specific capabilities on top of Harness, such as native coverage collection, custom reporting, artifact collection, or workflow-specific automation.
+
+A plugin can react to events such as:
+
+- Harness startup and teardown
+- run start and finish
+- Metro initialization and bundle events
+- app lifecycle signals
+- collection, suite, and test execution events
+
+## Defining a Plugin
+
+Use `definePlugin()` from `@react-native-harness/plugins` and register the plugin in your Harness config.
+
+```ts
+import { definePlugin } from '@react-native-harness/plugins';
+
+export const loggingPlugin = () =>
+  definePlugin({
+    name: 'logging-plugin',
+    hooks: {
+      harness: {
+        beforeCreation: async (ctx) => {
+          ctx.logger.info('Harness is starting for', ctx.platform.platformId);
+        },
+      },
+      run: {
+        started: async (ctx) => {
+          ctx.logger.info('Run started', ctx.runId);
+        },
+        finished: async (ctx) => {
+          ctx.logger.info('Run finished', ctx.runId, ctx.status);
+        },
+      },
+      testFile: {
+        finished: async (ctx) => {
+          ctx.logger.info('Finished test file', ctx.file, ctx.status);
+        },
+      },
+    },
+  });
+```
+
+Then register it in `rn-harness.config.mjs`:
+
+```ts
+import { loggingPlugin } from './logging-plugin';
+
+export default {
+  entryPoint: './src/test.ts',
+  appRegistryComponentName: 'App',
+  runners: [
+    {
+      name: 'ios',
+      runner: '@react-native-harness/platform-ios',
+      platformId: 'ios',
+      config: {},
+    },
+  ],
+  plugins: [loggingPlugin()],
+};
+```
+
+## Available Events
+
+The full list of plugin events is defined in the source here:
+
+- [packages/plugins/src/types.ts](https://github.com/callstackincubator/react-native-harness/blob/main/packages/plugins/src/types.ts)
+
+The public plugin shape is based on nested objects like `run.started`, `metro.bundleFinished`, or `harness.beforeDispose`.

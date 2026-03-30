@@ -4208,46 +4208,42 @@ var coerce = {
 };
 var NEVER = INVALID;
 
-// ../config/dist/types.js
-var DEFAULT_METRO_PORT = 8081;
-var RunnerSchema = external_exports.object({
-  name: external_exports.string().min(1, "Runner name is required").regex(/^[a-zA-Z0-9._-]+$/, "Runner name can only contain alphanumeric characters, dots, underscores, and hyphens"),
-  config: external_exports.record(external_exports.any()),
-  runner: external_exports.string(),
-  platformId: external_exports.string()
-});
-var ConfigSchema = external_exports.object({
-  entryPoint: external_exports.string().min(1, "Entry point is required"),
-  appRegistryComponentName: external_exports.string().min(1, "App registry component name is required"),
-  runners: external_exports.array(RunnerSchema).min(1, "At least one runner is required"),
-  defaultRunner: external_exports.string().optional(),
-  host: external_exports.string().min(1, "Host is required").optional(),
-  metroPort: external_exports.number().int("Metro port must be an integer").min(1, "Metro port must be at least 1").max(65535, "Metro port must be at most 65535").optional().default(DEFAULT_METRO_PORT),
-  webSocketPort: external_exports.number().optional().default(3001),
-  bridgeTimeout: external_exports.number().min(1e3, "Bridge timeout must be at least 1 second").default(6e4),
-  bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(15e3),
-  maxAppRestarts: external_exports.number().min(0, "Max app restarts must be at least 0").default(2),
-  resetEnvironmentBetweenTestFiles: external_exports.boolean().optional().default(true),
-  unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().default(false),
-  unstable__enableMetroCache: external_exports.boolean().optional().default(false),
-  detectNativeCrashes: external_exports.boolean().optional().default(true),
-  crashDetectionInterval: external_exports.number().min(100, "Crash detection interval must be at least 100ms").default(500),
-  disableViewFlattening: external_exports.boolean().optional().default(false).describe("Disable view flattening in React Native. This will set collapsable={true} for all View components to ensure they are not flattened by the native layout engine."),
-  coverage: external_exports.object({
-    root: external_exports.string().optional().describe(`Root directory for coverage instrumentation in monorepo setups. Specifies the directory from which coverage data should be collected. Use ".." for create-react-native-library projects where tests run from example/ but source files are in parent directory. Passed to babel-plugin-istanbul's cwd option.`)
-  }).optional(),
-  forwardClientLogs: external_exports.boolean().optional().default(false).describe("Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app to the terminal. When enabled, all console output from your app will be displayed in the test runner terminal with styled level indicators (log, warn, error)."),
-  // Deprecated property - used for migration detection
-  include: external_exports.array(external_exports.string()).optional()
-}).refine((config) => {
-  if (config.defaultRunner) {
-    return config.runners.some((runner) => runner.name === config.defaultRunner);
+// ../plugins/dist/utils.js
+var isHookTree = (value) => {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  for (const child of Object.values(value)) {
+    if (child === void 0) {
+      continue;
+    }
+    if (typeof child === "function") {
+      continue;
+    }
+    if (child == null || typeof child !== "object" || Array.isArray(child) || !isHookTree(child)) {
+      return false;
+    }
   }
   return true;
-}, {
-  message: "Default runner must match one of the configured runner names",
-  path: ["defaultRunner"]
-});
+};
+
+// ../plugins/dist/plugin.js
+var isHarnessPlugin = (value) => {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value;
+  if (typeof candidate.name !== "string" || candidate.name.length === 0) {
+    return false;
+  }
+  if (candidate.createState != null && typeof candidate.createState !== "function") {
+    return false;
+  }
+  if (candidate.hooks != null && !isHookTree(candidate.hooks)) {
+    return false;
+  }
+  return true;
+};
 
 // ../tools/dist/logger.js
 var import_node_util2 = __toESM(require("util"), 1);
@@ -4341,6 +4337,49 @@ var import_node_fs3 = __toESM(require("fs"), 1);
 var import_node_fs4 = __toESM(require("fs"), 1);
 var import_node_path4 = __toESM(require("path"), 1);
 var DEFAULT_ARTIFACT_ROOT = import_node_path4.default.join(process.cwd(), ".harness", "crash-reports");
+
+// ../config/dist/types.js
+var DEFAULT_METRO_PORT = 8081;
+var RunnerSchema = external_exports.object({
+  name: external_exports.string().min(1, "Runner name is required").regex(/^[a-zA-Z0-9._-]+$/, "Runner name can only contain alphanumeric characters, dots, underscores, and hyphens"),
+  config: external_exports.record(external_exports.any()),
+  runner: external_exports.string(),
+  platformId: external_exports.string()
+});
+var PluginSchema = external_exports.custom((value) => isHarnessPlugin(value), "Invalid Harness plugin");
+var ConfigSchema = external_exports.object({
+  entryPoint: external_exports.string().min(1, "Entry point is required"),
+  appRegistryComponentName: external_exports.string().min(1, "App registry component name is required"),
+  runners: external_exports.array(RunnerSchema).min(1, "At least one runner is required"),
+  plugins: external_exports.array(PluginSchema).optional().default([]),
+  defaultRunner: external_exports.string().optional(),
+  host: external_exports.string().min(1, "Host is required").optional(),
+  metroPort: external_exports.number().int("Metro port must be an integer").min(1, "Metro port must be at least 1").max(65535, "Metro port must be at most 65535").optional().default(DEFAULT_METRO_PORT),
+  webSocketPort: external_exports.number().optional().default(3001),
+  bridgeTimeout: external_exports.number().min(1e3, "Bridge timeout must be at least 1 second").default(6e4),
+  bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(15e3),
+  maxAppRestarts: external_exports.number().min(0, "Max app restarts must be at least 0").default(2),
+  resetEnvironmentBetweenTestFiles: external_exports.boolean().optional().default(true),
+  unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().default(false),
+  unstable__enableMetroCache: external_exports.boolean().optional().default(false),
+  detectNativeCrashes: external_exports.boolean().optional().default(true),
+  crashDetectionInterval: external_exports.number().min(100, "Crash detection interval must be at least 100ms").default(500),
+  disableViewFlattening: external_exports.boolean().optional().default(false).describe("Disable view flattening in React Native. This will set collapsable={true} for all View components to ensure they are not flattened by the native layout engine."),
+  coverage: external_exports.object({
+    root: external_exports.string().optional().describe(`Root directory for coverage instrumentation in monorepo setups. Specifies the directory from which coverage data should be collected. Use ".." for create-react-native-library projects where tests run from example/ but source files are in parent directory. Passed to babel-plugin-istanbul's cwd option.`)
+  }).optional(),
+  forwardClientLogs: external_exports.boolean().optional().default(false).describe("Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app to the terminal. When enabled, all console output from your app will be displayed in the test runner terminal with styled level indicators (log, warn, error)."),
+  // Deprecated property - used for migration detection
+  include: external_exports.array(external_exports.string()).optional()
+}).refine((config) => {
+  if (config.defaultRunner) {
+    return config.runners.some((runner) => runner.name === config.defaultRunner);
+  }
+  return true;
+}, {
+  message: "Default runner must match one of the configured runner names",
+  path: ["defaultRunner"]
+});
 
 // ../config/dist/errors.js
 var ConfigValidationError = class extends HarnessError {

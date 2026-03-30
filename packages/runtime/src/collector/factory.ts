@@ -21,6 +21,7 @@ export const getTestCollector = (): TestCollector => {
         type: 'collection-finished',
         file: testFilePath,
         duration: Date.now() - start,
+        totalTests: result.totalTests,
       });
 
       return result;

@@ -65,7 +65,12 @@ export type RunHarnessTestFile = (options: {
   harness: Harness;
   projectConfig: JestConfig.ProjectConfig;
   globalConfig: JestConfig.GlobalConfig;
-}) => Promise<JestTestResult>;
+}) => Promise<{
+  jestResult: JestTestResult;
+  harnessResult: HarnessTestSuiteResult;
+  relativeTestPath: string;
+  duration: number;
+}>;
 
 export const runHarnessTestFile: RunHarnessTestFile = async ({
   testPath,
@@ -84,7 +89,7 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
     (setupFile) => path.relative(globalConfig.rootDir, setupFile)
   );
 
-  const results = await harness.runTests(relativeTestPath, {
+  const harnessResult = await harness.runTests(relativeTestPath, {
     testNamePattern: globalConfig.testNamePattern,
     setupFiles,
     setupFilesAfterEnv,
@@ -92,7 +97,7 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
   });
   const end = Date.now();
 
-  const allTests = flattenTests(results);
+  const allTests = flattenTests(harnessResult);
   const stats = calculateStats(allTests);
 
   // Convert TestResult[] to the format expected by toTestResult
@@ -115,12 +120,12 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
   });
 
   // Check if the entire suite was skipped
-  const skipped = results.status === 'skipped';
+  const skipped = harnessResult.status === 'skipped';
 
   // Get error message from suite if it failed
-  const errorMessage = results.error?.message || null;
+  const errorMessage = harnessResult.error?.message || null;
 
-  const totalResults = toTestResult({
+  const jestResult = toTestResult({
     stats: {
       failures: stats.failures,
       pending: stats.pending,
@@ -133,15 +138,20 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
     errorMessage,
     tests,
     jestTestPath: testPath,
-    coverage: results.coverage as JestTestResult['coverage'],
+    coverage: harnessResult.coverage as JestTestResult['coverage'],
   });
 
-  totalResults.failureMessage = formatResultsErrors(
-    totalResults.testResults,
+  jestResult.failureMessage = formatResultsErrors(
+    jestResult.testResults,
     projectConfig,
     globalConfig,
     testPath
   );
 
-  return totalResults;
+  return {
+    jestResult,
+    harnessResult,
+    relativeTestPath,
+    duration: end - start,
+  };
 };

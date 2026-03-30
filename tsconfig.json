@@ -16,6 +16,9 @@
       "path": "./packages/config"
     },
     {
+      "path": "./packages/plugins"
+    },
+    {
       "path": "./packages/metro"
     },
     {

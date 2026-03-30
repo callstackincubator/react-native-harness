@@ -14,6 +14,9 @@ describe('JestHarness', () => {
       ensureAppReady: vi
         .fn()
         .mockRejectedValue(new StartupStallError(1500, 3)),
+      callHook: vi.fn(async () => undefined),
+      setRunState: vi.fn(),
+      getRunState: vi.fn(() => null),
       crashSupervisor: {
         beginTestRun: vi.fn(),
         waitForCrash: vi.fn(),

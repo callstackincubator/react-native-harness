@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { HarnessPlugin } from '@react-native-harness/plugins';
+import { isHarnessPlugin } from '@react-native-harness/plugins';
 
 export const DEFAULT_METRO_PORT = 8081;
 
@@ -15,6 +17,13 @@ const RunnerSchema = z.object({
   platformId: z.string(),
 });
 
+type AnyHarnessPlugin = HarnessPlugin<any, any, any>;
+
+const PluginSchema = z.custom<AnyHarnessPlugin>(
+  (value) => isHarnessPlugin(value),
+  'Invalid Harness plugin'
+);
+
 export const ConfigSchema = z
   .object({
     entryPoint: z.string().min(1, 'Entry point is required'),
@@ -22,6 +31,7 @@ export const ConfigSchema = z
       .string()
       .min(1, 'App registry component name is required'),
     runners: z.array(RunnerSchema).min(1, 'At least one runner is required'),
+    plugins: z.array(PluginSchema).optional().default([]),
     defaultRunner: z.string().optional(),
     host: z.string().min(1, 'Host is required').optional(),
     metroPort: z

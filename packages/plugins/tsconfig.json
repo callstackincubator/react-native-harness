@@ -7,7 +7,10 @@
       "path": "../tools"
     },
     {
-      "path": "../plugins"
+      "path": "../platforms"
+    },
+    {
+      "path": "../bridge"
     },
     {
       "path": "./tsconfig.lib.json"

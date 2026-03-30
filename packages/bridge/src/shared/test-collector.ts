@@ -36,6 +36,7 @@ export type TestCollectionFinishedEvent = {
   type: 'collection-finished';
   file: string;
   duration: number;
+  totalTests: number;
 };
 
 export type TestCollectorEvents =
