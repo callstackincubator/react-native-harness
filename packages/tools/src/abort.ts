@@ -1,5 +1,17 @@
 export const getTimeoutSignal = (timeout: number): AbortSignal => {
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(), timeout);
-  return controller.signal;
+  return AbortSignal.timeout(timeout);
+};
+
+export const raceAbortSignals = (signals: AbortSignal[]): AbortSignal => {
+  if (signals.length === 0) {
+    return new AbortController().signal;
+  }
+  return AbortSignal.any(signals);
+};
+
+export const withAbortTimeout = (
+  signal: AbortSignal,
+  timeout: number
+): AbortSignal => {
+  return raceAbortSignals([signal, getTimeoutSignal(timeout)]);
 };

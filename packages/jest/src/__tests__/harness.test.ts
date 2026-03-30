@@ -10,8 +10,13 @@ import type {
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import type { BridgeServer } from '@react-native-harness/bridge/server';
+import type {
+  MetroInstance,
+  Reporter,
+  ReportableEvent,
+  WaitForMetroBackedAppReadyOptions,
+} from '@react-native-harness/bundler-metro';
 import { createCrashSupervisor } from '../crash-supervisor.js';
-import type { Reporter, ReportableEvent } from '@react-native-harness/bundler-metro';
 
 const mocks = vi.hoisted(() => ({
   createCrashArtifactWriter: vi.fn(() => ({})),
@@ -19,26 +24,29 @@ const mocks = vi.hoisted(() => ({
   getMetroInstance: vi.fn(),
   isMetroCacheReusable: vi.fn(() => false),
   logMetroCacheReused: vi.fn(),
-  logMetroPrewarmCompleted: vi.fn(),
-  prewarmMetroBundle: vi.fn(),
+  waitForMetroBackedAppReady: vi.fn(),
 }));
 
-vi.mock('@react-native-harness/bundler-metro', () => ({
-  getMetroInstance: mocks.getMetroInstance,
-  prewarmMetroBundle: mocks.prewarmMetroBundle,
-}));
+vi.mock('@react-native-harness/bundler-metro', async () => {
+  const actual =
+    await vi.importActual<typeof import('@react-native-harness/bundler-metro')>(
+      '@react-native-harness/bundler-metro'
+    );
+
+  return {
+    ...actual,
+    getMetroInstance: mocks.getMetroInstance,
+    isMetroCacheReusable: mocks.isMetroCacheReusable,
+    waitForMetroBackedAppReady: mocks.waitForMetroBackedAppReady,
+  };
+});
 
 vi.mock('@react-native-harness/bridge/server', () => ({
   getBridgeServer: mocks.getBridgeServer,
 }));
 
-vi.mock('@react-native-harness/metro', () => ({
-  isMetroCacheReusable: mocks.isMetroCacheReusable,
-}));
-
 vi.mock('../logs.js', () => ({
   logMetroCacheReused: mocks.logMetroCacheReused,
-  logMetroPrewarmCompleted: mocks.logMetroPrewarmCompleted,
 }));
 
 vi.mock('@react-native-harness/tools', async () => {
@@ -86,32 +94,34 @@ const createBridgeServer = () => {
   };
 };
 
-const createMetroReporter = (): {
-  reporter: Reporter;
-  emit: (event: ReportableEvent) => void;
-} => {
+const createReporter = (): Reporter => {
   const listeners = new Set<(event: ReportableEvent) => void>();
 
   return {
-    reporter: {
-      addListener: (listener) => {
-        listeners.add(listener);
-      },
-      removeListener: (listener) => {
-        listeners.delete(listener);
-      },
-      emit: (event) => {
-        listeners.forEach((listener) => listener(event));
-      },
-      clearAllListeners: () => {
-        listeners.clear();
-      },
+    addListener: (listener) => {
+      listeners.add(listener);
+    },
+    removeListener: (listener) => {
+      listeners.delete(listener);
     },
     emit: (event) => {
       listeners.forEach((listener) => listener(event));
     },
+    clearAllListeners: () => {
+      listeners.clear();
+    },
   };
 };
+
+const createMetroInstance = (
+  overrides: Partial<MetroInstance> = {}
+): MetroInstance => ({
+  events: createReporter(),
+  waitUntilHealthy: vi.fn(async () => 'HTTP 200: packager-status:running'),
+  prewarm: vi.fn(async () => false),
+  dispose: vi.fn(async () => undefined),
+  ...overrides,
+});
 
 const createAppMonitor = (): {
   appMonitor: AppMonitor;
@@ -157,7 +167,7 @@ const createHarnessConfig = (
   ({
     appRegistryComponentName: 'App',
     bridgeTimeout: 60_000,
-    bundleStartTimeout: 1_000,
+    bundleStartTimeout: 60_000,
     crashDetectionInterval: 500,
     defaultRunner: 'ios',
     detectNativeCrashes: true,
@@ -165,25 +175,20 @@ const createHarnessConfig = (
     entryPoint: 'index.js',
     forwardClientLogs: false,
     maxAppRestarts: 2,
+    metroPort: 8081,
     resetEnvironmentBetweenTestFiles: true,
     runners: [],
     unstable__enableMetroCache: false,
     unstable__skipAlreadyIncludedModules: false,
-    webSocketPort: 8081,
+    webSocketPort: 3001,
     ...overrides,
   }) as HarnessConfig;
-
-const flush = async () => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 afterEach(() => {
-  vi.useRealTimers();
   delete (
     globalThis as typeof globalThis & {
       __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
@@ -192,12 +197,59 @@ afterEach(() => {
 });
 
 describe('waitForAppReady', () => {
-  it('retries startup when Metro is idle and passes launch options on every attempt', async () => {
-    vi.useFakeTimers();
-
+  it('delegates startup orchestration to bundler-metro and resolves readiness from the bridge', async () => {
     const { serverBridge, emitReady } = createBridgeServer();
-    const { reporter } = createMetroReporter();
-    const restartApp = vi.fn().mockResolvedValue(undefined);
+    const metroInstance = createMetroInstance();
+    const platformInstance = createPlatformRunner();
+    const { appMonitor } = createAppMonitor();
+    const crashSupervisor = createCrashSupervisor({
+      appMonitor,
+      platformRunner: platformInstance,
+    });
+
+    mocks.waitForMetroBackedAppReady.mockImplementationOnce(
+      async (options: WaitForMetroBackedAppReadyOptions) => {
+        options.onAttemptStart?.();
+        const readyPromise = options.waitForReady(new AbortController().signal);
+        emitReady();
+        await readyPromise;
+        options.onAttemptReset?.();
+      }
+    );
+
+    await waitForAppReady({
+      metroInstance,
+      serverBridge,
+      platformInstance,
+      platformId: 'ios',
+      bundleStartTimeout: 1_500,
+      readyTimeout: 2_500,
+      maxAppRestarts: 3,
+      testFilePath: '/tmp/test.harness.ts',
+      crashSupervisor,
+    });
+
+    expect(mocks.waitForMetroBackedAppReady).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metro: metroInstance,
+        platformId: 'ios',
+        bundleStartTimeout: 1_500,
+        readyTimeout: 2_500,
+        maxAppRestarts: 3,
+        startAttempt: expect.any(Function),
+        waitForReady: expect.any(Function),
+        waitForCrash: expect.any(Function),
+      })
+    );
+    expect(crashSupervisor.isReady()).toBe(true);
+
+    await crashSupervisor.dispose();
+  });
+
+  it('passes launch options through the shared Metro startup helper', async () => {
+    const { serverBridge } = createBridgeServer();
+    const metroInstance = createMetroInstance();
+    const restartApp = vi.fn(async () => undefined);
     const platformInstance = createPlatformRunner({ restartApp });
     const { appMonitor } = createAppMonitor();
     const crashSupervisor = createCrashSupervisor({
@@ -205,12 +257,20 @@ describe('waitForAppReady', () => {
       platformRunner: platformInstance,
     });
 
-    const promise = waitForAppReady({
-      metroEvents: reporter,
+    mocks.waitForMetroBackedAppReady.mockImplementationOnce(
+      async (options: WaitForMetroBackedAppReadyOptions) => {
+        await options.startAttempt();
+      }
+    );
+
+    await waitForAppReady({
+      metroInstance,
       serverBridge,
       platformInstance,
-      bundleStartTimeout: 1_000,
-      maxAppRestarts: 2,
+      platformId: 'ios',
+      bundleStartTimeout: 1_500,
+      readyTimeout: 2_500,
+      maxAppRestarts: 3,
       testFilePath: '/tmp/test.harness.ts',
       crashSupervisor,
       appLaunchOptions: {
@@ -220,278 +280,104 @@ describe('waitForAppReady', () => {
       },
     });
 
-    await flush();
-    expect(restartApp).toHaveBeenCalledTimes(1);
-    expect(restartApp).toHaveBeenNthCalledWith(1, {
+    expect(restartApp).toHaveBeenCalledWith({
       extras: {
         mode: 'startup',
       },
     });
-
-    await vi.advanceTimersByTimeAsync(1_000);
-    await flush();
-
-    expect(restartApp).toHaveBeenCalledTimes(2);
-    expect(restartApp).toHaveBeenNthCalledWith(2, {
-      extras: {
-        mode: 'startup',
-      },
-    });
-
-    emitReady();
-    await promise;
-    await crashSupervisor.dispose();
-  });
-
-  it('does not retry while Metro is still bundling', async () => {
-    vi.useFakeTimers();
-
-    const { serverBridge, emitReady } = createBridgeServer();
-    const { reporter, emit } = createMetroReporter();
-    const restartApp = vi.fn().mockResolvedValue(undefined);
-    const platformInstance = createPlatformRunner({ restartApp });
-    const { appMonitor } = createAppMonitor();
-    const crashSupervisor = createCrashSupervisor({
-      appMonitor,
-      platformRunner: platformInstance,
-    });
-
-    const promise = waitForAppReady({
-      metroEvents: reporter,
-      serverBridge,
-      platformInstance,
-      bundleStartTimeout: 1_000,
-      maxAppRestarts: 2,
-      testFilePath: '/tmp/test.harness.ts',
-      crashSupervisor,
-    });
-
-    emit({
-      type: 'bundle_build_started',
-      buildID: 'startup',
-      bundleDetails: { entryFile: 'index.js', platform: 'ios', dev: true, minify: false, bundleType: 'bundle' },
-    } as ReportableEvent);
-
-    await flush();
-    await vi.advanceTimersByTimeAsync(1_000);
-    await flush();
-
-    expect(restartApp).toHaveBeenCalledTimes(1);
-
-    emitReady();
-    await promise;
-    await crashSupervisor.dispose();
-  });
-
-  it('resumes retries once bundling finishes', async () => {
-    vi.useFakeTimers();
-
-    const { serverBridge, emitReady } = createBridgeServer();
-    const { reporter, emit } = createMetroReporter();
-    const restartApp = vi.fn().mockResolvedValue(undefined);
-    const platformInstance = createPlatformRunner({ restartApp });
-    const { appMonitor } = createAppMonitor();
-    const crashSupervisor = createCrashSupervisor({
-      appMonitor,
-      platformRunner: platformInstance,
-    });
-
-    const promise = waitForAppReady({
-      metroEvents: reporter,
-      serverBridge,
-      platformInstance,
-      bundleStartTimeout: 1_000,
-      maxAppRestarts: 2,
-      testFilePath: '/tmp/test.harness.ts',
-      crashSupervisor,
-    });
-
-    emit({
-      type: 'bundle_build_started',
-      buildID: 'startup',
-      bundleDetails: { entryFile: 'index.js', platform: 'ios', dev: true, minify: false, bundleType: 'bundle' },
-    } as ReportableEvent);
-
-    await flush();
-    await vi.advanceTimersByTimeAsync(1_000);
-    await flush();
-
-    expect(restartApp).toHaveBeenCalledTimes(1);
-
-    emit({
-      type: 'bundle_build_done',
-      buildID: 'startup',
-    } as ReportableEvent);
-
-    await flush();
-    await vi.advanceTimersByTimeAsync(1_000);
-    await flush();
-
-    expect(restartApp).toHaveBeenCalledTimes(2);
-
-    emitReady();
-    await promise;
-    await crashSupervisor.dispose();
-  });
-
-  it('throws a startup stall error when all launch attempts are exhausted', async () => {
-    vi.useFakeTimers();
-
-    const { serverBridge } = createBridgeServer();
-    const { reporter } = createMetroReporter();
-    const restartApp = vi.fn().mockResolvedValue(undefined);
-    const platformInstance = createPlatformRunner({ restartApp });
-    const { appMonitor } = createAppMonitor();
-    const crashSupervisor = createCrashSupervisor({
-      appMonitor,
-      platformRunner: platformInstance,
-    });
-
-    const promise = waitForAppReady({
-      metroEvents: reporter,
-      serverBridge,
-      platformInstance,
-      bundleStartTimeout: 1_000,
-      maxAppRestarts: 2,
-      testFilePath: '/tmp/test.harness.ts',
-      crashSupervisor,
-    });
-    const expectation = expect(promise).rejects.toEqual(
-      expect.objectContaining({
-        name: 'StartupStallError',
-        message:
-          'The app never became ready after 3 launch attempts with a startup stall timeout of 1000ms and no native crash signal.',
-      })
-    );
-
-    await flush();
-    await vi.advanceTimersByTimeAsync(3_000);
-
-    await expectation;
-    expect(restartApp).toHaveBeenCalledTimes(3);
-
-    await crashSupervisor.dispose();
-  });
-
-  it('fails immediately on a confirmed startup crash', async () => {
-    const { serverBridge } = createBridgeServer();
-    const { reporter } = createMetroReporter();
-    const restartApp = vi.fn().mockResolvedValue(undefined);
-    const platformInstance = createPlatformRunner({ restartApp });
-    const { appMonitor, emit } = createAppMonitor();
-    const crashSupervisor = createCrashSupervisor({
-      appMonitor,
-      platformRunner: {
-        ...platformInstance,
-        isAppRunning: vi.fn(async () => false),
-      },
-    });
-
-    const promise = waitForAppReady({
-      metroEvents: reporter,
-      serverBridge,
-      platformInstance,
-      bundleStartTimeout: 1_000,
-      maxAppRestarts: 2,
-      testFilePath: '/tmp/test.harness.ts',
-      crashSupervisor,
-    });
-
-    await flush();
-
-    emit({
-      type: 'app_exited',
-      source: 'polling',
-      isConfirmed: true,
-      pid: 123,
-      crashDetails: {
-        summary: 'fatal startup crash',
-      },
-    } as AppMonitorEvent);
-
-    await expect(promise).rejects.toMatchObject({
-      name: 'NativeCrashError',
-      phase: 'startup',
-    });
-    expect(restartApp).toHaveBeenCalledTimes(1);
-
-    await crashSupervisor.dispose();
-  });
-
-  it('stops retrying once a crash is reported after an earlier stall', async () => {
-    vi.useFakeTimers();
-
-    const { serverBridge } = createBridgeServer();
-    const { reporter } = createMetroReporter();
-    const restartApp = vi.fn().mockResolvedValue(undefined);
-    const platformInstance = createPlatformRunner({ restartApp });
-    const { appMonitor, emit } = createAppMonitor();
-    const crashSupervisor = createCrashSupervisor({
-      appMonitor,
-      platformRunner: {
-        ...platformInstance,
-        isAppRunning: vi.fn(async () => false),
-      },
-    });
-
-    const promise = waitForAppReady({
-      metroEvents: reporter,
-      serverBridge,
-      platformInstance,
-      bundleStartTimeout: 1_000,
-      maxAppRestarts: 2,
-      testFilePath: '/tmp/test.harness.ts',
-      crashSupervisor,
-    });
-
-    await flush();
-    await vi.advanceTimersByTimeAsync(1_000);
-    await flush();
-
-    expect(restartApp).toHaveBeenCalledTimes(2);
-
-    emit({
-      type: 'possible_crash',
-      source: 'polling',
-      isConfirmed: true,
-      pid: 456,
-      crashDetails: {
-        summary: 'crashed on retry',
-      },
-    } as AppMonitorEvent);
-
-    await expect(promise).rejects.toMatchObject({
-      name: 'NativeCrashError',
-      phase: 'startup',
-    });
-    expect(restartApp).toHaveBeenCalledTimes(2);
 
     await crashSupervisor.dispose();
   });
 });
 
-describe('restart(testFilePath)', () => {
-  it('stops the app and relaunches through the shared startup recovery helper', async () => {
-    vi.useFakeTimers();
-
+describe('getHarness', () => {
+  it('routes ensureAppReady through the shared Metro startup helper', async () => {
     const { serverBridge, emitReady } = createBridgeServer();
     const appMonitor = createAppMonitor();
-    const restartApp = vi.fn().mockResolvedValue(undefined);
-    const stopApp = vi.fn().mockResolvedValue(undefined);
+    const restartApp = vi.fn(async () => undefined);
+    const platformInstance = createPlatformRunner({
+      restartApp,
+      createAppMonitor: () => appMonitor.appMonitor,
+    });
+    const metroInstance = createMetroInstance();
+
+    mocks.getBridgeServer.mockResolvedValue(serverBridge);
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
+    mocks.waitForMetroBackedAppReady.mockImplementationOnce(
+      async (options: WaitForMetroBackedAppReadyOptions) => {
+        await options.startAttempt();
+        const readyPromise = options.waitForReady(
+          new AbortController().signal
+        );
+        emitReady();
+        await readyPromise;
+      }
+    );
+
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = vi.fn(async () => platformInstance);
+
+    const platform: HarnessPlatform = {
+      config: {
+        appLaunchOptions: {
+          extras: {
+            source: 'ensure-ready',
+          },
+        },
+      },
+      name: 'ios',
+      platformId: 'ios',
+      runner: `data:text/javascript,${encodeURIComponent(
+        'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
+      )}`,
+    };
+
+    const harness = await getHarness(
+      createHarnessConfig(),
+      platform,
+      '/tmp/project'
+    );
+
+    await harness.ensureAppReady('/tmp/example.harness.ts');
+
+    expect(mocks.waitForMetroBackedAppReady).toHaveBeenCalledTimes(1);
+    expect(restartApp).toHaveBeenCalledWith({
+      extras: {
+        source: 'ensure-ready',
+      },
+    });
+
+    await harness.dispose();
+  });
+
+  it('routes restart(testFilePath) through the shared Metro startup helper', async () => {
+    const { serverBridge, emitReady } = createBridgeServer();
+    const appMonitor = createAppMonitor();
+    const restartApp = vi.fn(async () => undefined);
+    const stopApp = vi.fn(async () => undefined);
     const platformInstance = createPlatformRunner({
       restartApp,
       stopApp,
       isAppRunning: vi.fn(async () => false),
       createAppMonitor: () => appMonitor.appMonitor,
     });
+    const metroInstance = createMetroInstance();
 
     mocks.getBridgeServer.mockResolvedValue(serverBridge);
-    const metroReporter = createMetroReporter();
-    mocks.getMetroInstance.mockResolvedValue({
-      events: metroReporter.reporter,
-      dispose: vi.fn(async () => undefined),
-    });
-    mocks.prewarmMetroBundle.mockResolvedValue(undefined);
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
+    mocks.waitForMetroBackedAppReady.mockImplementationOnce(
+      async (options: WaitForMetroBackedAppReadyOptions) => {
+        await options.startAttempt();
+        const readyPromise = options.waitForReady(
+          new AbortController().signal
+        );
+        emitReady();
+        await readyPromise;
+      }
+    );
 
     (
       globalThis as typeof globalThis & {
@@ -515,39 +401,21 @@ describe('restart(testFilePath)', () => {
     };
 
     const harness = await getHarness(
-      createHarnessConfig({
-        bundleStartTimeout: 1_000,
-        maxAppRestarts: 2,
-      }),
+      createHarnessConfig(),
       platform,
       '/tmp/project'
     );
 
-    const restartPromise = harness.restart('/tmp/restart.harness.ts');
-
-    await flush();
-    await flush();
+    await harness.restart('/tmp/restart.harness.ts');
 
     expect(stopApp).toHaveBeenCalledTimes(1);
-    expect(restartApp).toHaveBeenCalledTimes(0);
-
-    await vi.advanceTimersByTimeAsync(1_000);
-    await flush();
-
-    expect(restartApp).toHaveBeenCalledTimes(2);
-    expect(restartApp).toHaveBeenNthCalledWith(1, {
-      extras: {
-        source: 'restart',
-      },
-    });
-    expect(restartApp).toHaveBeenNthCalledWith(2, {
+    expect(mocks.waitForMetroBackedAppReady).toHaveBeenCalledTimes(1);
+    expect(restartApp).toHaveBeenCalledWith({
       extras: {
         source: 'restart',
       },
     });
 
-    emitReady();
-    await restartPromise;
     await harness.dispose();
   });
 });
@@ -563,12 +431,8 @@ describe('plugins', () => {
     const observedHooks: string[] = [];
 
     mocks.getBridgeServer.mockResolvedValue(serverBridge);
-    const metroReporter = createMetroReporter();
-    mocks.getMetroInstance.mockResolvedValue({
-      events: metroReporter.reporter,
-      dispose: vi.fn(async () => undefined),
-    });
-    mocks.prewarmMetroBundle.mockResolvedValue(undefined);
+    const metroInstance = createMetroInstance();
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
 
     (
       globalThis as typeof globalThis & {
@@ -677,7 +541,7 @@ describe('plugins', () => {
 describe('StartupStallError', () => {
   it('includes the configured timeout and attempt count', () => {
     expect(new StartupStallError(1_500, 4).message).toBe(
-      'The app never became ready after 4 launch attempts with a startup stall timeout of 1500ms and no native crash signal.'
+      'The app did not request its Metro bundle after 4 launch attempts within 1500ms. Last Metro status: unknown.'
     );
   });
 });

@@ -1,4 +1,5 @@
 import { getResolvedEntryPointWithoutExtension } from './entry-point-utils.js';
+import { HARNESS_REQUEST_KIND_HEADER } from './request-kind.js';
 
 type PrewarmOptions = {
   projectRoot: string;
@@ -26,7 +27,12 @@ export const prewarmMetroBundle = async (
   });
   const url = `http://localhost:${port}/${resolvedEntryPoint}.bundle?${searchParams.toString()}`;
 
-  const response = await fetch(url, { signal });
+  const response = await fetch(url, {
+    signal,
+    headers: {
+      [HARNESS_REQUEST_KIND_HEADER]: 'prewarm',
+    },
+  });
 
   if (!response.ok) {
     const snippet = (await response.text()).trim();

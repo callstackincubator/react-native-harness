@@ -50,7 +50,7 @@ export const ConfigSchema = z
     bundleStartTimeout: z
       .number()
       .min(1000, 'Bundle start timeout must be at least 1 second')
-      .default(15000),
+      .default(60000),
     maxAppRestarts: z
       .number()
       .min(0, 'Max app restarts must be at least 0')

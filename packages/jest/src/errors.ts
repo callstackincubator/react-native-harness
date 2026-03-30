@@ -1,5 +1,10 @@
 import { HarnessError } from '@react-native-harness/tools';
 import type { AppCrashDetails } from '@react-native-harness/platforms';
+export {
+  StartupStallError,
+  type StartupStallCode,
+  type StartupStallDetails,
+} from '@react-native-harness/bundler-metro';
 
 export class NoRunnerSpecifiedError extends HarnessError {
   constructor() {
@@ -19,20 +24,6 @@ export class InitializationTimeoutError extends HarnessError {
   constructor() {
     super('The Harness did not become ready within the timeout period.');
     this.name = 'InitializationTimeoutError';
-  }
-}
-
-export class StartupStallError extends HarnessError {
-  constructor(
-    public readonly timeoutMs: number,
-    public readonly attempts: number
-  ) {
-    super(
-      `The app never became ready after ${attempts} launch attempt${
-        attempts === 1 ? '' : 's'
-      } with a startup stall timeout of ${timeoutMs}ms and no native crash signal.`
-    );
-    this.name = 'StartupStallError';
   }
 }
 

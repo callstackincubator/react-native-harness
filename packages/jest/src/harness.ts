@@ -18,8 +18,8 @@ import {
 import {
   getMetroInstance,
   isMetroCacheReusable,
-  prewarmMetroBundle,
-  type Reporter,
+  waitForMetroBackedAppReady,
+  type MetroInstance,
   type ReportableEvent,
 } from '@react-native-harness/bundler-metro';
 import {
@@ -31,15 +31,15 @@ import {
   type HarnessRunSummary,
 } from '@react-native-harness/plugins';
 import { logger, createCrashArtifactWriter } from '@react-native-harness/tools';
-import { InitializationTimeoutError, StartupStallError } from './errors.js';
+import { InitializationTimeoutError } from './errors.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
 import {
   createCrashSupervisor,
   type CrashSupervisor,
 } from './crash-supervisor.js';
 import { createClientLogListener } from './client-log-handler.js';
-import { logMetroCacheReused, logMetroPrewarmCompleted } from './logs.js';
 import path from 'node:path';
+import { logMetroCacheReused } from './logs.js';
 
 const harnessLogger = logger.child('runtime');
 
@@ -84,171 +84,112 @@ export const maybeLogMetroCacheReuse = (
   }
 };
 
+const createAbortError = () =>
+  new DOMException('The operation was aborted', 'AbortError');
+
+const waitForAbort = (signal: AbortSignal): Promise<never> => {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? createAbortError());
+  }
+
+  return new Promise((_, reject) => {
+    signal.addEventListener(
+      'abort',
+      () => {
+        reject(signal.reason ?? createAbortError());
+      },
+      { once: true }
+    );
+  });
+};
+
 export const waitForAppReady = async (options: {
-  metroEvents: Reporter;
+  metroInstance: MetroInstance;
   serverBridge: BridgeServer;
   platformInstance: HarnessPlatformRunner;
+  platformId: string;
   bundleStartTimeout: number;
+  readyTimeout: number;
   maxAppRestarts: number;
   testFilePath: string;
   crashSupervisor: CrashSupervisor;
+  signal?: AbortSignal;
   appLaunchOptions?: AppLaunchOptions;
   launchApp?: () => Promise<void>;
 }): Promise<void> => {
   const {
-    metroEvents,
+    metroInstance,
     serverBridge,
     platformInstance,
+    platformId,
     bundleStartTimeout,
+    readyTimeout,
     maxAppRestarts,
     testFilePath,
     crashSupervisor,
     appLaunchOptions,
     launchApp = () => platformInstance.restartApp(appLaunchOptions),
   } = options;
-
-  const totalAttempts = maxAppRestarts + 1;
-  let restartCount = 0;
-  let isBundling = false;
-  let timeoutId: NodeJS.Timeout | null = null;
-  let settled = false;
+  const signal = options.signal ?? new AbortController().signal;
 
   const logWait = (message: string, ...args: Array<unknown>) => {
     harnessLogger.debug(`waitForAppReady: ${message}`, ...args);
   };
-
-  const clearStartupTimer = () => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-      timeoutId = null;
-    }
-  };
-
-  return await new Promise<void>((resolve, reject) => {
-    const cleanup = () => {
-      settled = true;
-      clearStartupTimer();
-      metroEvents.removeListener(onMetroEvent);
-      serverBridge.off('ready', onReady);
-      crashSupervisor.cancelCrashWaiters();
-    };
-
-    const rejectOnce = (error: unknown) => {
-      if (settled) {
-        return;
-      }
-
-      logWait('failed while waiting for app readiness');
-      harnessLogger.debug(error);
-      cleanup();
-      reject(error);
-    };
-
-    const resolveOnce = () => {
-      if (settled) {
-        return;
-      }
-
-      logWait('runtime ready received');
-      cleanup();
-      resolve();
-    };
-
-    const startStartupTimer = () => {
-      clearStartupTimer();
-      logWait(
-        'starting startup timer (%dms) for attempt %d/%d',
-        bundleStartTimeout,
-        restartCount + 1,
-        totalAttempts
-      );
-      timeoutId = setTimeout(() => {
-        if (settled || isBundling) {
-          return;
-        }
-
-        if (restartCount >= maxAppRestarts) {
-          logWait('startup timer expired with no retries remaining');
-          rejectOnce(
-            new StartupStallError(bundleStartTimeout, totalAttempts)
-          );
-          return;
-        }
-
-        restartCount += 1;
-        logWait(
-          'startup timer expired, retrying launch (%d/%d)',
-          restartCount + 1,
-          totalAttempts
-        );
-        void startAttempt();
-      }, bundleStartTimeout);
-    };
-
-    const onReady = () => {
-      if (settled) {
-        return;
-      }
-
-      crashSupervisor.markReady();
-      resolveOnce();
-    };
-
-    const onMetroEvent = (event: ReportableEvent) => {
-      if (event.type === 'bundle_build_started') {
-        isBundling = true;
-        clearStartupTimer();
-        logWait('bundle started, pausing startup timer');
-        return;
-      }
-
-      if (
-        event.type === 'bundle_build_done' ||
-        event.type === 'bundle_build_failed'
-      ) {
-        isBundling = false;
-
-        if (!settled && !crashSupervisor.isReady()) {
-          // Keep the historical behavior: once bundling settles, give RN a fresh timeout window.
-          logWait('bundle settled (%s), waiting for runtime ready', event.type);
-          startStartupTimer();
-        }
-      }
-    };
-
-    const startAttempt = async () => {
-      if (settled || crashSupervisor.isReady()) {
-        resolveOnce();
-        return;
-      }
-
-      logWait(
-        'launch attempt %d/%d for %s',
-        restartCount + 1,
-        totalAttempts,
-        testFilePath
-      );
-      crashSupervisor.cancelCrashWaiters();
-      crashSupervisor.beginLaunch(testFilePath);
-      startStartupTimer();
+  return await waitForMetroBackedAppReady({
+    metro: metroInstance,
+    platformId,
+    bundleStartTimeout,
+    readyTimeout,
+    maxAppRestarts,
+    signal,
+    startAttempt: async () => {
+      logWait('launching app for %s', testFilePath);
+      await launchApp();
+      logWait('launch request completed, waiting for bridge ready');
+    },
+    waitForReady: async (signal) => {
       logWait('waiting for runtime ready');
+      return await Promise.race([
+        new Promise<void>((resolve) => {
+          const onReady = () => {
+            cleanup();
+            crashSupervisor.markReady();
+            logWait('runtime ready received');
+            resolve();
+          };
+          const onAbort = () => {
+            cleanup();
+          };
+          const cleanup = () => {
+            serverBridge.off('ready', onReady);
+            signal.removeEventListener('abort', onAbort);
+          };
 
-      void crashSupervisor.waitForCrash(testFilePath).catch((error) => {
-        rejectOnce(error);
-      });
-
+          serverBridge.on('ready', onReady);
+          signal.addEventListener('abort', onAbort, { once: true });
+        }),
+        waitForAbort(signal),
+      ]);
+    },
+    waitForCrash: async (signal) => {
       try {
-        await launchApp();
-        logWait('launch request completed, waiting for bridge ready');
-      } catch (error) {
-        rejectOnce(error);
+        logWait('waiting for crash or runtime ready');
+        return await Promise.race([
+          crashSupervisor.waitForCrash(testFilePath),
+          waitForAbort(signal),
+        ]);
+      } finally {
+        crashSupervisor.cancelCrashWaiters();
       }
-    };
-
-    metroEvents.addListener(onMetroEvent);
-    serverBridge.on('ready', onReady);
-
-    void startAttempt();
+    },
+    onAttemptStart: () => {
+      logWait('beginning launch attempt for %s', testFilePath);
+      crashSupervisor.beginLaunch(testFilePath);
+    },
+    onAttemptReset: () => {
+      logWait('resetting launch attempt state');
+      crashSupervisor.cancelCrashWaiters();
+    },
   });
 };
 
@@ -626,18 +567,6 @@ const getHarnessInternal = async (
     await pluginManager.callHook('harness:before-creation', {
       appLaunchOptions,
     });
-    harnessLogger.debug('starting Metro prewarm');
-    await prewarmMetroBundle({
-      projectRoot,
-      entryPoint: config.entryPoint,
-      port: config.metroPort,
-      platform: platform.platformId,
-      dev: true,
-      minify: false,
-      signal,
-    });
-    logMetroPrewarmCompleted(platform);
-    harnessLogger.debug('Metro prewarm completed');
     await appMonitor.start();
     harnessLogger.debug('app monitor started');
   } catch (error) {
@@ -665,10 +594,12 @@ const getHarnessInternal = async (
     crashSupervisor.reset();
     harnessLogger.debug('app not ready, waiting for launch and runtime readiness');
     await waitForAppReady({
-      metroEvents: metroInstance.events,
+      metroInstance,
       serverBridge,
       platformInstance: platformInstance as HarnessPlatformRunner,
-      bundleStartTimeout: config.bundleStartTimeout ?? 15000,
+      platformId: platform.platformId,
+      bundleStartTimeout: config.bundleStartTimeout ?? 60000,
+      readyTimeout: config.bridgeTimeout,
       maxAppRestarts: config.maxAppRestarts ?? 2,
       testFilePath,
       crashSupervisor,
