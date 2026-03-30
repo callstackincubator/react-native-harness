@@ -13,16 +13,19 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../babel-preset/tsconfig.lib.json"
+      "path": "../runtime/tsconfig.lib.json"
     },
     {
       "path": "../config/tsconfig.lib.json"
     },
     {
-      "path": "../runtime/tsconfig.lib.json"
+      "path": "../tools/tsconfig.lib.json"
     },
     {
-      "path": "../tools/tsconfig.lib.json"
+      "path": "../bridge/tsconfig.lib.json"
+    },
+    {
+      "path": "../babel-preset/tsconfig.lib.json"
     }
   ]
 }

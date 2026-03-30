@@ -21,6 +21,7 @@ import {
   isMetroCacheReusable,
   waitForMetroBackedAppReady,
   type MetroInstance,
+  type MetroWebSocketEndpoint,
   type ReportableEvent,
 } from '@react-native-harness/bundler-metro';
 import {
@@ -293,7 +294,8 @@ const getHarnessInternal = async (
             projectRoot,
             harnessConfig: config,
             websocketEndpoints: {
-              [HARNESS_BRIDGE_PATH]: serverBridge.ws,
+              [HARNESS_BRIDGE_PATH]:
+                serverBridge.ws as unknown as MetroWebSocketEndpoint,
             },
           },
           signal

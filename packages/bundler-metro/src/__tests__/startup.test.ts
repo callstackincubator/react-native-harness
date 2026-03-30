@@ -27,6 +27,8 @@ const createMetroInstance = (
   overrides: Partial<MetroInstance> = {}
 ): MetroInstance => ({
   events: getEmitter<ReportableEvent>(),
+  httpServer: {} as never,
+  websocketEndpoints: {},
   waitUntilHealthy: vi.fn(async () => 'HTTP 200: packager-status:running'),
   prewarm: vi.fn(async () => false),
   dispose: vi.fn(async () => undefined),
