@@ -248,9 +248,6 @@ importers:
       '@react-native-harness/babel-preset':
         specifier: workspace:*
         version: link:../babel-preset
-      '@react-native-harness/bridge':
-        specifier: workspace:*
-        version: link:../bridge
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config
