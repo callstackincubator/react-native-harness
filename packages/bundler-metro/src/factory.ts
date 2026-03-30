@@ -1,4 +1,4 @@
-import { logger } from '@react-native-harness/tools';
+import { logger, withAbortTimeout } from '@react-native-harness/tools';
 import type { Server as HttpServer } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
 import connect from 'connect';
@@ -12,8 +12,58 @@ import {
   type ReportableEvent,
 } from './reporter.js';
 import { getExpoMiddleware } from './middlewares/expo-middleware.js';
+import { getBundleRequestObserverMiddleware } from './middlewares/bundle-request-middleware.js';
 import { getStatusMiddleware } from './middlewares/status-middleware.js';
+import { prewarmMetroBundle } from './prewarm.js';
 import { withRnHarness } from './withRnHarness.js';
+
+const METRO_STATUS_POLL_INTERVAL_MS = 500;
+const METRO_STATUS_REQUEST_TIMEOUT_MS = 1000;
+
+const getMetroStatusUrl = (port: number) => `http://localhost:${port}/status`;
+
+const waitForMetroStatus = async (options: {
+  port: number;
+  timeoutMs: number;
+  signal: AbortSignal;
+}): Promise<string> => {
+  const { port, timeoutMs, signal } = options;
+  const deadline = Date.now() + timeoutMs;
+  let lastStatus = 'waiting for first /status response';
+
+  while (Date.now() < deadline) {
+    signal.throwIfAborted();
+
+    try {
+      const response = await fetch(getMetroStatusUrl(port), {
+        signal: withAbortTimeout(signal, METRO_STATUS_REQUEST_TIMEOUT_MS),
+      });
+      const body = await response.text();
+
+      lastStatus = `HTTP ${response.status}: ${body.trim()}`;
+
+      if (response.ok && body.includes('packager-status:running')) {
+        return lastStatus;
+      }
+    } catch (error) {
+      if (
+        error instanceof DOMException &&
+        error.name === 'AbortError' &&
+        signal.aborted
+      ) {
+        throw error;
+      }
+
+      lastStatus = error instanceof Error ? error.message : String(error);
+    }
+
+    await new Promise((resolve) =>
+      setTimeout(resolve, METRO_STATUS_POLL_INTERVAL_MS)
+    );
+  }
+
+  return lastStatus;
+};
 
 const waitForBundler = async (
   reporter: Reporter,
@@ -62,6 +112,7 @@ export const getMetroInstance = async (
 
   const middleware = connect()
     .use(nocache())
+    .use('/', getBundleRequestObserverMiddleware(projectRoot, harnessConfig, reporter))
     .use('/', getExpoMiddleware(projectRoot, harnessConfig))
     .use('/status', getStatusMiddleware(projectRoot));
 
@@ -89,8 +140,46 @@ export const getMetroInstance = async (
 
   logger.debug('Metro server is running');
 
+  let prewarmResult: Promise<boolean> | null = null;
+
   return {
     events: reporter,
+    waitUntilHealthy: async ({ timeoutMs, signal }) =>
+      waitForMetroStatus({ port: metroPort, timeoutMs, signal }),
+    prewarm: ({ platform, signal }) => {
+      if (!prewarmResult) {
+        prewarmResult = (async () => {
+          try {
+            await prewarmMetroBundle({
+              projectRoot,
+              entryPoint: harnessConfig.entryPoint,
+              port: metroPort,
+              platform,
+              dev: true,
+              minify: false,
+              signal,
+            });
+            return true;
+          } catch (error) {
+            if (
+              error instanceof DOMException &&
+              error.name === 'AbortError' &&
+              signal.aborted
+            ) {
+              throw error;
+            }
+
+            logger.warn(
+              `Metro pre-warm for ${platform} failed; continuing without pre-warm.`,
+              error
+            );
+            return false;
+          }
+        })();
+      }
+
+      return prewarmResult;
+    },
     dispose: () =>
       new Promise<void>((resolve) => {
         server.close(() => resolve());
