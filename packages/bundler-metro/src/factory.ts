@@ -14,6 +14,7 @@ import {
 import { getExpoMiddleware } from './middlewares/expo-middleware.js';
 import { getStatusMiddleware } from './middlewares/status-middleware.js';
 import { withRnHarness } from './withRnHarness.js';
+const metroLogger = logger.child('metro');
 
 const waitForBundler = async (
   reporter: Reporter,
@@ -41,6 +42,11 @@ export const getMetroInstance = async (
 ): Promise<MetroInstance> => {
   const { projectRoot, harnessConfig } = options;
   const metroPort = harnessConfig.metroPort;
+  metroLogger.debug(
+    'creating Metro instance for %s on port %d',
+    projectRoot,
+    metroPort
+  );
   const isMetroPortAvailable = await isPortAvailable(metroPort);
 
   if (!isMetroPortAvailable) {
@@ -68,7 +74,7 @@ export const getMetroInstance = async (
   const ready = waitForBundler(reporter, abortSignal);
   const metroBindHost = harnessConfig.host?.trim();
   if (metroBindHost) {
-    logger.debug(`Binding Metro server to host ${metroBindHost}`);
+    metroLogger.debug('binding Metro server to host %s', metroBindHost);
   }
 
   const maybeServer = await Metro.runServer(config, {
@@ -87,7 +93,7 @@ export const getMetroInstance = async (
 
   await ready;
 
-  logger.debug('Metro server is running');
+  metroLogger.debug('Metro server is running');
 
   return {
     events: reporter,

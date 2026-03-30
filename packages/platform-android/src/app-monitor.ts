@@ -10,6 +10,8 @@ import { escapeRegExp, getEmitter, logger, spawn, SubprocessError, type Subproce
 import * as adb from './adb.js';
 import { androidCrashParser } from './crash-parser.js';
 
+const androidAppMonitorLogger = logger.child('android-app-monitor');
+
 const getLogcatArgs = (uid: number, fromTime: string) =>
   ['logcat', '-v', 'threadtime', '-b', 'crash', `--uid=${uid}`, '-T', fromTime] as const;
 const MAX_RECENT_LOG_LINES = 200;
@@ -445,7 +447,7 @@ export const createAndroidAppMonitor = ({
         }
       } catch (error) {
         if (!(error instanceof SubprocessError && error.signalName === 'SIGTERM')) {
-          logger.debug('Android logcat monitor stopped', error);
+          androidAppMonitorLogger.debug('Android logcat monitor stopped', error);
         }
       }
     })();

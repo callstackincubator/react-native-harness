@@ -10,12 +10,17 @@ import { getAdditionalCliArgs, HarnessCliArgs } from './cli-args.js';
 import { logTestEnvironmentReady, logTestRunHeader } from './logs.js';
 import { NoRunnerSpecifiedError, RunnerNotFoundError } from './errors.js';
 import { HarnessPlatform } from '@react-native-harness/platforms';
+import { logger } from '@react-native-harness/tools';
+
+const setupLogger = logger.child('setup');
 
 const getHarnessConfig = async (
   globalConfig: JestConfig.GlobalConfig
 ): Promise<HarnessConfig> => {
   const projectRoot = globalConfig.rootDir;
+  setupLogger.debug('loading Harness config from %s', projectRoot);
   const { config: harnessConfig } = await getConfig(projectRoot);
+  setupLogger.debug('loaded Harness config');
   return harnessConfig;
 };
 
@@ -37,6 +42,7 @@ const getHarnessRunner = (
     throw new RunnerNotFoundError(selectedRunnerName);
   }
 
+  setupLogger.debug('selected runner %s (%s)', runner.name, runner.platformId);
   return runner;
 };
 
@@ -60,6 +66,7 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   const cliArgs = getAdditionalCliArgs();
 
   if (cliArgs.metroPort != null) {
+    setupLogger.debug('applying CLI metro port override: %d', cliArgs.metroPort);
     harnessConfig = ConfigSchema.parse({
       ...harnessConfig,
       metroPort: cliArgs.metroPort,
@@ -76,19 +83,24 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
     if (harnessConfig.coverage?.root) {
       process.env.RN_HARNESS_COVERAGE_ROOT = harnessConfig.coverage.root;
     }
+
+    setupLogger.debug('coverage enabled for this run');
   }
 
   if (harnessConfig.disableViewFlattening) {
     process.env.RN_HARNESS_VIEW_FLATTENING = 'false';
+    setupLogger.debug('view flattening disabled for runtime');
   }
 
   logTestRunHeader(selectedRunner);
+  setupLogger.debug('creating Harness instance');
   const harness = await getHarness(
     harnessConfig,
     selectedRunner,
     globalConfig.rootDir
   );
   logTestEnvironmentReady(selectedRunner);
+  setupLogger.debug('Harness instance is ready');
 
   global.HARNESS_CONFIG = harnessConfig;
   global.HARNESS = harness;

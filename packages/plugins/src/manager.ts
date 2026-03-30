@@ -8,6 +8,8 @@ import {
 } from './types.js';
 import { createPluginLogger, getNestedValue } from './utils.js';
 
+const pluginsLogger = logger.child('plugins');
+
 type ManagerOptions<TConfig, TRunner extends HarnessPlatform> = {
   plugins: Array<HarnessPlugin<object, TConfig, TRunner>>;
   projectRoot: string;
@@ -91,7 +93,6 @@ export const createHarnessPluginManager = <
         >;
         const timestamp = Date.now();
         const invocationId = `${hookName}-${++invocationCount}`;
-        const debugPrefix = `[plugins] plugin=${plugin.name} hook=${hookName}`;
 
         try {
           await typedHandler({
@@ -121,16 +122,24 @@ export const createHarnessPluginManager = <
           });
 
           if (logger.isVerbose()) {
-            logger.debug(
-              `${debugPrefix} duration=${Date.now() - timestamp}ms outcome=success`
+            pluginsLogger.debug(
+              'hook completed: plugin=%s hook=%s invocationId=%s duration=%dms outcome=success',
+              plugin.name,
+              hookName,
+              invocationId,
+              Date.now() - timestamp
             );
           }
         } catch (error) {
           if (logger.isVerbose()) {
-            logger.debug(
-              `${debugPrefix} duration=${Date.now() - timestamp}ms outcome=error`,
-              error
+            pluginsLogger.debug(
+              'hook completed: plugin=%s hook=%s invocationId=%s duration=%dms outcome=error',
+              plugin.name,
+              hookName,
+              invocationId,
+              Date.now() - timestamp
             );
+            pluginsLogger.debug(error);
           }
 
           throw error;

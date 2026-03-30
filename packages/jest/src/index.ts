@@ -18,8 +18,11 @@ import { HarnessError } from '@react-native-harness/tools';
 import { getErrorMessage } from './logs.js';
 import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
 import { NativeCrashError, StartupStallError } from './errors.js';
+import { logger } from '@react-native-harness/tools';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+
+const runLogger = logger.child('run');
 
 const createRunSummary = () => ({
   passed: 0,
@@ -136,6 +139,13 @@ export default class JestHarness implements CallbackTestRunnerInterface {
     };
 
     updateRunState();
+    runLogger.debug(
+      'run started: runId=%s files=%d watchMode=%s coverage=%s',
+      runId,
+      testFiles.length,
+      watchMode,
+      this.#globalConfig.collectCoverage
+    );
     await harness.callHook('run:started', {
       runId,
       startTime,
@@ -168,6 +178,7 @@ export default class JestHarness implements CallbackTestRunnerInterface {
                   runId,
                   file: relativeTestPath,
                 });
+                runLogger.debug('test file started: %s', relativeTestPath);
 
                 const emitTestFileFinished = async (options: {
                   status: 'passed' | 'failed' | 'skipped' | 'todo';
@@ -175,6 +186,12 @@ export default class JestHarness implements CallbackTestRunnerInterface {
                   result: Awaited<ReturnType<typeof runHarnessTestFile>>['harnessResult'] | null;
                 }) => {
                   didEmitTestFileFinished = true;
+                  runLogger.debug(
+                    'test file finished: %s status=%s duration=%dms',
+                    relativeTestPath,
+                    options.status,
+                    options.duration
+                  );
                   await harness.callHook('test-file:finished', {
                     runId,
                     file: relativeTestPath,
@@ -193,12 +210,20 @@ export default class JestHarness implements CallbackTestRunnerInterface {
                     harnessConfig.resetEnvironmentBetweenTestFiles &&
                     !isFirstTest
                   ) {
+                    runLogger.debug(
+                      'resetting environment before %s',
+                      relativeTestPath
+                    );
                     await harness.restart(test.path);
                   }
                   isFirstTest = false;
 
                   const result = await onStart(test).then(async () => {
                     if (!harnessConfig.detectNativeCrashes) {
+                      runLogger.debug(
+                        'native crash detection disabled for %s',
+                        relativeTestPath
+                      );
                       await harness.ensureAppReady(test.path);
                       return runHarnessTestFile({
                         testPath: test.path,
@@ -210,6 +235,10 @@ export default class JestHarness implements CallbackTestRunnerInterface {
 
                     await harness.ensureAppReady(test.path);
                     harness.crashSupervisor.beginTestRun(test.path);
+                    runLogger.debug(
+                      'native crash detection armed for %s',
+                      relativeTestPath
+                    );
                     const crashPromise =
                       harness.crashSupervisor.waitForCrash(test.path);
 
@@ -263,6 +292,11 @@ export default class JestHarness implements CallbackTestRunnerInterface {
                   err instanceof StartupStallError ||
                   err instanceof DeviceNotRespondingError
                 ) {
+                  runLogger.debug(
+                    'classified runtime failure for %s: %s',
+                    test.path,
+                    err.name
+                  );
                   summary.failed += 1;
                   updateRunState();
                 }
@@ -306,6 +340,12 @@ export default class JestHarness implements CallbackTestRunnerInterface {
       );
 
       const runState = updateRunState();
+      runLogger.debug(
+        'run finished: runId=%s status=%s duration=%dms',
+        runId,
+        runState.status ?? 'passed',
+        Date.now() - startTime
+      );
       await harness.callHook('run:finished', {
         runId,
         startTime,
@@ -319,6 +359,11 @@ export default class JestHarness implements CallbackTestRunnerInterface {
         error,
         status: 'failed',
       });
+      runLogger.debug(
+        'run failed: runId=%s status=%s',
+        runId,
+        runState.status ?? 'failed'
+      );
       await harness.callHook('run:finished', {
         runId,
         startTime,

@@ -13,6 +13,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { iosCrashParser } from '../crash-parser.js';
 
+const simctlLogger = logger.child('simctl');
+
 const plistToJson = async (
   plistOutput: string
 ): Promise<Record<string, unknown>> => {
@@ -64,22 +66,34 @@ export const collectCrashReports = async ({
 }): Promise<AppleSimulatorCrashReport[]> => {
   const diagnosticReportsDir = getDiagnosticReportsDir();
 
-  logger.debug('[simctl] collectCrashReports', { udid, processNames, minOccurredAt, diagnosticReportsDir });
+  simctlLogger.debug('collecting crash reports: %o', {
+    udid,
+    processNames,
+    minOccurredAt,
+    diagnosticReportsDir,
+  });
 
   if (!fs.existsSync(diagnosticReportsDir)) {
-    logger.debug('[simctl] DiagnosticReports directory does not exist, skipping');
+    simctlLogger.debug('DiagnosticReports directory does not exist, skipping');
     return [];
   }
 
   const allEntries = fs.readdirSync(diagnosticReportsDir);
   const ipsEntries = allEntries.filter((entry) => entry.endsWith('.ips'));
-  logger.debug(`[simctl] Found ${allEntries.length} total entries, ${ipsEntries.length} .ips files in DiagnosticReports`);
+  simctlLogger.debug(
+    'found %d total entries and %d .ips files in DiagnosticReports',
+    allEntries.length,
+    ipsEntries.length
+  );
 
   // Crash files are named {ProcessName}-YYYY-MM-DD-HHMMSS.ips, so filter by filename prefix.
   const matchingEntries = ipsEntries.filter((entry) =>
     processNames.some((name) => entry.startsWith(`${name}-`))
   );
-  logger.debug(`[simctl] ${matchingEntries.length} file(s) match process names by filename prefix`);
+  simctlLogger.debug(
+    '%d crash report file(s) match process names by filename prefix',
+    matchingEntries.length
+  );
 
   type CrashCandidate = AppleSimulatorCrashReport & { contents: string };
   const candidates: CrashCandidate[] = [];
@@ -90,16 +104,25 @@ export const collectCrashReports = async ({
     const report = iosCrashParser.parse({ path, contents });
 
     if (!report) {
-      logger.debug(`[simctl] Skipping ${entry}: failed to parse crash report`);
+      simctlLogger.debug('skipping %s: failed to parse crash report', entry);
       continue;
     }
 
     if (minOccurredAt !== undefined && report.occurredAt < minOccurredAt) {
-      logger.debug(`[simctl] Skipping ${entry}: occurredAt ${report.occurredAt} is older than minOccurredAt ${minOccurredAt}`);
+      simctlLogger.debug(
+        'skipping %s: occurredAt=%d is older than minOccurredAt=%d',
+        entry,
+        report.occurredAt,
+        minOccurredAt
+      );
       continue;
     }
 
-    logger.debug(`[simctl] Candidate crash report: ${entry}`, { occurredAt: report.occurredAt, processName: report.processName, pid: report.pid });
+    simctlLogger.debug('candidate crash report: %s %o', entry, {
+      occurredAt: report.occurredAt,
+      processName: report.processName,
+      pid: report.pid,
+    });
     candidates.push({
       ...report,
       rawLines: report.rawLines ?? [],
@@ -110,7 +133,7 @@ export const collectCrashReports = async ({
   }
 
   if (candidates.length === 0) {
-    logger.debug('[simctl] No candidates after filtering');
+    simctlLogger.debug('no crash report candidates after filtering');
     return [];
   }
 
@@ -119,11 +142,19 @@ export const collectCrashReports = async ({
 
   for (const candidate of sorted) {
     if (!candidate.contents.includes(udid)) {
-      logger.debug(`[simctl] Skipping candidate (occurredAt=${candidate.occurredAt}): does not contain udid ${udid}`);
+      simctlLogger.debug(
+        'skipping candidate occurredAt=%d: report does not contain udid %s',
+        candidate.occurredAt,
+        udid
+      );
       continue;
     }
 
-    logger.debug(`[simctl] Matched crash report for simulator`, { occurredAt: candidate.occurredAt, processName: candidate.processName, pid: candidate.pid });
+    simctlLogger.debug('matched crash report for simulator: %o', {
+      occurredAt: candidate.occurredAt,
+      processName: candidate.processName,
+      pid: candidate.pid,
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { contents: _contents, ...report } = candidate;
@@ -139,11 +170,11 @@ export const collectCrashReports = async ({
         path: report.artifactPath,
       },
     });
-    logger.debug(`[simctl] Persisted crash artifact to: ${artifactPath}`);
+    simctlLogger.debug('persisted crash artifact to %s', artifactPath);
     return [{ ...report, artifactPath }];
   }
 
-  logger.debug('[simctl] No candidates matched the simulator udid');
+  simctlLogger.debug('no crash report candidates matched simulator udid');
   return [];
 };
 
