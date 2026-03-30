@@ -4,6 +4,7 @@ const createAbortError = () =>
 export const getTimeoutSignal = (timeout: number): AbortSignal => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(createAbortError()), timeout);
+  timeoutId.unref?.();
 
   controller.signal.addEventListener(
     'abort',
