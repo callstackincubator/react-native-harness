@@ -1,5 +1,5 @@
 {
-  "name": "@react-native-harness/hooks",
+  "name": "@react-native-harness/plugins",
   "version": "1.0.0",
   "type": "module",
   "main": "./dist/index.js",

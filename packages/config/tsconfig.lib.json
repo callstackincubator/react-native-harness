@@ -15,7 +15,7 @@
       "path": "../tools/tsconfig.lib.json"
     },
     {
-      "path": "../hooks/tsconfig.lib.json"
+      "path": "../plugins/tsconfig.lib.json"
     }
   ]
 }

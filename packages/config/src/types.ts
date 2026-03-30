@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { HarnessPlugin } from '@react-native-harness/hooks';
-import { isHarnessPlugin } from '@react-native-harness/hooks';
+import type { HarnessPlugin } from '@react-native-harness/plugins';
+import { isHarnessPlugin } from '@react-native-harness/plugins';
 
 export const DEFAULT_METRO_PORT = 8081;
 

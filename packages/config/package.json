@@ -15,7 +15,7 @@
     }
   },
   "dependencies": {
-    "@react-native-harness/hooks": "workspace:*",
+    "@react-native-harness/plugins": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
     "tslib": "^2.3.0",
     "zod": "^3.25.67"

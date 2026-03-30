@@ -30,7 +30,7 @@ import {
   type HarnessPluginManager,
   type HarnessRunStatus,
   type HarnessRunSummary,
-} from '@react-native-harness/hooks';
+} from '@react-native-harness/plugins';
 import {
   InitializationTimeoutError,
   StartupStallError,

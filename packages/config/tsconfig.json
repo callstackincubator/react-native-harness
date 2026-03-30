@@ -7,7 +7,7 @@
       "path": "../tools"
     },
     {
-      "path": "../hooks"
+      "path": "../plugins"
     },
     {
       "path": "./tsconfig.lib.json"

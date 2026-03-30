@@ -16,7 +16,7 @@
       "path": "./packages/config"
     },
     {
-      "path": "./packages/hooks"
+      "path": "./packages/plugins"
     },
     {
       "path": "./packages/metro"

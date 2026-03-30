@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
-import { definePlugin } from '@react-native-harness/hooks';
+import { definePlugin } from '@react-native-harness/plugins';
 import type {
   AppMonitor,
   AppMonitorEvent,
@@ -551,8 +551,8 @@ describe('restart(testFilePath)', () => {
   });
 });
 
-describe('plugin hooks', () => {
-  it('invokes lifecycle and runtime hooks for configured plugins', async () => {
+describe('plugins', () => {
+  it('invokes lifecycle and runtime plugin handlers for configured plugins', async () => {
     const { serverBridge, emitReady, emitEvent, emitDisconnect } =
       createBridgeServer();
     const appMonitor = createAppMonitor();

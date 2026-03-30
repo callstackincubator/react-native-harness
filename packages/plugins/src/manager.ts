@@ -91,7 +91,7 @@ export const createHarnessPluginManager = <
         >;
         const timestamp = Date.now();
         const invocationId = `${hookName}-${++invocationCount}`;
-        const debugPrefix = `[hooks] plugin=${plugin.name} hook=${hookName}`;
+        const debugPrefix = `[plugins] plugin=${plugin.name} hook=${hookName}`;
 
         try {
           await typedHandler({

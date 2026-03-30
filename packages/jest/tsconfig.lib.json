@@ -19,7 +19,7 @@
       "path": "../platforms/tsconfig.lib.json"
     },
     {
-      "path": "../hooks/tsconfig.lib.json"
+      "path": "../plugins/tsconfig.lib.json"
     },
     {
       "path": "../config/tsconfig.lib.json"

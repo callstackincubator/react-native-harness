@@ -319,9 +319,9 @@ importers:
 
   packages/config:
     dependencies:
-      '@react-native-harness/hooks':
+      '@react-native-harness/plugins':
         specifier: workspace:*
-        version: link:../hooks
+        version: link:../plugins
       '@react-native-harness/tools':
         specifier: workspace:*
         version: link:../tools
@@ -342,7 +342,7 @@ importers:
         specifier: ^8.5.1
         version: 8.5.1(@swc/core@1.5.29(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(typescript@5.9.3)(yaml@2.8.0)
 
-  packages/hooks:
+  packages/plugins:
     dependencies:
       '@react-native-harness/bridge':
         specifier: workspace:*
@@ -374,9 +374,9 @@ importers:
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config
-      '@react-native-harness/hooks':
+      '@react-native-harness/plugins':
         specifier: workspace:*
-        version: link:../hooks
+        version: link:../plugins
       '@react-native-harness/platforms':
         specifier: workspace:*
         version: link:../platforms

@@ -4208,7 +4208,7 @@ var coerce = {
 };
 var NEVER = INVALID;
 
-// ../hooks/dist/utils.js
+// ../plugins/dist/utils.js
 var isHookTree = (value) => {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -4227,7 +4227,7 @@ var isHookTree = (value) => {
   return true;
 };
 
-// ../hooks/dist/plugin.js
+// ../plugins/dist/plugin.js
 var isHarnessPlugin = (value) => {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     return false;

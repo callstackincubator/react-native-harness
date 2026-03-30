@@ -10,7 +10,7 @@
       "path": "../platforms"
     },
     {
-      "path": "../hooks"
+      "path": "../plugins"
     },
     {
       "path": "../config"
