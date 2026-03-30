@@ -27,11 +27,19 @@ const mocks = vi.hoisted(() => ({
   waitForMetroBackedAppReady: vi.fn(),
 }));
 
-vi.mock('@react-native-harness/bundler-metro', () => ({
-  getMetroInstance: mocks.getMetroInstance,
-  isMetroCacheReusable: mocks.isMetroCacheReusable,
-  waitForMetroBackedAppReady: mocks.waitForMetroBackedAppReady,
-}));
+vi.mock('@react-native-harness/bundler-metro', async () => {
+  const actual =
+    await vi.importActual<typeof import('@react-native-harness/bundler-metro')>(
+      '@react-native-harness/bundler-metro'
+    );
+
+  return {
+    ...actual,
+    getMetroInstance: mocks.getMetroInstance,
+    isMetroCacheReusable: mocks.isMetroCacheReusable,
+    waitForMetroBackedAppReady: mocks.waitForMetroBackedAppReady,
+  };
+});
 
 vi.mock('@react-native-harness/bridge/server', () => ({
   getBridgeServer: mocks.getBridgeServer,

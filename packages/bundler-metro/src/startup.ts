@@ -109,16 +109,15 @@ const waitForReadyAfterBundleRequest = async (options: {
   events: MetroInstance['events'];
   readyTimeout: number;
   signal: AbortSignal;
-  waitForReady: (signal: AbortSignal) => Promise<void>;
+  readyPromise: Promise<void>;
+  cancelReadyWait: () => void;
 }): Promise<void> => {
-  const { events, readyTimeout, signal, waitForReady } = options;
+  const { events, readyTimeout, signal, readyPromise, cancelReadyWait } = options;
 
   return await new Promise<void>((resolve, reject) => {
     let bundlingInProgress = false;
     let settled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const readyController = new AbortController();
-    const readySignal = raceAbortSignals([signal, readyController.signal]);
 
     const clearReadyTimer = () => {
       if (timeoutId) {
@@ -156,7 +155,7 @@ const waitForReadyAfterBundleRequest = async (options: {
     const startReadyTimer = () => {
       clearReadyTimer();
       timeoutId = setTimeout(() => {
-        readyController.abort(new DOMException('The operation was aborted', 'AbortError'));
+        cancelReadyWait();
         rejectOnce(new ReadyTimeoutError());
       }, readyTimeout);
     };
@@ -186,17 +185,20 @@ const waitForReadyAfterBundleRequest = async (options: {
     events.addListener(onMetroEvent);
     signal.addEventListener('abort', onAbort, { once: true });
 
-    void waitForReady(readySignal)
+    void readyPromise
       .then(() => {
         resolveOnce();
       })
       .catch((error) => {
         if (
-          readyController.signal.aborted &&
-          !signal.aborted &&
           error instanceof DOMException &&
           error.name === 'AbortError'
         ) {
+          if (signal.aborted) {
+            rejectOnce(
+              signal.reason ?? new DOMException('The operation was aborted', 'AbortError')
+            );
+          }
           return;
         }
 
@@ -246,6 +248,10 @@ export const waitForMetroBackedAppReady = async ({
     const attemptController = new AbortController();
     const attemptSignal = raceAbortSignals([signal, attemptController.signal]);
     const crashPromise = waitForCrash(attemptSignal);
+    const readyController = new AbortController();
+    const readyPromise = waitForReady(
+      raceAbortSignals([attemptSignal, readyController.signal])
+    );
 
     try {
       const bundleRequestPromise = waitForBundleRequest({
@@ -264,17 +270,25 @@ export const waitForMetroBackedAppReady = async ({
       ]);
       sawPrewarmRequest = bundleRequestResult.sawPrewarmRequest;
 
-      const readyPromise = waitForReadyAfterBundleRequest({
+      const readyAfterBundleRequestPromise = waitForReadyAfterBundleRequest({
         events: metro.events,
         readyTimeout,
         signal: attemptSignal,
-        waitForReady,
+        readyPromise,
+        cancelReadyWait: () => {
+          readyController.abort(
+            new DOMException('The operation was aborted', 'AbortError')
+          );
+        },
       });
-      await Promise.race([readyPromise, crashPromise]);
+      await Promise.race([readyAfterBundleRequestPromise, crashPromise]);
       attemptController.abort();
       onAttemptReset?.();
       return;
     } catch (error) {
+      readyController.abort(
+        new DOMException('The operation was aborted', 'AbortError')
+      );
       attemptController.abort();
       onAttemptReset?.();
 

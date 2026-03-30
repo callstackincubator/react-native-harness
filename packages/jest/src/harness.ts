@@ -20,6 +20,7 @@ import {
   isMetroCacheReusable,
   waitForMetroBackedAppReady,
   type MetroInstance,
+  type ReportableEvent,
 } from '@react-native-harness/bundler-metro';
 import { createCrashArtifactWriter } from '@react-native-harness/tools';
 import {

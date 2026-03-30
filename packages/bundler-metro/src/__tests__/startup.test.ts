@@ -142,6 +142,64 @@ describe('waitForMetroBackedAppReady', () => {
     expect(waitForReady).toHaveBeenCalledTimes(1);
   });
 
+  it('does not miss ready events emitted before bundle-request handling moves to the ready phase', async () => {
+    const metroInstance = createMetroInstance();
+    const readyListeners = new Set<() => void>();
+    let readyAlreadyReported = false;
+
+    const emitReady = () => {
+      readyAlreadyReported = true;
+      for (const listener of readyListeners) {
+        listener();
+      }
+      readyListeners.clear();
+    };
+
+    const waitForReady = vi.fn(async (signal: AbortSignal) => {
+      if (readyAlreadyReported) {
+        return await waitForAbort(signal);
+      }
+
+      return await new Promise<void>((resolve, reject) => {
+        const onReady = () => {
+          cleanup();
+          resolve();
+        };
+        const onAbort = () => {
+          cleanup();
+          reject(signal.reason ?? createAbortError());
+        };
+        const cleanup = () => {
+          readyListeners.delete(onReady);
+          signal.removeEventListener('abort', onAbort);
+        };
+
+        readyListeners.add(onReady);
+        signal.addEventListener('abort', onAbort, { once: true });
+      });
+    });
+
+    const startAttempt = vi.fn(async () => {
+      emitReady();
+      emitBundleRequestObserved(metroInstance, 'app');
+    });
+
+    await waitForMetroBackedAppReady({
+      metro: metroInstance,
+      platformId: 'web',
+      bundleStartTimeout: 1_000,
+      readyTimeout: 2_000,
+      maxAppRestarts: 2,
+      signal: new AbortController().signal,
+      startAttempt,
+      waitForReady,
+      waitForCrash: async (signal) => await waitForAbort(signal),
+    });
+
+    expect(startAttempt).toHaveBeenCalledTimes(1);
+    expect(waitForReady).toHaveBeenCalledTimes(1);
+  });
+
   it('does not count Metro bundle build time against readyTimeout', async () => {
     vi.useFakeTimers();
 
