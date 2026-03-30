@@ -3,6 +3,7 @@ import {
   BridgeServer,
 } from '@react-native-harness/bridge/server';
 import {
+  HARNESS_BRIDGE_PATH,
   HarnessContext,
   type BridgeEvents,
   type DeviceDescriptor,
@@ -298,17 +299,33 @@ const getHarnessInternal = async (
     trackHook(pluginManager.callHook(name, payload));
   };
 
-  const [metroInstance, platformInstance, serverBridge] = await Promise.all([
-    getMetroInstance({ projectRoot, harnessConfig: config }, signal),
-    import(platform.runner).then((module) =>
-      module.default(platform.config, config)
-    ),
-    getBridgeServer({
-      port: config.webSocketPort,
-      timeout: config.bridgeTimeout,
-      context,
-    }),
-  ]);
+  const serverBridge = await getBridgeServer({
+    noServer: true,
+    timeout: config.bridgeTimeout,
+    context,
+  });
+  const [metroInstance, platformInstance] = await (async () => {
+    try {
+      return await Promise.all([
+        getMetroInstance(
+          {
+            projectRoot,
+            harnessConfig: config,
+            websocketEndpoints: {
+              [HARNESS_BRIDGE_PATH]: serverBridge.ws,
+            },
+          },
+          signal
+        ),
+        import(platform.runner).then((module) =>
+          module.default(platform.config, config)
+        ),
+      ]);
+    } catch (error) {
+      serverBridge.dispose();
+      throw error;
+    }
+  })();
   const crashArtifactWriter = createCrashArtifactWriter({
     runnerName: platform.name,
     platformId: platform.platformId,

@@ -93,9 +93,9 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `runners`                          | **Required.** Array of test runners (at least one required).                  |
 | `defaultRunner`                    | Default runner to use when none specified.                                    |
 | `host`                             | Hostname or IP address to bind the Metro server to (default: Metro default).  |
+| `metroPort`                        | Port used by Metro and Harness bridge traffic (default: `8081`).              |
 | `bridgeTimeout`                    | Bridge timeout in milliseconds (default: `60000`).                            |
 | `resetEnvironmentBetweenTestFiles` | Reset environment between test files (default: `true`).                       |
-| `webSocketPort`                    | Web socket port for bridge communication (default: `3001`).                   |
 | `detectNativeCrashes`              | Detect native app crashes during startup and test execution (default: `true`). |
 | `crashDetectionInterval`           | Interval in milliseconds to check for native crashes (default: `500`).        |
 | `disableViewFlattening`            | Disable view flattening in React Native (default: `false`).                   |
@@ -176,20 +176,6 @@ Increase this value if you experience timeout errors, especially on:
 
 - Slower devices or simulators
 - Complex test suites with heavy setup
-
-## Web Socket Port
-
-The port used for the WebSocket bridge communication between the CLI and the device.
-
-```javascript
-{
-  webSocketPort: 4000,
-}
-```
-
-**Default:** 3001
-
-Change this if port 3001 is already in use on your system.
 
 ## Environment-Specific Configurations
 

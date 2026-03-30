@@ -1,10 +1,9 @@
+import { HARNESS_BRIDGE_PATH } from '@react-native-harness/bridge';
 import { getDevServerUrl } from '../utils/dev-server.js';
-import { WS_SERVER_PORT } from '../constants.js';
 
 export const getWSServer = (): string => {
-  const devServerUrl = getDevServerUrl();
-  const hostname = devServerUrl.split('://')[1].split(':')[0];
-  const port = global.RN_HARNESS?.webSocketPort || WS_SERVER_PORT;
+  const devServerUrl = new URL(getDevServerUrl());
+  const protocol = devServerUrl.protocol === 'https:' ? 'wss:' : 'ws:';
 
-  return `ws://${hostname}:${port}`;
+  return `${protocol}//${devServerUrl.host}${HARNESS_BRIDGE_PATH}`;
 };

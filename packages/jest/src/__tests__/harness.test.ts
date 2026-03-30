@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { HARNESS_BRIDGE_PATH } from '@react-native-harness/bridge';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
 import { definePlugin } from '@react-native-harness/plugins';
@@ -61,6 +62,7 @@ const createBridgeServer = () => {
 
   return {
     serverBridge: {
+      ws: {} as BridgeServer['ws'],
       rpc: {
         clients: [],
       },
@@ -165,11 +167,11 @@ const createHarnessConfig = (
     entryPoint: 'index.js',
     forwardClientLogs: false,
     maxAppRestarts: 2,
+    metroPort: 8081,
     resetEnvironmentBetweenTestFiles: true,
     runners: [],
     unstable__enableMetroCache: false,
     unstable__skipAlreadyIncludedModules: false,
-    webSocketPort: 8081,
     ...overrides,
   }) as HarnessConfig;
 
@@ -489,6 +491,8 @@ describe('restart(testFilePath)', () => {
     const metroReporter = createMetroReporter();
     mocks.getMetroInstance.mockResolvedValue({
       events: metroReporter.reporter,
+      httpServer: {} as never,
+      websocketEndpoints: {},
       dispose: vi.fn(async () => undefined),
     });
     mocks.prewarmMetroBundle.mockResolvedValue(undefined);
@@ -521,6 +525,20 @@ describe('restart(testFilePath)', () => {
       }),
       platform,
       '/tmp/project'
+    );
+
+    expect(mocks.getBridgeServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        noServer: true,
+      })
+    );
+    expect(mocks.getMetroInstance).toHaveBeenCalledWith(
+      expect.objectContaining({
+        websocketEndpoints: {
+          [HARNESS_BRIDGE_PATH]: serverBridge.ws,
+        },
+      }),
+      expect.any(AbortSignal)
     );
 
     const restartPromise = harness.restart('/tmp/restart.harness.ts');
@@ -566,6 +584,8 @@ describe('plugins', () => {
     const metroReporter = createMetroReporter();
     mocks.getMetroInstance.mockResolvedValue({
       events: metroReporter.reporter,
+      httpServer: {} as never,
+      websocketEndpoints: {},
       dispose: vi.fn(async () => undefined),
     });
     mocks.prewarmMetroBundle.mockResolvedValue(undefined);

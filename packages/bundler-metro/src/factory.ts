@@ -39,7 +39,7 @@ export const getMetroInstance = async (
   options: MetroOptions,
   abortSignal: AbortSignal
 ): Promise<MetroInstance> => {
-  const { projectRoot, harnessConfig } = options;
+  const { projectRoot, harnessConfig, websocketEndpoints = {} } = options;
   const metroPort = harnessConfig.metroPort;
   const isMetroPortAvailable = await isPortAvailable(metroPort);
 
@@ -74,6 +74,7 @@ export const getMetroInstance = async (
   const maybeServer = await Metro.runServer(config, {
     waitForBundler: true,
     unstable_extraMiddleware: [middleware],
+    websocketEndpoints,
     ...(metroBindHost ? { host: metroBindHost } : {}),
     watch: process.env.CI ? false : undefined,
   });
@@ -91,6 +92,8 @@ export const getMetroInstance = async (
 
   return {
     events: reporter,
+    httpServer: server,
+    websocketEndpoints,
     dispose: () =>
       new Promise<void>((resolve) => {
         server.close(() => resolve());

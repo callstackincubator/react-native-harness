@@ -6,6 +6,8 @@ import type { TestCollectorEvents } from './shared/test-collector.js';
 import type { BundlerEvents } from './shared/bundler.js';
 import type { HarnessPlatform } from '@react-native-harness/platforms';
 
+export const HARNESS_BRIDGE_PATH = '/__harness';
+
 export type FileReference = {
   path: string;
 };

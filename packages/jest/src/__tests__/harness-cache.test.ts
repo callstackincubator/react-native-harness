@@ -31,7 +31,6 @@ const createHarnessConfig = (
 ): HarnessConfig =>
   ({
     appRegistryComponentName: 'App',
-    webSocketPort: 8081,
     disableViewFlattening: false,
     bridgeTimeout: 5000,
     entryPoint: 'index.js',

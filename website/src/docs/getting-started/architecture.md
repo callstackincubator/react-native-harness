@@ -29,7 +29,7 @@ Harness does **not** modify your native code (`.ipa` or `.apk`). Instead, it rel
 4.  The app loads the bundle, and instead of rendering your `App.tsx`, it starts the Harness Test Runner.
 
 ### 3. The Bridge (WebSocket)
-Once the Test Runner starts on the device, it establishes a WebSocket connection back to the Harness CLI on your computer (default port `3001`). This bridge is used for:
+Once the Test Runner starts on the device, it establishes a WebSocket connection back to the Harness CLI through Metro. This bridge is used for:
 *   **Control**: The CLI tells the device which tests to run.
 *   **Reporting**: The device sends assertions, failures, and logs back to the CLI.
 *   **Lifecycle**: The CLI monitors the device for crashes or timeouts.

@@ -2,7 +2,6 @@ import type { ImageSnapshotOptions } from '@react-native-harness/bridge';
 
 export type HarnessGlobal = {
   appRegistryComponentName: string;
-  webSocketPort?: number;
   disableViewFlattening?: boolean;
 };
 

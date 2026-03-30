@@ -41,7 +41,12 @@ export const ConfigSchema = z
       .max(65535, 'Metro port must be at most 65535')
       .optional()
       .default(DEFAULT_METRO_PORT),
-    webSocketPort: z.number().optional().default(3001),
+    webSocketPort: z
+      .number()
+      .optional()
+      .describe(
+        'Deprecated. Bridge traffic now uses metroPort and this value is ignored.'
+      ),
     bridgeTimeout: z
       .number()
       .min(1000, 'Bridge timeout must be at least 1 second')

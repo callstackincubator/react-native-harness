@@ -116,7 +116,6 @@ export default {
   ],
   defaultRunner: 'android',
   bridgeTimeout: 120000,
-  webSocketPort: 3002,
 
   resetEnvironmentBetweenTestFiles: true,
   unstable__enableMetroCache: true,

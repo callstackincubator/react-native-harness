@@ -43,7 +43,6 @@ const getAndroidRunner = async (
   await Promise.all([
     adb.reversePort(adbId, metroPort),
     adb.reversePort(adbId, 8080),
-    adb.reversePort(adbId, harnessConfig.webSocketPort),
     adb.setHideErrorDialogs(adbId, true),
     applyHarnessDebugHttpHost(adbId, parsedConfig.bundleId, `localhost:${metroPort}`),
   ]);
