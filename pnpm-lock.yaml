@@ -342,24 +342,6 @@ importers:
         specifier: ^8.5.1
         version: 8.5.1(@swc/core@1.5.29(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(typescript@5.9.3)(yaml@2.8.0)
 
-  packages/plugins:
-    dependencies:
-      '@react-native-harness/bridge':
-        specifier: workspace:*
-        version: link:../bridge
-      '@react-native-harness/platforms':
-        specifier: workspace:*
-        version: link:../platforms
-      '@react-native-harness/tools':
-        specifier: workspace:*
-        version: link:../tools
-      hookable:
-        specifier: ^6.1.0
-        version: 6.1.0
-      tslib:
-        specifier: ^2.3.0
-        version: 2.8.1
-
   packages/jest:
     dependencies:
       '@jest/test-result':
@@ -374,12 +356,12 @@ importers:
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config
-      '@react-native-harness/plugins':
-        specifier: workspace:*
-        version: link:../plugins
       '@react-native-harness/platforms':
         specifier: workspace:*
         version: link:../platforms
+      '@react-native-harness/plugins':
+        specifier: workspace:*
+        version: link:../plugins
       '@react-native-harness/tools':
         specifier: workspace:*
         version: link:../tools
@@ -494,6 +476,24 @@ importers:
         specifier: ^2.3.0
         version: 2.8.1
 
+  packages/plugins:
+    dependencies:
+      '@react-native-harness/bridge':
+        specifier: workspace:*
+        version: link:../bridge
+      '@react-native-harness/platforms':
+        specifier: workspace:*
+        version: link:../platforms
+      '@react-native-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
+      hookable:
+        specifier: ^6.1.0
+        version: 6.1.0
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
+
   packages/react-native-harness:
     dependencies:
       '@react-native-harness/babel-preset':
@@ -558,9 +558,6 @@ importers:
       '@clack/prompts':
         specifier: 1.0.0-alpha.9
         version: 1.0.0-alpha.9
-      is-unicode-supported:
-        specifier: ^0.1.0
-        version: 0.1.0
       nano-spawn:
         specifier: ^1.0.2
         version: 1.0.2
@@ -10829,7 +10826,9 @@ snapshots:
       metro-config: 0.83.3
       metro-runtime: 0.83.3
     transitivePeerDependencies:
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 
