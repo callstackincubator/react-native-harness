@@ -481,6 +481,7 @@ describe('restart(testFilePath)', () => {
     const platformInstance = createPlatformRunner({
       restartApp,
       stopApp,
+      isAppRunning: vi.fn(async () => false),
       createAppMonitor: () => appMonitor.appMonitor,
     });
 
@@ -528,17 +529,17 @@ describe('restart(testFilePath)', () => {
     await flush();
 
     expect(stopApp).toHaveBeenCalledTimes(1);
-    expect(restartApp).toHaveBeenCalledTimes(1);
-    expect(restartApp).toHaveBeenNthCalledWith(1, {
-      extras: {
-        source: 'restart',
-      },
-    });
+    expect(restartApp).toHaveBeenCalledTimes(0);
 
     await vi.advanceTimersByTimeAsync(1_000);
     await flush();
 
     expect(restartApp).toHaveBeenCalledTimes(2);
+    expect(restartApp).toHaveBeenNthCalledWith(1, {
+      extras: {
+        source: 'restart',
+      },
+    });
     expect(restartApp).toHaveBeenNthCalledWith(2, {
       extras: {
         source: 'restart',

@@ -236,7 +236,7 @@ const getHarnessInternal = async (
   maybeLogMetroCacheReuse(config, platform, projectRoot);
   const pluginAbortController = new AbortController();
   const pluginManager = createHarnessPluginManager<HarnessConfig, HarnessPlatform>({
-    plugins: config.plugins as Array<
+    plugins: (config.plugins ?? []) as Array<
       HarnessPlugin<object, HarnessConfig, HarnessPlatform>
     >,
     projectRoot,

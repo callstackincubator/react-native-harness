@@ -114,8 +114,9 @@ export default class JestHarness implements CallbackTestRunnerInterface {
     const startTime = Date.now();
     const runId = randomUUID();
     const watchMode = this.#globalConfig.watch || this.#globalConfig.watchAll;
+    const rootDir = this.#globalConfig.rootDir ?? process.cwd();
     const testFiles = tests.map((test) =>
-      path.relative(this.#globalConfig.rootDir, test.path)
+      path.relative(rootDir, test.path)
     );
     const summary = createRunSummary();
     const updateRunState = (overrides: Partial<HarnessRunState> = {}) => {
@@ -157,7 +158,7 @@ export default class JestHarness implements CallbackTestRunnerInterface {
             return promise
               .then(async () => {
                 const relativeTestPath = path.relative(
-                  this.#globalConfig.rootDir,
+                  rootDir,
                   test.path
                 );
                 const testFileStartedAt = Date.now();
