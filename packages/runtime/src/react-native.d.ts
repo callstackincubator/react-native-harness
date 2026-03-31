@@ -16,3 +16,17 @@ declare module 'react-native/Libraries/Core/Devtools/parseErrorStack' {
   };
   export default function parseErrorStack(errorStack?: string): StackFrame[];
 }
+
+declare module '*.png' {
+  import type { ImageSourcePropType } from 'react-native';
+
+  const value: ImageSourcePropType;
+  export default value;
+}
+
+declare module '*.jpg' {
+  import type { ImageSourcePropType } from 'react-native';
+
+  const value: ImageSourcePropType;
+  export default value;
+}
