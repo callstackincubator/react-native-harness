@@ -1,6 +1,5 @@
 import os from 'node:os';
 import path from 'node:path';
-import type { SpawnOptions } from '@react-native-harness/tools';
 
 const CMDLINE_TOOLS_PATH_SEGMENTS = ['cmdline-tools', 'latest'];
 
@@ -39,9 +38,6 @@ export const getAndroidProcessEnv = (
   };
 };
 
-export const withAndroidProcessEnv = (
-  options?: SpawnOptions
-): SpawnOptions => ({
-  ...options,
-  env: getAndroidProcessEnv(options?.env),
-});
+export const initializeAndroidProcessEnv = (): void => {
+  Object.assign(process.env, getAndroidProcessEnv());
+};

@@ -1,5 +1,4 @@
 import { spawn, SubprocessError } from '@react-native-harness/tools';
-import { withAndroidProcessEnv } from './environment.js';
 
 const DEBUG_HTTP_HOST_BLOCK_START =
   '<!-- react-native-harness:debug_http_host:start -->';
@@ -114,16 +113,12 @@ const readSharedPrefsFile = async (
   bundleId: string
 ): Promise<string | null> => {
   try {
-    const { stdout } = await spawn(
-      'adb',
-      [
-        '-s',
-        adbId,
-        'shell',
-        `run-as ${bundleId} cat ${getSharedPrefsPath(bundleId)}`,
-      ],
-      withAndroidProcessEnv()
-    );
+    const { stdout } = await spawn('adb', [
+      '-s',
+      adbId,
+      'shell',
+      `run-as ${bundleId} cat ${getSharedPrefsPath(bundleId)}`,
+    ]);
     return stdout;
   } catch (error) {
     if (error instanceof SubprocessError && error.exitCode === 1) {
@@ -149,7 +144,7 @@ const writeSharedPrefsFile = async (
         bundleId
       )}'`,
     ],
-    withAndroidProcessEnv({ stdin: { string: `${content.trim()}\n` } })
+    { stdin: { string: `${content.trim()}\n` } }
   );
 };
 

@@ -16,7 +16,6 @@ import {
 } from '@react-native-harness/tools';
 import * as adb from './adb.js';
 import { androidCrashParser } from './crash-parser.js';
-import { withAndroidProcessEnv } from './environment.js';
 
 const androidAppMonitorLogger = logger.child('android-app-monitor');
 
@@ -452,7 +451,6 @@ export const createAndroidAppMonitor = ({
       {
         stdout: 'pipe',
         stderr: 'pipe',
-        ...withAndroidProcessEnv(),
       }
     );
 

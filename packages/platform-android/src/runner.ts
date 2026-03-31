@@ -9,12 +9,15 @@ import {
   getAndroidEmulatorPlatformInstance,
   getAndroidPhysicalDevicePlatformInstance,
 } from './instance.js';
+import { initializeAndroidProcessEnv } from './environment.js';
 
 const getAndroidRunner = async (
   config: AndroidPlatformConfig,
   harnessConfig: HarnessConfig
 ): Promise<HarnessPlatformRunner> => {
   const parsedConfig = AndroidPlatformConfigSchema.parse(config);
+
+  initializeAndroidProcessEnv();
 
   if (isAndroidDeviceEmulator(parsedConfig.device)) {
     return getAndroidEmulatorPlatformInstance(parsedConfig, harnessConfig);
