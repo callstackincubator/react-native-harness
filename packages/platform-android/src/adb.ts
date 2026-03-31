@@ -1,5 +1,6 @@
 import { type AndroidAppLaunchOptions } from '@react-native-harness/platforms';
 import { spawn, SubprocessError } from '@react-native-harness/tools';
+import { access } from 'node:fs/promises';
 import {
   getAdbBinaryPath,
   getAvdManagerBinaryPath,
@@ -21,6 +22,19 @@ const getAvdConfigPath = (name: string): string =>
   `${
     process.env.ANDROID_AVD_HOME ?? `${process.env.HOME}/.android/avd`
   }/${name}.avd/config.ini`;
+
+const ensureEmulatorInstalled = async (): Promise<string> => {
+  const emulatorBinaryPath = getEmulatorBinaryPath();
+
+  try {
+    await access(emulatorBinaryPath);
+    return emulatorBinaryPath;
+  } catch {
+    await spawn(getSdkManagerBinaryPath(), ['emulator']);
+    await access(emulatorBinaryPath);
+    return emulatorBinaryPath;
+  }
+};
 
 export type CreateAvdOptions = {
   name: string;
@@ -222,8 +236,10 @@ export const createAvd = async ({
 };
 
 export const startEmulator = async (name: string): Promise<void> => {
+  const emulatorBinaryPath = await ensureEmulatorInstalled();
+
   void spawn(
-    getEmulatorBinaryPath(),
+    emulatorBinaryPath,
     [
       `@${name}`,
       '-no-snapshot-save',
@@ -364,7 +380,8 @@ export const getLogcatTimestamp = async (adbId: string): Promise<string> => {
 
 export const getAvds = async (): Promise<string[]> => {
   try {
-    const { stdout } = await spawn(getEmulatorBinaryPath(), ['-list-avds']);
+    const emulatorBinaryPath = await ensureEmulatorInstalled();
+    const { stdout } = await spawn(emulatorBinaryPath, ['-list-avds']);
     return stdout
       .split('\n')
       .map((line) => line.trim())
