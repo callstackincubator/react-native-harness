@@ -25,10 +25,20 @@ export const logTestEnvironmentReady = (runner: HarnessPlatform): void => {
   log(`${TAG} Runner ${chalk.bold(runner.name)} ready\n`);
 };
 
+export const logRunnerWaitingInQueue = (runner: HarnessPlatform): void => {
+  log(`${TAG} Runner ${chalk.bold(runner.name)} is busy, waiting in queue\n`);
+};
+
+export const logRunnerStillWaitingInQueue = (runner: HarnessPlatform): void => {
+  log(`${TAG} Still waiting in queue for ${chalk.bold(runner.name)} runner\n`);
+};
+
+export const logRunnerStarting = (runner: HarnessPlatform): void => {
+  log(`${TAG} Runner ${chalk.bold(runner.name)} is starting\n`);
+};
+
 export const logMetroPrewarmCompleted = (runner: HarnessPlatform): void => {
-  log(
-    `${TAG} Metro pre-warm for ${chalk.bold(runner.name)} completed\n`
-  );
+  log(`${TAG} Metro pre-warm for ${chalk.bold(runner.name)} completed\n`);
 };
 
 export const logMetroCacheReused = (runner: HarnessPlatform): void => {

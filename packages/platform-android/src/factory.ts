@@ -31,4 +31,8 @@ export const androidPlatform = (
   config,
   runner: import.meta.resolve('./runner.js'),
   platformId: 'android',
+  getResourceLockKey: () =>
+    config.device.type === 'emulator'
+      ? `android:emulator:${config.device.name}`
+      : `android:physical:${config.device.manufacturer}:${config.device.model}`,
 });

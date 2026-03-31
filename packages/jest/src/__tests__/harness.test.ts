@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   getMetroInstance: vi.fn(),
   isMetroCacheReusable: vi.fn(() => false),
   logMetroCacheReused: vi.fn(),
+  logRunnerStarting: vi.fn(),
+  logRunnerStillWaitingInQueue: vi.fn(),
+  logRunnerWaitingInQueue: vi.fn(),
   waitForMetroBackedAppReady: vi.fn(),
 }));
 
@@ -48,6 +51,9 @@ vi.mock('@react-native-harness/bridge/server', () => ({
 
 vi.mock('../logs.js', () => ({
   logMetroCacheReused: mocks.logMetroCacheReused,
+  logRunnerStarting: mocks.logRunnerStarting,
+  logRunnerStillWaitingInQueue: mocks.logRunnerStillWaitingInQueue,
+  logRunnerWaitingInQueue: mocks.logRunnerWaitingInQueue,
 }));
 
 vi.mock('@react-native-harness/tools', async () => {
@@ -337,6 +343,7 @@ describe('getHarness', () => {
       runner: `data:text/javascript,${encodeURIComponent(
         'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
       )}`,
+      getResourceLockKey: () => 'ios:simulator:iPhone 17 Pro:26.2',
     };
 
     const harness = await getHarness(
@@ -402,6 +409,7 @@ describe('getHarness', () => {
       runner: `data:text/javascript,${encodeURIComponent(
         'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
       )}`,
+      getResourceLockKey: () => 'ios:simulator:iPhone 17 Pro:26.2',
     };
 
     const harness = await getHarness(
@@ -511,6 +519,7 @@ describe('plugins', () => {
       runner: `data:text/javascript,${encodeURIComponent(
         'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
       )}`,
+      getResourceLockKey: () => 'ios:simulator:iPhone 17 Pro:26.2',
     };
 
     const harness = await getHarness(
@@ -552,6 +561,75 @@ describe('plugins', () => {
       'runtime.disconnected:bridge-disconnected',
       'beforeDispose:1:normal',
     ]);
+  });
+
+  it('waits in queue before starting Metro and releases the lock on dispose', async () => {
+    const resourceKey = 'ios:simulator:iPhone 17 Pro:26.2';
+    const firstPlatformRunner = createPlatformRunner();
+    const secondPlatformRunner = createPlatformRunner();
+    const secondAppMonitor = createAppMonitor();
+    const firstMetroInstance = createMetroInstance();
+    const secondMetroInstance = createMetroInstance();
+    const firstBridge = createBridgeServer();
+    const secondBridge = createBridgeServer();
+
+    mocks.getBridgeServer
+      .mockResolvedValueOnce(firstBridge.serverBridge)
+      .mockResolvedValueOnce(secondBridge.serverBridge);
+    mocks.getMetroInstance
+      .mockResolvedValueOnce(firstMetroInstance)
+      .mockResolvedValueOnce(secondMetroInstance);
+
+    let invocationCount = 0;
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = vi.fn(async () => {
+      invocationCount += 1;
+      return invocationCount === 1
+        ? firstPlatformRunner
+        : createPlatformRunner({
+            createAppMonitor: () => secondAppMonitor.appMonitor,
+            dispose: secondPlatformRunner.dispose,
+          });
+    });
+
+    const platform: HarnessPlatform = {
+      config: {},
+      name: 'ios',
+      platformId: 'ios',
+      runner: `data:text/javascript,${encodeURIComponent(
+        'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
+      )}`,
+      getResourceLockKey: () => resourceKey,
+    };
+
+    const firstHarness = await getHarness(
+      createHarnessConfig(),
+      platform,
+      '/tmp/project'
+    );
+
+    const secondHarnessPromise = getHarness(
+      createHarnessConfig(),
+      platform,
+      '/tmp/project'
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    expect(mocks.logRunnerWaitingInQueue).toHaveBeenCalledWith(platform);
+    expect(mocks.logRunnerStarting).not.toHaveBeenCalled();
+    expect(mocks.getMetroInstance).toHaveBeenCalledTimes(1);
+
+    await firstHarness.dispose();
+    const secondHarness = await secondHarnessPromise;
+
+    expect(mocks.logRunnerStarting).toHaveBeenCalledWith(platform);
+    expect(mocks.getMetroInstance).toHaveBeenCalledTimes(2);
+
+    await secondHarness.dispose();
   });
 });
 
