@@ -56,12 +56,15 @@ export const getAppleSimulatorPlatformInstance = async (
   const simulatorStatus = await simctl.getSimulatorStatus(udid);
   let startedByHarness = false;
 
-  if (simulatorStatus === 'Shutdown') {
+  if (
+    !simctl.isBootedSimulatorStatus(simulatorStatus) &&
+    !simctl.isBootingSimulatorStatus(simulatorStatus)
+  ) {
     await simctl.bootSimulator(udid);
     startedByHarness = true;
   }
 
-  if (simulatorStatus === 'Shutdown' || simulatorStatus === 'Booting') {
+  if (!simctl.isBootedSimulatorStatus(simulatorStatus)) {
     await simctl.waitForBoot(udid);
   }
 

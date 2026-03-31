@@ -209,7 +209,18 @@ export const isAppInstalled = async (
   return appInfo !== null;
 };
 
-export type AppleSimulatorState = 'Booted' | 'Booting' | 'Shutdown';
+export type AppleSimulatorState =
+  | 'Booted'
+  | 'Booting'
+  | 'Shutdown'
+  | (string & {});
+
+export const isBootedSimulatorStatus = (status: AppleSimulatorState): boolean =>
+  status === 'Booted';
+
+export const isBootingSimulatorStatus = (
+  status: AppleSimulatorState
+): boolean => status === 'Booting';
 
 export type AppleSimulatorInfo = {
   name: string;
