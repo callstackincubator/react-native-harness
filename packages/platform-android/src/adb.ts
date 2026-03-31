@@ -1,6 +1,24 @@
 import { type AndroidAppLaunchOptions } from '@react-native-harness/platforms';
 import { spawn, SubprocessError } from '@react-native-harness/tools';
 
+const wait = async (ms: number): Promise<void> => {
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+};
+
+const getSystemImagePackage = (apiLevel: number): string => {
+  return `system-images;android-${apiLevel};default;x86_64`;
+};
+
+export type CreateAvdOptions = {
+  name: string;
+  apiLevel: number;
+  profile: string;
+  diskSize: string;
+  heapSize: string;
+};
+
 export const getStartAppArgs = (
   bundleId: string,
   activityName: string,
@@ -86,7 +104,11 @@ export const startApp = async (
   activityName: string,
   options?: AndroidAppLaunchOptions
 ): Promise<void> => {
-  await spawn('adb', ['-s', adbId, ...getStartAppArgs(bundleId, activityName, options)]);
+  await spawn('adb', [
+    '-s',
+    adbId,
+    ...getStartAppArgs(bundleId, activityName, options),
+  ]);
 };
 
 export const getDeviceIds = async (): Promise<string[]> => {
@@ -139,6 +161,104 @@ export const isBootCompleted = async (adbId: string): Promise<boolean> => {
 
 export const stopEmulator = async (adbId: string): Promise<void> => {
   await spawn('adb', ['-s', adbId, 'emu', 'kill']);
+};
+
+export const installApp = async (
+  adbId: string,
+  appPath: string
+): Promise<void> => {
+  await spawn('adb', ['-s', adbId, 'install', '-r', appPath]);
+};
+
+export const hasAvd = async (name: string): Promise<boolean> => {
+  const avds = await getAvds();
+  return avds.includes(name);
+};
+
+export const createAvd = async ({
+  name,
+  apiLevel,
+  profile,
+  diskSize,
+  heapSize,
+}: CreateAvdOptions): Promise<void> => {
+  const systemImagePackage = getSystemImagePackage(apiLevel);
+
+  await spawn('sdkmanager', [systemImagePackage]);
+  await spawn('bash', [
+    '-lc',
+    `printf 'no\n' | avdmanager create avd --force --name "${name}" --package "${systemImagePackage}" --device "${profile}"`,
+  ]);
+  await spawn('bash', [
+    '-lc',
+    `printf '%s\n%s\n' 'disk.dataPartition.size=${diskSize}' 'vm.heapSize=${heapSize}' >> "$HOME/.android/avd/${name}.avd/config.ini"`,
+  ]);
+};
+
+export const startEmulator = async (name: string): Promise<void> => {
+  void spawn(
+    'emulator',
+    [
+      `@${name}`,
+      '-no-snapshot-save',
+      '-no-window',
+      '-gpu',
+      'swiftshader_indirect',
+      '-noaudio',
+      '-no-boot-anim',
+      '-camera-back',
+      'none',
+    ],
+    {
+      detached: true,
+      stdout: 'ignore',
+      stderr: 'ignore',
+    }
+  );
+};
+
+export const waitForEmulator = async (
+  name: string,
+  timeoutMs: number = 120000
+): Promise<string> => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const adbIds = await getDeviceIds();
+
+    for (const adbId of adbIds) {
+      if (!adbId.startsWith('emulator-')) {
+        continue;
+      }
+
+      const emulatorName = await getEmulatorName(adbId);
+
+      if (emulatorName === name) {
+        return adbId;
+      }
+    }
+
+    await wait(1000);
+  }
+
+  throw new Error(`Timed out waiting for emulator "${name}" to appear in adb.`);
+};
+
+export const waitForBoot = async (
+  adbId: string,
+  timeoutMs: number = 300000
+): Promise<void> => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await isBootCompleted(adbId)) {
+      return;
+    }
+
+    await wait(1000);
+  }
+
+  throw new Error(`Timed out waiting for emulator "${adbId}" to boot.`);
 };
 
 export const isAppRunning = async (
