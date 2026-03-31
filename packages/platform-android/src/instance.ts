@@ -5,6 +5,7 @@ import {
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
+import { logger } from '@react-native-harness/tools';
 import {
   AndroidPlatformConfig,
   assertAndroidDeviceEmulator,
@@ -20,6 +21,8 @@ import { getDeviceName } from './utils.js';
 import { createAndroidAppMonitor } from './app-monitor.js';
 import { HarnessAppPathError, HarnessEmulatorConfigError } from './errors.js';
 import fs from 'node:fs';
+
+const androidInstanceLogger = logger.child('android-instance');
 
 const getHarnessAppPath = (): string => {
   const appPath = process.env.HARNESS_APP_PATH;
@@ -61,6 +64,12 @@ export const getAndroidEmulatorPlatformInstance = async (
   let adbId = await getAdbId(config.device);
   let startedByHarness = false;
 
+  androidInstanceLogger.debug(
+    'resolved Android emulator %s with adb id %s',
+    config.device.name,
+    adbId ?? 'not-found'
+  );
+
   if (!adbId) {
     const avdConfig = config.device.avd;
 
@@ -69,6 +78,10 @@ export const getAndroidEmulatorPlatformInstance = async (
     }
 
     if (!(await adb.hasAvd(config.device.name))) {
+      androidInstanceLogger.debug(
+        'creating Android AVD %s before startup',
+        config.device.name
+      );
       await adb.createAvd({
         name: config.device.name,
         apiLevel: avdConfig.apiLevel,
@@ -78,15 +91,29 @@ export const getAndroidEmulatorPlatformInstance = async (
       });
     }
 
+    androidInstanceLogger.debug(
+      'starting Android emulator %s',
+      config.device.name
+    );
     await adb.startEmulator(config.device.name);
     adbId = await adb.waitForEmulator(config.device.name);
     startedByHarness = true;
+
+    androidInstanceLogger.debug(
+      'Android emulator %s connected as %s',
+      config.device.name,
+      adbId
+    );
   }
 
   if (!adbId) {
     throw new DeviceNotFoundError(getDeviceName(config.device));
   }
 
+  androidInstanceLogger.debug(
+    'waiting for Android emulator %s to finish booting',
+    adbId
+  );
   await adb.waitForBoot(adbId);
 
   const isInstalled = await adb.isAppInstalled(adbId, config.bundleId);
