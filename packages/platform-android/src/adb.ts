@@ -1,5 +1,11 @@
 import { type AndroidAppLaunchOptions } from '@react-native-harness/platforms';
 import { spawn, SubprocessError } from '@react-native-harness/tools';
+import {
+  getAdbBinaryPath,
+  getAvdManagerBinaryPath,
+  getEmulatorBinaryPath,
+  getSdkManagerBinaryPath,
+} from './environment.js';
 
 const wait = async (ms: number): Promise<void> => {
   await new Promise((resolve) => {
@@ -10,6 +16,11 @@ const wait = async (ms: number): Promise<void> => {
 const getSystemImagePackage = (apiLevel: number): string => {
   return `system-images;android-${apiLevel};default;x86_64`;
 };
+
+const getAvdConfigPath = (name: string): string =>
+  `${
+    process.env.ANDROID_AVD_HOME ?? `${process.env.HOME}/.android/avd`
+  }/${name}.avd/config.ini`;
 
 export type CreateAvdOptions = {
   name: string;
@@ -65,7 +76,7 @@ export const isAppInstalled = async (
   adbId: string,
   bundleId: string
 ): Promise<boolean> => {
-  const { stdout } = await spawn('adb', [
+  const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
     adbId,
     'shell',
@@ -82,7 +93,7 @@ export const reversePort = async (
   port: number,
   hostPort: number = port
 ): Promise<void> => {
-  await spawn('adb', [
+  await spawn(getAdbBinaryPath(), [
     '-s',
     adbId,
     'reverse',
@@ -95,7 +106,14 @@ export const stopApp = async (
   adbId: string,
   bundleId: string
 ): Promise<void> => {
-  await spawn('adb', ['-s', adbId, 'shell', 'am', 'force-stop', bundleId]);
+  await spawn(getAdbBinaryPath(), [
+    '-s',
+    adbId,
+    'shell',
+    'am',
+    'force-stop',
+    bundleId,
+  ]);
 };
 
 export const startApp = async (
@@ -104,7 +122,7 @@ export const startApp = async (
   activityName: string,
   options?: AndroidAppLaunchOptions
 ): Promise<void> => {
-  await spawn('adb', [
+  await spawn(getAdbBinaryPath(), [
     '-s',
     adbId,
     ...getStartAppArgs(bundleId, activityName, options),
@@ -112,7 +130,7 @@ export const startApp = async (
 };
 
 export const getDeviceIds = async (): Promise<string[]> => {
-  const { stdout } = await spawn('adb', ['devices']);
+  const { stdout } = await spawn(getAdbBinaryPath(), ['devices']);
   return stdout
     .split('\n')
     .slice(1) // Skip header
@@ -123,7 +141,13 @@ export const getDeviceIds = async (): Promise<string[]> => {
 export const getEmulatorName = async (
   adbId: string
 ): Promise<string | null> => {
-  const { stdout } = await spawn('adb', ['-s', adbId, 'emu', 'avd', 'name']);
+  const { stdout } = await spawn(getAdbBinaryPath(), [
+    '-s',
+    adbId,
+    'emu',
+    'avd',
+    'name',
+  ]);
   return stdout.split('\n')[0].trim() || null;
 };
 
@@ -131,7 +155,7 @@ export const getShellProperty = async (
   adbId: string,
   property: string
 ): Promise<string | null> => {
-  const { stdout } = await spawn('adb', [
+  const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
     adbId,
     'shell',
@@ -160,14 +184,14 @@ export const isBootCompleted = async (adbId: string): Promise<boolean> => {
 };
 
 export const stopEmulator = async (adbId: string): Promise<void> => {
-  await spawn('adb', ['-s', adbId, 'emu', 'kill']);
+  await spawn(getAdbBinaryPath(), ['-s', adbId, 'emu', 'kill']);
 };
 
 export const installApp = async (
   adbId: string,
   appPath: string
 ): Promise<void> => {
-  await spawn('adb', ['-s', adbId, 'install', '-r', appPath]);
+  await spawn(getAdbBinaryPath(), ['-s', adbId, 'install', '-r', appPath]);
 };
 
 export const hasAvd = async (name: string): Promise<boolean> => {
@@ -184,20 +208,22 @@ export const createAvd = async ({
 }: CreateAvdOptions): Promise<void> => {
   const systemImagePackage = getSystemImagePackage(apiLevel);
 
-  await spawn('sdkmanager', [systemImagePackage]);
+  await spawn(getSdkManagerBinaryPath(), [systemImagePackage]);
   await spawn('bash', [
     '-lc',
-    `printf 'no\n' | avdmanager create avd --force --name "${name}" --package "${systemImagePackage}" --device "${profile}"`,
+    `printf 'no\n' | "${getAvdManagerBinaryPath()}" create avd --force --name "${name}" --package "${systemImagePackage}" --device "${profile}"`,
   ]);
   await spawn('bash', [
     '-lc',
-    `printf '%s\n%s\n' 'disk.dataPartition.size=${diskSize}' 'vm.heapSize=${heapSize}' >> "$HOME/.android/avd/${name}.avd/config.ini"`,
+    `printf '%s\n%s\n' 'disk.dataPartition.size=${diskSize}' 'vm.heapSize=${heapSize}' >> "${getAvdConfigPath(
+      name
+    )}"`,
   ]);
 };
 
 export const startEmulator = async (name: string): Promise<void> => {
   void spawn(
-    'emulator',
+    getEmulatorBinaryPath(),
     [
       `@${name}`,
       '-no-snapshot-save',
@@ -266,7 +292,7 @@ export const isAppRunning = async (
   bundleId: string
 ): Promise<boolean> => {
   try {
-    const { stdout } = await spawn('adb', [
+    const { stdout } = await spawn(getAdbBinaryPath(), [
       '-s',
       adbId,
       'shell',
@@ -287,7 +313,7 @@ export const getAppUid = async (
   adbId: string,
   bundleId: string
 ): Promise<number> => {
-  const { stdout } = await spawn('adb', [
+  const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
     adbId,
     'shell',
@@ -312,7 +338,7 @@ export const setHideErrorDialogs = async (
   adbId: string,
   hide: boolean
 ): Promise<void> => {
-  await spawn('adb', [
+  await spawn(getAdbBinaryPath(), [
     '-s',
     adbId,
     'shell',
@@ -325,7 +351,7 @@ export const setHideErrorDialogs = async (
 };
 
 export const getLogcatTimestamp = async (adbId: string): Promise<string> => {
-  const { stdout } = await spawn('adb', [
+  const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
     adbId,
     'shell',
@@ -338,7 +364,7 @@ export const getLogcatTimestamp = async (adbId: string): Promise<string> => {
 
 export const getAvds = async (): Promise<string[]> => {
   try {
-    const { stdout } = await spawn('emulator', ['-list-avds']);
+    const { stdout } = await spawn(getEmulatorBinaryPath(), ['-list-avds']);
     return stdout
       .split('\n')
       .map((line) => line.trim())
@@ -355,7 +381,7 @@ export type AdbDevice = {
 };
 
 export const getConnectedDevices = async (): Promise<AdbDevice[]> => {
-  const { stdout } = await spawn('adb', ['devices', '-l']);
+  const { stdout } = await spawn(getAdbBinaryPath(), ['devices', '-l']);
   const lines = stdout.split('\n').slice(1);
   const devices: AdbDevice[] = [];
 

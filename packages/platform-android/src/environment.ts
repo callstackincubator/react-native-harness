@@ -3,8 +3,22 @@ import path from 'node:path';
 
 const CMDLINE_TOOLS_PATH_SEGMENTS = ['cmdline-tools', 'latest'];
 
-const getAndroidSdkRoot = (env: NodeJS.ProcessEnv): string | null => {
+export const getAndroidSdkRoot = (
+  env: NodeJS.ProcessEnv = process.env
+): string | null => {
   return env.ANDROID_HOME ?? env.ANDROID_SDK_ROOT ?? null;
+};
+
+const getRequiredAndroidSdkRoot = (): string => {
+  const sdkRoot = getAndroidSdkRoot();
+
+  if (!sdkRoot) {
+    throw new Error(
+      'Android SDK root is not configured. Set ANDROID_HOME or ANDROID_SDK_ROOT.'
+    );
+  }
+
+  return sdkRoot;
 };
 
 export const getAndroidProcessEnv = (
@@ -41,3 +55,25 @@ export const getAndroidProcessEnv = (
 export const initializeAndroidProcessEnv = (): void => {
   Object.assign(process.env, getAndroidProcessEnv());
 };
+
+export const getAdbBinaryPath = (): string =>
+  path.join(getRequiredAndroidSdkRoot(), 'platform-tools', 'adb');
+
+export const getEmulatorBinaryPath = (): string =>
+  path.join(getRequiredAndroidSdkRoot(), 'emulator', 'emulator');
+
+export const getSdkManagerBinaryPath = (): string =>
+  path.join(
+    getRequiredAndroidSdkRoot(),
+    ...CMDLINE_TOOLS_PATH_SEGMENTS,
+    'bin',
+    'sdkmanager'
+  );
+
+export const getAvdManagerBinaryPath = (): string =>
+  path.join(
+    getRequiredAndroidSdkRoot(),
+    ...CMDLINE_TOOLS_PATH_SEGMENTS,
+    'bin',
+    'avdmanager'
+  );
