@@ -22,7 +22,10 @@ import {
 } from './app-monitor.js';
 import { assertLibimobiledeviceInstalled } from './libimobiledevice.js';
 import { HarnessAppPathError } from './errors.js';
+import { logger } from '@react-native-harness/tools';
 import fs from 'node:fs';
+
+const iosInstanceLogger = logger.child('ios-instance');
 
 const getHarnessAppPath = (): string => {
   const appPath = process.env.HARNESS_APP_PATH;
@@ -56,15 +59,30 @@ export const getAppleSimulatorPlatformInstance = async (
   const simulatorStatus = await simctl.getSimulatorStatus(udid);
   let startedByHarness = false;
 
+  iosInstanceLogger.debug(
+    'resolved iOS simulator %s with status %s',
+    udid,
+    simulatorStatus
+  );
+
   if (
     !simctl.isBootedSimulatorStatus(simulatorStatus) &&
     !simctl.isBootingSimulatorStatus(simulatorStatus)
   ) {
+    iosInstanceLogger.debug(
+      'booting iOS simulator %s from status %s',
+      udid,
+      simulatorStatus
+    );
     await simctl.bootSimulator(udid);
     startedByHarness = true;
   }
 
   if (!simctl.isBootedSimulatorStatus(simulatorStatus)) {
+    iosInstanceLogger.debug(
+      'waiting for iOS simulator %s to finish booting',
+      udid
+    );
     await simctl.waitForBoot(udid);
   }
 
