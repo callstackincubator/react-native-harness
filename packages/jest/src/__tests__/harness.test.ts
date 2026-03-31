@@ -29,10 +29,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@react-native-harness/bundler-metro', async () => {
-  const actual =
-    await vi.importActual<typeof import('@react-native-harness/bundler-metro')>(
-      '@react-native-harness/bundler-metro'
-    );
+  const actual = await vi.importActual<
+    typeof import('@react-native-harness/bundler-metro')
+  >('@react-native-harness/bundler-metro');
 
   return {
     ...actual,
@@ -51,10 +50,9 @@ vi.mock('../logs.js', () => ({
 }));
 
 vi.mock('@react-native-harness/tools', async () => {
-  const actual =
-    await vi.importActual<typeof import('@react-native-harness/tools')>(
-      '@react-native-harness/tools'
-    );
+  const actual = await vi.importActual<
+    typeof import('@react-native-harness/tools')
+  >('@react-native-harness/tools');
 
   return {
     ...actual,
@@ -186,7 +184,7 @@ const createHarnessConfig = (
     unstable__skipAlreadyIncludedModules: false,
     webSocketPort: 3001,
     ...overrides,
-  }) as HarnessConfig;
+  } as HarnessConfig);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -310,9 +308,7 @@ describe('getHarness', () => {
     mocks.waitForMetroBackedAppReady.mockImplementationOnce(
       async (options: WaitForMetroBackedAppReadyOptions) => {
         await options.startAttempt();
-        const readyPromise = options.waitForReady(
-          new AbortController().signal
-        );
+        const readyPromise = options.waitForReady(new AbortController().signal);
         emitReady();
         await readyPromise;
       }
@@ -375,9 +371,7 @@ describe('getHarness', () => {
     mocks.waitForMetroBackedAppReady.mockImplementationOnce(
       async (options: WaitForMetroBackedAppReadyOptions) => {
         await options.startAttempt();
-        const readyPromise = options.waitForReady(
-          new AbortController().signal
-        );
+        const readyPromise = options.waitForReady(new AbortController().signal);
         emitReady();
         await readyPromise;
       }
@@ -473,7 +467,25 @@ describe('plugins', () => {
           beforeCreation: (ctx) => {
             ctx.state.creationCount += 1;
             observedHooks.push(
-              `beforeCreation:${ctx.platform.platformId}:${ctx.appLaunchOptions == null ? 'no-launch-options' : 'launch-options'}`
+              `beforeCreation:${ctx.platform.platformId}:${
+                ctx.appLaunchOptions == null
+                  ? 'no-launch-options'
+                  : 'launch-options'
+              }`
+            );
+          },
+          beforeRun: (ctx) => {
+            observedHooks.push(
+              `beforeRun:${ctx.platform.platformId}:${
+                ctx.appLaunchOptions == null
+                  ? 'no-launch-options'
+                  : 'launch-options'
+              }`
+            );
+          },
+          afterRun: (ctx) => {
+            observedHooks.push(
+              `afterRun:${ctx.state.creationCount}:${ctx.reason}`
             );
           },
           beforeDispose: (ctx) => {
@@ -484,7 +496,9 @@ describe('plugins', () => {
         },
         runtime: {
           ready: (ctx) => {
-            observedHooks.push(`runtime.ready:${ctx.runId}:${ctx.device.platform}`);
+            observedHooks.push(
+              `runtime.ready:${ctx.runId}:${ctx.device.platform}`
+            );
           },
           disconnected: (ctx) => {
             observedHooks.push(`runtime.disconnected:${ctx.reason}`);
@@ -547,9 +561,11 @@ describe('plugins', () => {
 
     expect(observedHooks).toEqual([
       'beforeCreation:ios:launch-options',
+      'beforeRun:ios:launch-options',
       'runtime.ready:run-1:ios',
       'collection.started:example.harness.ts',
       'runtime.disconnected:bridge-disconnected',
+      'afterRun:1:normal',
       'beforeDispose:1:normal',
     ]);
   });

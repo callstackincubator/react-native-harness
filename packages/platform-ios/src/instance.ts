@@ -21,6 +21,22 @@ import {
   createIosSimulatorAppMonitor,
 } from './app-monitor.js';
 import { assertLibimobiledeviceInstalled } from './libimobiledevice.js';
+import { HarnessAppPathError } from './errors.js';
+import fs from 'node:fs';
+
+const getHarnessAppPath = (): string => {
+  const appPath = process.env.HARNESS_APP_PATH;
+
+  if (!appPath) {
+    throw new HarnessAppPathError('missing');
+  }
+
+  if (!fs.existsSync(appPath)) {
+    throw new HarnessAppPathError('invalid', appPath);
+  }
+
+  return appPath;
+};
 
 export const getAppleSimulatorPlatformInstance = async (
   config: ApplePlatformConfig,
@@ -37,19 +53,23 @@ export const getAppleSimulatorPlatformInstance = async (
     throw new DeviceNotFoundError(getDeviceName(config.device));
   }
 
+  const simulatorStatus = await simctl.getSimulatorStatus(udid);
+  let startedByHarness = false;
+
+  if (simulatorStatus === 'Shutdown') {
+    await simctl.bootSimulator(udid);
+    startedByHarness = true;
+  }
+
+  if (simulatorStatus === 'Shutdown' || simulatorStatus === 'Booting') {
+    await simctl.waitForBoot(udid);
+  }
+
   const isInstalled = await simctl.isAppInstalled(udid, config.bundleId);
 
   if (!isInstalled) {
-    throw new AppNotInstalledError(
-      config.bundleId,
-      getDeviceName(config.device)
-    );
-  }
-
-  const simulatorStatus = await simctl.getSimulatorStatus(udid);
-
-  if (simulatorStatus !== 'Booted') {
-    throw new Error('Simulator is not booted');
+    const appPath = getHarnessAppPath();
+    await simctl.installApp(udid, appPath);
   }
 
   await simctl.applyHarnessJsLocationOverride(
@@ -82,6 +102,10 @@ export const getAppleSimulatorPlatformInstance = async (
     dispose: async () => {
       await simctl.stopApp(udid, config.bundleId);
       await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
+
+      if (startedByHarness) {
+        await simctl.shutdownSimulator(udid);
+      }
     },
     isAppRunning: async () => {
       return await simctl.isAppRunning(udid, config.bundleId);

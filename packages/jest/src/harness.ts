@@ -78,10 +78,7 @@ export const maybeLogMetroCacheReuse = (
   platform: HarnessPlatform,
   projectRoot: string
 ): void => {
-  if (
-    config.unstable__enableMetroCache &&
-    isMetroCacheReusable(projectRoot)
-  ) {
+  if (config.unstable__enableMetroCache && isMetroCacheReusable(projectRoot)) {
     logMetroCacheReused(platform);
   }
 };
@@ -211,7 +208,10 @@ const getHarnessInternal = async (
   );
   maybeLogMetroCacheReuse(config, platform, projectRoot);
   const pluginAbortController = new AbortController();
-  const pluginManager = createHarnessPluginManager<HarnessConfig, HarnessPlatform>({
+  const pluginManager = createHarnessPluginManager<
+    HarnessConfig,
+    HarnessPlatform
+  >({
     plugins: (config.plugins ?? []) as Array<
       HarnessPlugin<object, HarnessConfig, HarnessPlatform>
     >,
@@ -254,7 +254,11 @@ const getHarnessInternal = async (
     pendingHookPromises.add(trackedPromise);
   };
   const scheduleHook = <
-    TName extends keyof FlatHarnessHookContexts<object, HarnessConfig, HarnessPlatform>,
+    TName extends keyof FlatHarnessHookContexts<
+      object,
+      HarnessConfig,
+      HarnessPlatform
+    >
   >(
     name: TName,
     payload: Omit<
@@ -303,12 +307,12 @@ const getHarnessInternal = async (
           harnessLogger.debug('Metro initialized');
           return instance;
         }),
-        import(platform.runner).then((module) =>
-          module.default(platform.config, config)
-        ).then((instance) => {
-          harnessLogger.debug('platform runner initialized');
-          return instance;
-        }),
+        import(platform.runner)
+          .then((module) => module.default(platform.config, config))
+          .then((instance) => {
+            harnessLogger.debug('platform runner initialized');
+            return instance;
+          }),
       ]);
     } catch (error) {
       serverBridge.dispose();
@@ -538,6 +542,14 @@ const getHarnessInternal = async (
 
     try {
       await flushPendingHooks();
+      await pluginManager.callHook('harness:after-run', {
+        runId: currentRun?.runId,
+        reason,
+        summary: currentRun?.summary,
+        status: currentRun?.status,
+        error: currentRun?.error,
+      });
+      await flushPendingHooks();
       await pluginManager.callHook('harness:before-dispose', {
         runId: currentRun?.runId,
         reason,
@@ -582,8 +594,13 @@ const getHarnessInternal = async (
     await pluginManager.callHook('harness:before-creation', {
       appLaunchOptions,
     });
+    await flushPendingHooks();
     await appMonitor.start();
     harnessLogger.debug('app monitor started');
+    await pluginManager.callHook('harness:before-run', {
+      appLaunchOptions,
+    });
+    await flushPendingHooks();
   } catch (error) {
     const runState = currentRun as HarnessRunState | null;
 
@@ -591,7 +608,11 @@ const getHarnessInternal = async (
       runState.error = error;
       currentRun = runState;
     }
-    await dispose(error instanceof DOMException && error.name === 'AbortError' ? 'abort' : 'error');
+    await dispose(
+      error instanceof DOMException && error.name === 'AbortError'
+        ? 'abort'
+        : 'error'
+    );
     throw error;
   }
 
@@ -607,7 +628,9 @@ const getHarnessInternal = async (
     }
 
     crashSupervisor.reset();
-    harnessLogger.debug('app not ready, waiting for launch and runtime readiness');
+    harnessLogger.debug(
+      'app not ready, waiting for launch and runtime readiness'
+    );
     await waitForAppReady({
       metroInstance,
       serverBridge,

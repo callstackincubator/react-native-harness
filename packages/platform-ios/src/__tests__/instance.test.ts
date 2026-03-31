@@ -10,6 +10,7 @@ import {
 import * as simctl from '../xcrun/simctl.js';
 import * as devicectl from '../xcrun/devicectl.js';
 import * as libimobiledevice from '../libimobiledevice.js';
+import { HarnessAppPathError } from '../errors.js';
 
 const harnessConfig = {
   metroPort: DEFAULT_METRO_PORT,
@@ -18,6 +19,7 @@ const harnessConfig = {
 describe('iOS platform instance dependency validation', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it('does not validate libimobiledevice before creating a simulator instance', async () => {
@@ -33,7 +35,11 @@ describe('iOS platform instance dependency validation', () => {
 
     const config = {
       name: 'ios',
-      device: { type: 'simulator' as const, name: 'iPhone 16 Pro', systemVersion: '18.0' },
+      device: {
+        type: 'simulator' as const,
+        name: 'iPhone 16 Pro',
+        systemVersion: '18.0',
+      },
       bundleId: 'com.harnessplayground',
     };
 
@@ -61,12 +67,13 @@ describe('iOS platform instance dependency validation', () => {
   });
 
   it('still discovers the simulator without libimobiledevice', async () => {
-    vi.spyOn(libimobiledevice, 'assertLibimobiledeviceInstalled').mockResolvedValue(
-      undefined
-    );
-    const getSimulatorId = vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue(
-      'sim-udid'
-    );
+    vi.spyOn(
+      libimobiledevice,
+      'assertLibimobiledeviceInstalled'
+    ).mockResolvedValue(undefined);
+    const getSimulatorId = vi
+      .spyOn(simctl, 'getSimulatorId')
+      .mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
     vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
@@ -75,7 +82,11 @@ describe('iOS platform instance dependency validation', () => {
 
     const config = {
       name: 'ios',
-      device: { type: 'simulator' as const, name: 'iPhone 16 Pro', systemVersion: '18.0' },
+      device: {
+        type: 'simulator' as const,
+        name: 'iPhone 16 Pro',
+        systemVersion: '18.0',
+      },
       bundleId: 'com.harnessplayground',
     };
 
@@ -86,9 +97,10 @@ describe('iOS platform instance dependency validation', () => {
   });
 
   it('does not try to discover the physical device when the dependency is missing', async () => {
-    vi.spyOn(libimobiledevice, 'assertLibimobiledeviceInstalled').mockRejectedValue(
-      new Error('missing')
-    );
+    vi.spyOn(
+      libimobiledevice,
+      'assertLibimobiledeviceInstalled'
+    ).mockRejectedValue(new Error('missing'));
     const getDeviceId = vi.spyOn(devicectl, 'getDeviceId');
 
     const config = {
@@ -101,5 +113,172 @@ describe('iOS platform instance dependency validation', () => {
       getApplePhysicalDevicePlatformInstance(config, harnessConfig)
     ).rejects.toThrow('missing');
     expect(getDeviceId).not.toHaveBeenCalled();
+  });
+
+  it('reuses a booted simulator and does not shut it down on dispose', async () => {
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    const stopApp = vi.spyOn(simctl, 'stopApp').mockResolvedValue(undefined);
+    const clearOverride = vi
+      .spyOn(simctl, 'clearHarnessJsLocationOverride')
+      .mockResolvedValue(undefined);
+    const shutdownSimulator = vi
+      .spyOn(simctl, 'shutdownSimulator')
+      .mockResolvedValue(undefined);
+    const applyOverride = vi
+      .spyOn(simctl, 'applyHarnessJsLocationOverride')
+      .mockResolvedValue(undefined);
+
+    const instance = await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfig
+    );
+
+    expect(applyOverride).toHaveBeenCalledWith(
+      'sim-udid',
+      'com.harnessplayground',
+      'localhost:8081'
+    );
+
+    await instance.dispose();
+
+    expect(stopApp).toHaveBeenCalledWith('sim-udid', 'com.harnessplayground');
+    expect(clearOverride).toHaveBeenCalledWith(
+      'sim-udid',
+      'com.harnessplayground'
+    );
+    expect(shutdownSimulator).not.toHaveBeenCalled();
+  });
+
+  it('boots a shutdown simulator and shuts it down on dispose', async () => {
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Shutdown');
+    const bootSimulator = vi
+      .spyOn(simctl, 'bootSimulator')
+      .mockResolvedValue(undefined);
+    const waitForBoot = vi
+      .spyOn(simctl, 'waitForBoot')
+      .mockResolvedValue(undefined);
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined
+    );
+    vi.spyOn(simctl, 'stopApp').mockResolvedValue(undefined);
+    vi.spyOn(simctl, 'clearHarnessJsLocationOverride').mockResolvedValue(
+      undefined
+    );
+    const shutdownSimulator = vi
+      .spyOn(simctl, 'shutdownSimulator')
+      .mockResolvedValue(undefined);
+
+    const instance = await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfig
+    );
+
+    expect(bootSimulator).toHaveBeenCalledWith('sim-udid');
+    expect(waitForBoot).toHaveBeenCalledWith('sim-udid');
+
+    await instance.dispose();
+
+    expect(shutdownSimulator).toHaveBeenCalledWith('sim-udid');
+  });
+
+  it('installs the app from HARNESS_APP_PATH when missing', async () => {
+    vi.stubEnv('HARNESS_APP_PATH', '/tmp/HarnessPlayground.app');
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(false);
+    const installApp = vi
+      .spyOn(simctl, 'installApp')
+      .mockResolvedValue(undefined);
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined
+    );
+    const existsSync = vi
+      .spyOn(await import('node:fs'), 'existsSync')
+      .mockReturnValue(true);
+
+    await expect(
+      getAppleSimulatorPlatformInstance(
+        {
+          name: 'ios',
+          device: {
+            type: 'simulator',
+            name: 'iPhone 16 Pro',
+            systemVersion: '18.0',
+          },
+          bundleId: 'com.harnessplayground',
+        },
+        harnessConfig
+      )
+    ).resolves.toBeDefined();
+
+    expect(existsSync).toHaveBeenCalledWith('/tmp/HarnessPlayground.app');
+    expect(installApp).toHaveBeenCalledWith(
+      'sim-udid',
+      '/tmp/HarnessPlayground.app'
+    );
+  });
+
+  it('throws a HarnessAppPathError when HARNESS_APP_PATH is missing', async () => {
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(false);
+
+    await expect(
+      getAppleSimulatorPlatformInstance(
+        {
+          name: 'ios',
+          device: {
+            type: 'simulator',
+            name: 'iPhone 16 Pro',
+            systemVersion: '18.0',
+          },
+          bundleId: 'com.harnessplayground',
+        },
+        harnessConfig
+      )
+    ).rejects.toBeInstanceOf(HarnessAppPathError);
+  });
+
+  it('throws a HarnessAppPathError when HARNESS_APP_PATH points to a missing app', async () => {
+    vi.stubEnv('HARNESS_APP_PATH', '/tmp/missing.app');
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(false);
+    vi.spyOn(await import('node:fs'), 'existsSync').mockReturnValue(false);
+
+    await expect(
+      getAppleSimulatorPlatformInstance(
+        {
+          name: 'ios',
+          device: {
+            type: 'simulator',
+            name: 'iPhone 16 Pro',
+            systemVersion: '18.0',
+          },
+          bundleId: 'com.harnessplayground',
+        },
+        harnessConfig
+      )
+    ).rejects.toBeInstanceOf(HarnessAppPathError);
   });
 });

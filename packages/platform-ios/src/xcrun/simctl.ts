@@ -285,6 +285,25 @@ export const stopApp = async (
   await spawnAndForget('xcrun', ['simctl', 'terminate', udid, bundleId]);
 };
 
+export const bootSimulator = async (udid: string): Promise<void> => {
+  await spawn('xcrun', ['simctl', 'boot', udid]);
+};
+
+export const waitForBoot = async (udid: string): Promise<void> => {
+  await spawn('xcrun', ['simctl', 'bootstatus', udid, '-b']);
+};
+
+export const shutdownSimulator = async (udid: string): Promise<void> => {
+  await spawnAndForget('xcrun', ['simctl', 'shutdown', udid]);
+};
+
+export const installApp = async (
+  udid: string,
+  appPath: string
+): Promise<void> => {
+  await spawn('xcrun', ['simctl', 'install', udid, appPath]);
+};
+
 export const getSimulatorId = async (
   name: string,
   systemVersion: string
@@ -399,7 +418,11 @@ export const applyHarnessJsLocationOverride = async (
   );
 
   if (backupValue === null) {
-    const existingValue = await getDefaultsValue(udid, bundleId, 'RCT_jsLocation');
+    const existingValue = await getDefaultsValue(
+      udid,
+      bundleId,
+      'RCT_jsLocation'
+    );
     await writeDefaultsValue(
       udid,
       bundleId,
