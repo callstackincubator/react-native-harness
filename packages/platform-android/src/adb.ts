@@ -1,5 +1,6 @@
 import { type AndroidAppLaunchOptions } from '@react-native-harness/platforms';
 import { spawn, SubprocessError } from '@react-native-harness/tools';
+import { withAndroidProcessEnv } from './environment.js';
 
 const wait = async (ms: number): Promise<void> => {
   await new Promise((resolve) => {
@@ -65,15 +66,11 @@ export const isAppInstalled = async (
   adbId: string,
   bundleId: string
 ): Promise<boolean> => {
-  const { stdout } = await spawn('adb', [
-    '-s',
-    adbId,
-    'shell',
-    'pm',
-    'list',
-    'packages',
-    bundleId,
-  ]);
+  const { stdout } = await spawn(
+    'adb',
+    ['-s', adbId, 'shell', 'pm', 'list', 'packages', bundleId],
+    withAndroidProcessEnv()
+  );
   return stdout.trim() !== '';
 };
 
@@ -82,20 +79,22 @@ export const reversePort = async (
   port: number,
   hostPort: number = port
 ): Promise<void> => {
-  await spawn('adb', [
-    '-s',
-    adbId,
-    'reverse',
-    `tcp:${port}`,
-    `tcp:${hostPort}`,
-  ]);
+  await spawn(
+    'adb',
+    ['-s', adbId, 'reverse', `tcp:${port}`, `tcp:${hostPort}`],
+    withAndroidProcessEnv()
+  );
 };
 
 export const stopApp = async (
   adbId: string,
   bundleId: string
 ): Promise<void> => {
-  await spawn('adb', ['-s', adbId, 'shell', 'am', 'force-stop', bundleId]);
+  await spawn(
+    'adb',
+    ['-s', adbId, 'shell', 'am', 'force-stop', bundleId],
+    withAndroidProcessEnv()
+  );
 };
 
 export const startApp = async (
@@ -104,15 +103,15 @@ export const startApp = async (
   activityName: string,
   options?: AndroidAppLaunchOptions
 ): Promise<void> => {
-  await spawn('adb', [
-    '-s',
-    adbId,
-    ...getStartAppArgs(bundleId, activityName, options),
-  ]);
+  await spawn(
+    'adb',
+    ['-s', adbId, ...getStartAppArgs(bundleId, activityName, options)],
+    withAndroidProcessEnv()
+  );
 };
 
 export const getDeviceIds = async (): Promise<string[]> => {
-  const { stdout } = await spawn('adb', ['devices']);
+  const { stdout } = await spawn('adb', ['devices'], withAndroidProcessEnv());
   return stdout
     .split('\n')
     .slice(1) // Skip header
@@ -123,7 +122,11 @@ export const getDeviceIds = async (): Promise<string[]> => {
 export const getEmulatorName = async (
   adbId: string
 ): Promise<string | null> => {
-  const { stdout } = await spawn('adb', ['-s', adbId, 'emu', 'avd', 'name']);
+  const { stdout } = await spawn(
+    'adb',
+    ['-s', adbId, 'emu', 'avd', 'name'],
+    withAndroidProcessEnv()
+  );
   return stdout.split('\n')[0].trim() || null;
 };
 
@@ -131,13 +134,11 @@ export const getShellProperty = async (
   adbId: string,
   property: string
 ): Promise<string | null> => {
-  const { stdout } = await spawn('adb', [
-    '-s',
-    adbId,
-    'shell',
-    'getprop',
-    property,
-  ]);
+  const { stdout } = await spawn(
+    'adb',
+    ['-s', adbId, 'shell', 'getprop', property],
+    withAndroidProcessEnv()
+  );
   return stdout.trim() || null;
 };
 
@@ -160,7 +161,7 @@ export const isBootCompleted = async (adbId: string): Promise<boolean> => {
 };
 
 export const stopEmulator = async (adbId: string): Promise<void> => {
-  await spawn('adb', ['-s', adbId, 'emu', 'kill']);
+  await spawn('adb', ['-s', adbId, 'emu', 'kill'], withAndroidProcessEnv());
 };
 
 export const installApp = async (
@@ -266,13 +267,11 @@ export const isAppRunning = async (
   bundleId: string
 ): Promise<boolean> => {
   try {
-    const { stdout } = await spawn('adb', [
-      '-s',
-      adbId,
-      'shell',
-      'pidof',
-      bundleId,
-    ]);
+    const { stdout } = await spawn(
+      'adb',
+      ['-s', adbId, 'shell', 'pidof', bundleId],
+      withAndroidProcessEnv()
+    );
     return stdout.trim() !== '';
   } catch (error) {
     if (error instanceof SubprocessError && error.exitCode === 1) {
@@ -287,15 +286,11 @@ export const getAppUid = async (
   adbId: string,
   bundleId: string
 ): Promise<number> => {
-  const { stdout } = await spawn('adb', [
-    '-s',
-    adbId,
-    'shell',
-    'pm',
-    'list',
-    'packages',
-    '-U',
-  ]);
+  const { stdout } = await spawn(
+    'adb',
+    ['-s', adbId, 'shell', 'pm', 'list', 'packages', '-U'],
+    withAndroidProcessEnv()
+  );
   const line = stdout
     .split('\n')
     .find((entry) => entry.includes(`package:${bundleId}`));
@@ -312,33 +307,39 @@ export const setHideErrorDialogs = async (
   adbId: string,
   hide: boolean
 ): Promise<void> => {
-  await spawn('adb', [
-    '-s',
-    adbId,
-    'shell',
-    'settings',
-    'put',
-    'global',
-    'hide_error_dialogs',
-    hide ? '1' : '0',
-  ]);
+  await spawn(
+    'adb',
+    [
+      '-s',
+      adbId,
+      'shell',
+      'settings',
+      'put',
+      'global',
+      'hide_error_dialogs',
+      hide ? '1' : '0',
+    ],
+    withAndroidProcessEnv()
+  );
 };
 
 export const getLogcatTimestamp = async (adbId: string): Promise<string> => {
-  const { stdout } = await spawn('adb', [
-    '-s',
-    adbId,
-    'shell',
-    'date',
-    "+'%m-%d %H:%M:%S.000'",
-  ]);
+  const { stdout } = await spawn(
+    'adb',
+    ['-s', adbId, 'shell', 'date', "+'%m-%d %H:%M:%S.000'"],
+    withAndroidProcessEnv()
+  );
 
   return stdout.trim().replace(/^'+|'+$/g, '');
 };
 
 export const getAvds = async (): Promise<string[]> => {
   try {
-    const { stdout } = await spawn('emulator', ['-list-avds']);
+    const { stdout } = await spawn(
+      'emulator',
+      ['-list-avds'],
+      withAndroidProcessEnv()
+    );
     return stdout
       .split('\n')
       .map((line) => line.trim())
@@ -355,7 +356,11 @@ export type AdbDevice = {
 };
 
 export const getConnectedDevices = async (): Promise<AdbDevice[]> => {
-  const { stdout } = await spawn('adb', ['devices', '-l']);
+  const { stdout } = await spawn(
+    'adb',
+    ['devices', '-l'],
+    withAndroidProcessEnv()
+  );
   const lines = stdout.split('\n').slice(1);
   const devices: AdbDevice[] = [];
 
