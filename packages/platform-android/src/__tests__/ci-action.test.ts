@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
 
 describe('Android GitHub action config', () => {
-  it('keeps SDK verification enabled even when the AVD cache hits', async () => {
+  it('does not duplicate Android SDK verification in the action YAML', async () => {
     const [rootAction, packageAction] = await Promise.all([
       readFile(path.join(workspaceRoot, 'action.yml'), 'utf8'),
       readFile(
@@ -15,7 +15,7 @@ describe('Android GitHub action config', () => {
     ]);
 
     for (const actionYaml of [rootAction, packageAction]) {
-      expect(actionYaml).toContain('Verify Android SDK packages');
+      expect(actionYaml).not.toContain('Verify Android SDK packages');
       expect(actionYaml).toContain(
         "steps.avd-cache.outputs.cache-hit != 'true'"
       );
