@@ -115,6 +115,7 @@ export default {
     }),
   ],
   defaultRunner: 'android',
+  platformReadyTimeout: 300000,
   bridgeTimeout: 120000,
 
   resetEnvironmentBetweenTestFiles: true,

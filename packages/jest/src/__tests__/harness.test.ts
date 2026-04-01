@@ -61,7 +61,7 @@ vi.mock('@react-native-harness/tools', async () => {
 });
 
 import { getHarness, waitForAppReady } from '../harness.js';
-import { StartupStallError } from '../errors.js';
+import { PlatformReadyTimeoutError, StartupStallError } from '../errors.js';
 
 const createBridgeServer = () => {
   const emitter = new EventEmitter();
@@ -178,6 +178,7 @@ const createHarnessConfig = (
     forwardClientLogs: false,
     maxAppRestarts: 2,
     metroPort: 8081,
+    platformReadyTimeout: 300_000,
     resetEnvironmentBetweenTestFiles: true,
     runners: [],
     unstable__enableMetroCache: false,
@@ -293,6 +294,46 @@ describe('waitForAppReady', () => {
 });
 
 describe('getHarness', () => {
+  it('fails when the platform runner does not become ready within platformReadyTimeout', async () => {
+    const { serverBridge } = createBridgeServer();
+    const metroInstance = createMetroInstance();
+
+    mocks.getBridgeServer.mockResolvedValue(serverBridge);
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
+
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = vi.fn(
+      async () =>
+        await new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(new DOMException('The operation was aborted', 'AbortError'));
+          }, 20);
+        })
+    );
+
+    const platform: HarnessPlatform = {
+      config: {},
+      name: 'ios',
+      platformId: 'ios',
+      runner: `data:text/javascript,${encodeURIComponent(
+        'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
+      )}`,
+    };
+
+    await expect(
+      getHarness(
+        createHarnessConfig({
+          platformReadyTimeout: 10,
+        }),
+        platform,
+        '/tmp/project'
+      )
+    ).rejects.toBeInstanceOf(PlatformReadyTimeoutError);
+  });
+
   it('routes ensureAppReady through the shared Metro startup helper', async () => {
     const { serverBridge, emitReady } = createBridgeServer();
     const appMonitor = createAppMonitor();
@@ -336,7 +377,9 @@ describe('getHarness', () => {
     };
 
     const harness = await getHarness(
-      createHarnessConfig(),
+      createHarnessConfig({
+        bridgeTimeout: 1,
+      }),
       platform,
       '/tmp/project'
     );

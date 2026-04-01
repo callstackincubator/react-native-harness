@@ -1,4 +1,4 @@
-import { RunTarget } from "@react-native-harness/platforms";
+import { RunTarget } from '@react-native-harness/platforms';
 import * as adb from './adb.js';
 
 export const getRunTargets = async (): Promise<RunTarget[]> => {
@@ -15,9 +15,9 @@ export const getRunTargets = async (): Promise<RunTarget[]> => {
       name: avd,
       platform: 'android',
       description: 'Android emulator',
-	  device: {
-		name: avd,
-	  },
+      device: {
+        name: avd,
+      },
     });
   }
 
@@ -27,10 +27,10 @@ export const getRunTargets = async (): Promise<RunTarget[]> => {
       name: `${device.manufacturer} ${device.model}`,
       platform: 'android',
       description: `Physical device (${device.id})`,
-	  device: {
-		manufacturer: device.manufacturer,
-		model: device.model,
-	  },
+      device: {
+        manufacturer: device.manufacturer,
+        model: device.model,
+      },
     });
   }
 

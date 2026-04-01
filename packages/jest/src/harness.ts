@@ -32,8 +32,13 @@ import {
   type HarnessRunStatus,
   type HarnessRunSummary,
 } from '@react-native-harness/plugins';
-import { logger, createCrashArtifactWriter } from '@react-native-harness/tools';
-import { InitializationTimeoutError } from './errors.js';
+import {
+  logger,
+  createCrashArtifactWriter,
+  getTimeoutSignal,
+  raceAbortSignals,
+} from '@react-native-harness/tools';
+import { PlatformReadyTimeoutError } from './errors.js';
 import { Config as HarnessConfig } from '@react-native-harness/config';
 import {
   createCrashSupervisor,
@@ -100,6 +105,30 @@ const waitForAbort = (signal: AbortSignal): Promise<never> => {
       { once: true }
     );
   });
+};
+
+const withPlatformReadyTimeout = async <T>(options: {
+  timeout: number;
+  signal: AbortSignal;
+  work: (signal: AbortSignal) => Promise<T>;
+}): Promise<T> => {
+  const timeoutSignal = getTimeoutSignal(options.timeout);
+  const combinedSignal = raceAbortSignals([options.signal, timeoutSignal]);
+
+  try {
+    return await options.work(combinedSignal);
+  } catch (error) {
+    if (
+      error instanceof DOMException &&
+      error.name === 'AbortError' &&
+      timeoutSignal.aborted &&
+      !options.signal.aborted
+    ) {
+      throw new PlatformReadyTimeoutError(options.timeout);
+    }
+
+    throw error;
+  }
 };
 
 export const waitForAppReady = async (options: {
@@ -307,12 +336,18 @@ const getHarnessInternal = async (
           harnessLogger.debug('Metro initialized');
           return instance;
         }),
-        import(platform.runner)
-          .then((module) => module.default(platform.config, config))
-          .then((instance) => {
-            harnessLogger.debug('platform runner initialized');
-            return instance;
-          }),
+        withPlatformReadyTimeout({
+          timeout: config.platformReadyTimeout,
+          signal,
+          work: async () => {
+            return await import(platform.runner)
+              .then((module) => module.default(platform.config, config))
+              .then((instance) => {
+                harnessLogger.debug('platform runner initialized');
+                return instance;
+              });
+          },
+        }),
       ]);
     } catch (error) {
       serverBridge.dispose();
@@ -716,25 +751,15 @@ export const getHarness = async (
   platform: HarnessPlatform,
   projectRoot: string
 ): Promise<Harness> => {
-  const abortSignal = AbortSignal.timeout(config.bridgeTimeout);
   harnessLogger.debug(
-    'creating Harness with bridge timeout %dms',
-    config.bridgeTimeout
+    'creating Harness with platform ready timeout %dms',
+    config.platformReadyTimeout
   );
 
-  try {
-    const harness = await getHarnessInternal(
-      config,
-      platform,
-      projectRoot,
-      abortSignal
-    );
-    return harness;
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new InitializationTimeoutError();
-    }
-
-    throw error;
-  }
+  return await getHarnessInternal(
+    config,
+    platform,
+    projectRoot,
+    new AbortController().signal
+  );
 };
