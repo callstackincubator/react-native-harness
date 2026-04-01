@@ -137,6 +137,7 @@ export const getAppleSimulatorPlatformInstance = async (
       await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
 
       if (startedByHarness) {
+        logger.info('Shutting down iOS simulator %s...', config.device.name);
         await simctl.shutdownSimulator(udid);
       }
     },

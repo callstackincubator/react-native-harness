@@ -63,6 +63,7 @@ export const getAndroidEmulatorPlatformInstance = async (
   init: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDeviceEmulator(config.device);
+  const emulatorName = config.device.name;
 
   let adbId = await getAdbId(config.device);
   let startedByHarness = false;
@@ -83,7 +84,7 @@ export const getAndroidEmulatorPlatformInstance = async (
     await ensureAndroidEmulatorEnvironment(avdConfig.apiLevel);
 
     if (!(await adb.hasAvd(config.device.name))) {
-      logger.info('Creating Android emulator %s...', config.device.name);
+      logger.info('Creating Android emulator %s...', emulatorName);
       androidInstanceLogger.debug(
         'creating Android AVD %s before startup',
         config.device.name
@@ -96,7 +97,7 @@ export const getAndroidEmulatorPlatformInstance = async (
         heapSize: avdConfig.heapSize,
       });
     } else {
-      logger.info('Using existing Android emulator %s...', config.device.name);
+      logger.info('Using existing Android emulator %s...', emulatorName);
     }
 
     androidInstanceLogger.debug(
@@ -164,6 +165,7 @@ export const getAndroidEmulatorPlatformInstance = async (
       await adb.setHideErrorDialogs(adbId, false);
 
       if (startedByHarness) {
+        logger.info('Shutting down Android emulator %s...', emulatorName);
         await adb.stopEmulator(adbId);
       }
     },
