@@ -1,11 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createAvd,
+  emulatorProcess,
   getAppUid,
   getLogcatTimestamp,
   getStartAppArgs,
   hasAvd,
   installApp,
+  startEmulator,
   waitForBoot,
   waitForEmulator,
 } from '../adb.js';
@@ -13,6 +17,24 @@ import * as tools from '@react-native-harness/tools';
 
 const createAbortError = () =>
   new DOMException('The operation was aborted', 'AbortError');
+
+const createMockChildProcess = () => {
+  const process = new EventEmitter() as EventEmitter & {
+    stdout: PassThrough;
+    stderr: PassThrough;
+    unref: ReturnType<typeof vi.fn>;
+  };
+
+  process.stdout = new PassThrough();
+  process.stderr = new PassThrough();
+  process.unref = vi.fn();
+
+  return process;
+};
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('getStartAppArgs', () => {
   it('maps supported extras to adb am start flags', () => {
@@ -66,7 +88,7 @@ describe('getStartAppArgs', () => {
       10234
     );
 
-    expect(spawnSpy).toHaveBeenCalledWith('adb', [
+    expect(spawnSpy).toHaveBeenCalledWith(expect.stringMatching(/adb$/), [
       '-s',
       'emulator-5554',
       'shell',
@@ -86,7 +108,7 @@ describe('getStartAppArgs', () => {
       '03-12 11:35:08.000'
     );
 
-    expect(spawnSpy).toHaveBeenCalledWith('adb', [
+    expect(spawnSpy).toHaveBeenCalledWith(expect.stringMatching(/adb$/), [
       '-s',
       'emulator-5554',
       'shell',
@@ -111,7 +133,7 @@ describe('getStartAppArgs', () => {
 
     await installApp('emulator-5554', '/tmp/app.apk');
 
-    expect(spawnSpy).toHaveBeenCalledWith('adb', [
+    expect(spawnSpy).toHaveBeenCalledWith(expect.stringMatching(/adb$/), [
       '-s',
       'emulator-5554',
       'install',
@@ -133,17 +155,110 @@ describe('getStartAppArgs', () => {
       heapSize: '1G',
     });
 
-    expect(spawnSpy).toHaveBeenNthCalledWith(1, 'sdkmanager', [
-      'system-images;android-35;default;x86_64',
-    ]);
+    expect(spawnSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.stringMatching(/sdkmanager$/),
+      ['system-images;android-35;default;x86_64']
+    );
     expect(spawnSpy).toHaveBeenNthCalledWith(2, 'bash', [
       '-lc',
-      `printf 'no\n' | avdmanager create avd --force --name "Pixel_8_API_35" --package "system-images;android-35;default;x86_64" --device "pixel_8"`,
+      expect.stringContaining(
+        'create avd --force --name "Pixel_8_API_35" --package "system-images;android-35;default;x86_64" --device "pixel_8"'
+      ),
     ]);
     expect(spawnSpy).toHaveBeenNthCalledWith(3, 'bash', [
       '-lc',
-      `printf '%s\n%s\n' 'disk.dataPartition.size=1G' 'vm.heapSize=1G' >> "$HOME/.android/avd/Pixel_8_API_35.avd/config.ini"`,
+      expect.stringContaining(
+        `'disk.dataPartition.size=1G' 'vm.heapSize=1G' >> `
+      ),
     ]);
+  });
+
+  it('surfaces emulator stdout when startup fails immediately', async () => {
+    const child = createMockChildProcess();
+    let launcherReadyResolve: (() => void) | undefined;
+    const launcherReady = new Promise<void>((resolve) => {
+      launcherReadyResolve = resolve;
+    });
+
+    vi.spyOn(tools, 'spawn').mockResolvedValue({
+      stdout: 'List of devices attached\n\n',
+    } as Awaited<ReturnType<typeof tools.spawn>>);
+    vi.spyOn(emulatorProcess, 'startDetachedProcess').mockImplementation(() => {
+      launcherReadyResolve?.();
+      return child as unknown as ReturnType<
+        typeof emulatorProcess.startDetachedProcess
+      >;
+    });
+
+    const startPromise = startEmulator('Pixel_8_API_35');
+    await launcherReady;
+
+    child.stdout.write('Unknown AVD name [Pixel_8_API_35]\n');
+    child.stdout.end();
+    child.stderr.end();
+    child.emit('close', 1, null);
+
+    await expect(startPromise).rejects.toThrow(
+      'Unknown AVD name [Pixel_8_API_35]'
+    );
+  });
+
+  it('surfaces emulator stderr when startup fails immediately', async () => {
+    const child = createMockChildProcess();
+    let launcherReadyResolve: (() => void) | undefined;
+    const launcherReady = new Promise<void>((resolve) => {
+      launcherReadyResolve = resolve;
+    });
+
+    vi.spyOn(tools, 'spawn').mockResolvedValue({
+      stdout: 'List of devices attached\n\n',
+    } as Awaited<ReturnType<typeof tools.spawn>>);
+    vi.spyOn(emulatorProcess, 'startDetachedProcess').mockImplementation(() => {
+      launcherReadyResolve?.();
+      return child as unknown as ReturnType<
+        typeof emulatorProcess.startDetachedProcess
+      >;
+    });
+
+    const startPromise = startEmulator('Pixel_8_API_35');
+    await launcherReady;
+
+    child.stderr.write('emulator: panic: broken config\n');
+    child.stdout.end();
+    child.stderr.end();
+    child.emit('close', 1, null);
+
+    await expect(startPromise).rejects.toThrow(
+      'emulator: panic: broken config'
+    );
+  });
+
+  it('returns after the emulator appears without waiting for process exit', async () => {
+    vi.useFakeTimers();
+    const child = createMockChildProcess();
+    const spawnSpy = vi.spyOn(tools, 'spawn');
+
+    spawnSpy
+      .mockResolvedValueOnce({
+        stdout: 'List of devices attached\nemulator-5554\tdevice\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>)
+      .mockResolvedValueOnce({
+        stdout: 'Pixel_8_API_35\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>);
+
+    vi.spyOn(emulatorProcess, 'startDetachedProcess').mockReturnValue(
+      child as unknown as ReturnType<
+        typeof emulatorProcess.startDetachedProcess
+      >
+    );
+
+    const startPromise = startEmulator('Pixel_8_API_35');
+
+    await vi.runAllTimersAsync();
+
+    await expect(startPromise).resolves.toBeUndefined();
+    expect(child.unref).toHaveBeenCalled();
   });
 
   it('aborts while waiting for an emulator to appear', async () => {

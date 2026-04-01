@@ -1,6 +1,9 @@
 import { type AndroidAppLaunchOptions } from '@react-native-harness/platforms';
 import { spawn, SubprocessError } from '@react-native-harness/tools';
+import { spawn as nodeSpawn } from 'node:child_process';
+import type { ChildProcessByStdio } from 'node:child_process';
 import { access } from 'node:fs/promises';
+import type { Readable } from 'node:stream';
 import {
   getAdbBinaryPath,
   getAvdManagerBinaryPath,
@@ -49,6 +52,79 @@ const getAvdConfigPath = (name: string): string =>
   `${
     process.env.ANDROID_AVD_HOME ?? `${process.env.HOME}/.android/avd`
   }/${name}.avd/config.ini`;
+
+const EMULATOR_STARTUP_OBSERVATION_TIMEOUT_MS = 5000;
+const EMULATOR_OUTPUT_BUFFER_LIMIT = 16 * 1024;
+
+export const emulatorProcess = {
+  startDetachedProcess: (
+    file: string,
+    args: readonly string[]
+  ): ChildProcessByStdio<null, Readable, Readable> =>
+    nodeSpawn(file, args, {
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }),
+};
+
+const appendBoundedOutput = (
+  output: string,
+  chunk: string,
+  limit: number = EMULATOR_OUTPUT_BUFFER_LIMIT
+): string => {
+  const nextOutput = output + chunk;
+
+  if (nextOutput.length <= limit) {
+    return nextOutput;
+  }
+
+  return nextOutput.slice(-limit);
+};
+
+const formatEmulatorStartupError = ({
+  name,
+  stdout,
+  stderr,
+  exitCode,
+  signal,
+  error,
+}: {
+  name: string;
+  stdout: string;
+  stderr: string;
+  exitCode?: number | null;
+  signal?: NodeJS.Signals | null;
+  error?: unknown;
+}): Error => {
+  const sections = [`Failed to start Android emulator @${name}.`];
+
+  if (typeof exitCode === 'number') {
+    sections.push(`Exit code: ${exitCode}`);
+  }
+
+  if (signal) {
+    sections.push(`Signal: ${signal}`);
+  }
+
+  if (error instanceof Error) {
+    sections.push(`Cause: ${error.message}`);
+  }
+
+  const trimmedStdout = stdout.trim();
+  const trimmedStderr = stderr.trim();
+
+  if (trimmedStdout !== '') {
+    sections.push(`stdout:\n${trimmedStdout}`);
+  }
+
+  if (trimmedStderr !== '') {
+    sections.push(`stderr:\n${trimmedStderr}`);
+  }
+
+  return new Error(sections.join('\n\n'), {
+    cause: error instanceof Error ? error : undefined,
+  });
+};
 
 const ensureEmulatorInstalled = async (): Promise<string> => {
   const emulatorBinaryPath = getEmulatorBinaryPath();
@@ -264,8 +340,7 @@ export const createAvd = async ({
 
 export const startEmulator = async (name: string): Promise<void> => {
   const emulatorBinaryPath = await ensureEmulatorInstalled();
-
-  void spawn(
+  const childProcess = emulatorProcess.startDetachedProcess(
     emulatorBinaryPath,
     [
       `@${name}`,
@@ -277,13 +352,82 @@ export const startEmulator = async (name: string): Promise<void> => {
       '-no-boot-anim',
       '-camera-back',
       'none',
-    ],
-    {
-      detached: true,
-      stdout: 'ignore',
-      stderr: 'ignore',
-    }
+    ]
   );
+
+  let stdout = '';
+  let stderr = '';
+
+  childProcess.stdout?.setEncoding('utf8');
+  childProcess.stderr?.setEncoding('utf8');
+
+  const onStdout = (chunk: string | Buffer) => {
+    stdout = appendBoundedOutput(stdout, chunk.toString());
+  };
+  const onStderr = (chunk: string | Buffer) => {
+    stderr = appendBoundedOutput(stderr, chunk.toString());
+  };
+
+  childProcess.stdout?.on('data', onStdout);
+  childProcess.stderr?.on('data', onStderr);
+
+  const startupAbortController = new AbortController();
+  const cleanup = () => {
+    startupAbortController.abort();
+    childProcess.stdout?.off('data', onStdout);
+    childProcess.stderr?.off('data', onStderr);
+    childProcess.removeAllListeners('error');
+    childProcess.removeAllListeners('close');
+  };
+
+  const earlyExit = new Promise<never>((_, reject) => {
+    childProcess.once('error', (error) => {
+      reject(
+        formatEmulatorStartupError({
+          name,
+          stdout,
+          stderr,
+          error,
+        })
+      );
+    });
+
+    childProcess.once('close', (exitCode, signal) => {
+      reject(
+        formatEmulatorStartupError({
+          name,
+          stdout,
+          stderr,
+          exitCode,
+          signal,
+        })
+      );
+    });
+  });
+
+  const observedBoot = waitForEmulator(name, startupAbortController.signal)
+    .then(() => 'booted' as const)
+    .catch((error: unknown) => {
+      if (startupAbortController.signal.aborted) {
+        return 'aborted' as const;
+      }
+
+      throw error;
+    });
+
+  const observationTimeout = wait(EMULATOR_STARTUP_OBSERVATION_TIMEOUT_MS).then(
+    () => 'timeout' as const
+  );
+
+  try {
+    await Promise.race([earlyExit, observedBoot, observationTimeout]);
+  } finally {
+    cleanup();
+  }
+
+  childProcess.stdout?.destroy();
+  childProcess.stderr?.destroy();
+  childProcess.unref();
 };
 
 export const waitForEmulator = async (
