@@ -28,6 +28,12 @@ describe('Android platform instance', () => {
   });
 
   it('reuses a running emulator and does not shut it down on dispose', async () => {
+    const ensureAndroidEmulatorEnvironment = vi
+      .spyOn(
+        await import('../environment.js'),
+        'ensureAndroidEmulatorEnvironment'
+      )
+      .mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
     vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
     vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);
@@ -66,10 +72,15 @@ describe('Android platform instance', () => {
 
     await instance.dispose();
 
+    expect(ensureAndroidEmulatorEnvironment).toHaveBeenCalledWith(35);
     expect(stopEmulator).not.toHaveBeenCalled();
   });
 
   it('creates and boots an emulator when missing and shuts it down on dispose', async () => {
+    vi.spyOn(
+      await import('../environment.js'),
+      'ensureAndroidEmulatorEnvironment'
+    ).mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue([]);
     vi.spyOn(adb, 'hasAvd').mockResolvedValue(false);
     const createAvd = vi.spyOn(adb, 'createAvd').mockResolvedValue(undefined);
@@ -125,10 +136,64 @@ describe('Android platform instance', () => {
     expect(stopEmulator).toHaveBeenCalledWith('emulator-5554');
   });
 
+  it('verifies SDK assets before booting an existing AVD', async () => {
+    const ensureAndroidEmulatorEnvironment = vi
+      .spyOn(
+        await import('../environment.js'),
+        'ensureAndroidEmulatorEnvironment'
+      )
+      .mockResolvedValue('/tmp/android-sdk');
+    vi.spyOn(adb, 'getDeviceIds').mockResolvedValue([]);
+    vi.spyOn(adb, 'hasAvd').mockResolvedValue(true);
+    const createAvd = vi.spyOn(adb, 'createAvd').mockResolvedValue(undefined);
+    const startEmulator = vi
+      .spyOn(adb, 'startEmulator')
+      .mockResolvedValue(undefined);
+    vi.spyOn(adb, 'waitForEmulator').mockResolvedValue('emulator-5554');
+    vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
+    vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
+      undefined
+    );
+
+    await expect(
+      getAndroidEmulatorPlatformInstance(
+        {
+          name: 'android',
+          device: {
+            type: 'emulator',
+            name: 'Pixel_8_API_35',
+            avd: {
+              apiLevel: 35,
+              profile: 'pixel_8',
+              diskSize: '1G',
+              heapSize: '1G',
+            },
+          },
+          bundleId: 'com.harnessplayground',
+          activityName: '.MainActivity',
+        },
+        harnessConfig,
+        init
+      )
+    ).resolves.toBeDefined();
+
+    expect(ensureAndroidEmulatorEnvironment).toHaveBeenCalledWith(35);
+    expect(createAvd).not.toHaveBeenCalled();
+    expect(startEmulator).toHaveBeenCalledWith('Pixel_8_API_35');
+  });
+
   it('installs the app from HARNESS_APP_PATH when missing', async () => {
     const appPath = path.join(os.tmpdir(), 'HarnessPlayground.apk');
     fs.writeFileSync(appPath, 'apk');
     vi.stubEnv('HARNESS_APP_PATH', appPath);
+    vi.spyOn(
+      await import('../environment.js'),
+      'ensureAndroidEmulatorEnvironment'
+    ).mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
     vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
     vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);

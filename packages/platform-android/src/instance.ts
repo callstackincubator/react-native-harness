@@ -21,6 +21,7 @@ import {
 import { getDeviceName } from './utils.js';
 import { createAndroidAppMonitor } from './app-monitor.js';
 import { HarnessAppPathError, HarnessEmulatorConfigError } from './errors.js';
+import { ensureAndroidEmulatorEnvironment } from './environment.js';
 import fs from 'node:fs';
 
 const androidInstanceLogger = logger.child('android-instance');
@@ -79,6 +80,8 @@ export const getAndroidEmulatorPlatformInstance = async (
       throw new HarnessEmulatorConfigError(config.device.name);
     }
 
+    await ensureAndroidEmulatorEnvironment(avdConfig.apiLevel);
+
     if (!(await adb.hasAvd(config.device.name))) {
       androidInstanceLogger.debug(
         'creating Android AVD %s before startup',
@@ -106,6 +109,8 @@ export const getAndroidEmulatorPlatformInstance = async (
       config.device.name,
       adbId
     );
+  } else if (config.device.avd) {
+    await ensureAndroidEmulatorEnvironment(config.device.avd.apiLevel);
   }
 
   if (!adbId) {

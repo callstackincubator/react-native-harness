@@ -130,6 +130,26 @@ runs:
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
+    - name: Verify Android SDK packages
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' }}
+      shell: bash
+      run: |
+        if [ -n "$ANDROID_HOME" ]; then
+          SDK_ROOT="$ANDROID_HOME"
+        elif [ -n "$ANDROID_SDK_ROOT" ]; then
+          SDK_ROOT="$ANDROID_SDK_ROOT"
+        elif [ "${{ runner.os }}" = "macOS" ]; then
+          SDK_ROOT="$HOME/Library/Android/sdk"
+        else
+          SDK_ROOT="$HOME/Android/Sdk"
+        fi
+        SDKMANAGER_BIN="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+        yes | "$SDKMANAGER_BIN" --licenses >/dev/null
+        yes | "$SDKMANAGER_BIN" \
+          "platform-tools" \
+          "emulator" \
+          "platforms;android-${{ fromJson(steps.load-config.outputs.config).config.device.avd.apiLevel }}" \
+          "system-images;android-${{ fromJson(steps.load-config.outputs.config).config.device.avd.apiLevel }};default;${{ steps.arch.outputs.arch }}"
     - name: Create AVD and generate snapshot for caching
       if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJSON(inputs.cacheAvd) && steps.avd-cache.outputs.cache-hit != 'true' }}
       uses: reactivecircus/android-emulator-runner@v2

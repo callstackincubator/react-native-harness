@@ -5,9 +5,13 @@ import type { ChildProcessByStdio } from 'node:child_process';
 import { access } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
 import {
+  ensureAndroidSdkPackages,
   getAdbBinaryPath,
+  getAndroidSystemImagePackage,
   getAvdManagerBinaryPath,
   getEmulatorBinaryPath,
+  getHostAndroidSystemImageArch,
+  getRequiredAndroidSdkPackages,
   getSdkManagerBinaryPath,
 } from './environment.js';
 
@@ -42,10 +46,6 @@ const waitWithSignal = async (
   }
 
   await Promise.race([wait(ms), waitForAbort(signal)]);
-};
-
-const getSystemImagePackage = (apiLevel: number): string => {
-  return `system-images;android-${apiLevel};default;x86_64`;
 };
 
 const getAvdConfigPath = (name: string): string =>
@@ -145,6 +145,20 @@ export type CreateAvdOptions = {
   profile: string;
   diskSize: string;
   heapSize: string;
+};
+
+export const getRequiredEmulatorPackages = (apiLevel: number): string[] => {
+  return getRequiredAndroidSdkPackages({
+    apiLevel,
+    includeEmulator: true,
+    architecture: getHostAndroidSystemImageArch(),
+  });
+};
+
+export const verifyAndroidEmulatorSdk = async (
+  apiLevel: number
+): Promise<void> => {
+  await ensureAndroidSdkPackages(getRequiredEmulatorPackages(apiLevel));
 };
 
 export const getStartAppArgs = (
@@ -323,9 +337,12 @@ export const createAvd = async ({
   diskSize,
   heapSize,
 }: CreateAvdOptions): Promise<void> => {
-  const systemImagePackage = getSystemImagePackage(apiLevel);
+  const systemImagePackage = getAndroidSystemImagePackage(
+    apiLevel,
+    getHostAndroidSystemImageArch()
+  );
 
-  await spawn(getSdkManagerBinaryPath(), [systemImagePackage]);
+  await verifyAndroidEmulatorSdk(apiLevel);
   await spawn('bash', [
     '-lc',
     `printf 'no\n' | "${getAvdManagerBinaryPath()}" create avd --force --name "${name}" --package "${systemImagePackage}" --device "${profile}"`,

@@ -12,7 +12,11 @@ import {
   getAndroidEmulatorPlatformInstance,
   getAndroidPhysicalDevicePlatformInstance,
 } from './instance.js';
-import { initializeAndroidProcessEnv } from './environment.js';
+import {
+  ensureAndroidEmulatorEnvironment,
+  ensureAndroidPhysicalDeviceEnvironment,
+  initializeAndroidProcessEnv,
+} from './environment.js';
 
 const getAndroidRunner = async (
   config: AndroidPlatformConfig,
@@ -24,12 +28,18 @@ const getAndroidRunner = async (
   initializeAndroidProcessEnv();
 
   if (isAndroidDeviceEmulator(parsedConfig.device)) {
+    if (parsedConfig.device.avd) {
+      await ensureAndroidEmulatorEnvironment(parsedConfig.device.avd.apiLevel);
+    }
+
     return getAndroidEmulatorPlatformInstance(
       parsedConfig,
       harnessConfig,
       init
     );
   }
+
+  await ensureAndroidPhysicalDeviceEnvironment();
 
   return getAndroidPhysicalDevicePlatformInstance(parsedConfig, harnessConfig);
 };

@@ -14,6 +14,7 @@ import {
   waitForEmulator,
 } from '../adb.js';
 import * as tools from '@react-native-harness/tools';
+import * as environment from '../environment.js';
 
 const createAbortError = () =>
   new DOMException('The operation was aborted', 'AbortError');
@@ -146,6 +147,12 @@ describe('getStartAppArgs', () => {
     const spawnSpy = vi
       .spyOn(tools, 'spawn')
       .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>);
+    const verifyAndroidEmulatorSdk = vi
+      .spyOn(environment, 'ensureAndroidSdkPackages')
+      .mockResolvedValue('/tmp/android-sdk');
+    vi.spyOn(environment, 'getHostAndroidSystemImageArch').mockReturnValue(
+      'x86_64'
+    );
 
     await createAvd({
       name: 'Pixel_8_API_35',
@@ -155,22 +162,50 @@ describe('getStartAppArgs', () => {
       heapSize: '1G',
     });
 
-    expect(spawnSpy).toHaveBeenNthCalledWith(
-      1,
-      expect.stringMatching(/sdkmanager$/),
-      ['system-images;android-35;default;x86_64']
-    );
-    expect(spawnSpy).toHaveBeenNthCalledWith(2, 'bash', [
+    expect(verifyAndroidEmulatorSdk).toHaveBeenCalledWith([
+      'platform-tools',
+      'emulator',
+      'platforms;android-35',
+      'system-images;android-35;default;x86_64',
+    ]);
+    expect(spawnSpy).toHaveBeenNthCalledWith(1, 'bash', [
       '-lc',
       expect.stringContaining(
         'create avd --force --name "Pixel_8_API_35" --package "system-images;android-35;default;x86_64" --device "pixel_8"'
       ),
     ]);
-    expect(spawnSpy).toHaveBeenNthCalledWith(3, 'bash', [
+    expect(spawnSpy).toHaveBeenNthCalledWith(2, 'bash', [
       '-lc',
       expect.stringContaining(
         `'disk.dataPartition.size=1G' 'vm.heapSize=1G' >> `
       ),
+    ]);
+  });
+
+  it('creates an AVD with arm64 system image packages on arm64 hosts', async () => {
+    vi.spyOn(tools, 'spawn').mockResolvedValue(
+      {} as Awaited<ReturnType<typeof tools.spawn>>
+    );
+    const ensureAndroidSdkPackages = vi
+      .spyOn(environment, 'ensureAndroidSdkPackages')
+      .mockResolvedValue('/tmp/android-sdk');
+    vi.spyOn(environment, 'getHostAndroidSystemImageArch').mockReturnValue(
+      'arm64-v8a'
+    );
+
+    await createAvd({
+      name: 'Pixel_8_API_35',
+      apiLevel: 35,
+      profile: 'pixel_8',
+      diskSize: '1G',
+      heapSize: '1G',
+    });
+
+    expect(ensureAndroidSdkPackages).toHaveBeenCalledWith([
+      'platform-tools',
+      'emulator',
+      'platforms;android-35',
+      'system-images;android-35;default;arm64-v8a',
     ]);
   });
 
