@@ -4551,6 +4551,66 @@ var getConfig = async (dir) => {
 // src/shared/index.ts
 var import_node_path6 = __toESM(require("path"));
 var import_node_fs6 = __toESM(require("fs"));
+var getHostAndroidSystemImageArch = () => {
+  switch (process.arch) {
+    case "arm64":
+      return "arm64-v8a";
+    case "arm":
+      return "armeabi-v7a";
+    case "x64":
+    default:
+      return "x86_64";
+  }
+};
+var resolveAvdCachingEnabled = ({
+  snapshotEnabled
+}) => {
+  const override = process.env.HARNESS_AVD_CACHING;
+  const requestedValue = override == null ? snapshotEnabled : override.toLowerCase() === "true";
+  return requestedValue === true;
+};
+var getNormalizedAvdCacheConfig = ({
+  emulator,
+  hostArch
+}) => {
+  const avd = emulator.avd;
+  if (!avd) {
+    return null;
+  }
+  return {
+    name: emulator.name,
+    apiLevel: avd.apiLevel,
+    arch: hostArch,
+    profile: avd.profile.trim().toLowerCase(),
+    diskSize: avd.diskSize.trim().toLowerCase(),
+    heapSize: avd.heapSize.trim().toLowerCase()
+  };
+};
+var getResolvedRunner = (runner) => {
+  if (runner.platformId !== "android" || runner.config.device.type !== "emulator") {
+    return runner;
+  }
+  const avdCachingEnabled = resolveAvdCachingEnabled({
+    snapshotEnabled: runner.config.device.avd?.snapshot?.enabled
+  });
+  return {
+    ...runner,
+    config: {
+      ...runner.config,
+      device: {
+        ...runner.config.device,
+        avd: runner.config.device.avd
+      }
+    },
+    action: {
+      avdCachingEnabled,
+      avdCacheConfig: getNormalizedAvdCacheConfig({
+        emulator: runner.config.device,
+        hostArch: getHostAndroidSystemImageArch()
+      })
+    }
+  };
+};
 var run = async () => {
   try {
     const projectRootInput = process.env.INPUT_PROJECTROOT;
@@ -4560,7 +4620,9 @@ var run = async () => {
     }
     const projectRoot = projectRootInput ? import_node_path6.default.resolve(projectRootInput) : process.cwd();
     console.info(`Loading React Native Harness config from: ${projectRoot}`);
-    const { config, projectRoot: resolvedProjectRoot } = await getConfig(projectRoot);
+    const { config, projectRoot: resolvedProjectRoot } = await getConfig(
+      projectRoot
+    );
     const runner = config.runners.find((runner2) => runner2.name === runnerInput);
     if (!runner) {
       throw new Error(`Runner ${runnerInput} not found in config`);
@@ -4569,8 +4631,11 @@ var run = async () => {
     if (!githubOutput) {
       throw new Error("GITHUB_OUTPUT environment variable is not set");
     }
+    const resolvedRunner = getResolvedRunner(runner);
     const relativeProjectRoot = import_node_path6.default.relative(process.cwd(), resolvedProjectRoot) || ".";
-    const output = `config=${JSON.stringify(runner)}
+    const output = `config=${JSON.stringify(
+      resolvedRunner
+    )}
 projectRoot=${relativeProjectRoot}
 `;
     import_node_fs6.default.appendFileSync(githubOutput, output);

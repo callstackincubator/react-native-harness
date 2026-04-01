@@ -30,7 +30,7 @@ import {
   ensureAndroidEmulatorEnvironment,
   getHostAndroidSystemImageArch,
 } from './environment.js';
-import { isInteractive } from '../../tools/src/isInteractive.js';
+import { isInteractive } from '@react-native-harness/tools';
 import fs from 'node:fs';
 
 const androidInstanceLogger = logger.child('android-instance');
