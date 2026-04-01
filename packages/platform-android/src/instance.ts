@@ -83,6 +83,7 @@ export const getAndroidEmulatorPlatformInstance = async (
     await ensureAndroidEmulatorEnvironment(avdConfig.apiLevel);
 
     if (!(await adb.hasAvd(config.device.name))) {
+      logger.info('Creating Android emulator %s...', config.device.name);
       androidInstanceLogger.debug(
         'creating Android AVD %s before startup',
         config.device.name
@@ -94,6 +95,8 @@ export const getAndroidEmulatorPlatformInstance = async (
         diskSize: avdConfig.diskSize,
         heapSize: avdConfig.heapSize,
       });
+    } else {
+      logger.info('Using existing Android emulator %s...', config.device.name);
     }
 
     androidInstanceLogger.debug(

@@ -71,6 +71,7 @@ export const getAppleSimulatorPlatformInstance = async (
     !simctl.isBootedSimulatorStatus(simulatorStatus) &&
     !simctl.isBootingSimulatorStatus(simulatorStatus)
   ) {
+    logger.info('Booting iOS simulator %s...', config.device.name);
     iosInstanceLogger.debug(
       'booting iOS simulator %s from status %s',
       udid,
@@ -78,6 +79,15 @@ export const getAppleSimulatorPlatformInstance = async (
     );
     await simctl.bootSimulator(udid);
     startedByHarness = true;
+  }
+
+  if (simctl.isBootedSimulatorStatus(simulatorStatus)) {
+    logger.info('Using booted iOS simulator %s...', config.device.name);
+  } else if (simctl.isBootingSimulatorStatus(simulatorStatus)) {
+    logger.info(
+      'Waiting for iOS simulator %s to finish booting...',
+      config.device.name
+    );
   }
 
   if (!simctl.isBootedSimulatorStatus(simulatorStatus)) {

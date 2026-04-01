@@ -1,4 +1,5 @@
 import { spawn } from '@react-native-harness/tools';
+import { logger } from '@react-native-harness/tools';
 import { createWriteStream } from 'node:fs';
 import { access, cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
@@ -9,6 +10,7 @@ import https from 'node:https';
 const CMDLINE_TOOLS_PATH_SEGMENTS = ['cmdline-tools', 'latest'];
 const ANDROID_REPOSITORY_INDEX_URL =
   'https://dl.google.com/android/repository/repository2-1.xml';
+const androidEnvironmentLogger = logger.child('android-environment');
 
 export type AndroidSystemImageArch = 'x86_64' | 'arm64-v8a' | 'armeabi-v7a';
 
@@ -186,6 +188,11 @@ const ensureAndroidCommandLineTools = async (
     );
   }
 
+  androidEnvironmentLogger.info(
+    'Bootstrapping Android command-line tools in %s',
+    sdkRoot
+  );
+
   await mkdir(sdkRoot, { recursive: true });
 
   const temporaryDirectory = await mkdtemp(
@@ -287,6 +294,11 @@ const installAndroidSdkPackages = async (
   const packageArgs = packages
     .map((packageName) => quoteShell(packageName))
     .join(' ');
+
+  androidEnvironmentLogger.info(
+    'Installing missing Android SDK packages: %s',
+    packages.join(', ')
+  );
 
   await acceptAndroidLicenses(sdkRoot);
   await spawn(
