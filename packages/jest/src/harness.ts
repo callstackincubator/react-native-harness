@@ -14,6 +14,7 @@ import {
   type AppMonitorEvent,
   type AppLaunchOptions,
   HarnessPlatform,
+  type HarnessPlatformInitOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import {
@@ -341,7 +342,11 @@ const getHarnessInternal = async (
           signal,
           work: async () => {
             return await import(platform.runner)
-              .then((module) => module.default(platform.config, config))
+              .then((module) =>
+                module.default(platform.config, config, {
+                  signal,
+                } satisfies HarnessPlatformInitOptions)
+              )
               .then((instance) => {
                 harnessLogger.debug('platform runner initialized');
                 return instance;

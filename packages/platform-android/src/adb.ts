@@ -14,6 +14,33 @@ const wait = async (ms: number): Promise<void> => {
   });
 };
 
+const waitForAbort = (signal: AbortSignal): Promise<never> => {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason);
+  }
+
+  return new Promise((_, reject) => {
+    signal.addEventListener(
+      'abort',
+      () => {
+        reject(signal.reason);
+      },
+      { once: true }
+    );
+  });
+};
+
+const waitWithSignal = async (
+  ms: number,
+  signal: AbortSignal
+): Promise<void> => {
+  if (signal.aborted) {
+    throw signal.reason;
+  }
+
+  await Promise.race([wait(ms), waitForAbort(signal)]);
+};
+
 const getSystemImagePackage = (apiLevel: number): string => {
   return `system-images;android-${apiLevel};default;x86_64`;
 };
@@ -261,11 +288,9 @@ export const startEmulator = async (name: string): Promise<void> => {
 
 export const waitForEmulator = async (
   name: string,
-  timeoutMs: number = 120000
+  signal: AbortSignal
 ): Promise<string> => {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
+  while (!signal.aborted) {
     const adbIds = await getDeviceIds();
 
     for (const adbId of adbIds) {
@@ -280,27 +305,25 @@ export const waitForEmulator = async (
       }
     }
 
-    await wait(1000);
+    await waitWithSignal(1000, signal);
   }
 
-  throw new Error(`Timed out waiting for emulator "${name}" to appear in adb.`);
+  throw signal.reason;
 };
 
 export const waitForBoot = async (
   adbId: string,
-  timeoutMs: number = 300000
+  signal: AbortSignal
 ): Promise<void> => {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
+  while (!signal.aborted) {
     if (await isBootCompleted(adbId)) {
       return;
     }
 
-    await wait(1000);
+    await waitWithSignal(1000, signal);
   }
 
-  throw new Error(`Timed out waiting for emulator "${adbId}" to boot.`);
+  throw signal.reason;
 };
 
 export const isAppRunning = async (

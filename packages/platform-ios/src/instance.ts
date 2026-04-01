@@ -2,6 +2,7 @@ import {
   AppNotInstalledError,
   CreateAppMonitorOptions,
   DeviceNotFoundError,
+  type HarnessPlatformInitOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import {
@@ -43,7 +44,8 @@ const getHarnessAppPath = (): string => {
 
 export const getAppleSimulatorPlatformInstance = async (
   config: ApplePlatformConfig,
-  harnessConfig: HarnessConfig
+  harnessConfig: HarnessConfig,
+  init: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDeviceSimulator(config.device);
 
@@ -83,7 +85,7 @@ export const getAppleSimulatorPlatformInstance = async (
       'waiting for iOS simulator %s to finish booting',
       udid
     );
-    await simctl.waitForBoot(udid);
+    await simctl.waitForBoot(udid, init.signal);
   }
 
   const isInstalled = await simctl.isAppInstalled(udid, config.bundleId);

@@ -4,6 +4,7 @@ import {
   DeviceNotFoundError,
   AppNotInstalledError,
   type CreateAppMonitorOptions,
+  type HarnessPlatformInitOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import { getEmitter } from '@react-native-harness/tools';
@@ -67,7 +68,8 @@ const createPollingAppMonitor = ({
 };
 
 const getVegaRunner = async (
-  config: VegaPlatformConfig
+  config: VegaPlatformConfig,
+  _init?: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   const parsedConfig = VegaPlatformConfigSchema.parse(config);
   const deviceId = parsedConfig.device.deviceId;

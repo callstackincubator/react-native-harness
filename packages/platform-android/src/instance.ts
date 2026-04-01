@@ -2,6 +2,7 @@ import {
   AppNotInstalledError,
   CreateAppMonitorOptions,
   DeviceNotFoundError,
+  type HarnessPlatformInitOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
@@ -57,7 +58,8 @@ const configureAndroidRuntime = async (
 
 export const getAndroidEmulatorPlatformInstance = async (
   config: AndroidPlatformConfig,
-  harnessConfig: HarnessConfig
+  harnessConfig: HarnessConfig,
+  init: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDeviceEmulator(config.device);
 
@@ -96,7 +98,7 @@ export const getAndroidEmulatorPlatformInstance = async (
       config.device.name
     );
     await adb.startEmulator(config.device.name);
-    adbId = await adb.waitForEmulator(config.device.name);
+    adbId = await adb.waitForEmulator(config.device.name, init.signal);
     startedByHarness = true;
 
     androidInstanceLogger.debug(
@@ -114,7 +116,7 @@ export const getAndroidEmulatorPlatformInstance = async (
     'waiting for Android emulator %s to finish booting',
     adbId
   );
-  await adb.waitForBoot(adbId);
+  await adb.waitForBoot(adbId, init.signal);
 
   const isInstalled = await adb.isAppInstalled(adbId, config.bundleId);
 

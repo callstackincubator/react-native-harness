@@ -334,6 +334,50 @@ describe('getHarness', () => {
     ).rejects.toBeInstanceOf(PlatformReadyTimeoutError);
   });
 
+  it('passes a platform init signal to the runner factory', async () => {
+    const { serverBridge } = createBridgeServer();
+    const appMonitor = createAppMonitor();
+    const platformInstance = createPlatformRunner({
+      createAppMonitor: () => appMonitor.appMonitor,
+    });
+    const metroInstance = createMetroInstance();
+
+    mocks.getBridgeServer.mockResolvedValue(serverBridge);
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
+
+    const runner = vi.fn(async () => platformInstance);
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = runner;
+
+    const platform: HarnessPlatform = {
+      config: {},
+      name: 'ios',
+      platformId: 'ios',
+      runner: `data:text/javascript,${encodeURIComponent(
+        'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
+      )}`,
+    };
+
+    const harness = await getHarness(
+      createHarnessConfig(),
+      platform,
+      '/tmp/project'
+    );
+
+    expect(runner).toHaveBeenCalledWith(
+      platform.config,
+      expect.any(Object),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      })
+    );
+
+    await harness.dispose();
+  });
+
   it('routes ensureAppReady through the shared Metro startup helper', async () => {
     const { serverBridge, emitReady } = createBridgeServer();
     const appMonitor = createAppMonitor();

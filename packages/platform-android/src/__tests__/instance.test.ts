@@ -17,6 +17,9 @@ import { HarnessAppPathError, HarnessEmulatorConfigError } from '../errors.js';
 const harnessConfig = {
   metroPort: DEFAULT_METRO_PORT,
 } as HarnessConfig;
+const init = {
+  signal: new AbortController().signal,
+};
 
 describe('Android platform instance', () => {
   beforeEach(() => {
@@ -57,7 +60,8 @@ describe('Android platform instance', () => {
         bundleId: 'com.harnessplayground',
         activityName: '.MainActivity',
       },
-      harnessConfig
+      harnessConfig,
+      init
     );
 
     await instance.dispose();
@@ -103,7 +107,8 @@ describe('Android platform instance', () => {
         bundleId: 'com.harnessplayground',
         activityName: '.MainActivity',
       },
-      harnessConfig
+      harnessConfig,
+      init
     );
 
     expect(createAvd).toHaveBeenCalledWith({
@@ -153,7 +158,8 @@ describe('Android platform instance', () => {
           bundleId: 'com.harnessplayground',
           activityName: '.MainActivity',
         },
-        harnessConfig
+        harnessConfig,
+        init
       )
     ).resolves.toBeDefined();
 
@@ -185,7 +191,8 @@ describe('Android platform instance', () => {
           bundleId: 'com.harnessplayground',
           activityName: '.MainActivity',
         },
-        harnessConfig
+        harnessConfig,
+        init
       )
     ).rejects.toBeInstanceOf(HarnessAppPathError);
   });
@@ -214,7 +221,8 @@ describe('Android platform instance', () => {
           bundleId: 'com.harnessplayground',
           activityName: '.MainActivity',
         },
-        harnessConfig
+        harnessConfig,
+        init
       )
     ).rejects.toBeInstanceOf(HarnessAppPathError);
   });
@@ -233,7 +241,8 @@ describe('Android platform instance', () => {
           bundleId: 'com.harnessplayground',
           activityName: '.MainActivity',
         },
-        harnessConfig
+        harnessConfig,
+        init
       )
     ).rejects.toBeInstanceOf(HarnessEmulatorConfigError);
   });

@@ -2,6 +2,7 @@ import {
   type AppMonitor,
   type AppMonitorEvent,
   type CreateAppMonitorOptions,
+  type HarnessPlatformInitOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import { chromium, firefox, webkit, type Browser, type Page } from 'playwright';
@@ -65,7 +66,8 @@ const createPollingAppMonitor = ({
 };
 
 const getWebRunner = async (
-  config: WebPlatformConfig
+  config: WebPlatformConfig,
+  _init?: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   const parsedConfig = WebPlatformConfigSchema.parse(config);
 

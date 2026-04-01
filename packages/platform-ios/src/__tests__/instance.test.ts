@@ -18,6 +18,9 @@ import { join } from 'node:path';
 const harnessConfig = {
   metroPort: DEFAULT_METRO_PORT,
 } as HarnessConfig;
+const init = {
+  signal: new AbortController().signal,
+};
 
 describe('iOS platform instance dependency validation', () => {
   beforeEach(() => {
@@ -47,7 +50,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getAppleSimulatorPlatformInstance(config, harnessConfig)
+      getAppleSimulatorPlatformInstance(config, harnessConfig, init)
     ).resolves.toBeDefined();
     expect(assertInstalled).not.toHaveBeenCalled();
   });
@@ -94,7 +97,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getAppleSimulatorPlatformInstance(config, harnessConfig)
+      getAppleSimulatorPlatformInstance(config, harnessConfig, init)
     ).resolves.toBeDefined();
     expect(getSimulatorId).toHaveBeenCalled();
   });
@@ -143,7 +146,8 @@ describe('iOS platform instance dependency validation', () => {
         },
         bundleId: 'com.harnessplayground',
       },
-      harnessConfig
+      harnessConfig,
+      init
     );
 
     expect(applyOverride).toHaveBeenCalledWith(
@@ -193,11 +197,12 @@ describe('iOS platform instance dependency validation', () => {
         },
         bundleId: 'com.harnessplayground',
       },
-      harnessConfig
+      harnessConfig,
+      init
     );
 
     expect(bootSimulator).toHaveBeenCalledWith('sim-udid');
-    expect(waitForBoot).toHaveBeenCalledWith('sim-udid');
+    expect(waitForBoot).toHaveBeenCalledWith('sim-udid', init.signal);
 
     await instance.dispose();
 
@@ -235,11 +240,12 @@ describe('iOS platform instance dependency validation', () => {
         },
         bundleId: 'com.harnessplayground',
       },
-      harnessConfig
+      harnessConfig,
+      init
     );
 
     expect(bootSimulator).not.toHaveBeenCalled();
-    expect(waitForBoot).toHaveBeenCalledWith('sim-udid');
+    expect(waitForBoot).toHaveBeenCalledWith('sim-udid', init.signal);
 
     await instance.dispose();
 
@@ -277,11 +283,12 @@ describe('iOS platform instance dependency validation', () => {
         },
         bundleId: 'com.harnessplayground',
       },
-      harnessConfig
+      harnessConfig,
+      init
     );
 
     expect(bootSimulator).toHaveBeenCalledWith('sim-udid');
-    expect(waitForBoot).toHaveBeenCalledWith('sim-udid');
+    expect(waitForBoot).toHaveBeenCalledWith('sim-udid', init.signal);
 
     await instance.dispose();
 
@@ -315,7 +322,8 @@ describe('iOS platform instance dependency validation', () => {
             },
             bundleId: 'com.harnessplayground',
           },
-          harnessConfig
+          harnessConfig,
+          init
         )
       ).resolves.toBeDefined();
 
@@ -341,7 +349,8 @@ describe('iOS platform instance dependency validation', () => {
           },
           bundleId: 'com.harnessplayground',
         },
-        harnessConfig
+        harnessConfig,
+        init
       )
     ).rejects.toBeInstanceOf(HarnessAppPathError);
   });
@@ -366,7 +375,8 @@ describe('iOS platform instance dependency validation', () => {
           },
           bundleId: 'com.harnessplayground',
         },
-        harnessConfig
+        harnessConfig,
+        init
       )
     ).rejects.toBeInstanceOf(HarnessAppPathError);
   });

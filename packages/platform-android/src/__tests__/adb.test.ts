@@ -6,8 +6,13 @@ import {
   getStartAppArgs,
   hasAvd,
   installApp,
+  waitForBoot,
+  waitForEmulator,
 } from '../adb.js';
 import * as tools from '@react-native-harness/tools';
+
+const createAbortError = () =>
+  new DOMException('The operation was aborted', 'AbortError');
 
 describe('getStartAppArgs', () => {
   it('maps supported extras to adb am start flags', () => {
@@ -139,5 +144,33 @@ describe('getStartAppArgs', () => {
       '-lc',
       `printf '%s\n%s\n' 'disk.dataPartition.size=1G' 'vm.heapSize=1G' >> "$HOME/.android/avd/Pixel_8_API_35.avd/config.ini"`,
     ]);
+  });
+
+  it('aborts while waiting for an emulator to appear', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(tools, 'spawn').mockResolvedValue({
+      stdout: 'List of devices attached\n\n',
+    } as Awaited<ReturnType<typeof tools.spawn>>);
+    const controller = new AbortController();
+    const waitPromise = waitForEmulator('Pixel_8_API_35', controller.signal);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    controller.abort(createAbortError());
+
+    await expect(waitPromise).rejects.toBeInstanceOf(DOMException);
+  });
+
+  it('aborts while waiting for boot completion', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(tools, 'spawn').mockResolvedValue({
+      stdout: '0\n',
+    } as Awaited<ReturnType<typeof tools.spawn>>);
+    const controller = new AbortController();
+    const waitPromise = waitForBoot('emulator-5554', controller.signal);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    controller.abort(createAbortError());
+
+    await expect(waitPromise).rejects.toBeInstanceOf(DOMException);
   });
 });

@@ -11,6 +11,7 @@ export type {
   CrashArtifactWriter,
   CreateAppMonitorOptions,
   HarnessPlatform,
+  HarnessPlatformInitOptions,
   HarnessPlatformRunner,
   RunTarget,
   VegaAppLaunchOptions,

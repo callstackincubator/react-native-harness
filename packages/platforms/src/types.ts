@@ -7,9 +7,7 @@ export type AppCrashDetails = {
   pid?: number;
   stackTrace?: string[];
   rawLines?: string[];
-  artifactType?:
-    | 'logcat'
-    | 'ios-crash-report';
+  artifactType?: 'logcat' | 'ios-crash-report';
   artifactPath?: string;
 };
 
@@ -110,6 +108,10 @@ export type HarnessPlatformRunner = {
   getCrashDetails?: (
     options: CrashDetailsLookupOptions
   ) => Promise<AppCrashDetails | null>;
+};
+
+export type HarnessPlatformInitOptions = {
+  signal: AbortSignal;
 };
 
 export type HarnessPlatform<TConfig = Record<string, unknown>> = {

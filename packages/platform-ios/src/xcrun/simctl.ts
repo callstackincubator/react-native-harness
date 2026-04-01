@@ -300,8 +300,13 @@ export const bootSimulator = async (udid: string): Promise<void> => {
   await spawn('xcrun', ['simctl', 'boot', udid]);
 };
 
-export const waitForBoot = async (udid: string): Promise<void> => {
-  await spawn('xcrun', ['simctl', 'bootstatus', udid, '-b']);
+export const waitForBoot = async (
+  udid: string,
+  signal: AbortSignal
+): Promise<void> => {
+  await spawn('xcrun', ['simctl', 'bootstatus', udid, '-b'], {
+    signal,
+  });
 };
 
 export const shutdownSimulator = async (udid: string): Promise<void> => {
