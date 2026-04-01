@@ -46,6 +46,7 @@ runs:
       env:
         INPUT_RUNNER: ${{ inputs.runner }}
         INPUT_PROJECTROOT: ${{ inputs.projectRoot }}
+        HARNESS_AVD_CACHING: ${{ inputs.cacheAvd }}
       run: |
         node ${{ github.action_path }}/../shared/index.cjs
     - name: Verify Android config
@@ -85,18 +86,18 @@ runs:
         sudo udevadm trigger --name-match=kvm
         ls /dev/kvm
     - name: Compute AVD cache key
-      if: ${{ fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJSON(inputs.cacheAvd) }}
+      if: ${{ fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled }}
       id: avd-key
       shell: bash
       run: |
-        CONFIG='${{ steps.load-config.outputs.config }}'
-        AVD_CONFIG=$(echo "$CONFIG" | jq -c '.config.device.avd')
-        AVD_CONFIG_HASH=$(echo "$AVD_CONFIG" | sha256sum | cut -d' ' -f1)
+        CACHE_CONFIG='${{ toJson(fromJson(steps.load-config.outputs.config).action.avdCacheConfig) }}'
+        AVD_CONFIG_HASH=$(printf '%s' "$CACHE_CONFIG" | sha256sum | cut -d' ' -f1)
+        AVD_NAME='${{ fromJson(steps.load-config.outputs.config).config.device.name }}'
         ARCH="${{ steps.arch.outputs.arch }}"
-        CACHE_KEY="avd-$ARCH-$AVD_CONFIG_HASH"
+        CACHE_KEY="avd-$AVD_NAME-$ARCH-$AVD_CONFIG_HASH"
         echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
     - name: Restore AVD cache
-      if: ${{ fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJSON(inputs.cacheAvd) }}
+      if: ${{ fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled }}
       uses: actions/cache/restore@v4
       id: avd-cache
       with:
@@ -104,22 +105,8 @@ runs:
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
-    - name: Create AVD and generate snapshot for caching
-      if: ${{ fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJSON(inputs.cacheAvd) && steps.avd-cache.outputs.cache-hit != 'true' }}
-      uses: reactivecircus/android-emulator-runner@v2
-      with:
-        api-level: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.apiLevel }}
-        arch: ${{ steps.arch.outputs.arch }}
-        profile: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.profile }}
-        disk-size: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.diskSize }}
-        heap-size: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.heapSize }}
-        force-avd-creation: false
-        avd-name: ${{ fromJson(steps.load-config.outputs.config).config.device.name }}
-        disable-animations: true
-        emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-        script: echo "Generated AVD snapshot for caching."
     - name: Save AVD cache
-      if: ${{ fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJSON(inputs.cacheAvd) && steps.avd-cache.outputs.cache-hit != 'true' }}
+      if: ${{ always() && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled && steps.avd-cache.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v4
       with:
         path: |
@@ -155,6 +142,7 @@ runs:
         AFTER_RUN_HOOK: ${{ inputs.afterRunHook }}
         HARNESS_RUNNER: ${{ inputs.runner }}
         HARNESS_APP_PATH: ${{ inputs.app }}
+        HARNESS_AVD_CACHING: ${{ inputs.cacheAvd }}
       run: |
         export HARNESS_PROJECT_ROOT="$PWD"
 

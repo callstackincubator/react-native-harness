@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SubprocessError } from '@react-native-harness/tools';
 import {
   createAvd,
+  deleteAvd,
   emulatorProcess,
   getAppUid,
   getLogcatTimestamp,
@@ -210,6 +211,25 @@ describe('getStartAppArgs', () => {
     ]);
   });
 
+  it('deletes both AVD directory and ini file', async () => {
+    const rm = vi
+      .spyOn(await import('node:fs/promises'), 'rm')
+      .mockResolvedValue(undefined);
+
+    await deleteAvd('Pixel_8_API_35');
+
+    expect(rm).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('/Pixel_8_API_35.avd'),
+      { force: true, recursive: true }
+    );
+    expect(rm).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('/Pixel_8_API_35.ini'),
+      { force: true }
+    );
+  });
+
   it('surfaces emulator stdout when startup fails immediately', async () => {
     const child = createMockChildProcess();
     let launcherReadyResolve: (() => void) | undefined;
@@ -295,6 +315,99 @@ describe('getStartAppArgs', () => {
 
     await expect(startPromise).resolves.toBeUndefined();
     expect(child.unref).toHaveBeenCalled();
+  });
+
+  it('passes default boot args to the emulator process', async () => {
+    vi.useFakeTimers();
+    const child = createMockChildProcess();
+    vi.spyOn(tools, 'spawn')
+      .mockResolvedValueOnce({
+        stdout: 'List of devices attached\nemulator-5554\tdevice\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>)
+      .mockResolvedValueOnce({
+        stdout: 'Pixel_8_API_35\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>);
+    const startDetachedProcess = vi
+      .spyOn(emulatorProcess, 'startDetachedProcess')
+      .mockReturnValue(
+        child as unknown as ReturnType<
+          typeof emulatorProcess.startDetachedProcess
+        >
+      );
+
+    const startPromise = startEmulator('Pixel_8_API_35');
+    await vi.runAllTimersAsync();
+    await startPromise;
+
+    expect(startDetachedProcess).toHaveBeenCalledWith(
+      expect.stringMatching(/emulator$/),
+      expect.arrayContaining(['-no-snapshot-load', '-no-snapshot-save'])
+    );
+  });
+
+  it('passes clean snapshot generation args to the emulator process', async () => {
+    vi.useFakeTimers();
+    const child = createMockChildProcess();
+    vi.spyOn(tools, 'spawn')
+      .mockResolvedValueOnce({
+        stdout: 'List of devices attached\nemulator-5554\tdevice\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>)
+      .mockResolvedValueOnce({
+        stdout: 'Pixel_8_API_35\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>);
+    const startDetachedProcess = vi
+      .spyOn(emulatorProcess, 'startDetachedProcess')
+      .mockReturnValue(
+        child as unknown as ReturnType<
+          typeof emulatorProcess.startDetachedProcess
+        >
+      );
+
+    const startPromise = startEmulator(
+      'Pixel_8_API_35',
+      'clean-snapshot-generation'
+    );
+    await vi.runAllTimersAsync();
+    await startPromise;
+
+    expect(startDetachedProcess).toHaveBeenCalledWith(
+      expect.stringMatching(/emulator$/),
+      expect.arrayContaining(['-no-snapshot-load'])
+    );
+    expect(startDetachedProcess.mock.calls[0]?.[1]).not.toContain(
+      '-no-snapshot-save'
+    );
+  });
+
+  it('passes snapshot reuse args to the emulator process', async () => {
+    vi.useFakeTimers();
+    const child = createMockChildProcess();
+    vi.spyOn(tools, 'spawn')
+      .mockResolvedValueOnce({
+        stdout: 'List of devices attached\nemulator-5554\tdevice\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>)
+      .mockResolvedValueOnce({
+        stdout: 'Pixel_8_API_35\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>);
+    const startDetachedProcess = vi
+      .spyOn(emulatorProcess, 'startDetachedProcess')
+      .mockReturnValue(
+        child as unknown as ReturnType<
+          typeof emulatorProcess.startDetachedProcess
+        >
+      );
+
+    const startPromise = startEmulator('Pixel_8_API_35', 'snapshot-reuse');
+    await vi.runAllTimersAsync();
+    await startPromise;
+
+    expect(startDetachedProcess).toHaveBeenCalledWith(
+      expect.stringMatching(/emulator$/),
+      expect.arrayContaining(['-no-snapshot-save'])
+    );
+    expect(startDetachedProcess.mock.calls[0]?.[1]).not.toContain(
+      '-no-snapshot-load'
+    );
   });
 
   it('aborts while waiting for an emulator to appear', async () => {

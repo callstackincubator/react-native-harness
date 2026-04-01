@@ -21,4 +21,45 @@ describe('Android GitHub action config', () => {
       );
     }
   });
+
+  it('removes the third-party emulator runner and maps cacheAvd to HARNESS_AVD_CACHING', async () => {
+    const [rootAction, packageAction] = await Promise.all([
+      readFile(path.join(workspaceRoot, 'action.yml'), 'utf8'),
+      readFile(
+        path.join(workspaceRoot, 'packages/github-action/src/action.yml'),
+        'utf8'
+      ),
+    ]);
+
+    for (const actionYaml of [rootAction, packageAction]) {
+      expect(actionYaml).not.toContain(
+        'reactivecircus/android-emulator-runner'
+      );
+      expect(actionYaml).toContain(
+        'HARNESS_AVD_CACHING: ${{ inputs.cacheAvd }}'
+      );
+      expect(actionYaml).toContain(
+        'fromJson(steps.load-config.outputs.config).action.avdCachingEnabled'
+      );
+    }
+  });
+
+  it('uses a cache key that includes the emulator name', async () => {
+    const [rootAction, packageAction] = await Promise.all([
+      readFile(path.join(workspaceRoot, 'action.yml'), 'utf8'),
+      readFile(
+        path.join(workspaceRoot, 'packages/github-action/src/action.yml'),
+        'utf8'
+      ),
+    ]);
+
+    for (const actionYaml of [rootAction, packageAction]) {
+      expect(actionYaml).toContain(
+        "AVD_NAME='${{ fromJson(steps.load-config.outputs.config).config.device.name }}'"
+      );
+      expect(actionYaml).toContain(
+        'CACHE_KEY="avd-$AVD_NAME-$ARCH-$AVD_CONFIG_HASH"'
+      );
+    }
+  });
 });

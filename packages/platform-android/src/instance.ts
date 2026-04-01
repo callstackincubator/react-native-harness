@@ -12,6 +12,11 @@ import {
   assertAndroidDeviceEmulator,
   assertAndroidDevicePhysical,
 } from './config.js';
+import {
+  isAvdCompatible,
+  readAvdConfig,
+  resolveAvdCachingEnabled,
+} from './avd-config.js';
 import { getAdbId } from './adb-id.js';
 import * as adb from './adb.js';
 import {
@@ -21,7 +26,11 @@ import {
 import { getDeviceName } from './utils.js';
 import { createAndroidAppMonitor } from './app-monitor.js';
 import { HarnessAppPathError, HarnessEmulatorConfigError } from './errors.js';
-import { ensureAndroidEmulatorEnvironment } from './environment.js';
+import {
+  ensureAndroidEmulatorEnvironment,
+  getHostAndroidSystemImageArch,
+} from './environment.js';
+import { isInteractive } from '../../tools/src/isInteractive.js';
 import fs from 'node:fs';
 
 const androidInstanceLogger = logger.child('android-instance');
@@ -57,75 +66,179 @@ const configureAndroidRuntime = async (
   return adb.getAppUid(adbId, config.bundleId);
 };
 
+const startAndWaitForBoot = async ({
+  emulatorName,
+  signal,
+  mode,
+}: {
+  emulatorName: string;
+  signal: AbortSignal;
+  mode?: Parameters<typeof adb.startEmulator>[1];
+}): Promise<string> => {
+  await adb.startEmulator(emulatorName, mode);
+  const adbId = await adb.waitForEmulator(emulatorName, signal);
+  await adb.waitForBoot(adbId, signal);
+  return adbId;
+};
+
+const recreateAvd = async ({
+  emulatorConfig,
+}: {
+  emulatorConfig: Extract<
+    AndroidPlatformConfig['device'],
+    { type: 'emulator' }
+  >;
+}): Promise<void> => {
+  if (!emulatorConfig.avd) {
+    throw new HarnessEmulatorConfigError(emulatorConfig.name);
+  }
+
+  await adb.createAvd({
+    name: emulatorConfig.name,
+    apiLevel: emulatorConfig.avd.apiLevel,
+    profile: emulatorConfig.avd.profile,
+    diskSize: emulatorConfig.avd.diskSize,
+    heapSize: emulatorConfig.avd.heapSize,
+  });
+};
+
+const prepareCachedAvd = async ({
+  emulatorConfig,
+  signal,
+}: {
+  emulatorConfig: Extract<
+    AndroidPlatformConfig['device'],
+    { type: 'emulator' }
+  >;
+  signal: AbortSignal;
+}): Promise<string> => {
+  const emulatorName = emulatorConfig.name;
+  const hostArch = getHostAndroidSystemImageArch();
+  const hasExistingAvd = await adb.hasAvd(emulatorName);
+  const avdConfig = hasExistingAvd ? await readAvdConfig(emulatorName) : null;
+  const compatibility =
+    avdConfig == null
+      ? { compatible: false as const, reason: 'Missing AVD config.ini.' }
+      : isAvdCompatible({
+          emulator: emulatorConfig,
+          avdConfig,
+          hostArch,
+        });
+
+  if (!hasExistingAvd || !compatibility.compatible) {
+    logger.info(
+      hasExistingAvd
+        ? 'Recreating incompatible Android emulator %s...'
+        : 'Creating Android emulator %s...',
+      emulatorName
+    );
+
+    if (hasExistingAvd && !compatibility.compatible) {
+      androidInstanceLogger.debug(
+        'Android AVD %s is not reusable: %s',
+        emulatorName,
+        compatibility.reason
+      );
+      await adb.deleteAvd(emulatorName);
+    }
+
+    await recreateAvd({ emulatorConfig });
+
+    const generationAdbId = await startAndWaitForBoot({
+      emulatorName,
+      signal,
+      mode: 'clean-snapshot-generation',
+    });
+
+    logger.info('Saving Android emulator snapshot for %s...', emulatorName);
+    await adb.stopEmulator(generationAdbId);
+  } else {
+    logger.info('Using cached Android emulator %s...', emulatorName);
+  }
+
+  return startAndWaitForBoot({
+    emulatorName,
+    signal,
+    mode: 'snapshot-reuse',
+  });
+};
+
 export const getAndroidEmulatorPlatformInstance = async (
   config: AndroidPlatformConfig,
   harnessConfig: HarnessConfig,
   init: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDeviceEmulator(config.device);
-  const emulatorName = config.device.name;
+  const emulatorConfig = config.device;
+  const emulatorName = emulatorConfig.name;
+  const avdConfig = emulatorConfig.avd;
+  const avdCachingEnabled = resolveAvdCachingEnabled({
+    avd: avdConfig,
+    isInteractive: isInteractive(),
+  });
 
-  let adbId = await getAdbId(config.device);
+  let adbId = await getAdbId(emulatorConfig);
   let startedByHarness = false;
 
   androidInstanceLogger.debug(
     'resolved Android emulator %s with adb id %s',
-    config.device.name,
+    emulatorConfig.name,
     adbId ?? 'not-found'
   );
 
   if (!adbId) {
-    const avdConfig = config.device.avd;
-
     if (!avdConfig) {
-      throw new HarnessEmulatorConfigError(config.device.name);
+      throw new HarnessEmulatorConfigError(emulatorConfig.name);
     }
 
     await ensureAndroidEmulatorEnvironment(avdConfig.apiLevel);
 
-    if (!(await adb.hasAvd(config.device.name))) {
-      logger.info('Creating Android emulator %s...', emulatorName);
-      androidInstanceLogger.debug(
-        'creating Android AVD %s before startup',
-        config.device.name
-      );
-      await adb.createAvd({
-        name: config.device.name,
-        apiLevel: avdConfig.apiLevel,
-        profile: avdConfig.profile,
-        diskSize: avdConfig.diskSize,
-        heapSize: avdConfig.heapSize,
-      });
-    } else {
-      logger.info('Using existing Android emulator %s...', emulatorName);
-    }
+    adbId = avdCachingEnabled
+      ? await prepareCachedAvd({
+          emulatorConfig,
+          signal: init.signal,
+        })
+      : await (async () => {
+          if (!(await adb.hasAvd(emulatorConfig.name))) {
+            logger.info('Creating Android emulator %s...', emulatorName);
+            androidInstanceLogger.debug(
+              'creating Android AVD %s before startup',
+              emulatorConfig.name
+            );
+            await recreateAvd({ emulatorConfig });
+          } else {
+            logger.info('Using existing Android emulator %s...', emulatorName);
+          }
 
-    androidInstanceLogger.debug(
-      'starting Android emulator %s',
-      config.device.name
-    );
-    await adb.startEmulator(config.device.name);
-    adbId = await adb.waitForEmulator(config.device.name, init.signal);
+          androidInstanceLogger.debug(
+            'starting Android emulator %s',
+            emulatorConfig.name
+          );
+          return startAndWaitForBoot({
+            emulatorName: emulatorConfig.name,
+            signal: init.signal,
+          });
+        })();
+
     startedByHarness = true;
 
     androidInstanceLogger.debug(
       'Android emulator %s connected as %s',
-      config.device.name,
+      emulatorConfig.name,
       adbId
     );
-  } else if (config.device.avd) {
-    await ensureAndroidEmulatorEnvironment(config.device.avd.apiLevel);
+  } else if (emulatorConfig.avd) {
+    await ensureAndroidEmulatorEnvironment(emulatorConfig.avd.apiLevel);
   }
 
   if (!adbId) {
-    throw new DeviceNotFoundError(getDeviceName(config.device));
+    throw new DeviceNotFoundError(getDeviceName(emulatorConfig));
   }
 
   androidInstanceLogger.debug(
     'waiting for Android emulator %s to finish booting',
     adbId
   );
-  await adb.waitForBoot(adbId, init.signal);
 
   const isInstalled = await adb.isAppInstalled(adbId, config.bundleId);
 

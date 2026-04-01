@@ -2,7 +2,7 @@ import { type AndroidAppLaunchOptions } from '@react-native-harness/platforms';
 import { spawn, SubprocessError } from '@react-native-harness/tools';
 import { spawn as nodeSpawn } from 'node:child_process';
 import type { ChildProcessByStdio } from 'node:child_process';
-import { access } from 'node:fs/promises';
+import { access, rm } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
 import {
   ensureAndroidSdkPackages,
@@ -14,6 +14,10 @@ import {
   getRequiredAndroidSdkPackages,
   getSdkManagerBinaryPath,
 } from './environment.js';
+import {
+  getEmulatorStartupArgs,
+  type EmulatorBootMode,
+} from './emulator-startup.js';
 
 const wait = async (ms: number): Promise<void> => {
   await new Promise((resolve) => {
@@ -367,21 +371,34 @@ export const createAvd = async ({
   ]);
 };
 
-export const startEmulator = async (name: string): Promise<void> => {
+export const deleteAvd = async (name: string): Promise<void> => {
+  await rm(
+    `${
+      process.env.ANDROID_AVD_HOME ?? `${process.env.HOME}/.android/avd`
+    }/${name}.avd`,
+    {
+      force: true,
+      recursive: true,
+    }
+  );
+  await rm(
+    `${
+      process.env.ANDROID_AVD_HOME ?? `${process.env.HOME}/.android/avd`
+    }/${name}.ini`,
+    {
+      force: true,
+    }
+  );
+};
+
+export const startEmulator = async (
+  name: string,
+  mode: EmulatorBootMode = 'default-boot'
+): Promise<void> => {
   const emulatorBinaryPath = await ensureEmulatorInstalled();
   const childProcess = emulatorProcess.startDetachedProcess(
     emulatorBinaryPath,
-    [
-      `@${name}`,
-      '-no-snapshot-save',
-      '-no-window',
-      '-gpu',
-      'swiftshader_indirect',
-      '-noaudio',
-      '-no-boot-anim',
-      '-camera-back',
-      'none',
-    ]
+    getEmulatorStartupArgs(name, mode)
   );
 
   let stdout = '';
