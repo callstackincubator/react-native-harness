@@ -1,4 +1,5 @@
 import {
+  AppMonitor,
   AppNotInstalledError,
   CreateAppMonitorOptions,
   DeviceNotFoundError,
@@ -21,6 +22,14 @@ import {
   createIosSimulatorAppMonitor,
 } from './app-monitor.js';
 import { assertLibimobiledeviceInstalled } from './libimobiledevice.js';
+
+const createNoopAppMonitor = (): AppMonitor => ({
+  start: async () => {},
+  stop: async () => {},
+  dispose: async () => {},
+  addListener: () => {},
+  removeListener: () => {},
+});
 
 export const getAppleSimulatorPlatformInstance = async (
   config: ApplePlatformConfig,
@@ -100,7 +109,11 @@ export const getApplePhysicalDevicePlatformInstance = async (
   harnessConfig: HarnessConfig
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDevicePhysical(config.device);
-  await assertLibimobiledeviceInstalled();
+  const detectNativeCrashes = harnessConfig.detectNativeCrashes;
+
+  if (detectNativeCrashes) {
+    await assertLibimobiledeviceInstalled();
+  }
 
   if (harnessConfig.metroPort !== DEFAULT_METRO_PORT) {
     throw new Error(
@@ -153,12 +166,17 @@ export const getApplePhysicalDevicePlatformInstance = async (
     isAppRunning: async () => {
       return await devicectl.isAppRunning(deviceId, config.bundleId);
     },
-    createAppMonitor: (options?: CreateAppMonitorOptions) =>
-      createIosDeviceAppMonitor({
+    createAppMonitor: (options?: CreateAppMonitorOptions) => {
+      if (!detectNativeCrashes) {
+        return createNoopAppMonitor();
+      }
+
+      return createIosDeviceAppMonitor({
         deviceId,
         libimobiledeviceUdid: hardwareUdid,
         bundleId: config.bundleId,
         crashArtifactWriter: options?.crashArtifactWriter,
-      }),
+      });
+    },
   };
 };
