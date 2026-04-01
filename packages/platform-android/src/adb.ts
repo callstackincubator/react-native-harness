@@ -296,6 +296,10 @@ export const getShellProperty = async (
   return stdout.trim() || null;
 };
 
+const isTransientAdbShellFailure = (error: unknown): boolean => {
+  return error instanceof SubprocessError && error.exitCode === 1;
+};
+
 export type DeviceInfo = {
   manufacturer: string | null;
   model: string | null;
@@ -310,8 +314,16 @@ export const getDeviceInfo = async (
 };
 
 export const isBootCompleted = async (adbId: string): Promise<boolean> => {
-  const bootCompleted = await getShellProperty(adbId, 'sys.boot_completed');
-  return bootCompleted === '1';
+  try {
+    const bootCompleted = await getShellProperty(adbId, 'sys.boot_completed');
+    return bootCompleted === '1';
+  } catch (error) {
+    if (isTransientAdbShellFailure(error)) {
+      return false;
+    }
+
+    throw error;
+  }
 };
 
 export const stopEmulator = async (adbId: string): Promise<void> => {

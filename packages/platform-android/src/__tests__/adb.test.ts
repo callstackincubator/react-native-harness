@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SubprocessError } from '@react-native-harness/tools';
 import {
   createAvd,
   emulatorProcess,
@@ -322,5 +323,28 @@ describe('getStartAppArgs', () => {
     controller.abort(createAbortError());
 
     await expect(waitPromise).rejects.toBeInstanceOf(DOMException);
+  });
+
+  it('treats transient adb shell failures as not-yet-booted', async () => {
+    vi.useFakeTimers();
+    const spawnSpy = vi.spyOn(tools, 'spawn');
+    const transientShellError = Object.assign(new Error('adb shell failed'), {
+      exitCode: 1,
+    });
+    Object.setPrototypeOf(transientShellError, SubprocessError.prototype);
+
+    spawnSpy.mockRejectedValueOnce(transientShellError).mockResolvedValueOnce({
+      stdout: '1\n',
+    } as Awaited<ReturnType<typeof tools.spawn>>);
+
+    const waitPromise = waitForBoot(
+      'emulator-5554',
+      new AbortController().signal
+    );
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(waitPromise).resolves.toBeUndefined();
+    expect(spawnSpy).toHaveBeenCalledTimes(2);
   });
 });
