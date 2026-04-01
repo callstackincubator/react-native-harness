@@ -10,14 +10,26 @@ export const devicectl = async <TOutput>(
   args: string[]
 ): Promise<TOutput> => {
   const tempFile = join(tmpdir(), `devicectl-${randomUUID()}.json`);
+  const separatorIndex = args.indexOf('--');
+  const argsWithJsonOutput =
+    separatorIndex === -1
+      ? [...args, '--json-output', tempFile]
+      : [
+          ...args.slice(0, separatorIndex),
+          '--json-output',
+          tempFile,
+          ...args.slice(separatorIndex),
+        ];
 
   await spawn('xcrun', [
     'devicectl',
     command,
-    ...args,
-    '--json-output',
-    tempFile,
+    ...argsWithJsonOutput,
   ]);
+
+  if (!fs.existsSync(tempFile)) {
+    throw new Error(`devicectl did not produce JSON output at ${tempFile}`);
+  }
 
   const output = fs.readFileSync(tempFile, 'utf8');
   fs.unlinkSync(tempFile);
@@ -106,7 +118,11 @@ export const getDeviceCtlLaunchArgs = (
     args.push('--environment-variables', JSON.stringify(environment));
   }
 
-  args.push(bundleId, ...(options?.arguments ?? []));
+  args.push(bundleId);
+
+  if (options?.arguments?.length) {
+    args.push('--', ...options.arguments);
+  }
 
   return args;
 };
