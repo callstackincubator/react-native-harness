@@ -1,16 +1,11 @@
 import {
   Image,
-  type ImageSourcePropType,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-
-const logoImage =
-  require('../../assets/runner-logo.jpg') as ImageSourcePropType;
-const poweredByImage =
-  require('../../assets/powered-by.png') as ImageSourcePropType;
+import { CK_LOGO, POWERED_BY } from './images.js';
 
 type RunnerScreenProps = {
   title: string;
@@ -28,14 +23,14 @@ export const RunnerScreen = ({
       <StatusBar hidden={true} />
       <View style={styles.topSpacer} />
       <View style={styles.content}>
-        <Image source={logoImage} style={styles.logo} resizeMode="cover" />
+        <Image source={{ uri: CK_LOGO }} style={styles.logo} resizeMode="cover" />
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.statusText}>{statusText}</Text>
         {message ? <Text style={styles.message}>{message}</Text> : null}
       </View>
       <View style={styles.footer}>
         <Image
-          source={poweredByImage}
+          source={{ uri: POWERED_BY }}
           style={styles.poweredBy}
           resizeMode="contain"
         />
@@ -48,7 +43,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
-    backgroundColor: '#0a1628',
+    backgroundColor: '#fff',
     paddingVertical: 16,
   },
   topSpacer: {
@@ -69,14 +64,14 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 28,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#000',
     textAlign: 'center',
   },
   statusText: {
     marginTop: 12,
     fontSize: 16,
     fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.78)',
+    color: '#000',
     textAlign: 'center',
   },
   message: {
@@ -84,7 +79,7 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     fontSize: 14,
     lineHeight: 20,
-    color: 'rgba(255, 255, 255, 0.62)',
+    color: '#000',
     textAlign: 'center',
   },
   footer: {
