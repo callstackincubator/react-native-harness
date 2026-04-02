@@ -1,4 +1,5 @@
 import util from 'node:util';
+import pc from 'picocolors';
 
 let verbose = !!process.env.HARNESS_DEBUG;
 
@@ -18,6 +19,14 @@ export type HarnessLogger = {
 };
 
 const BASE_TAG = '[harness]';
+
+const INFO_TAG = pc.isColorSupported
+  ? pc.reset(pc.inverse(pc.bold(pc.magenta(' HARNESS '))))
+  : 'HARNESS';
+
+const ERROR_TAG = pc.isColorSupported
+  ? pc.reset(pc.inverse(pc.bold(pc.red(' HARNESS '))))
+  : 'HARNESS';
 
 const getTimestamp = (): string => new Date().toISOString();
 
@@ -43,14 +52,23 @@ const writeLog = (
   scopes: readonly string[],
   messages: Array<unknown>
 ) => {
-  const method =
-    level === 'warn'
-      ? console.warn
-      : level === 'error'
-        ? console.error
-        : level === 'debug'
-          ? console.debug
-          : console.info;
+  if (
+    !verbose &&
+    (level === 'info' || level === 'log' || level === 'success')
+  ) {
+    const output = util.format(...messages);
+    const tag = INFO_TAG;
+    process.stderr.write(`${tag} ${output}\n`);
+    return;
+  }
+
+  if (!verbose && level === 'error') {
+    const output = util.format(...messages);
+    process.stderr.write(`${ERROR_TAG} ${output}\n`);
+    return;
+  }
+
+  const method = level === 'warn' ? console.warn : console.debug;
   const output = util.format(...messages);
   const prefix = `${getTimestamp()} ${formatPrefix(scopes)}`;
   method(mapLines(output, prefix));

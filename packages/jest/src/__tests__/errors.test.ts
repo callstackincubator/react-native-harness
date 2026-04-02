@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { NativeCrashError } from '../errors.js';
+import { NativeCrashError, PlatformReadyTimeoutError } from '../errors.js';
+
+describe('PlatformReadyTimeoutError', () => {
+  it('includes the configured timeout and config hint', () => {
+    expect(new PlatformReadyTimeoutError(300000).message).toBe(
+      'The platform did not become ready within 300000ms. Increase "platformReadyTimeout" if your device, simulator, or emulator needs more time to start.'
+    );
+  });
+});
 
 describe('NativeCrashError', () => {
   it('formats the extracted stack trace in the error message', () => {
@@ -35,7 +43,9 @@ describe('NativeCrashError', () => {
       exceptionType: 'EXC_CRASH',
     });
 
-    expect(error.message).not.toContain('notify_get_state check indicated test daemon not ready');
+    expect(error.message).not.toContain(
+      'notify_get_state check indicated test daemon not ready'
+    );
     expect(error.message).toContain('Signal: SIGABRT');
     expect(error.message).toContain('Exception: EXC_CRASH');
     expect(error.message).toContain('Process: HarnessPlayground (pid 18007)');
@@ -54,9 +64,9 @@ describe('NativeCrashError', () => {
       stackTrace: [frame],
     });
 
-    expect(error.message.match(/MainActivity\.onCreate\(MainActivity\.kt:38\)/g)).toHaveLength(
-      1
-    );
+    expect(
+      error.message.match(/MainActivity\.onCreate\(MainActivity\.kt:38\)/g)
+    ).toHaveLength(1);
   });
 
   it('collapses the native crash stack header so jest does not reprint multiline messages', () => {
@@ -65,6 +75,8 @@ describe('NativeCrashError', () => {
       summary: ['line one', 'line two'].join('\n'),
     });
 
-    expect(error.stack).toBe('NativeCrashError: The native app crashed while preparing to run this test file.');
+    expect(error.stack).toBe(
+      'NativeCrashError: The native app crashed while preparing to run this test file.'
+    );
   });
 });

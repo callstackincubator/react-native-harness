@@ -110,6 +110,10 @@ export type HarnessPlatformRunner = {
   ) => Promise<AppCrashDetails | null>;
 };
 
+export type HarnessPlatformInitOptions = {
+  signal: AbortSignal;
+};
+
 export type HarnessPlatform<TConfig = Record<string, unknown>> = {
   name: string;
   config: TConfig;

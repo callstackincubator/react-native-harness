@@ -32,10 +32,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@react-native-harness/bundler-metro', async () => {
-  const actual =
-    await vi.importActual<typeof import('@react-native-harness/bundler-metro')>(
-      '@react-native-harness/bundler-metro'
-    );
+  const actual = await vi.importActual<
+    typeof import('@react-native-harness/bundler-metro')
+  >('@react-native-harness/bundler-metro');
 
   return {
     ...actual,
@@ -57,10 +56,9 @@ vi.mock('../logs.js', () => ({
 }));
 
 vi.mock('@react-native-harness/tools', async () => {
-  const actual =
-    await vi.importActual<typeof import('@react-native-harness/tools')>(
-      '@react-native-harness/tools'
-    );
+  const actual = await vi.importActual<
+    typeof import('@react-native-harness/tools')
+  >('@react-native-harness/tools');
 
   return {
     ...actual,
@@ -69,7 +67,7 @@ vi.mock('@react-native-harness/tools', async () => {
 });
 
 import { getHarness, waitForAppReady } from '../harness.js';
-import { StartupStallError } from '../errors.js';
+import { PlatformReadyTimeoutError, StartupStallError } from '../errors.js';
 
 const createBridgeServer = () => {
   const emitter = new EventEmitter();
@@ -186,13 +184,14 @@ const createHarnessConfig = (
     forwardClientLogs: false,
     maxAppRestarts: 2,
     metroPort: 8081,
+    platformReadyTimeout: 300_000,
     resetEnvironmentBetweenTestFiles: true,
     runners: [],
     unstable__enableMetroCache: false,
     unstable__skipAlreadyIncludedModules: false,
     webSocketPort: 3001,
     ...overrides,
-  }) as HarnessConfig;
+  } as HarnessConfig);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -301,6 +300,92 @@ describe('waitForAppReady', () => {
 });
 
 describe('getHarness', () => {
+  it('fails when the platform runner does not become ready within platformReadyTimeout', async () => {
+    const { serverBridge } = createBridgeServer();
+    const metroInstance = createMetroInstance();
+
+    mocks.getBridgeServer.mockResolvedValue(serverBridge);
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
+
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = vi.fn(
+      async () =>
+        await new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(new DOMException('The operation was aborted', 'AbortError'));
+          }, 20);
+        })
+    );
+
+    const platform: HarnessPlatform = {
+      config: {},
+      getResourceLockKey: () => 'ios:test-platform-ready-timeout',
+      name: 'ios',
+      platformId: 'ios',
+      runner: `data:text/javascript,${encodeURIComponent(
+        'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
+      )}`,
+    };
+
+    await expect(
+      getHarness(
+        createHarnessConfig({
+          platformReadyTimeout: 10,
+        }),
+        platform,
+        '/tmp/project'
+      )
+    ).rejects.toBeInstanceOf(PlatformReadyTimeoutError);
+  });
+
+  it('passes a platform init signal to the runner factory', async () => {
+    const { serverBridge } = createBridgeServer();
+    const appMonitor = createAppMonitor();
+    const platformInstance = createPlatformRunner({
+      createAppMonitor: () => appMonitor.appMonitor,
+    });
+    const metroInstance = createMetroInstance();
+
+    mocks.getBridgeServer.mockResolvedValue(serverBridge);
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
+
+    const runner = vi.fn(async () => platformInstance);
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = runner;
+
+    const platform: HarnessPlatform = {
+      config: {},
+      getResourceLockKey: () => 'ios:test-platform-init-signal',
+      name: 'ios',
+      platformId: 'ios',
+      runner: `data:text/javascript,${encodeURIComponent(
+        'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
+      )}`,
+    };
+
+    const harness = await getHarness(
+      createHarnessConfig(),
+      platform,
+      '/tmp/project'
+    );
+
+    expect(runner).toHaveBeenCalledWith(
+      platform.config,
+      expect.any(Object),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      })
+    );
+
+    await harness.dispose();
+  });
+
   it('routes ensureAppReady through the shared Metro startup helper', async () => {
     const { serverBridge, emitReady } = createBridgeServer();
     const appMonitor = createAppMonitor();
@@ -316,9 +401,7 @@ describe('getHarness', () => {
     mocks.waitForMetroBackedAppReady.mockImplementationOnce(
       async (options: WaitForMetroBackedAppReadyOptions) => {
         await options.startAttempt();
-        const readyPromise = options.waitForReady(
-          new AbortController().signal
-        );
+        const readyPromise = options.waitForReady(new AbortController().signal);
         emitReady();
         await readyPromise;
       }
@@ -347,7 +430,9 @@ describe('getHarness', () => {
     };
 
     const harness = await getHarness(
-      createHarnessConfig(),
+      createHarnessConfig({
+        bridgeTimeout: 1,
+      }),
       platform,
       '/tmp/project'
     );
@@ -382,9 +467,7 @@ describe('getHarness', () => {
     mocks.waitForMetroBackedAppReady.mockImplementationOnce(
       async (options: WaitForMetroBackedAppReadyOptions) => {
         await options.startAttempt();
-        const readyPromise = options.waitForReady(
-          new AbortController().signal
-        );
+        const readyPromise = options.waitForReady(new AbortController().signal);
         emitReady();
         await readyPromise;
       }
@@ -481,7 +564,25 @@ describe('plugins', () => {
           beforeCreation: (ctx) => {
             ctx.state.creationCount += 1;
             observedHooks.push(
-              `beforeCreation:${ctx.platform.platformId}:${ctx.appLaunchOptions == null ? 'no-launch-options' : 'launch-options'}`
+              `beforeCreation:${ctx.platform.platformId}:${
+                ctx.appLaunchOptions == null
+                  ? 'no-launch-options'
+                  : 'launch-options'
+              }`
+            );
+          },
+          beforeRun: (ctx) => {
+            observedHooks.push(
+              `beforeRun:${ctx.platform.platformId}:${
+                ctx.appLaunchOptions == null
+                  ? 'no-launch-options'
+                  : 'launch-options'
+              }`
+            );
+          },
+          afterRun: (ctx) => {
+            observedHooks.push(
+              `afterRun:${ctx.state.creationCount}:${ctx.reason}`
             );
           },
           beforeDispose: (ctx) => {
@@ -492,7 +593,9 @@ describe('plugins', () => {
         },
         runtime: {
           ready: (ctx) => {
-            observedHooks.push(`runtime.ready:${ctx.runId}:${ctx.device.platform}`);
+            observedHooks.push(
+              `runtime.ready:${ctx.runId}:${ctx.device.platform}`
+            );
           },
           disconnected: (ctx) => {
             observedHooks.push(`runtime.disconnected:${ctx.reason}`);
@@ -556,9 +659,11 @@ describe('plugins', () => {
 
     expect(observedHooks).toEqual([
       'beforeCreation:ios:launch-options',
+      'beforeRun:ios:launch-options',
       'runtime.ready:run-1:ios',
       'collection.started:example.harness.ts',
       'runtime.disconnected:bridge-disconnected',
+      'afterRun:1:normal',
       'beforeDispose:1:normal',
     ]);
   });

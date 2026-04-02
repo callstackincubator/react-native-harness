@@ -43,18 +43,6 @@ runs:
         INPUT_PROJECTROOT: ${{ inputs.projectRoot }}
       run: |
         node ${{ github.action_path }}/../shared/index.cjs
-    - uses: futureware-tech/simulator-action@v4
-      with:
-        model: ${{ fromJson(steps.load-config.outputs.config).config.device.name }}
-        os: iOS
-        os_version: ${{ fromJson(steps.load-config.outputs.config).config.device.systemVersion }}
-        wait_for_boot: true
-        erase_before_boot: false
-    - name: Install app
-      shell: bash
-      working-directory: ${{ inputs.projectRoot }}
-      run: |
-        xcrun simctl install booted ${{ inputs.app }}
     - name: Detect Package Manager
       id: detect-pm
       shell: bash
@@ -83,47 +71,19 @@ runs:
         PRE_RUN_HOOK: ${{ inputs.preRunHook }}
         AFTER_RUN_HOOK: ${{ inputs.afterRunHook }}
         HARNESS_RUNNER: ${{ inputs.runner }}
+        HARNESS_APP_PATH: ${{ inputs.app }}
       run: |
         export HARNESS_PROJECT_ROOT="$PWD"
-
-        if [ -n "$PRE_RUN_HOOK" ]; then
-          pre_hook_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-pre-run.XXXXXX.sh")"
-          trap 'rm -f "$pre_hook_file"' EXIT
-          printf '%s\n' "$PRE_RUN_HOOK" > "$pre_hook_file"
-          chmod +x "$pre_hook_file"
-          bash "$pre_hook_file"
-          rm -f "$pre_hook_file"
-          trap - EXIT
-        fi
 
         set +e
         ${{ steps.detect-pm.outputs.runner }}react-native-harness --harnessRunner ${{ inputs.runner }} ${{ inputs.harnessArgs }}
         harness_exit_code=$?
         set -e
 
-        export HARNESS_EXIT_CODE="$harness_exit_code"
-        after_run_exit_code=0
-        if [ -n "$AFTER_RUN_HOOK" ]; then
-          after_hook_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-after-run.XXXXXX.sh")"
-          trap 'rm -f "$after_hook_file"' EXIT
-          printf '%s\n' "$AFTER_RUN_HOOK" > "$after_hook_file"
-          chmod +x "$after_hook_file"
-          set +e
-          bash "$after_hook_file"
-          after_run_exit_code=$?
-          set -e
-          rm -f "$after_hook_file"
-          trap - EXIT
-        fi
-
         echo "harness_exit_code=$harness_exit_code" >> "$GITHUB_OUTPUT"
 
         if [ "$harness_exit_code" -ne 0 ]; then
           exit "$harness_exit_code"
-        fi
-
-        if [ "$after_run_exit_code" -ne 0 ]; then
-          exit "$after_run_exit_code"
         fi
     - name: Upload visual test artifacts
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
