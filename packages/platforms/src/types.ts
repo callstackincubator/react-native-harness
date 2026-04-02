@@ -119,7 +119,7 @@ export type HarnessPlatform<TConfig = Record<string, unknown>> = {
   config: TConfig;
   runner: string;
   platformId: string;
-  getResourceLockKey: () => string | Promise<string>;
+  getResourceLockKey?: () => string | Promise<string>;
 };
 
 export type AndroidEmulatorRunTarget = {

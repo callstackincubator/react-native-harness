@@ -60,22 +60,6 @@ const wait = async (ms: number): Promise<void> => {
 const createAbortError = () =>
   new DOMException('The operation was aborted', 'AbortError');
 
-const waitForAbort = (signal: AbortSignal): Promise<never> => {
-  if (signal.aborted) {
-    return Promise.reject(signal.reason ?? createAbortError());
-  }
-
-  return new Promise((_, reject) => {
-    signal.addEventListener(
-      'abort',
-      () => {
-        reject(signal.reason ?? createAbortError());
-      },
-      { once: true }
-    );
-  });
-};
-
 export const hashResourceLockKey = (key: string): string => {
   return crypto.createHash('sha256').update(key).digest('hex');
 };
@@ -168,6 +152,40 @@ const isMetadataStale = (
   return now - metadata.heartbeatAt > staleLockTimeoutMs;
 };
 
+const isQueuedTicketStale = (
+  metadata: ResourceLockMetadata,
+  isProcessActive: (pid: number) => boolean
+): boolean => {
+  return !isProcessActive(metadata.pid);
+};
+
+const waitForPollInterval = (
+  ms: number,
+  signal?: AbortSignal
+): Promise<void> => {
+  if (!signal) {
+    return wait(ms);
+  }
+
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? createAbortError());
+  }
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      reject(signal.reason ?? createAbortError());
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+};
+
 const readQueueTickets = async (
   queueDir: string
 ): Promise<ResourceLockMetadata[]> => {
@@ -194,28 +212,18 @@ const readQueueTickets = async (
 
 const cleanupQueue = async (options: {
   paths: LockPaths;
-  staleLockTimeoutMs: number;
-  now: number;
   currentTicketId: string;
   logger: HarnessLogger;
   isProcessActive: (pid: number) => boolean;
 }): Promise<ResourceLockMetadata[]> => {
-  const {
-    paths,
-    staleLockTimeoutMs,
-    now,
-    currentTicketId,
-    logger,
-    isProcessActive,
-  } = options;
+  const { paths, currentTicketId, logger, isProcessActive } = options;
   const tickets = await readQueueTickets(paths.queueDir);
   const activeTickets: ResourceLockMetadata[] = [];
 
   for (const ticket of tickets) {
     const isCurrentTicket = ticket.ticketId === currentTicketId;
     const isStale =
-      !isCurrentTicket &&
-      isMetadataStale(ticket, now, staleLockTimeoutMs, isProcessActive);
+      !isCurrentTicket && isQueuedTicketStale(ticket, isProcessActive);
 
     if (isStale) {
       logger.debug(
@@ -378,8 +386,6 @@ export const createResourceLockManager = (
           const now = Date.now();
           const activeTickets = await cleanupQueue({
             paths,
-            staleLockTimeoutMs,
-            now,
             currentTicketId: ticketId,
             logger: scopedLogger,
             isProcessActive,
@@ -433,12 +439,7 @@ export const createResourceLockManager = (
             ownIndex + 1
           );
 
-          await Promise.race([
-            wait(pollIntervalMs),
-            acquireOptions.signal
-              ? waitForAbort(acquireOptions.signal)
-              : new Promise<never>(() => undefined),
-          ]);
+          await waitForPollInterval(pollIntervalMs, acquireOptions.signal);
         }
       } catch (error) {
         await release();

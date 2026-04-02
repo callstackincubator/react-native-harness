@@ -386,6 +386,41 @@ describe('getHarness', () => {
     await harness.dispose();
   });
 
+  it('falls back to a default resource lock key for platforms without getResourceLockKey', async () => {
+    const { serverBridge } = createBridgeServer();
+    const appMonitor = createAppMonitor();
+    const platformInstance = createPlatformRunner({
+      createAppMonitor: () => appMonitor.appMonitor,
+    });
+    const metroInstance = createMetroInstance();
+
+    mocks.getBridgeServer.mockResolvedValue(serverBridge);
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
+
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = vi.fn(async () => platformInstance);
+
+    const platform: HarnessPlatform = {
+      config: {},
+      name: 'legacy-ios',
+      platformId: 'ios',
+      runner: `data:text/javascript,${encodeURIComponent(
+        'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
+      )}`,
+    };
+
+    const harness = await getHarness(
+      createHarnessConfig(),
+      platform,
+      '/tmp/project'
+    );
+
+    await harness.dispose();
+  });
+
   it('routes ensureAppReady through the shared Metro startup helper', async () => {
     const { serverBridge, emitReady } = createBridgeServer();
     const appMonitor = createAppMonitor();

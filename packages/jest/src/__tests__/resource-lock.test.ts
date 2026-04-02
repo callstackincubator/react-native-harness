@@ -81,6 +81,26 @@ describe('resource lock manager', () => {
     await firstLease.release();
   });
 
+  it('keeps queued tickets alive while the waiting process is still active', async () => {
+    const manager = createResourceLockManager({
+      rootDir,
+      pollIntervalMs: 5,
+      heartbeatIntervalMs: 20,
+      staleLockTimeoutMs: 30,
+      isProcessActive: () => true,
+    });
+    const key = 'ios:simulator:iPhone 17 Pro:26.2';
+    const firstLease = await manager.acquire(key);
+
+    const secondAcquire = manager.acquire(key);
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    await firstLease.release();
+    const secondLease = await secondAcquire;
+    await secondLease.release();
+  });
+
   it('reclaims a stale owner before granting the lock', async () => {
     const manager = createResourceLockManager({
       rootDir,

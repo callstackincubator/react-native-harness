@@ -99,6 +99,9 @@ export const maybeLogMetroCacheReuse = (
 const createAbortError = () =>
   new DOMException('The operation was aborted', 'AbortError');
 
+const getDefaultResourceLockKey = (platform: HarnessPlatform): string =>
+  `${platform.platformId}:${platform.name}`;
+
 const waitForAbort = (signal: AbortSignal): Promise<never> => {
   if (signal.aborted) {
     return Promise.reject(signal.reason ?? createAbortError());
@@ -243,7 +246,8 @@ const getHarnessInternal = async (
     platform.name,
     platform.platformId
   );
-  const resourceLockKey = await platform.getResourceLockKey();
+  const resourceLockKey = await (platform.getResourceLockKey?.() ??
+    getDefaultResourceLockKey(platform));
   let didWaitForResourceLock = false;
   let lastStillWaitingLogAt = 0;
   const resourceLease = await resourceLockManager.acquire(resourceLockKey, {
