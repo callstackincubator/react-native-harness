@@ -8,6 +8,8 @@ export const webPlatform = (
   config,
   runner: import.meta.resolve('./runner.js'),
   platformId: 'web',
+  getResourceLockKey: () =>
+    `web:browser:${config.browser.channel ?? config.browser.type}`,
 });
 
 export const chromium = (

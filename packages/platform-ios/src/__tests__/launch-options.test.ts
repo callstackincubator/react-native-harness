@@ -35,6 +35,7 @@ describe('Apple app launch options', () => {
       '--environment-variables',
       '{"FEATURE_X":"1"}',
       'com.example.app',
+      '--',
       '--mode=test',
       '--retry=1',
     ]);

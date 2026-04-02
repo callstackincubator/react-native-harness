@@ -52,6 +52,11 @@ export const ConfigSchema = z
       .min(1000, 'Bridge timeout must be at least 1 second')
       .default(60000),
 
+    platformReadyTimeout: z
+      .number()
+      .min(1000, 'Platform ready timeout must be at least 1 second')
+      .default(300000),
+
     bundleStartTimeout: z
       .number()
       .min(1000, 'Bundle start timeout must be at least 1 second')
@@ -77,7 +82,7 @@ export const ConfigSchema = z
       .default(false)
       .describe(
         'Disable view flattening in React Native. This will set collapsable={true} for all View components ' +
-        'to ensure they are not flattened by the native layout engine.'
+          'to ensure they are not flattened by the native layout engine.'
       ),
 
     coverage: z
@@ -87,9 +92,9 @@ export const ConfigSchema = z
           .optional()
           .describe(
             'Root directory for coverage instrumentation in monorepo setups. ' +
-            'Specifies the directory from which coverage data should be collected. ' +
-            'Use ".." for create-react-native-library projects where tests run from example/ ' +
-            "but source files are in parent directory. Passed to babel-plugin-istanbul's cwd option."
+              'Specifies the directory from which coverage data should be collected. ' +
+              'Use ".." for create-react-native-library projects where tests run from example/ ' +
+              "but source files are in parent directory. Passed to babel-plugin-istanbul's cwd option."
           ),
       })
       .optional(),
@@ -100,7 +105,7 @@ export const ConfigSchema = z
       .default(false)
       .describe(
         'Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app to the terminal. ' +
-        'When enabled, all console output from your app will be displayed in the test runner terminal with styled level indicators (log, warn, error).'
+          'When enabled, all console output from your app will be displayed in the test runner terminal with styled level indicators (log, warn, error).'
       ),
 
     // Deprecated property - used for migration detection

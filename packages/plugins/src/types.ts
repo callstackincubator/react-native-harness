@@ -43,7 +43,7 @@ export type HarnessBaseHookContext<
   TState extends object,
   TConfig,
   TRunner extends HarnessPlatform,
-  TName extends string,
+  TName extends string
 > = {
   plugin: {
     name: string;
@@ -62,7 +62,7 @@ export type HarnessBaseHookContext<
 export type HarnessBeforeCreationContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<
   TState,
   TConfig,
@@ -75,7 +75,7 @@ export type HarnessBeforeCreationContext<
 export type HarnessBeforeDisposeContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<
   TState,
   TConfig,
@@ -89,10 +89,30 @@ export type HarnessBeforeDisposeContext<
   error?: unknown;
 };
 
+export type HarnessBeforeRunContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'harness:before-run'> & {
+  appLaunchOptions?: AppLaunchOptions;
+};
+
+export type HarnessAfterRunContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'harness:after-run'> & {
+  runId?: string;
+  reason?: 'normal' | 'abort' | 'error';
+  summary?: HarnessRunSummary;
+  status?: HarnessRunStatus;
+  error?: unknown;
+};
+
 export type RunStartedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<TState, TConfig, TRunner, 'run:started'> & {
   runId: string;
   startTime: number;
@@ -104,7 +124,7 @@ export type RunStartedContext<
 export type RunFinishedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<TState, TConfig, TRunner, 'run:finished'> & {
   runId: string;
   startTime: number;
@@ -118,7 +138,7 @@ export type RunFinishedContext<
 export type RuntimeReadyContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<TState, TConfig, TRunner, 'runtime:ready'> & {
   runId: string;
   device: DeviceDescriptor;
@@ -127,13 +147,8 @@ export type RuntimeReadyContext<
 export type RuntimeDisconnectedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
-> = HarnessBaseHookContext<
-  TState,
-  TConfig,
-  TRunner,
-  'runtime:disconnected'
-> & {
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'runtime:disconnected'> & {
   runId: string;
   reason?: string;
 };
@@ -141,13 +156,8 @@ export type RuntimeDisconnectedContext<
 export type MetroInitializedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
-> = HarnessBaseHookContext<
-  TState,
-  TConfig,
-  TRunner,
-  'metro:initialized'
-> & {
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'metro:initialized'> & {
   runId: string;
   port: number;
   host?: string;
@@ -158,13 +168,8 @@ export type MetroBundleTarget = 'module' | 'setupFile';
 export type MetroBundleStartedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
-> = HarnessBaseHookContext<
-  TState,
-  TConfig,
-  TRunner,
-  'metro:bundle-started'
-> & {
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'metro:bundle-started'> & {
   runId: string;
   target: MetroBundleTarget;
   file: string;
@@ -174,7 +179,7 @@ export type MetroBundleStartedContext<
 export type MetroBundleFinishedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<
   TState,
   TConfig,
@@ -191,13 +196,8 @@ export type MetroBundleFinishedContext<
 export type MetroBundleFailedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
-> = HarnessBaseHookContext<
-  TState,
-  TConfig,
-  TRunner,
-  'metro:bundle-failed'
-> & {
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'metro:bundle-failed'> & {
   runId: string;
   target: MetroBundleTarget;
   file: string;
@@ -220,13 +220,8 @@ export type MetroClientLogLevel =
 export type MetroClientLogContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
-> = HarnessBaseHookContext<
-  TState,
-  TConfig,
-  TRunner,
-  'metro:client-log'
-> & {
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'metro:client-log'> & {
   runId: string;
   level: MetroClientLogLevel;
   data: unknown[];
@@ -235,7 +230,7 @@ export type MetroClientLogContext<
 export type AppStartedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<TState, TConfig, TRunner, 'app:started'> & {
   runId: string;
   testFile?: string;
@@ -247,7 +242,7 @@ export type AppStartedContext<
 export type AppExitedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<TState, TConfig, TRunner, 'app:exited'> & {
   runId: string;
   testFile?: string;
@@ -261,13 +256,8 @@ export type AppExitedContext<
 export type AppPossibleCrashContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
-> = HarnessBaseHookContext<
-  TState,
-  TConfig,
-  TRunner,
-  'app:possible-crash'
-> & {
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'app:possible-crash'> & {
   runId: string;
   testFile?: string;
   pid?: number;
@@ -280,13 +270,8 @@ export type AppPossibleCrashContext<
 export type CollectionStartedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
-> = HarnessBaseHookContext<
-  TState,
-  TConfig,
-  TRunner,
-  'collection:started'
-> & {
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'collection:started'> & {
   runId: string;
   file: string;
 };
@@ -294,13 +279,8 @@ export type CollectionStartedContext<
 export type CollectionFinishedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
-> = HarnessBaseHookContext<
-  TState,
-  TConfig,
-  TRunner,
-  'collection:finished'
-> & {
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'collection:finished'> & {
   runId: string;
   file: string;
   duration: number;
@@ -310,13 +290,8 @@ export type CollectionFinishedContext<
 export type TestFileStartedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
-> = HarnessBaseHookContext<
-  TState,
-  TConfig,
-  TRunner,
-  'test-file:started'
-> & {
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'test-file:started'> & {
   runId: string;
   file: string;
 };
@@ -324,13 +299,8 @@ export type TestFileStartedContext<
 export type TestFileFinishedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
-> = HarnessBaseHookContext<
-  TState,
-  TConfig,
-  TRunner,
-  'test-file:finished'
-> & {
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'test-file:finished'> & {
   runId: string;
   file: string;
   duration: number;
@@ -341,7 +311,7 @@ export type TestFileFinishedContext<
 export type SuiteStartedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<TState, TConfig, TRunner, 'suite:started'> & {
   runId: string;
   file: string;
@@ -351,7 +321,7 @@ export type SuiteStartedContext<
 export type SuiteFinishedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<TState, TConfig, TRunner, 'suite:finished'> & {
   runId: string;
   file: string;
@@ -364,7 +334,7 @@ export type SuiteFinishedContext<
 export type TestStartedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<TState, TConfig, TRunner, 'test:started'> & {
   runId: string;
   file: string;
@@ -375,7 +345,7 @@ export type TestStartedContext<
 export type TestFinishedContext<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<TState, TConfig, TRunner, 'test:finished'> & {
   runId: string;
   file: string;
@@ -389,7 +359,7 @@ export type TestFinishedContext<
 export type FlatHarnessHookContexts<
   TState extends object,
   TConfig,
-  TRunner extends HarnessPlatform,
+  TRunner extends HarnessPlatform
 > = {
   'harness:before-creation': HarnessBeforeCreationContext<
     TState,
@@ -401,30 +371,16 @@ export type FlatHarnessHookContexts<
     TConfig,
     TRunner
   >;
+  'harness:before-run': HarnessBeforeRunContext<TState, TConfig, TRunner>;
+  'harness:after-run': HarnessAfterRunContext<TState, TConfig, TRunner>;
   'run:started': RunStartedContext<TState, TConfig, TRunner>;
   'run:finished': RunFinishedContext<TState, TConfig, TRunner>;
   'runtime:ready': RuntimeReadyContext<TState, TConfig, TRunner>;
-  'runtime:disconnected': RuntimeDisconnectedContext<
-    TState,
-    TConfig,
-    TRunner
-  >;
+  'runtime:disconnected': RuntimeDisconnectedContext<TState, TConfig, TRunner>;
   'metro:initialized': MetroInitializedContext<TState, TConfig, TRunner>;
-  'metro:bundle-started': MetroBundleStartedContext<
-    TState,
-    TConfig,
-    TRunner
-  >;
-  'metro:bundle-finished': MetroBundleFinishedContext<
-    TState,
-    TConfig,
-    TRunner
-  >;
-  'metro:bundle-failed': MetroBundleFailedContext<
-    TState,
-    TConfig,
-    TRunner
-  >;
+  'metro:bundle-started': MetroBundleStartedContext<TState, TConfig, TRunner>;
+  'metro:bundle-finished': MetroBundleFinishedContext<TState, TConfig, TRunner>;
+  'metro:bundle-failed': MetroBundleFailedContext<TState, TConfig, TRunner>;
   'metro:client-log': MetroClientLogContext<TState, TConfig, TRunner>;
   'app:started': AppStartedContext<TState, TConfig, TRunner>;
   'app:exited': AppExitedContext<TState, TConfig, TRunner>;
@@ -450,11 +406,17 @@ export type HarnessHookHandler<TContext> = (ctx: TContext) => Awaitable<void>;
 export type HarnessPluginHooks<
   TState extends object = Record<string, never>,
   TConfig = unknown,
-  TRunner extends HarnessPlatform = HarnessPlatform,
+  TRunner extends HarnessPlatform = HarnessPlatform
 > = {
   harness?: {
     beforeCreation?: HarnessHookHandler<
       HarnessBeforeCreationContext<TState, TConfig, TRunner>
+    >;
+    beforeRun?: HarnessHookHandler<
+      HarnessBeforeRunContext<TState, TConfig, TRunner>
+    >;
+    afterRun?: HarnessHookHandler<
+      HarnessAfterRunContext<TState, TConfig, TRunner>
     >;
     beforeDispose?: HarnessHookHandler<
       HarnessBeforeDisposeContext<TState, TConfig, TRunner>
@@ -462,14 +424,10 @@ export type HarnessPluginHooks<
   };
   run?: {
     started?: HarnessHookHandler<RunStartedContext<TState, TConfig, TRunner>>;
-    finished?: HarnessHookHandler<
-      RunFinishedContext<TState, TConfig, TRunner>
-    >;
+    finished?: HarnessHookHandler<RunFinishedContext<TState, TConfig, TRunner>>;
   };
   runtime?: {
-    ready?: HarnessHookHandler<
-      RuntimeReadyContext<TState, TConfig, TRunner>
-    >;
+    ready?: HarnessHookHandler<RuntimeReadyContext<TState, TConfig, TRunner>>;
     disconnected?: HarnessHookHandler<
       RuntimeDisconnectedContext<TState, TConfig, TRunner>
     >;
@@ -531,7 +489,7 @@ export type HarnessPluginHooks<
 export type HarnessPlugin<
   TState extends object = Record<string, never>,
   TConfig = unknown,
-  TRunner extends HarnessPlatform = HarnessPlatform,
+  TRunner extends HarnessPlatform = HarnessPlatform
 > = {
   name: string;
   hooks?: HarnessPluginHooks<TState, TConfig, TRunner>;
@@ -540,6 +498,8 @@ export type HarnessPlugin<
 
 export const HARNESS_HOOKS = [
   { flatName: 'harness:before-creation', path: ['harness', 'beforeCreation'] },
+  { flatName: 'harness:before-run', path: ['harness', 'beforeRun'] },
+  { flatName: 'harness:after-run', path: ['harness', 'afterRun'] },
   { flatName: 'harness:before-dispose', path: ['harness', 'beforeDispose'] },
   { flatName: 'run:started', path: ['run', 'started'] },
   { flatName: 'run:finished', path: ['run', 'finished'] },

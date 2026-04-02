@@ -22,9 +22,6 @@
       "path": "../tools/tsconfig.lib.json"
     },
     {
-      "path": "../bridge/tsconfig.lib.json"
-    },
-    {
       "path": "../babel-preset/tsconfig.lib.json"
     }
   ]

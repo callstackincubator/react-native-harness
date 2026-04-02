@@ -1,4 +1,7 @@
-import { raceAbortSignals, withAbortTimeout } from '@react-native-harness/tools';
+import {
+  raceAbortSignals,
+  withAbortTimeout,
+} from '@react-native-harness/tools';
 import { StartupStallError } from './errors.js';
 import type { ReportableEvent } from './reporter.js';
 import type { MetroInstance } from './types.js';
@@ -6,8 +9,6 @@ import type { MetroInstance } from './types.js';
 type WaitForBundleRequestOptions = {
   events: MetroInstance['events'];
   platformId: string;
-  timeoutMs: number;
-  signal: AbortSignal;
   initialPrewarmSeen?: boolean;
 };
 
@@ -15,9 +16,18 @@ type BundleRequestObservation = {
   sawPrewarmRequest: boolean;
 };
 
+type BundleRequestObserver = {
+  sawPrewarmRequest: () => boolean;
+  hasSeenAppRequest: () => boolean;
+  waitForAppRequest: () => Promise<BundleRequestObservation>;
+  dispose: () => void;
+};
+
 class ReadyTimeoutError extends Error {
   constructor() {
-    super('Timed out waiting for the app to become ready after Metro bundling.');
+    super(
+      'Timed out waiting for the app to become ready after Metro bundling.'
+    );
     this.name = 'ReadyTimeoutError';
   }
 }
@@ -47,61 +57,90 @@ const isAbortError = (error: unknown): error is DOMException => {
   return error instanceof DOMException && error.name === 'AbortError';
 };
 
-const waitForBundleRequest = async ({
+const observeBundleRequest = ({
   events,
   platformId,
+  initialPrewarmSeen = false,
+}: WaitForBundleRequestOptions): BundleRequestObserver => {
+  let sawPrewarmRequest = initialPrewarmSeen;
+  let sawAppRequest = false;
+  let settled = false;
+
+  let resolvePromise!: (value: BundleRequestObservation) => void;
+  const appRequestPromise = new Promise<BundleRequestObservation>((resolve) => {
+    resolvePromise = resolve;
+  });
+
+  const resolveOnce = () => {
+    if (settled) {
+      return;
+    }
+
+    settled = true;
+    resolvePromise({
+      sawPrewarmRequest,
+    });
+  };
+
+  const onMetroEvent = (event: ReportableEvent) => {
+    if (event.type !== 'bundle_request_observed') {
+      return;
+    }
+
+    if (event.requestKind === 'prewarm') {
+      sawPrewarmRequest = true;
+      return;
+    }
+
+    if (event.requestKind === 'app' && event.platform === platformId) {
+      sawAppRequest = true;
+      resolveOnce();
+    }
+  };
+
+  events.addListener(onMetroEvent);
+
+  return {
+    sawPrewarmRequest: () => sawPrewarmRequest,
+    hasSeenAppRequest: () => sawAppRequest,
+    waitForAppRequest: async () => await appRequestPromise,
+    dispose: () => {
+      events.removeListener(onMetroEvent);
+    },
+  };
+};
+
+const waitForBundleRequestTimeout = async ({
   timeoutMs,
   signal,
-  initialPrewarmSeen = false,
-}: WaitForBundleRequestOptions): Promise<BundleRequestObservation> => {
-  let sawPrewarmRequest = initialPrewarmSeen;
+  sawPrewarmRequest,
+}: {
+  timeoutMs: number;
+  signal: AbortSignal;
+  sawPrewarmRequest: () => boolean;
+}): Promise<never> => {
+  const timeoutSignal = withAbortTimeout(signal, timeoutMs);
 
-  return await new Promise<BundleRequestObservation>((resolve, reject) => {
-    const requestSignal = withAbortTimeout(signal, timeoutMs);
-
+  return await new Promise<never>((_, reject) => {
     const cleanup = () => {
-      events.removeListener(onMetroEvent);
-      requestSignal.removeEventListener('abort', onAbort);
-    };
-
-    const resolveOnce = () => {
-      cleanup();
-      resolve({
-        sawPrewarmRequest,
-      });
-    };
-
-    const rejectOnce = (error: unknown) => {
-      cleanup();
-      reject(error);
+      timeoutSignal.removeEventListener('abort', onAbort);
     };
 
     const onAbort = () => {
+      cleanup();
+
       if (signal.aborted) {
-        rejectOnce(signal.reason ?? new DOMException('The operation was aborted', 'AbortError'));
+        reject(
+          signal.reason ??
+            new DOMException('The operation was aborted', 'AbortError')
+        );
         return;
       }
 
-      rejectOnce(new BundleRequestTimeoutError(sawPrewarmRequest));
+      reject(new BundleRequestTimeoutError(sawPrewarmRequest()));
     };
 
-    const onMetroEvent = (event: ReportableEvent) => {
-      if (event.type !== 'bundle_request_observed') {
-        return;
-      }
-
-      if (event.requestKind === 'prewarm') {
-        sawPrewarmRequest = true;
-        return;
-      }
-
-      if (event.requestKind === 'app' && event.platform === platformId) {
-        resolveOnce();
-      }
-    };
-
-    events.addListener(onMetroEvent);
-    requestSignal.addEventListener('abort', onAbort, { once: true });
+    timeoutSignal.addEventListener('abort', onAbort, { once: true });
   });
 };
 
@@ -112,7 +151,8 @@ const waitForReadyAfterBundleRequest = async (options: {
   readyPromise: Promise<void>;
   cancelReadyWait: () => void;
 }): Promise<void> => {
-  const { events, readyTimeout, signal, readyPromise, cancelReadyWait } = options;
+  const { events, readyTimeout, signal, readyPromise, cancelReadyWait } =
+    options;
 
   return await new Promise<void>((resolve, reject) => {
     let bundlingInProgress = false;
@@ -161,7 +201,10 @@ const waitForReadyAfterBundleRequest = async (options: {
     };
 
     const onAbort = () => {
-      rejectOnce(signal.reason ?? new DOMException('The operation was aborted', 'AbortError'));
+      rejectOnce(
+        signal.reason ??
+          new DOMException('The operation was aborted', 'AbortError')
+      );
     };
 
     const onMetroEvent = (event: ReportableEvent) => {
@@ -190,13 +233,11 @@ const waitForReadyAfterBundleRequest = async (options: {
         resolveOnce();
       })
       .catch((error) => {
-        if (
-          error instanceof DOMException &&
-          error.name === 'AbortError'
-        ) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
           if (signal.aborted) {
             rejectOnce(
-              signal.reason ?? new DOMException('The operation was aborted', 'AbortError')
+              signal.reason ??
+                new DOMException('The operation was aborted', 'AbortError')
             );
           }
           return;
@@ -248,27 +289,35 @@ export const waitForMetroBackedAppReady = async ({
     const attemptController = new AbortController();
     const attemptSignal = raceAbortSignals([signal, attemptController.signal]);
     const crashPromise = waitForCrash(attemptSignal);
+    void crashPromise.catch(() => undefined);
     const readyController = new AbortController();
     const readyPromise = waitForReady(
       raceAbortSignals([attemptSignal, readyController.signal])
     );
+    void readyPromise.catch(() => undefined);
+    const bundleRequestObserver = observeBundleRequest({
+      events: metro.events,
+      platformId,
+      initialPrewarmSeen: sawPrewarmRequest,
+    });
 
     try {
-      const bundleRequestPromise = waitForBundleRequest({
-        events: metro.events,
-        platformId,
-        timeoutMs: bundleStartTimeout,
-        signal: attemptSignal,
-        initialPrewarmSeen: sawPrewarmRequest,
-      });
-
       await startAttempt();
 
-      const bundleRequestResult = await Promise.race([
-        bundleRequestPromise,
-        crashPromise,
-      ]);
-      sawPrewarmRequest = bundleRequestResult.sawPrewarmRequest;
+      if (!bundleRequestObserver.hasSeenAppRequest()) {
+        const bundleRequestResult = await Promise.race([
+          bundleRequestObserver.waitForAppRequest(),
+          waitForBundleRequestTimeout({
+            timeoutMs: bundleStartTimeout,
+            signal: attemptSignal,
+            sawPrewarmRequest: bundleRequestObserver.sawPrewarmRequest,
+          }),
+          crashPromise,
+        ]);
+        sawPrewarmRequest = bundleRequestResult.sawPrewarmRequest;
+      } else {
+        sawPrewarmRequest = bundleRequestObserver.sawPrewarmRequest();
+      }
 
       const readyAfterBundleRequestPromise = waitForReadyAfterBundleRequest({
         events: metro.events,
@@ -282,10 +331,12 @@ export const waitForMetroBackedAppReady = async ({
         },
       });
       await Promise.race([readyAfterBundleRequestPromise, crashPromise]);
+      bundleRequestObserver.dispose();
       attemptController.abort();
       onAttemptReset?.();
       return;
     } catch (error) {
+      bundleRequestObserver.dispose();
       readyController.abort(
         new DOMException('The operation was aborted', 'AbortError')
       );

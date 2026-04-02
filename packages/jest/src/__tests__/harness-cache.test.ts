@@ -24,6 +24,7 @@ const platform: HarnessPlatform = {
   platformId: 'ios',
   runner: '/virtual/platform-runner.js',
   config: {},
+  getResourceLockKey: () => 'ios:simulator:iPhone 17 Pro:26.2',
 };
 
 const createHarnessConfig = (
@@ -37,7 +38,7 @@ const createHarnessConfig = (
     unstable__enableMetroCache: true,
     forwardClientLogs: false,
     ...overrides,
-  }) as HarnessConfig;
+  } as HarnessConfig);
 
 describe('maybeLogMetroCacheReuse', () => {
   beforeEach(() => {

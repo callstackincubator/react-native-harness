@@ -209,7 +209,18 @@ export const isAppInstalled = async (
   return appInfo !== null;
 };
 
-export type AppleSimulatorState = 'Booted' | 'Booting' | 'Shutdown';
+export type AppleSimulatorState =
+  | 'Booted'
+  | 'Booting'
+  | 'Shutdown'
+  | (string & {});
+
+export const isBootedSimulatorStatus = (status: AppleSimulatorState): boolean =>
+  status === 'Booted';
+
+export const isBootingSimulatorStatus = (
+  status: AppleSimulatorState
+): boolean => status === 'Booting';
 
 export type AppleSimulatorInfo = {
   name: string;
@@ -283,6 +294,30 @@ export const stopApp = async (
   bundleId: string
 ): Promise<void> => {
   await spawnAndForget('xcrun', ['simctl', 'terminate', udid, bundleId]);
+};
+
+export const bootSimulator = async (udid: string): Promise<void> => {
+  await spawn('xcrun', ['simctl', 'boot', udid]);
+};
+
+export const waitForBoot = async (
+  udid: string,
+  signal: AbortSignal
+): Promise<void> => {
+  await spawn('xcrun', ['simctl', 'bootstatus', udid, '-b'], {
+    signal,
+  });
+};
+
+export const shutdownSimulator = async (udid: string): Promise<void> => {
+  await spawnAndForget('xcrun', ['simctl', 'shutdown', udid]);
+};
+
+export const installApp = async (
+  udid: string,
+  appPath: string
+): Promise<void> => {
+  await spawn('xcrun', ['simctl', 'install', udid, appPath]);
 };
 
 export const getSimulatorId = async (
@@ -399,7 +434,11 @@ export const applyHarnessJsLocationOverride = async (
   );
 
   if (backupValue === null) {
-    const existingValue = await getDefaultsValue(udid, bundleId, 'RCT_jsLocation');
+    const existingValue = await getDefaultsValue(
+      udid,
+      bundleId,
+      'RCT_jsLocation'
+    );
     await writeDefaultsValue(
       udid,
       bundleId,
