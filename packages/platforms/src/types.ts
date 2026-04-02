@@ -7,9 +7,7 @@ export type AppCrashDetails = {
   pid?: number;
   stackTrace?: string[];
   rawLines?: string[];
-  artifactType?:
-    | 'logcat'
-    | 'ios-crash-report';
+  artifactType?: 'logcat' | 'ios-crash-report';
   artifactPath?: string;
 };
 
@@ -112,11 +110,16 @@ export type HarnessPlatformRunner = {
   ) => Promise<AppCrashDetails | null>;
 };
 
+export type HarnessPlatformInitOptions = {
+  signal: AbortSignal;
+};
+
 export type HarnessPlatform<TConfig = Record<string, unknown>> = {
   name: string;
   config: TConfig;
   runner: string;
   platformId: string;
+  getResourceLockKey?: () => string | Promise<string>;
 };
 
 export type AndroidEmulatorRunTarget = {

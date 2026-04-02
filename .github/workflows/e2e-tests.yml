@@ -110,6 +110,7 @@ jobs:
     timeout-minutes: 30
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios')) }}
     env:
+      HARNESS_DEBUG: true
       DEBUG: 'Metro:*'
     steps:
       - name: Checkout code
@@ -349,6 +350,7 @@ jobs:
     timeout-minutes: 30
     if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios') }}
     env:
+      HARNESS_DEBUG: true
       DEBUG: 'Metro:*'
     steps:
       - name: Checkout code

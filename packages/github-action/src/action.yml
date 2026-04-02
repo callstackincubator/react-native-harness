@@ -52,6 +52,7 @@ runs:
       env:
         INPUT_RUNNER: ${{ inputs.runner }}
         INPUT_PROJECTROOT: ${{ inputs.projectRoot }}
+        HARNESS_AVD_CACHING: ${{ inputs.cacheAvd }}
       run: |
         node ${{ github.action_path }}/actions/shared/index.cjs
     - name: Verify native app input
@@ -72,34 +73,20 @@ runs:
           ${{ runner.os }}-metro-cache-
 
     # ── iOS ──────────────────────────────────────────────────────────────────
-    - uses: futureware-tech/simulator-action@v4
-      if: fromJson(steps.load-config.outputs.config).platformId == 'ios'
-      with:
-        model: ${{ fromJson(steps.load-config.outputs.config).config.device.name }}
-        os: iOS
-        os_version: ${{ fromJson(steps.load-config.outputs.config).config.device.systemVersion }}
-        wait_for_boot: true
-        erase_before_boot: false
-    - name: Install app
-      if: fromJson(steps.load-config.outputs.config).platformId == 'ios'
-      shell: bash
-      working-directory: ${{ steps.load-config.outputs.projectRoot }}
-      run: |
-        xcrun simctl install booted ${{ inputs.app }}
+    # iOS simulator boot and app installation are handled by Harness itself.
     # ── Android ──────────────────────────────────────────────────────────────
     - name: Verify Android config
-      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' }}
       shell: bash
       run: |
-        CONFIG='${{ steps.load-config.outputs.config }}'
-        if [ -z "$CONFIG.config.device.avd" ] || [ "$CONFIG.config.device.avd" = "null" ]; then
+        if [ '${{ fromJson(steps.load-config.outputs.config).config.device.avd }}' = 'null' ]; then
           echo "Error: AVD config is required for Android emulators"
           echo "Please define the 'avd' property in the runner config"
           exit 1
         fi
     - name: Get architecture of the runner
       id: arch
-      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' }}
       shell: bash
       run: |
         case "${{ runner.arch }}" in
@@ -117,7 +104,7 @@ runs:
             ;;
         esac
     - name: Enable KVM group perms
-      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' }}
       shell: bash
       run: |
         echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -126,47 +113,24 @@ runs:
         ls /dev/kvm
     - name: Compute AVD cache key
       id: avd-key
-      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJSON(inputs.cacheAvd) }}
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled }}
       shell: bash
       run: |
-        CONFIG='${{ steps.load-config.outputs.config }}'
-        AVD_CONFIG=$(echo "$CONFIG" | jq -c '.config.device.avd')
-        AVD_CONFIG_HASH=$(echo "$AVD_CONFIG" | sha256sum | cut -d' ' -f1)
+        CACHE_CONFIG='${{ toJson(fromJson(steps.load-config.outputs.config).action.avdCacheConfig) }}'
+        AVD_CONFIG_HASH=$(printf '%s' "$CACHE_CONFIG" | sha256sum | cut -d' ' -f1)
+        AVD_NAME='${{ fromJson(steps.load-config.outputs.config).config.device.name }}'
         ARCH="${{ steps.arch.outputs.arch }}"
-        CACHE_KEY="avd-$ARCH-$AVD_CONFIG_HASH"
+        CACHE_KEY="avd-$AVD_NAME-$ARCH-$AVD_CONFIG_HASH"
         echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
     - name: Restore AVD cache
       uses: actions/cache/restore@v4
       id: avd-cache
-      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJSON(inputs.cacheAvd) }}
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled }}
       with:
         path: |
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
-    - name: Create AVD and generate snapshot for caching
-      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJSON(inputs.cacheAvd) && steps.avd-cache.outputs.cache-hit != 'true' }}
-      uses: reactivecircus/android-emulator-runner@v2
-      with:
-        api-level: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.apiLevel }}
-        arch: ${{ steps.arch.outputs.arch }}
-        profile: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.profile }}
-        disk-size: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.diskSize }}
-        heap-size: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.heapSize }}
-        force-avd-creation: false
-        avd-name: ${{ fromJson(steps.load-config.outputs.config).config.device.name }}
-        disable-animations: true
-        emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-        script: echo "Generated AVD snapshot for caching."
-    - name: Save AVD cache
-      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJSON(inputs.cacheAvd) && steps.avd-cache.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@v4
-      with:
-        path: |
-          ~/.android/avd
-          ~/.android/adb*
-        key: ${{ steps.avd-key.outputs.key }}
-
     # ── Web ──────────────────────────────────────────────────────────────────
     - name: Install Playwright Browsers
       if: fromJson(steps.load-config.outputs.config).platformId == 'web'
@@ -225,116 +189,27 @@ runs:
         fi
     - name: Run E2E tests
       id: run-tests
-      if: fromJson(steps.load-config.outputs.config).platformId != 'android'
       shell: bash
       working-directory: ${{ steps.load-config.outputs.projectRoot }}
       env:
         PRE_RUN_HOOK: ${{ inputs.preRunHook }}
         AFTER_RUN_HOOK: ${{ inputs.afterRunHook }}
         HARNESS_RUNNER: ${{ inputs.runner }}
+        HARNESS_APP_PATH: ${{ inputs.app }}
+        HARNESS_AVD_CACHING: ${{ inputs.cacheAvd }}
       run: |
         export HARNESS_PROJECT_ROOT="$PWD"
-
-        if [ -n "$PRE_RUN_HOOK" ]; then
-          pre_hook_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-pre-run.XXXXXX.sh")"
-          trap 'rm -f "$pre_hook_file"' EXIT
-          printf '%s\n' "$PRE_RUN_HOOK" > "$pre_hook_file"
-          chmod +x "$pre_hook_file"
-          bash "$pre_hook_file"
-          rm -f "$pre_hook_file"
-          trap - EXIT
-        fi
 
         set +e
         ${{ steps.detect-pm.outputs.runner }}react-native-harness --harnessRunner ${{ inputs.runner }} ${{ inputs.harnessArgs }}
         harness_exit_code=$?
         set -e
 
-        export HARNESS_EXIT_CODE="$harness_exit_code"
-        after_run_exit_code=0
-        if [ -n "$AFTER_RUN_HOOK" ]; then
-          after_hook_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-after-run.XXXXXX.sh")"
-          trap 'rm -f "$after_hook_file"' EXIT
-          printf '%s\n' "$AFTER_RUN_HOOK" > "$after_hook_file"
-          chmod +x "$after_hook_file"
-          set +e
-          bash "$after_hook_file"
-          after_run_exit_code=$?
-          set -e
-          rm -f "$after_hook_file"
-          trap - EXIT
-        fi
-
         echo "harness_exit_code=$harness_exit_code" >> "$GITHUB_OUTPUT"
 
         if [ "$harness_exit_code" -ne 0 ]; then
           exit "$harness_exit_code"
         fi
-
-        if [ "$after_run_exit_code" -ne 0 ]; then
-          exit "$after_run_exit_code"
-        fi
-    - name: Run E2E tests
-      id: run-tests-android
-      if: fromJson(steps.load-config.outputs.config).platformId == 'android'
-      uses: reactivecircus/android-emulator-runner@v2
-      env:
-        PRE_RUN_HOOK: ${{ inputs.preRunHook }}
-        AFTER_RUN_HOOK: ${{ inputs.afterRunHook }}
-        HARNESS_RUNNER: ${{ inputs.runner }}
-        # android-emulator-runner executes each script line via `sh -c`, so multi-line
-        # shell control flow must live in a separate bash script instead of `with.script`.
-        HARNESS_ANDROID_SESSION_SCRIPT: |-
-          export HARNESS_PROJECT_ROOT="$PWD"
-
-          adb install -r "${{ inputs.app }}"
-
-          if [ -n "$PRE_RUN_HOOK" ]; then
-            pre_hook_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-pre-run.XXXXXX.sh")"
-            printf "%s\n" "$PRE_RUN_HOOK" > "$pre_hook_file"
-            chmod +x "$pre_hook_file"
-            bash "$pre_hook_file"
-            rm -f "$pre_hook_file"
-          fi
-
-          set +e
-          ${{ steps.detect-pm.outputs.runner }}react-native-harness --harnessRunner "${{ inputs.runner }}" ${{ inputs.harnessArgs }}
-          harness_exit_code=$?
-          echo "harness_exit_code=$harness_exit_code" >> "$GITHUB_OUTPUT"
-          set -e
-
-          export HARNESS_EXIT_CODE="$harness_exit_code"
-          after_run_exit_code=0
-          if [ -n "$AFTER_RUN_HOOK" ]; then
-            after_hook_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-after-run.XXXXXX.sh")"
-            printf "%s\n" "$AFTER_RUN_HOOK" > "$after_hook_file"
-            chmod +x "$after_hook_file"
-            set +e
-            bash "$after_hook_file"
-            after_run_exit_code=$?
-            set -e
-            rm -f "$after_hook_file"
-          fi
-
-          if [ "$harness_exit_code" -ne 0 ]; then
-            exit "$harness_exit_code"
-          fi
-
-          if [ "$after_run_exit_code" -ne 0 ]; then
-            exit "$after_run_exit_code"
-          fi
-      with:
-        working-directory: ${{ steps.load-config.outputs.projectRoot }}
-        api-level: ${{ fromJson(steps.load-config.outputs.config).config.device.avd.apiLevel }}
-        arch: ${{ steps.arch.outputs.arch }}
-        force-avd-creation: false
-        avd-name: ${{ fromJson(steps.load-config.outputs.config).config.device.name }}
-        disable-animations: true
-        emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-        # Keep `script` to a single line so the emulator action does not split our bash
-        # session apart before the hooks and Harness command run.
-        script: >-
-          harness_script_file="$(mktemp "${RUNNER_TEMP:-/tmp}/harness-android-run.XXXXXX.sh")"; printf '%s\n' "$HARNESS_ANDROID_SESSION_SCRIPT" > "$harness_script_file"; chmod +x "$harness_script_file"; bash "$harness_script_file"; status=$?; rm -f "$harness_script_file"; exit "$status"
     - name: Upload visual test artifacts
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
       uses: actions/upload-artifact@v4
@@ -344,6 +219,14 @@ runs:
           ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
           ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
         if-no-files-found: ignore
+    - name: Save AVD cache
+      if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled && steps.avd-cache.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ~/.android/avd
+          ~/.android/adb*
+        key: ${{ steps.avd-key.outputs.key }}
     - name: Upload crash report artifacts
       if: always()
       uses: actions/upload-artifact@v4

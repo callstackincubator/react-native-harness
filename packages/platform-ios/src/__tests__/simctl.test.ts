@@ -3,7 +3,29 @@ import fs from 'node:fs';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { createCrashArtifactWriter } from '@react-native-harness/tools';
-import { collectCrashReports } from '../xcrun/simctl.js';
+import * as tools from '@react-native-harness/tools';
+import { collectCrashReports, waitForBoot } from '../xcrun/simctl.js';
+
+describe('simctl startup', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('passes the abort signal to simctl bootstatus', async () => {
+    const signal = new AbortController().signal;
+    const spawnSpy = vi
+      .spyOn(tools, 'spawn')
+      .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>);
+
+    await waitForBoot('sim-udid', signal);
+
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'xcrun',
+      ['simctl', 'bootstatus', 'sim-udid', '-b'],
+      { signal }
+    );
+  });
+});
 
 describe('simctl collectCrashReports', () => {
   beforeEach(() => {
@@ -33,8 +55,7 @@ describe('simctl collectCrashReports', () => {
         JSON.stringify({
           pid: 1234,
           procName: 'HarnessPlayground',
-          procPath:
-            `${homedir()}/Library/Developer/CoreSimulator/Devices/sim-udid/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground`,
+          procPath: `${homedir()}/Library/Developer/CoreSimulator/Devices/sim-udid/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground`,
           faultingThread: 0,
           threads: [
             {
@@ -118,8 +139,7 @@ describe('simctl collectCrashReports', () => {
         JSON.stringify({
           pid: 1234,
           procName: 'HarnessPlayground',
-          procPath:
-            `${homedir()}/Library/Developer/CoreSimulator/Devices/sim-udid/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground`,
+          procPath: `${homedir()}/Library/Developer/CoreSimulator/Devices/sim-udid/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground`,
           exception: {
             type: 'EXC_BREAKPOINT',
             signal: 'SIGTRAP',
@@ -130,7 +150,9 @@ describe('simctl collectCrashReports', () => {
     vi.spyOn(fs, 'statSync').mockReturnValue({
       mtimeMs: 123456,
     } as fs.Stats);
-    const copyFileSyncSpy = vi.spyOn(fs, 'copyFileSync').mockImplementation(() => undefined);
+    const copyFileSyncSpy = vi
+      .spyOn(fs, 'copyFileSync')
+      .mockImplementation(() => undefined);
     const writer = createCrashArtifactWriter({
       runnerName: 'ios-sim',
       platformId: 'ios',
@@ -158,7 +180,9 @@ describe('simctl collectCrashReports', () => {
       'HarnessPlayground-2026-03-12-113008.ips',
       'HarnessPlayground-2026-03-12-114008.ips',
     ] as unknown as ReturnType<typeof fs.readdirSync>);
-    vi.spyOn(fs, 'readFileSync').mockImplementation(((input: fs.PathOrFileDescriptor) => {
+    vi.spyOn(fs, 'readFileSync').mockImplementation(((
+      input: fs.PathOrFileDescriptor
+    ) => {
       const filePath = String(input);
 
       return [
@@ -170,8 +194,7 @@ describe('simctl collectCrashReports', () => {
         JSON.stringify({
           pid: filePath.includes('113008') ? 1234 : 1235,
           procName: 'HarnessPlayground',
-          procPath:
-            `${homedir()}/Library/Developer/CoreSimulator/Devices/sim-udid/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground`,
+          procPath: `${homedir()}/Library/Developer/CoreSimulator/Devices/sim-udid/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground`,
           exception: {
             type: 'EXC_BREAKPOINT',
             signal: 'SIGTRAP',
@@ -203,19 +226,27 @@ describe('simctl collectCrashReports', () => {
       'HarnessPlayground-2026-03-12-120000.ips',
       'HarnessPlayground-2026-03-12-130000.ips',
     ] as unknown as ReturnType<typeof fs.readdirSync>);
-    vi.spyOn(fs, 'readFileSync').mockImplementation(((input: fs.PathOrFileDescriptor) => {
+    vi.spyOn(fs, 'readFileSync').mockImplementation(((
+      input: fs.PathOrFileDescriptor
+    ) => {
       const filePath = String(input);
       // The newest file (130000) belongs to a different simulator; the second-newest (120000) is ours
       const udid = filePath.includes('130000') ? 'other-sim-udid' : 'sim-udid';
-      const pid = filePath.includes('110000') ? 1001 : filePath.includes('120000') ? 1002 : 1003;
+      const pid = filePath.includes('110000')
+        ? 1001
+        : filePath.includes('120000')
+        ? 1002
+        : 1003;
 
       return [
-        JSON.stringify({ app_name: 'HarnessPlayground', bundleID: 'com.harnessplayground' }),
+        JSON.stringify({
+          app_name: 'HarnessPlayground',
+          bundleID: 'com.harnessplayground',
+        }),
         JSON.stringify({
           pid,
           procName: 'HarnessPlayground',
-          procPath:
-            `${homedir()}/Library/Developer/CoreSimulator/Devices/${udid}/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground`,
+          procPath: `${homedir()}/Library/Developer/CoreSimulator/Devices/${udid}/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground`,
           exception: { type: 'EXC_BREAKPOINT', signal: 'SIGTRAP' },
         }),
       ].join('\n');
@@ -225,8 +256,8 @@ describe('simctl collectCrashReports', () => {
       const mtimeMs = filePath.includes('110000')
         ? Date.parse('2026-03-12T11:00:00.000Z')
         : filePath.includes('120000')
-          ? Date.parse('2026-03-12T12:00:00.000Z')
-          : Date.parse('2026-03-12T13:00:00.000Z');
+        ? Date.parse('2026-03-12T12:00:00.000Z')
+        : Date.parse('2026-03-12T13:00:00.000Z');
 
       return { mtimeMs } as fs.Stats;
     }) as typeof fs.statSync);

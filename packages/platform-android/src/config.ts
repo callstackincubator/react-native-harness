@@ -11,6 +11,11 @@ export const AndroidEmulatorAVDConfigSchema = z.object({
   profile: z.string().min(1, 'Profile is required'),
   diskSize: z.string().min(1, 'Disk size is required').default('1G'),
   heapSize: z.string().min(1, 'Heap size is required').default('1G'),
+  snapshot: z
+    .object({
+      enabled: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export const AndroidEmulatorSchema = z.object({
@@ -50,6 +55,9 @@ export type AndroidAppLaunchOptions = z.infer<
 >;
 export type AndroidEmulatorAVDConfig = z.infer<
   typeof AndroidEmulatorAVDConfigSchema
+>;
+export type AndroidEmulatorAVDSnapshotConfig = NonNullable<
+  AndroidEmulatorAVDConfig['snapshot']
 >;
 
 export const isAndroidDeviceEmulator = (

@@ -27,6 +27,15 @@ export class InitializationTimeoutError extends HarnessError {
   }
 }
 
+export class PlatformReadyTimeoutError extends HarnessError {
+  constructor(public readonly timeout: number) {
+    super(
+      `The platform did not become ready within ${timeout}ms. Increase "platformReadyTimeout" if your device, simulator, or emulator needs more time to start.`
+    );
+    this.name = 'PlatformReadyTimeoutError';
+  }
+}
+
 export type NativeCrashPhase = 'startup' | 'execution';
 
 export type NativeCrashDetails = AppCrashDetails & {
@@ -51,10 +60,7 @@ const buildNativeCrashMessage = ({
   const hasCrashBlock = summary?.includes('\n') ?? false;
   const shouldRenderSummary =
     Boolean(summary) &&
-    !(
-      !hasCrashBlock &&
-      artifactType === 'ios-crash-report'
-    );
+    !(!hasCrashBlock && artifactType === 'ios-crash-report');
 
   if (shouldRenderSummary && summary) {
     lines.push('');

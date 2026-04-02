@@ -11,6 +11,7 @@ import { logTestEnvironmentReady, logTestRunHeader } from './logs.js';
 import { NoRunnerSpecifiedError, RunnerNotFoundError } from './errors.js';
 import { HarnessPlatform } from '@react-native-harness/platforms';
 import { logger } from '@react-native-harness/tools';
+import { createActionHooksPlugin } from './action-hooks.js';
 
 const setupLogger = logger.child('setup');
 
@@ -66,10 +67,20 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   const cliArgs = getAdditionalCliArgs();
 
   if (cliArgs.metroPort != null) {
-    setupLogger.debug('applying CLI metro port override: %d', cliArgs.metroPort);
+    setupLogger.debug(
+      'applying CLI metro port override: %d',
+      cliArgs.metroPort
+    );
     harnessConfig = ConfigSchema.parse({
       ...harnessConfig,
       metroPort: cliArgs.metroPort,
+    });
+  }
+
+  if (process.env.PRE_RUN_HOOK || process.env.AFTER_RUN_HOOK) {
+    harnessConfig = ConfigSchema.parse({
+      ...harnessConfig,
+      plugins: [...(harnessConfig.plugins ?? []), createActionHooksPlugin()],
     });
   }
 

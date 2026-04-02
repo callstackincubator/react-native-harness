@@ -26,4 +26,8 @@ export const applePlatform = (
   config,
   runner: import.meta.resolve('./runner.js'),
   platformId: 'ios',
+  getResourceLockKey: () =>
+    config.device.type === 'simulator'
+      ? `ios:simulator:${config.device.name}:${config.device.systemVersion}`
+      : `ios:physical:${config.device.name}`,
 });
