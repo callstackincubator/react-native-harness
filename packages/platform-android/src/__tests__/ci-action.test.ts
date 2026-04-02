@@ -44,6 +44,22 @@ describe('Android GitHub action config', () => {
     }
   });
 
+  it('saves the AVD cache after the Harness run step', async () => {
+    const [rootAction, packageAction] = await Promise.all([
+      readFile(path.join(workspaceRoot, 'action.yml'), 'utf8'),
+      readFile(
+        path.join(workspaceRoot, 'packages/github-action/src/action.yml'),
+        'utf8'
+      ),
+    ]);
+
+    for (const actionYaml of [rootAction, packageAction]) {
+      expect(actionYaml.indexOf('- name: Run E2E tests')).toBeLessThan(
+        actionYaml.indexOf('- name: Save AVD cache')
+      );
+    }
+  });
+
   it('uses a cache key that includes the emulator name', async () => {
     const [rootAction, packageAction] = await Promise.all([
       readFile(path.join(workspaceRoot, 'action.yml'), 'utf8'),

@@ -105,14 +105,6 @@ runs:
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
-    - name: Save AVD cache
-      if: ${{ always() && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled && steps.avd-cache.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@v4
-      with:
-        path: |
-          ~/.android/avd
-          ~/.android/adb*
-        key: ${{ steps.avd-key.outputs.key }}
     - name: Detect Package Manager
       id: detect-pm
       shell: bash
@@ -165,6 +157,14 @@ runs:
           ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
           ${{ inputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
         if-no-files-found: ignore
+    - name: Save AVD cache
+      if: ${{ always() && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled && steps.avd-cache.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ~/.android/avd
+          ~/.android/adb*
+        key: ${{ steps.avd-key.outputs.key }}
     - name: Upload crash report artifacts
       if: always()
       uses: actions/upload-artifact@v4

@@ -131,15 +131,6 @@ runs:
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
-    - name: Save AVD cache
-      if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled && steps.avd-cache.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@v4
-      with:
-        path: |
-          ~/.android/avd
-          ~/.android/adb*
-        key: ${{ steps.avd-key.outputs.key }}
-
     # ── Web ──────────────────────────────────────────────────────────────────
     - name: Install Playwright Browsers
       if: fromJson(steps.load-config.outputs.config).platformId == 'web'
@@ -228,6 +219,14 @@ runs:
           ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
           ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
         if-no-files-found: ignore
+    - name: Save AVD cache
+      if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled && steps.avd-cache.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ~/.android/avd
+          ~/.android/adb*
+        key: ${{ steps.avd-key.outputs.key }}
     - name: Upload crash report artifacts
       if: always()
       uses: actions/upload-artifact@v4
