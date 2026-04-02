@@ -36,6 +36,40 @@ const normalizeConfigValue = (value: string): string => {
   return value.trim().toLowerCase();
 };
 
+const parseSizeInBytes = (value: string | undefined): number | null => {
+  if (!value) {
+    return null;
+  }
+
+  const normalizedValue = value.trim().toLowerCase();
+
+  if (/^\d+$/.test(normalizedValue)) {
+    return Number(normalizedValue);
+  }
+
+  const match = normalizedValue.match(/^(\d+)([kmgt])$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const size = Number(match[1]);
+  const unit = match[2]?.toLowerCase();
+
+  const multiplier =
+    unit === 'k'
+      ? 1024
+      : unit === 'm'
+      ? 1024 ** 2
+      : unit === 'g'
+      ? 1024 ** 3
+      : unit === 't'
+      ? 1024 ** 4
+      : null;
+
+  return multiplier == null ? null : size * multiplier;
+};
+
 const getApiLevelFromImageSysdir = (
   value: string | undefined
 ): number | null => {
@@ -163,8 +197,23 @@ export const isAvdCompatible = ({
   }
 
   if (
-    normalizeConfigValue(avdConfig.diskDataPartitionSize ?? '') !==
-    normalizeConfigValue(requestedAvdConfig.diskSize)
+    (() => {
+      const configuredDiskSizeBytes = parseSizeInBytes(
+        avdConfig.diskDataPartitionSize
+      );
+      const requestedDiskSizeBytes = parseSizeInBytes(
+        requestedAvdConfig.diskSize
+      );
+
+      if (configuredDiskSizeBytes != null && requestedDiskSizeBytes != null) {
+        return configuredDiskSizeBytes < requestedDiskSizeBytes;
+      }
+
+      return (
+        normalizeConfigValue(avdConfig.diskDataPartitionSize ?? '') !==
+        normalizeConfigValue(requestedAvdConfig.diskSize)
+      );
+    })()
   ) {
     return {
       compatible: false,

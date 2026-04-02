@@ -93,6 +93,63 @@ vm.heapSize=512M
     ).toEqual({ compatible: true });
   });
 
+  it('accepts disk partition sizes rewritten to bytes', () => {
+    const avdConfig = parseAvdConfig(`
+image.sysdir.1=system-images/android-35/default/x86_64/
+abi.type=x86_64
+hw.device.name=pixel_8
+disk.dataPartition.size=6442450944
+vm.heapSize=512M
+`);
+
+    expect(
+      isAvdCompatible({
+        emulator: {
+          type: 'emulator',
+          name: 'Pixel_8_API_35',
+          avd: {
+            apiLevel: 35,
+            profile: 'pixel_8',
+            diskSize: '1G',
+            heapSize: '512M',
+          },
+        },
+        avdConfig,
+        hostArch: 'x86_64',
+      })
+    ).toEqual({ compatible: true });
+  });
+
+  it('rejects smaller disk partitions even when sizes are normalized', () => {
+    const avdConfig = parseAvdConfig(`
+image.sysdir.1=system-images/android-35/default/x86_64/
+abi.type=x86_64
+hw.device.name=pixel_8
+disk.dataPartition.size=536870912
+vm.heapSize=512M
+`);
+
+    expect(
+      isAvdCompatible({
+        emulator: {
+          type: 'emulator',
+          name: 'Pixel_8_API_35',
+          avd: {
+            apiLevel: 35,
+            profile: 'pixel_8',
+            diskSize: '1G',
+            heapSize: '512M',
+          },
+        },
+        avdConfig,
+        hostArch: 'x86_64',
+      })
+    ).toMatchObject({
+      compatible: false,
+      reason: 'Disk size mismatch: expected 1G, got 536870912.',
+    });
+  });
+
   it('reports incompatibility when AVD metadata differs', () => {
     const avdConfig = parseAvdConfig(`
 image.sysdir.1=system-images/android-34/default/x86_64/
