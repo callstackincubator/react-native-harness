@@ -501,13 +501,44 @@ export const waitForEmulator = async (
   throw signal.reason;
 };
 
-export const waitForBoot = async (
+export const waitForEmulatorDisconnect = async (
   adbId: string,
   signal: AbortSignal
 ): Promise<void> => {
   while (!signal.aborted) {
-    if (await isBootCompleted(adbId)) {
+    const adbIds = await getDeviceIds();
+
+    if (!adbIds.includes(adbId)) {
       return;
+    }
+
+    await waitWithSignal(1000, signal);
+  }
+
+  throw signal.reason;
+};
+
+export const waitForBoot = async (
+  name: string,
+  signal: AbortSignal
+): Promise<string> => {
+  while (!signal.aborted) {
+    const adbIds = await getDeviceIds();
+
+    for (const adbId of adbIds) {
+      if (!adbId.startsWith('emulator-')) {
+        continue;
+      }
+
+      const emulatorName = await getEmulatorName(adbId);
+
+      if (emulatorName !== name) {
+        continue;
+      }
+
+      if (await isBootCompleted(adbId)) {
+        return adbId;
+      }
     }
 
     await waitWithSignal(1000, signal);

@@ -37,7 +37,7 @@ describe('Android platform instance', () => {
       .mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
     vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
-    vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
     vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
@@ -88,8 +88,7 @@ describe('Android platform instance', () => {
     const startEmulator = vi
       .spyOn(adb, 'startEmulator')
       .mockResolvedValue(undefined);
-    vi.spyOn(adb, 'waitForEmulator').mockResolvedValue('emulator-5554');
-    vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
     vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
@@ -150,8 +149,7 @@ describe('Android platform instance', () => {
     const startEmulator = vi
       .spyOn(adb, 'startEmulator')
       .mockResolvedValue(undefined);
-    vi.spyOn(adb, 'waitForEmulator').mockResolvedValue('emulator-5554');
-    vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
     vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
@@ -196,15 +194,14 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue([]);
     vi.spyOn(adb, 'hasAvd').mockResolvedValue(true);
     vi.spyOn(avdConfig, 'readAvdConfig').mockResolvedValue({
-      imageSysdir1: 'system-images/android-35/default/x86_64/',
-      abiType: 'x86_64',
+      imageSysdir1: 'system-images/android-35/default/arm64-v8a/',
+      abiType: 'arm64-v8a',
       hwDeviceName: 'pixel_8',
       diskDataPartitionSize: '1G',
       vmHeapSize: '1G',
     });
     vi.spyOn(adb, 'startEmulator').mockResolvedValue(undefined);
-    vi.spyOn(adb, 'waitForEmulator').mockResolvedValue('emulator-5554');
-    vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
     vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
@@ -261,9 +258,11 @@ describe('Android platform instance', () => {
     const deleteAvd = vi.spyOn(adb, 'deleteAvd').mockResolvedValue(undefined);
     const createAvd = vi.spyOn(adb, 'createAvd').mockResolvedValue(undefined);
     vi.spyOn(adb, 'startEmulator').mockResolvedValue(undefined);
-    vi.spyOn(adb, 'waitForEmulator').mockResolvedValue('emulator-5554');
-    vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
     const stopEmulator = vi.spyOn(adb, 'stopEmulator').mockResolvedValue();
+    const waitForEmulatorDisconnect = vi
+      .spyOn(adb, 'waitForEmulatorDisconnect')
+      .mockResolvedValue(undefined);
     vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
@@ -298,6 +297,10 @@ describe('Android platform instance', () => {
     expect(deleteAvd).toHaveBeenCalledWith('Pixel_8_API_35');
     expect(createAvd).toHaveBeenCalled();
     expect(stopEmulator).toHaveBeenCalledWith('emulator-5554');
+    expect(waitForEmulatorDisconnect).toHaveBeenCalledWith(
+      'emulator-5554',
+      init.signal
+    );
     expect(adb.startEmulator).toHaveBeenNthCalledWith(
       1,
       'Pixel_8_API_35',
@@ -306,7 +309,7 @@ describe('Android platform instance', () => {
     expect(adb.startEmulator).toHaveBeenNthCalledWith(
       2,
       'Pixel_8_API_35',
-      'default-boot'
+      'snapshot-reuse'
     );
   });
 
@@ -322,9 +325,11 @@ describe('Android platform instance', () => {
     const startEmulator = vi
       .spyOn(adb, 'startEmulator')
       .mockResolvedValue(undefined);
-    vi.spyOn(adb, 'waitForEmulator').mockResolvedValue('emulator-5554');
-    vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
     const stopEmulator = vi.spyOn(adb, 'stopEmulator').mockResolvedValue();
+    const waitForEmulatorDisconnect = vi
+      .spyOn(adb, 'waitForEmulatorDisconnect')
+      .mockResolvedValue(undefined);
     vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
@@ -362,10 +367,14 @@ describe('Android platform instance', () => {
       'clean-snapshot-generation'
     );
     expect(stopEmulator).toHaveBeenCalledWith('emulator-5554');
+    expect(waitForEmulatorDisconnect).toHaveBeenCalledWith(
+      'emulator-5554',
+      init.signal
+    );
     expect(startEmulator).toHaveBeenNthCalledWith(
       2,
       'Pixel_8_API_35',
-      'default-boot'
+      'snapshot-reuse'
     );
   });
 
@@ -379,7 +388,7 @@ describe('Android platform instance', () => {
     ).mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
     vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
-    vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
     vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(false);
     const installApp = vi.spyOn(adb, 'installApp').mockResolvedValue(undefined);
     vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
@@ -419,7 +428,7 @@ describe('Android platform instance', () => {
   it('throws a HarnessAppPathError when HARNESS_APP_PATH is missing', async () => {
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
     vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
-    vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
     vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(false);
 
     await expect(
@@ -449,7 +458,7 @@ describe('Android platform instance', () => {
     vi.stubEnv('HARNESS_APP_PATH', '/tmp/missing.apk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
     vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
-    vi.spyOn(adb, 'waitForBoot').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
     vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(false);
 
     await expect(

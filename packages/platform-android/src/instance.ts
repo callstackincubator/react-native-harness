@@ -76,9 +76,7 @@ const startAndWaitForBoot = async ({
   mode?: Parameters<typeof adb.startEmulator>[1];
 }): Promise<string> => {
   await adb.startEmulator(emulatorName, mode);
-  const adbId = await adb.waitForEmulator(emulatorName, signal);
-  await adb.waitForBoot(adbId, signal);
-  return adbId;
+  return adb.waitForBoot(emulatorName, signal);
 };
 
 const recreateAvd = async ({
@@ -152,6 +150,7 @@ const prepareCachedAvd = async ({
 
     logger.info('Saving Android emulator snapshot for %s...', emulatorName);
     await adb.stopEmulator(generationAdbId);
+    await adb.waitForEmulatorDisconnect(generationAdbId, signal);
   } else {
     logger.info('Using cached Android emulator %s...', emulatorName);
   }
