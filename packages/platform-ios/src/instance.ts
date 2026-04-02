@@ -44,11 +44,11 @@ const getHarnessAppPath = (): string => {
 };
 
 const createNoopAppMonitor = (): AppMonitor => ({
-  start: async () => {},
-  stop: async () => {},
-  dispose: async () => {},
-  addListener: () => {},
-  removeListener: () => {},
+  start: async () => undefined,
+  stop: async () => undefined,
+  dispose: async () => undefined,
+  addListener: () => undefined,
+  removeListener: () => undefined,
 });
 
 export const getAppleSimulatorPlatformInstance = async (

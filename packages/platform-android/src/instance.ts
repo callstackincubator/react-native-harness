@@ -37,11 +37,11 @@ import type { AppMonitor } from '@react-native-harness/platforms';
 const androidInstanceLogger = logger.child('android-instance');
 
 const createNoopAppMonitor = (): AppMonitor => ({
-  start: async () => {},
-  stop: async () => {},
-  dispose: async () => {},
-  addListener: () => {},
-  removeListener: () => {},
+  start: async () => undefined,
+  stop: async () => undefined,
+  dispose: async () => undefined,
+  addListener: () => undefined,
+  removeListener: () => undefined,
 });
 
 const getHarnessAppPath = (): string => {
