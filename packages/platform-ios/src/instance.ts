@@ -57,6 +57,7 @@ export const getAppleSimulatorPlatformInstance = async (
   init: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDeviceSimulator(config.device);
+  const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
 
   const udid = await simctl.getSimulatorId(
     config.device.name,
@@ -153,12 +154,17 @@ export const getAppleSimulatorPlatformInstance = async (
     isAppRunning: async () => {
       return await simctl.isAppRunning(udid, config.bundleId);
     },
-    createAppMonitor: (options?: CreateAppMonitorOptions) =>
-      createIosSimulatorAppMonitor({
+    createAppMonitor: (options?: CreateAppMonitorOptions) => {
+      if (!detectNativeCrashes) {
+        return createNoopAppMonitor();
+      }
+
+      return createIosSimulatorAppMonitor({
         udid,
         bundleId: config.bundleId,
         crashArtifactWriter: options?.crashArtifactWriter,
-      }),
+      });
+    },
   };
 };
 
@@ -167,7 +173,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
   harnessConfig: HarnessConfig
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDevicePhysical(config.device);
-  const detectNativeCrashes = harnessConfig.detectNativeCrashes;
+  const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
 
   if (detectNativeCrashes) {
     await assertLibimobiledeviceInstalled();

@@ -32,8 +32,17 @@ import {
 } from './environment.js';
 import { isInteractive } from '@react-native-harness/tools';
 import fs from 'node:fs';
+import type { AppMonitor } from '@react-native-harness/platforms';
 
 const androidInstanceLogger = logger.child('android-instance');
+
+const createNoopAppMonitor = (): AppMonitor => ({
+  start: async () => {},
+  stop: async () => {},
+  dispose: async () => {},
+  addListener: () => {},
+  removeListener: () => {},
+});
 
 const getHarnessAppPath = (): string => {
   const appPath = process.env.HARNESS_APP_PATH;
@@ -168,6 +177,7 @@ export const getAndroidEmulatorPlatformInstance = async (
   init: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDeviceEmulator(config.device);
+  const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
   const emulatorConfig = config.device;
   const emulatorName = emulatorConfig.name;
   const avdConfig = emulatorConfig.avd;
@@ -284,13 +294,18 @@ export const getAndroidEmulatorPlatformInstance = async (
     isAppRunning: async () => {
       return await adb.isAppRunning(adbId, config.bundleId);
     },
-    createAppMonitor: (options?: CreateAppMonitorOptions) =>
-      createAndroidAppMonitor({
+    createAppMonitor: (options?: CreateAppMonitorOptions) => {
+      if (!detectNativeCrashes) {
+        return createNoopAppMonitor();
+      }
+
+      return createAndroidAppMonitor({
         adbId,
         bundleId: config.bundleId,
         appUid,
         crashArtifactWriter: options?.crashArtifactWriter,
-      }),
+      });
+    },
   };
 };
 
@@ -299,6 +314,7 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
   harnessConfig: HarnessConfig
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDevicePhysical(config.device);
+  const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
 
   const adbId = await getAdbId(config.device);
 
@@ -348,12 +364,17 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
     isAppRunning: async () => {
       return await adb.isAppRunning(adbId, config.bundleId);
     },
-    createAppMonitor: (options?: CreateAppMonitorOptions) =>
-      createAndroidAppMonitor({
+    createAppMonitor: (options?: CreateAppMonitorOptions) => {
+      if (!detectNativeCrashes) {
+        return createNoopAppMonitor();
+      }
+
+      return createAndroidAppMonitor({
         adbId,
         bundleId: config.bundleId,
         appUid,
         crashArtifactWriter: options?.crashArtifactWriter,
-      }),
+      });
+    },
   };
 };

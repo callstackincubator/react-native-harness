@@ -159,6 +159,38 @@ describe('iOS platform instance dependency validation', () => {
     expect(assertInstalled).not.toHaveBeenCalled();
   });
 
+  it('returns a noop simulator app monitor when native crash detection is disabled', async () => {
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined
+    );
+
+    const instance = await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfigWithoutNativeCrashDetection,
+      init
+    );
+
+    const listener = vi.fn();
+    const appMonitor = instance.createAppMonitor();
+
+    await expect(appMonitor.start()).resolves.toBeUndefined();
+    await expect(appMonitor.stop()).resolves.toBeUndefined();
+    await expect(appMonitor.dispose()).resolves.toBeUndefined();
+    expect(appMonitor.addListener(listener)).toBeUndefined();
+    expect(appMonitor.removeListener(listener)).toBeUndefined();
+  });
+
   it('reuses a booted simulator and does not shut it down on dispose', async () => {
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');

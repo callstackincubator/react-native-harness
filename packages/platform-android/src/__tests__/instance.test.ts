@@ -18,6 +18,10 @@ import { HarnessAppPathError, HarnessEmulatorConfigError } from '../errors.js';
 const harnessConfig = {
   metroPort: DEFAULT_METRO_PORT,
 } as HarnessConfig;
+const harnessConfigWithoutNativeCrashDetection = {
+  metroPort: DEFAULT_METRO_PORT,
+  detectNativeCrashes: false,
+} as HarnessConfig;
 const init = {
   signal: new AbortController().signal,
 };
@@ -504,7 +508,53 @@ describe('Android platform instance', () => {
     ).rejects.toBeInstanceOf(HarnessEmulatorConfigError);
   });
 
-  it('keeps physical device behavior unchanged', async () => {
+  it('returns a noop emulator app monitor when native crash detection is disabled', async () => {
+    vi.spyOn(
+      await import('../environment.js'),
+      'ensureAndroidEmulatorEnvironment'
+    ).mockResolvedValue('/tmp/android-sdk');
+    vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
+    vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
+    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
+    vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
+    vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
+      undefined
+    );
+
+    const instance = await getAndroidEmulatorPlatformInstance(
+      {
+        name: 'android',
+        device: {
+          type: 'emulator',
+          name: 'Pixel_8_API_35',
+          avd: {
+            apiLevel: 35,
+            profile: 'pixel_8',
+            diskSize: '1G',
+            heapSize: '1G',
+          },
+        },
+        bundleId: 'com.harnessplayground',
+        activityName: '.MainActivity',
+      },
+      harnessConfigWithoutNativeCrashDetection,
+      init
+    );
+
+    const listener = vi.fn();
+    const appMonitor = instance.createAppMonitor();
+
+    await expect(appMonitor.start()).resolves.toBeUndefined();
+    await expect(appMonitor.stop()).resolves.toBeUndefined();
+    await expect(appMonitor.dispose()).resolves.toBeUndefined();
+    expect(appMonitor.addListener(listener)).toBeUndefined();
+    expect(appMonitor.removeListener(listener)).toBeUndefined();
+  });
+
+  it('returns a noop physical device app monitor when native crash detection is disabled', async () => {
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['012345']);
     vi.spyOn(adb, 'getDeviceInfo').mockResolvedValue({
       manufacturer: 'motorola',
@@ -530,8 +580,31 @@ describe('Android platform instance', () => {
           bundleId: 'com.harnessplayground',
           activityName: '.MainActivity',
         },
-        harnessConfig
+        harnessConfigWithoutNativeCrashDetection
       )
     ).resolves.toBeDefined();
+
+    const instance = await getAndroidPhysicalDevicePlatformInstance(
+      {
+        name: 'android-device',
+        device: {
+          type: 'physical',
+          manufacturer: 'motorola',
+          model: 'moto g72',
+        },
+        bundleId: 'com.harnessplayground',
+        activityName: '.MainActivity',
+      },
+      harnessConfigWithoutNativeCrashDetection
+    );
+
+    const listener = vi.fn();
+    const appMonitor = instance.createAppMonitor();
+
+    await expect(appMonitor.start()).resolves.toBeUndefined();
+    await expect(appMonitor.stop()).resolves.toBeUndefined();
+    await expect(appMonitor.dispose()).resolves.toBeUndefined();
+    expect(appMonitor.addListener(listener)).toBeUndefined();
+    expect(appMonitor.removeListener(listener)).toBeUndefined();
   });
 });
