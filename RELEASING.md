@@ -26,6 +26,8 @@ Canary releases publish a unique prerelease version for the current commit with 
 
 Canary releases do not consume or remove version plans.
 
-## Required secrets
+## Publishing auth
 
-The workflow expects `NPM_ACCESS_TOKEN` to be configured in GitHub Actions secrets.
+Publishing is expected to use npm trusted publishing via GitHub Actions OIDC.
+
+No npm access token is required for the release workflow itself.

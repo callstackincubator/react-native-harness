@@ -90,12 +90,6 @@ function ensureGithubToken() {
   }
 }
 
-function ensureNpmToken() {
-  if (!process.env.NODE_AUTH_TOKEN) {
-    fail('NODE_AUTH_TOKEN must be set');
-  }
-}
-
 function readVersion() {
   const filePath = path.join(cwd, representativePackagePath);
   const packageJson = JSON.parse(readFileSync(filePath, 'utf8'));
@@ -220,7 +214,6 @@ async function runStableRelease() {
 
   ensureRemoteBranch();
   ensureGithubToken();
-  ensureNpmToken();
 
   await release({
     yes: true,
@@ -241,14 +234,11 @@ async function runRcRelease() {
 
   ensureRemoteBranch();
   ensureGithubToken();
-  ensureNpmToken();
 
   await runRcReleaseWithVersionPlans();
 }
 
 async function runCanaryRelease() {
-  ensureNpmToken();
-
   const currentVersion = readVersion();
   const canaryVersion = getCanaryVersion(currentVersion);
   const releaseClient = new ReleaseClient({ versionPlans: false });
