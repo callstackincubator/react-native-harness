@@ -122,6 +122,6 @@ export const setup = async (globalConfig: JestConfig.GlobalConfig) => {
   logTestEnvironmentReady(selectedRunner);
   setupLogger.debug('Harness instance is ready');
 
-  global.HARNESS_CONFIG = harnessConfig;
+  global.HARNESS_CONFIG = harness.config;
   global.HARNESS = harness;
 };

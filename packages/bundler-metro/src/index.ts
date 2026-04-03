@@ -16,3 +16,4 @@ export {
   waitForMetroBackedAppReady,
   type WaitForMetroBackedAppReadyOptions,
 } from './startup.js';
+export { isPortAvailable } from './utils.js';

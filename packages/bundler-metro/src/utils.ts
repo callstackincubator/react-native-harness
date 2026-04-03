@@ -4,7 +4,10 @@ import { MetroNotInstalledError } from './errors.js';
 
 const require = createRequire(import.meta.url);
 
-export const isPortAvailable = (port: number): Promise<boolean> => {
+export const isPortAvailable = (
+  port: number,
+  host?: string
+): Promise<boolean> => {
   return new Promise((resolve) => {
     const server = net.createServer();
     server.once('error', () => {
@@ -15,7 +18,7 @@ export const isPortAvailable = (port: number): Promise<boolean> => {
       server.close();
       resolve(true);
     });
-    server.listen(port);
+    server.listen(port, host);
   });
 };
 

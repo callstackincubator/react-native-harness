@@ -92,12 +92,13 @@ export const getMetroInstance = async (
 ): Promise<MetroInstance> => {
   const { projectRoot, harnessConfig, websocketEndpoints = {} } = options;
   const metroPort = harnessConfig.metroPort;
+  const metroBindHost = harnessConfig.host?.trim();
   metroLogger.debug(
     'creating Metro instance for %s on port %d',
     projectRoot,
     metroPort
   );
-  const isMetroPortAvailable = await isPortAvailable(metroPort);
+  const isMetroPortAvailable = await isPortAvailable(metroPort, metroBindHost);
 
   if (!isMetroPortAvailable) {
     throw new MetroPortUnavailableError(metroPort);
@@ -118,12 +119,14 @@ export const getMetroInstance = async (
 
   const middleware = connect()
     .use(nocache())
-    .use('/', getBundleRequestObserverMiddleware(projectRoot, harnessConfig, reporter))
+    .use(
+      '/',
+      getBundleRequestObserverMiddleware(projectRoot, harnessConfig, reporter)
+    )
     .use('/', getExpoMiddleware(projectRoot, harnessConfig))
     .use('/status', getStatusMiddleware(projectRoot));
 
   const ready = waitForBundler(reporter, abortSignal);
-  const metroBindHost = harnessConfig.host?.trim();
   if (metroBindHost) {
     metroLogger.debug('binding Metro server to host %s', metroBindHost);
   }

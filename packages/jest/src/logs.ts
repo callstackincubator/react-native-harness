@@ -45,6 +45,17 @@ export const logMetroCacheReused = (runner: HarnessPlatform): void => {
   log(`${TAG} Reusing Metro cache for ${chalk.bold(runner.name)}\n`);
 };
 
+export const logMetroPortFallback = (
+  initialPort: number,
+  selectedPort: number
+): void => {
+  log(
+    `${TAG} Harness could not use Metro port ${chalk.bold(
+      String(initialPort)
+    )} and is using ${chalk.bold(String(selectedPort))} instead.\n`
+  );
+};
+
 export const getErrorMessage = (error: HarnessError): string => {
   return `${ERROR_TAG} ${error.message}\n`;
 };

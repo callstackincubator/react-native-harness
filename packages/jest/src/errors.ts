@@ -36,6 +36,19 @@ export class PlatformReadyTimeoutError extends HarnessError {
   }
 }
 
+export class MetroPortRangeExhaustedError extends HarnessError {
+  constructor(
+    public readonly initialPort: number,
+    public readonly attempts: number
+  ) {
+    const finalPort = initialPort + attempts - 1;
+    super(
+      `Harness could not find an available Metro port in the range ${initialPort}-${finalPort}.`
+    );
+    this.name = 'MetroPortRangeExhaustedError';
+  }
+}
+
 export type NativeCrashPhase = 'startup' | 'execution';
 
 export type NativeCrashDetails = AppCrashDetails & {

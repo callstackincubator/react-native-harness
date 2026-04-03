@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { HARNESS_BRIDGE_PATH } from '@react-native-harness/bridge';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
+import { MetroPortRangeExhaustedError } from '../errors.js';
 import { definePlugin } from '@react-native-harness/plugins';
 import type {
   AppMonitor,
@@ -25,10 +26,12 @@ const mocks = vi.hoisted(() => ({
   getMetroInstance: vi.fn(),
   isMetroCacheReusable: vi.fn(() => false),
   logMetroCacheReused: vi.fn(),
+  logMetroPortFallback: vi.fn(),
   logRunnerStarting: vi.fn(),
   logRunnerStillWaitingInQueue: vi.fn(),
   logRunnerWaitingInQueue: vi.fn(),
   waitForMetroBackedAppReady: vi.fn(),
+  isPortAvailable: vi.fn(async () => true),
 }));
 
 vi.mock('@react-native-harness/bundler-metro', async () => {
@@ -39,6 +42,7 @@ vi.mock('@react-native-harness/bundler-metro', async () => {
   return {
     ...actual,
     getMetroInstance: mocks.getMetroInstance,
+    isPortAvailable: mocks.isPortAvailable,
     isMetroCacheReusable: mocks.isMetroCacheReusable,
     waitForMetroBackedAppReady: mocks.waitForMetroBackedAppReady,
   };
@@ -50,6 +54,7 @@ vi.mock('@react-native-harness/bridge/server', () => ({
 
 vi.mock('../logs.js', () => ({
   logMetroCacheReused: mocks.logMetroCacheReused,
+  logMetroPortFallback: mocks.logMetroPortFallback,
   logRunnerStarting: mocks.logRunnerStarting,
   logRunnerStillWaitingInQueue: mocks.logRunnerStillWaitingInQueue,
   logRunnerWaitingInQueue: mocks.logRunnerWaitingInQueue,
@@ -195,6 +200,8 @@ const createHarnessConfig = (
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.isPortAvailable.mockReset();
+  mocks.isPortAvailable.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -377,13 +384,94 @@ describe('getHarness', () => {
 
     expect(runner).toHaveBeenCalledWith(
       platform.config,
-      expect.any(Object),
+      expect.objectContaining({
+        metroPort: 8081,
+      }),
       expect.objectContaining({
         signal: expect.any(AbortSignal),
       })
     );
 
     await harness.dispose();
+  });
+
+  it('resolves and exposes a fallback Metro port before platform init', async () => {
+    const { serverBridge } = createBridgeServer();
+    const appMonitor = createAppMonitor();
+    const platformInstance = createPlatformRunner({
+      createAppMonitor: () => appMonitor.appMonitor,
+    });
+    const metroInstance = createMetroInstance();
+
+    mocks.getBridgeServer.mockResolvedValue(serverBridge);
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
+    mocks.isPortAvailable
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    const runner = vi.fn(async () => platformInstance);
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = runner;
+
+    const platform: HarnessPlatform = {
+      config: {},
+      getResourceLockKey: () => 'android:emulator:Pixel_8_API_35',
+      name: 'android',
+      platformId: 'android',
+      runner: `data:text/javascript,${encodeURIComponent(
+        'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);'
+      )}`,
+    };
+
+    const harness = await getHarness(
+      createHarnessConfig(),
+      platform,
+      '/tmp/project'
+    );
+
+    expect(harness.config.metroPort).toBe(8082);
+    expect(mocks.getMetroInstance).toHaveBeenCalledWith(
+      expect.objectContaining({
+        harnessConfig: expect.objectContaining({
+          metroPort: 8082,
+        }),
+      }),
+      expect.any(AbortSignal)
+    );
+    expect(runner).toHaveBeenCalledWith(
+      platform.config,
+      expect.objectContaining({
+        metroPort: 8082,
+      }),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      })
+    );
+    expect(mocks.logMetroPortFallback).toHaveBeenCalledWith(8081, 8082);
+
+    await harness.dispose();
+  });
+
+  it('fails when no Metro port is available in the retry window', async () => {
+    mocks.isPortAvailable.mockResolvedValue(false);
+
+    const platform: HarnessPlatform = {
+      config: {},
+      getResourceLockKey: () => 'android:emulator:Pixel_8_API_35',
+      name: 'android',
+      platformId: 'android',
+      runner: 'data:text/javascript,export default async () => ({})',
+    };
+
+    await expect(
+      getHarness(createHarnessConfig(), platform, '/tmp/project')
+    ).rejects.toBeInstanceOf(MetroPortRangeExhaustedError);
+
+    expect(mocks.getBridgeServer).not.toHaveBeenCalled();
+    expect(mocks.getMetroInstance).not.toHaveBeenCalled();
   });
 
   it('falls back to a default resource lock key for platforms without getResourceLockKey', async () => {

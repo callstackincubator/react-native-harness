@@ -49,11 +49,13 @@ import { createClientLogListener } from './client-log-handler.js';
 import path from 'node:path';
 import {
   logMetroCacheReused,
+  logMetroPortFallback,
   logRunnerStarting,
   logRunnerStillWaitingInQueue,
   logRunnerWaitingInQueue,
 } from './logs.js';
 import { createResourceLockManager } from './resource-lock.js';
+import { resolveHarnessMetroPort } from './metro-port.js';
 
 const harnessLogger = logger.child('runtime');
 const resourceLockManager = createResourceLockManager();
@@ -73,6 +75,7 @@ export type HarnessRunState = {
 
 export type Harness = {
   context: HarnessContext;
+  config: HarnessConfig;
   runTests: (
     path: string,
     options: HarnessRunTestsOptions
@@ -285,17 +288,33 @@ const getHarnessInternal = async (
     resourceLockKey
   );
   try {
-    maybeLogMetroCacheReuse(config, platform, projectRoot);
+    const {
+      config: runtimeConfig,
+      metroPortLease,
+      initialMetroPort,
+      didFallback,
+    } = await resolveHarnessMetroPort({
+      config,
+      platform,
+      resourceLockManager,
+      signal,
+    });
+
+    if (didFallback) {
+      logMetroPortFallback(initialMetroPort, runtimeConfig.metroPort);
+    }
+
+    maybeLogMetroCacheReuse(runtimeConfig, platform, projectRoot);
     const pluginAbortController = new AbortController();
     const pluginManager = createHarnessPluginManager<
       HarnessConfig,
       HarnessPlatform
     >({
-      plugins: (config.plugins ?? []) as Array<
+      plugins: (runtimeConfig.plugins ?? []) as Array<
         HarnessPlugin<object, HarnessConfig, HarnessPlatform>
       >,
       projectRoot,
-      config,
+      config: runtimeConfig,
       runner: platform,
       abortSignal: pluginAbortController.signal,
     });
@@ -361,7 +380,7 @@ const getHarnessInternal = async (
 
     const serverBridge = await getBridgeServer({
       noServer: true,
-      timeout: config.bridgeTimeout,
+      timeout: runtimeConfig.bridgeTimeout,
       context,
     });
     harnessLogger.debug(
@@ -377,7 +396,7 @@ const getHarnessInternal = async (
           getMetroInstance(
             {
               projectRoot,
-              harnessConfig: config,
+              harnessConfig: runtimeConfig,
               websocketEndpoints: {
                 [HARNESS_BRIDGE_PATH]:
                   serverBridge.ws as unknown as MetroWebSocketEndpoint,
@@ -389,12 +408,12 @@ const getHarnessInternal = async (
             return instance;
           }),
           withPlatformReadyTimeout({
-            timeout: config.platformReadyTimeout,
+            timeout: runtimeConfig.platformReadyTimeout,
             signal,
             work: async () => {
               return await import(platform.runner)
                 .then((module) =>
-                  module.default(platform.config, config, {
+                  module.default(platform.config, runtimeConfig, {
                     signal,
                   } satisfies HarnessPlatformInitOptions)
                 )
@@ -408,6 +427,7 @@ const getHarnessInternal = async (
       } catch (error) {
         await Promise.allSettled([
           resourceLease.release(),
+          metroPortLease?.release(),
           serverBridge.dispose(),
         ]);
         throw error;
@@ -625,7 +645,7 @@ const getHarnessInternal = async (
     appMonitor.addListener(onAppMonitorEvent);
     harnessLogger.debug('registered runtime, bridge, and Metro listeners');
 
-    if (config.forwardClientLogs) {
+    if (runtimeConfig.forwardClientLogs) {
       metroInstance.events.addListener(clientLogListener);
       harnessLogger.debug('client log forwarding enabled');
     }
@@ -656,7 +676,7 @@ const getHarnessInternal = async (
         hookError = error;
       }
 
-      if (config.forwardClientLogs) {
+      if (runtimeConfig.forwardClientLogs) {
         metroInstance.events.removeListener(clientLogListener);
       }
       metroInstance.events.removeListener(onMetroEvent);
@@ -671,6 +691,7 @@ const getHarnessInternal = async (
           serverBridge.dispose(),
           platformInstance.dispose(),
           metroInstance.dispose(),
+          metroPortLease?.release(),
         ]);
       } catch (error) {
         cleanupError = error;
@@ -744,9 +765,9 @@ const getHarnessInternal = async (
         serverBridge,
         platformInstance: platformInstance as HarnessPlatformRunner,
         platformId: platform.platformId,
-        bundleStartTimeout: config.bundleStartTimeout ?? 60000,
-        readyTimeout: config.bridgeTimeout,
-        maxAppRestarts: config.maxAppRestarts ?? 2,
+        bundleStartTimeout: runtimeConfig.bundleStartTimeout ?? 60000,
+        readyTimeout: runtimeConfig.bridgeTimeout,
+        maxAppRestarts: runtimeConfig.maxAppRestarts ?? 2,
         testFilePath,
         crashSupervisor,
         appLaunchOptions,
@@ -786,6 +807,7 @@ const getHarnessInternal = async (
 
     return {
       context,
+      config: runtimeConfig,
       runTests: async (path, options) => {
         await flushPendingHooks();
         activeTestFilePath = path;
