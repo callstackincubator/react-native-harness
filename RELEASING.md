@@ -24,6 +24,8 @@ Run the workflow from any branch with `mode=canary`.
 
 Canary releases publish a unique prerelease version for the current commit with the `canary` dist-tag. They do not create a commit, tag, or GitHub release.
 
+Canary releases do not consume or remove version plans.
+
 ## Required secrets
 
 The workflow expects `NPM_ACCESS_TOKEN` to be configured in GitHub Actions secrets.

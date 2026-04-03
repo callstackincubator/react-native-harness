@@ -1,15 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { ReleaseClient, release } from 'nx/release';
@@ -39,16 +31,6 @@ function normalizeRef(ref) {
 
 function isReleaseBranch(ref) {
   return /^release\/v\d+\.\d+(?:\.\d+)?$/.test(ref);
-}
-
-function parseReleaseBranchVersion(ref) {
-  const match = ref.match(/^release\/v(\d+)\.(\d+)(?:\.(\d+))?$/);
-
-  if (!match) {
-    return null;
-  }
-
-  return `${match[1]}.${match[2]}.${match[3] ?? '0'}`;
 }
 
 function run(command, args, options = {}) {
@@ -138,81 +120,25 @@ function getVersionPlans() {
     .map((fileName) => path.join(versionPlansDir, fileName));
 }
 
-function deleteVersionPlans(versionPlans) {
-  for (const versionPlan of versionPlans) {
-    rmSync(versionPlan, { force: true });
-  }
-}
-
-function stageReleaseFiles() {
-  run('git', [
-    'add',
-    '-A',
-    '.nx/version-plans',
-    'packages',
-    'CHANGELOG.md',
-    'pnpm-lock.yaml',
-  ]);
-
-  const staged = runOutput('git', ['diff', '--cached', '--name-only']);
-
-  if (staged.length === 0) {
-    fail('no release files were staged for commit');
-  }
-}
-
-function commitVersionChanges(version) {
-  stageReleaseFiles();
-  run('git', ['commit', '-m', `chore: release v${version}`]);
-}
-
-function createTag(version) {
-  const tag = `v${version}`;
-
-  if (commandSucceeds('git', ['rev-parse', '--verify', `refs/tags/${tag}`])) {
-    fail(`tag ${tag} already exists locally`);
-  }
-
-  if (
-    commandSucceeds('git', [
-      'ls-remote',
-      '--exit-code',
-      '--tags',
-      remote,
-      `refs/tags/${tag}`,
-    ])
-  ) {
-    fail(`tag ${tag} already exists on ${remote}`);
-  }
-
-  run('git', ['tag', tag]);
-}
-
-function pushBranchAndTag(version) {
-  run('git', ['push', remote, `HEAD:${branch}`]);
-  run('git', ['push', remote, `refs/tags/v${version}`]);
-}
-
-function createGitHubRelease(version, notes, prerelease = false) {
-  ensureGithubToken();
-
-  const tempDir = mkdtempSync(path.join(tmpdir(), 'release-notes-'));
-  const notesPath = path.join(tempDir, 'notes.md');
-
-  writeFileSync(notesPath, notes);
-
-  const args = ['release', 'create', `v${version}`, '--title', `v${version}`];
-
-  if (prerelease) {
-    args.push('--prerelease');
-  }
-
-  args.push('--notes-file', notesPath, '--target', branch);
-
-  try {
-    run('gh', args);
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
+function convertVersionPlanReleaseType(releaseType) {
+  switch (releaseType) {
+    case 'major':
+    case 'feat!':
+    case 'fix!':
+      return 'premajor';
+    case 'minor':
+    case 'feat':
+      return 'preminor';
+    case 'patch':
+    case 'fix':
+      return 'prepatch';
+    case 'premajor':
+    case 'preminor':
+    case 'prepatch':
+    case 'prerelease':
+      return releaseType;
+    default:
+      return releaseType;
   }
 }
 
@@ -226,31 +152,48 @@ function assertPublishSucceeded(results) {
   }
 }
 
-function getNextRcVersion(targetVersion, currentVersion) {
-  const parsedCurrent = semver.parse(currentVersion);
+function rewriteVersionPlanForRc(content) {
+  return content.replace(/^---\n([\s\S]*?)\n---/m, (match, frontMatter) => {
+    const rewrittenFrontMatter = frontMatter.replace(
+      /^(\s*[^:\n]+:\s*)(\S+)\s*$/gm,
+      (_, prefix, releaseType) =>
+        `${prefix}${convertVersionPlanReleaseType(releaseType)}`
+    );
 
-  if (!parsedCurrent) {
-    fail(`current version ${currentVersion} is not valid semver`);
+    return `---\n${rewrittenFrontMatter}\n---`;
+  });
+}
+
+async function runRcReleaseWithVersionPlans() {
+  const versionPlans = getVersionPlans();
+
+  if (versionPlans.length === 0) {
+    fail('rc releases require at least one version plan in .nx/version-plans');
   }
 
-  if (parsedCurrent.version === targetVersion) {
-    return `${targetVersion}-rc.0`;
-  }
+  const originalContents = new Map(
+    versionPlans.map((filePath) => [filePath, readFileSync(filePath, 'utf8')])
+  );
+  let releaseSucceeded = false;
 
-  const prerelease = parsedCurrent.prerelease;
-  const stableCurrent = `${parsedCurrent.major}.${parsedCurrent.minor}.${parsedCurrent.patch}`;
-
-  if (stableCurrent === targetVersion && prerelease[0] === 'rc') {
-    const nextVersion = semver.inc(currentVersion, 'prerelease', 'rc');
-
-    if (!nextVersion) {
-      fail(`could not determine next rc version from ${currentVersion}`);
+  try {
+    for (const [filePath, content] of originalContents) {
+      writeFileSync(filePath, rewriteVersionPlanForRc(content));
     }
 
-    return nextVersion;
+    await release({
+      yes: true,
+      skipPublish: false,
+      preid: 'rc',
+    });
+    releaseSucceeded = true;
+  } finally {
+    if (!releaseSucceeded) {
+      for (const [filePath, content] of originalContents) {
+        writeFileSync(filePath, content);
+      }
+    }
   }
-
-  return `${targetVersion}-rc.0`;
 }
 
 function getCanaryVersion(currentVersion) {
@@ -300,62 +243,7 @@ async function runRcRelease() {
   ensureGithubToken();
   ensureNpmToken();
 
-  const versionPlans = getVersionPlans();
-
-  if (versionPlans.length === 0) {
-    fail('rc releases require at least one version plan in .nx/version-plans');
-  }
-
-  const targetVersion = parseReleaseBranchVersion(branch);
-
-  if (!targetVersion) {
-    fail(`could not determine target version from ${branch}`);
-  }
-
-  const nextVersion = getNextRcVersion(targetVersion, readVersion());
-  const releaseClient = new ReleaseClient({});
-  const { workspaceVersion, projectsVersionData, releaseGraph } =
-    await releaseClient.releaseVersion({
-      specifier: nextVersion,
-      gitCommit: false,
-      gitTag: false,
-      stageChanges: true,
-      deleteVersionPlans: false,
-    });
-  const changelogResult = await releaseClient.releaseChangelog({
-    releaseGraph,
-    versionData: projectsVersionData,
-    version: workspaceVersion ?? nextVersion,
-    gitCommit: false,
-    gitTag: false,
-    gitPush: false,
-    stageChanges: true,
-    createRelease: false,
-    deleteVersionPlans: false,
-  });
-
-  deleteVersionPlans(versionPlans);
-  commitVersionChanges(nextVersion);
-  createTag(nextVersion);
-  pushBranchAndTag(nextVersion);
-
-  if (changelogResult.workspaceChangelog?.contents) {
-    createGitHubRelease(
-      nextVersion,
-      changelogResult.workspaceChangelog.contents,
-      true
-    );
-  }
-
-  const publishResults = await releaseClient.releasePublish({
-    releaseGraph,
-    versionData: projectsVersionData,
-    tag: 'rc',
-    access: 'public',
-    outputStyle: 'static',
-  });
-
-  assertPublishSucceeded(publishResults);
+  await runRcReleaseWithVersionPlans();
 }
 
 async function runCanaryRelease() {
