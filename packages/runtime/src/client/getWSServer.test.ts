@@ -1,5 +1,6 @@
 import { HARNESS_BRIDGE_PATH } from '@react-native-harness/bridge';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getWSServer } from './getWSServer.js';
 
 const mocks = vi.hoisted(() => ({
   getDevServerUrl: vi.fn(),
@@ -12,8 +13,6 @@ vi.mock('../utils/dev-server.js', () => ({
 vi.mock('react-native-url-polyfill', () => ({
   URL,
 }));
-
-import { getWSServer } from './getWSServer.js';
 
 describe('getWSServer', () => {
   beforeEach(() => {
