@@ -208,7 +208,7 @@ const parseCrashArtifacts = ({
       return artifact;
     })
     .filter((artifact): artifact is DiagnosedCrashArtifact =>
-      Boolean(artifact)
+      Boolean(artifact),
     );
 
   return candidates.sort((left, right) => {
@@ -252,7 +252,7 @@ const collectPhysicalCrashArtifacts = async ({
       recursive: true,
     });
     const filteredCrashLogPaths = remoteCrashLogPaths.filter((remotePath) =>
-      processNames.some((processName) => remotePath.includes(processName))
+      processNames.some((processName) => remotePath.includes(processName)),
     );
 
     if (filteredCrashLogPaths.length > 0) {
@@ -311,7 +311,7 @@ const collectPhysicalCrashArtifacts = async ({
 };
 
 export const collectCrashArtifacts = async (
-  options: CollectCrashArtifactsOptions
+  options: CollectCrashArtifactsOptions,
 ): Promise<DiagnosedCrashArtifact[]> => {
   crashDiagnosticsLogger.debug('collecting crash artifacts: %o', {
     targetId: options.targetId,
@@ -360,7 +360,7 @@ export const waitForCrashArtifact = async ({
     }
 
     await new Promise((resolve) =>
-      setTimeout(resolve, CRASH_ARTIFACT_POLL_INTERVAL_MS)
+      setTimeout(resolve, CRASH_ARTIFACT_POLL_INTERVAL_MS),
     );
   } while (true);
 };

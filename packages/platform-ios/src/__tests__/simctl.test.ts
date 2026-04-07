@@ -18,7 +18,7 @@ describe('simctl startup', () => {
     expect(spawnSpy).toHaveBeenCalledWith(
       'xcrun',
       ['simctl', 'bootstatus', 'sim-udid', '-b'],
-      { signal }
+      { signal },
     );
   });
 
@@ -29,15 +29,19 @@ describe('simctl startup', () => {
 
     await diagnose('sim-udid', '/tmp/sim-diagnose-output');
 
-    expect(spawnSpy).toHaveBeenCalledWith('xcrun', [
-      'simctl',
-      'diagnose',
-      '--udid',
-      'sim-udid',
-      '--no-archive',
-      '--output',
-      '/tmp/sim-diagnose-output',
-      '-b',
-    ]);
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'xcrun',
+      [
+        'simctl',
+        'diagnose',
+        '--udid=sim-udid',
+        '--no-archive',
+        '--output=/tmp/sim-diagnose-output',
+        '-b',
+      ],
+      {
+        stdin: { string: '\n' },
+      },
+    );
   });
 });
