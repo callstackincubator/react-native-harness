@@ -336,7 +336,7 @@ export const waitForCrashArtifact = async ({
   const deadline = Date.now() + CRASH_ARTIFACT_WAIT_TIMEOUT_MS;
   let fallbackArtifact = getFallbackArtifact();
 
-  do {
+  while (Date.now() < deadline) {
     const artifacts = await collectCrashArtifacts(options);
 
     for (const artifact of artifacts) {
@@ -362,5 +362,7 @@ export const waitForCrashArtifact = async ({
     await new Promise((resolve) =>
       setTimeout(resolve, CRASH_ARTIFACT_POLL_INTERVAL_MS),
     );
-  } while (true);
+  }
+
+  return getFallbackArtifact() ?? fallbackArtifact;
 };
