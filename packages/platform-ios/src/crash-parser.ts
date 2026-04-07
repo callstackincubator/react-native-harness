@@ -8,6 +8,41 @@ type ParseIosCrashReportOptions = {
 
 export type ParsedIosCrashReport = AppCrashDetails & {
   occurredAt: number;
+  bundleId?: string;
+  procPath?: string;
+  targetId?: string;
+};
+
+const parseDateValue = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return undefined;
+  }
+
+  const normalizedValue = value
+    .trim()
+    .replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T')
+    .replace(/\s+([+-]\d{2})(\d{2})$/, '$1:$2');
+  const parsedDate = Date.parse(normalizedValue);
+
+  return Number.isNaN(parsedDate) ? undefined : parsedDate;
+};
+
+const getTargetIdFromProcPath = (procPath?: string) => {
+  if (!procPath) {
+    return undefined;
+  }
+
+  const simulatorMatch = procPath.match(/CoreSimulator\/Devices\/([^/]+)\//);
+
+  if (simulatorMatch) {
+    return simulatorMatch[1];
+  }
+
+  return undefined;
 };
 
 const getSignal = (contents: string) => {
@@ -26,20 +61,13 @@ const getSignal = (contents: string) => {
   return undefined;
 };
 
-const getOccurredAt = ({
-  path,
-  contents,
-}: ParseIosCrashReportOptions) => {
+const getOccurredAt = ({ path, contents }: ParseIosCrashReportOptions) => {
   const dateTimeMatch = contents.match(/^Date\/Time:\s+(.+)$/m);
 
   if (dateTimeMatch) {
-    const normalizedValue = dateTimeMatch[1]
-      .trim()
-      .replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T')
-      .replace(/\s+([+-]\d{2})(\d{2})$/, '$1:$2');
-    const parsedDate = Date.parse(normalizedValue);
+    const parsedDate = parseDateValue(dateTimeMatch[1]);
 
-    if (!Number.isNaN(parsedDate)) {
+    if (parsedDate !== undefined) {
       return parsedDate;
     }
   }
@@ -49,7 +77,9 @@ const getOccurredAt = ({
 
 const getCrashThreadFrames = (rawLines: string[], threadId: string) => {
   const threadHeader = `Thread ${threadId} Crashed:`;
-  const threadHeaderIndex = rawLines.findIndex((line) => line.trim() === threadHeader);
+  const threadHeaderIndex = rawLines.findIndex(
+    (line) => line.trim() === threadHeader
+  );
 
   if (threadHeaderIndex === -1) {
     return undefined;
@@ -87,11 +117,14 @@ const parseCrashTextReport = ({
   const rawLines = contents.split(/\r?\n/);
   const processMatch = contents.match(/^Process:\s+(.+?)\s+\[(\d+)\]$/m);
   const exceptionMatch = contents.match(/^Exception Type:\s+(.+)$/m);
-  const triggeredThreadMatch = contents.match(/^Triggered by Thread:\s+(\d+)$/m);
+  const triggeredThreadMatch = contents.match(
+    /^Triggered by Thread:\s+(\d+)$/m
+  );
 
   return {
     occurredAt: getOccurredAt({ path, contents }),
     rawLines,
+    bundleId: contents.match(/^Identifier:\s+(.+)$/m)?.[1]?.trim(),
     processName: processMatch?.[1]?.trim(),
     pid: processMatch ? Number(processMatch[2]) : undefined,
     signal: getSignal(contents),
@@ -117,10 +150,14 @@ const parseIpsCrashReport = ({
       app_name?: string;
       bundleID?: string;
       name?: string;
+      timestamp?: string;
     };
     const body = JSON.parse(bodyLines.join('\n')) as {
+      captureTime?: string;
       pid?: number;
       procName?: string;
+      procPath?: string;
+      procLaunch?: string;
       faultingThread?: number;
       threads?: Array<{
         frames?: Array<{
@@ -157,10 +194,10 @@ const parseIpsCrashReport = ({
           frame.sourceFile && frame.sourceLine
             ? `${frame.sourceFile}:${frame.sourceLine}`
             : frame.symbolLocation !== undefined
-              ? `+ ${frame.symbolLocation}`
-              : frame.imageOffset !== undefined
-                ? `+ ${frame.imageOffset}`
-                : undefined;
+            ? `+ ${frame.symbolLocation}`
+            : frame.imageOffset !== undefined
+            ? `+ ${frame.imageOffset}`
+            : undefined;
         const symbol = frame.symbol ?? imageName ?? '<unknown>';
 
         return `${index} ${symbol}${location ? ` (${location})` : ''}`;
@@ -168,13 +205,22 @@ const parseIpsCrashReport = ({
       .filter((line) => line.trim().length > 0);
 
     return {
-      occurredAt: fs.statSync(path).mtimeMs,
+      occurredAt:
+        parseDateValue(header.timestamp) ??
+        parseDateValue(body.captureTime) ??
+        parseDateValue(body.procLaunch) ??
+        fs.statSync(path).mtimeMs,
       rawLines: contents.split(/\r?\n/),
+      bundleId: header.bundleID,
       processName: body.procName ?? header.app_name ?? header.name,
       pid: body.pid,
+      procPath: body.procPath,
+      targetId: getTargetIdFromProcPath(body.procPath),
       signal: body.exception?.signal ?? getSignal(contents),
       exceptionType:
-        body.exception?.type ?? body.termination?.indicator ?? getSignal(contents),
+        body.exception?.type ??
+        body.termination?.indicator ??
+        getSignal(contents),
       stackTrace: stackTrace.length > 0 ? stackTrace : undefined,
     };
   } catch {

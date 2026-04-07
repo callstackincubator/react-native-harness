@@ -6,18 +6,26 @@ import {
   type CrashArtifactWriter,
   type CrashDetailsLookupOptions,
 } from '@react-native-harness/platforms';
-import { escapeRegExp, getEmitter, logger, spawn, type Subprocess } from '@react-native-harness/tools';
+import {
+  escapeRegExp,
+  getEmitter,
+  logger,
+  spawn,
+  type Subprocess,
+} from '@react-native-harness/tools';
 import * as devicectl from './xcrun/devicectl.js';
 import * as simctl from './xcrun/simctl.js';
-import * as libimobiledevice from './libimobiledevice.js';
+import {
+  collectCrashArtifacts,
+  waitForCrashArtifact,
+} from './crash-diagnostics.js';
 
 const iosAppMonitorLogger = logger.child('ios-app-monitor');
 
 const MAX_RECENT_LOG_LINES = 200;
 const MAX_RECENT_CRASH_ARTIFACTS = 10;
-const CRASH_ARTIFACT_SETTLE_DELAY_MS = 100;
-const CRASH_ARTIFACT_WAIT_TIMEOUT_MS = 10000;
-const CRASH_ARTIFACT_POLL_INTERVAL_MS = 1000;
+const CRASH_ARTIFACT_SETTLE_DELAY_MS = 300;
+const APP_EXIT_POLL_INTERVAL_MS = 1000;
 
 type TimedLogLine = {
   line: string;
@@ -58,7 +66,11 @@ const getProcessName = (line: string, processNames: string[]) =>
 const getPid = (line: string, processNames: string[]) => {
   for (const processName of processNames) {
     const match = line.match(
-      new RegExp(`\\b${escapeRegExp(processName)}(?:\\([^)]*\\))?\\[(\\d+)(?::[^\\]]+)?\\]`)
+      new RegExp(
+        `\\b${escapeRegExp(
+          processName
+        )}(?:\\([^)]*\\))?\\[(\\d+)(?::[^\\]]+)?\\]`
+      )
     );
 
     if (match) {
@@ -148,9 +160,10 @@ const createAppMonitorBase = () => {
   };
 
   const recordLogLine = (line: string) => {
-    recentLogLines = [...recentLogLines, { line, occurredAt: Date.now() }].slice(
-      -MAX_RECENT_LOG_LINES
-    );
+    recentLogLines = [
+      ...recentLogLines,
+      { line, occurredAt: Date.now() },
+    ].slice(-MAX_RECENT_LOG_LINES);
   };
 
   const recordCrashArtifact = (details: AppCrashDetails) => {
@@ -171,18 +184,17 @@ const createAppMonitorBase = () => {
       : [];
     const matchingByProcess = options.processName
       ? recentCrashArtifacts.filter(
-        (artifact) => artifact.processName === options.processName
-      )
+          (artifact) => artifact.processName === options.processName
+        )
       : [];
     const candidates =
       matchingByPid.length > 0
         ? matchingByPid
         : matchingByProcess.length > 0
-          ? matchingByProcess
-          : recentCrashArtifacts;
+        ? matchingByProcess
+        : recentCrashArtifacts;
     const preferredCandidates = candidates.filter(
-      (artifact) =>
-        artifact.artifactType === 'ios-crash-report'
+      (artifact) => artifact.artifactType === 'ios-crash-report'
     );
     const prioritizedCandidates =
       preferredCandidates.length > 0 ? preferredCandidates : candidates;
@@ -298,6 +310,7 @@ const createAppMonitorBase = () => {
 
   return {
     createLifecycle,
+    emit,
     handleLogEvent,
     recordCrashArtifact,
     getLatestCrashArtifact,
@@ -320,6 +333,84 @@ const getRecentLogBlock = ({
   return nearbyLines.map((line) => line.line);
 };
 
+const toLogOnlyDetails = ({
+  artifact,
+  recentLogLines,
+  occurredAt,
+}: {
+  artifact: AppCrashDetails;
+  recentLogLines: TimedLogLine[];
+  occurredAt: number;
+}): AppCrashDetails => {
+  const relatedLogLines = getRecentLogBlock({
+    recentLogLines,
+    occurredAt,
+  });
+
+  return {
+    ...artifact,
+    summary:
+      relatedLogLines.length > 0
+        ? relatedLogLines.join('\n')
+        : artifact.summary,
+    rawLines: relatedLogLines.length > 0 ? relatedLogLines : artifact.rawLines,
+    artifactType: undefined,
+    artifactPath: undefined,
+  };
+};
+
+const createCrashDetailsLookup = ({
+  targetId,
+  targetType,
+  bundleId,
+  processNames,
+  monitorStartedAt,
+  crashArtifactWriter,
+  base,
+}: {
+  targetId: string;
+  targetType: 'simulator' | 'device';
+  bundleId: string;
+  processNames: string[];
+  monitorStartedAt: number;
+  crashArtifactWriter?: CrashArtifactWriter;
+  base: ReturnType<typeof createAppMonitorBase>;
+}) => {
+  return async (options: CrashDetailsLookupOptions) => {
+    await new Promise((resolve) =>
+      setTimeout(resolve, CRASH_ARTIFACT_SETTLE_DELAY_MS)
+    );
+
+    const artifact = await waitForCrashArtifact({
+      lookup: options,
+      options: {
+        targetId,
+        targetType,
+        bundleId,
+        processNames,
+        crashArtifactWriter,
+        minOccurredAt: monitorStartedAt,
+      },
+      getFallbackArtifact: () => base.getLatestCrashArtifact(options),
+      recordArtifact: (details) => base.recordCrashArtifact(details),
+    });
+
+    if (!artifact) {
+      return null;
+    }
+
+    if (artifact.artifactType === 'ios-crash-report') {
+      return artifact;
+    }
+
+    return toLogOnlyDetails({
+      artifact,
+      recentLogLines: base.getRecentLogLines(),
+      occurredAt: options.occurredAt,
+    });
+  };
+};
+
 export const createIosSimulatorAppMonitor = ({
   udid,
   bundleId,
@@ -338,11 +429,13 @@ export const createIosSimulatorAppMonitor = ({
   const startLogMonitor = async (startedAt: number) => {
     monitorStartedAt = startedAt;
     const appInfo = await simctl.getAppInfo(udid, bundleId);
-    processNames = [...new Set([
-      appInfo?.CFBundleExecutable,
-      appInfo?.CFBundleName,
-      bundleId,
-    ].filter((value): value is string => Boolean(value)))];
+    processNames = [
+      ...new Set(
+        [appInfo?.CFBundleExecutable, appInfo?.CFBundleName, bundleId].filter(
+          (value): value is string => Boolean(value)
+        )
+      ),
+    ];
 
     const predicate = processNames
       .map((name) => `process == "${name}"`)
@@ -397,238 +490,130 @@ export const createIosSimulatorAppMonitor = ({
     await currentTask;
   };
 
-  const waitForCrashArtifact = async (
-    options: CrashDetailsLookupOptions
-  ): Promise<AppCrashDetails | null> => {
-    let fallbackArtifact: AppCrashDetails | null = null;
-    const deadline = Date.now() + CRASH_ARTIFACT_WAIT_TIMEOUT_MS;
-    let pollCount = 0;
-
-    do {
-      pollCount += 1;
-      iosAppMonitorLogger.debug('waitForCrashArtifact poll #%d %o', pollCount, {
-        pid: options.pid,
-        processName: options.processName,
-      });
-
-      const collectedArtifacts = await simctl.collectCrashReports({
-        udid,
-        bundleId,
-        processNames,
-        crashArtifactWriter,
-        minOccurredAt: monitorStartedAt,
-      });
-
-      iosAppMonitorLogger.debug(
-        'poll #%d collected %d crash artifact(s) from DiagnosticReports',
-        pollCount,
-        collectedArtifacts.length
-      );
-
-      for (const artifact of collectedArtifacts) {
-        base.recordCrashArtifact(artifact);
-      }
-
-      const artifact = base.getLatestCrashArtifact(options);
-
-      if (artifact) {
-        iosAppMonitorLogger.debug('poll #%d found artifact %o', pollCount, {
-          artifactType: artifact.artifactType,
-          artifactPath: artifact.artifactPath,
-          pid: artifact.pid,
-          processName: artifact.processName,
-        });
-
-        if (artifact.artifactType === 'ios-crash-report') {
-          return artifact;
-        }
-
-        fallbackArtifact = artifact;
-      } else {
-        iosAppMonitorLogger.debug(
-          'poll #%d found no matching crash artifact yet',
-          pollCount
-        );
-      }
-
-      if (Date.now() >= deadline) {
-        iosAppMonitorLogger.debug(
-          'waitForCrashArtifact deadline reached, returning %s',
-          fallbackArtifact ? 'fallback log-based artifact' : 'null'
-        );
-        return fallbackArtifact;
-      }
-
-      await new Promise((resolve) =>
-        setTimeout(resolve, CRASH_ARTIFACT_POLL_INTERVAL_MS)
-      );
-      // eslint-disable-next-line no-constant-condition
-    } while (true);
-  };
-
   return base.createLifecycle({
     startLogMonitor,
     stopLogMonitor,
-    getCrashDetails: async (options) => {
-      iosAppMonitorLogger.debug('getCrashDetails called for simulator: %o', {
-        pid: options.pid,
-        processName: options.processName,
-      });
-      await new Promise((resolve) =>
-        setTimeout(resolve, CRASH_ARTIFACT_SETTLE_DELAY_MS)
-      );
-
-      const artifact = await waitForCrashArtifact(options);
-
-      if (!artifact) {
-        iosAppMonitorLogger.debug('getCrashDetails found no artifact');
-        return null;
-      }
-
-      if (artifact.artifactType === 'ios-crash-report') {
-        iosAppMonitorLogger.debug(
-          'getCrashDetails returning ios-crash-report artifact: %s',
-          artifact.artifactPath
-        );
-        return artifact;
-      }
-
-      const relatedLogLines = getRecentLogBlock({
-        recentLogLines: base.getRecentLogLines(),
-        occurredAt: options.occurredAt,
-      });
-
-      iosAppMonitorLogger.debug(
-        'getCrashDetails returning log-based artifact with %d related log lines',
-        relatedLogLines.length
-      );
-
-      return {
-        ...artifact,
-        summary:
-          relatedLogLines.length > 0
-            ? relatedLogLines.join('\n')
-            : artifact.summary,
-        rawLines:
-          relatedLogLines.length > 0 ? relatedLogLines : artifact.rawLines,
-        artifactType: undefined,
-        artifactPath: undefined,
-      };
-    },
+    getCrashDetails: (options) =>
+      createCrashDetailsLookup({
+        targetId: udid,
+        targetType: 'simulator',
+        bundleId,
+        processNames,
+        monitorStartedAt,
+        crashArtifactWriter,
+        base,
+      })(options),
   });
 };
 
 export const createIosDeviceAppMonitor = ({
   deviceId,
-  libimobiledeviceUdid,
   bundleId,
   crashArtifactWriter,
 }: {
   deviceId: string;
-  libimobiledeviceUdid: string;
   bundleId: string;
   crashArtifactWriter?: CrashArtifactWriter;
 }): IosAppMonitor => {
   const base = createAppMonitorBase();
-  let logProcess: Subprocess | null = null;
-  let logTask: Promise<void> | null = null;
-  let processNames = [bundleId];
+  let pollTask: Promise<void> | null = null;
+  let stopPolling = false;
   let monitorStartedAt = 0;
+  let processNames = [bundleId];
+  let lastKnownPid: number | undefined;
 
   const startLogMonitor = async (startedAt: number) => {
     monitorStartedAt = startedAt;
     const appInfo = await devicectl.getAppInfo(deviceId, bundleId);
-    processNames = [bundleId, appInfo?.name].filter(
-      (value): value is string => Boolean(value)
-    );
+    processNames = [
+      ...new Set(
+        [appInfo?.name, bundleId].filter((value): value is string =>
+          Boolean(value)
+        )
+      ),
+    ];
 
-    await libimobiledevice.assertLibimobiledeviceTargetAvailable(libimobiledeviceUdid);
-    logProcess = libimobiledevice.createSyslogProcess({
-      targetId: libimobiledeviceUdid,
-      processNames,
-    });
+    stopPolling = false;
+    pollTask = (async () => {
+      let wasRunning = false;
 
-    const currentProcess = logProcess;
+      while (!stopPolling) {
+        try {
+          const processes = await devicectl.getProcesses(deviceId);
+          const matchingProcess = processes.find((process) => {
+            if (appInfo?.url) {
+              return process.executable.startsWith(appInfo.url);
+            }
 
-    if (!currentProcess) {
-      return;
-    }
+            return processNames.some((processName) =>
+              process.executable.includes(processName)
+            );
+          });
 
-    logTask = (async () => {
-      try {
-        for await (const line of currentProcess) {
-          base.handleLogEvent(line, processNames);
+          if (matchingProcess) {
+            wasRunning = true;
+            lastKnownPid = matchingProcess.processIdentifier;
+          } else if (wasRunning) {
+            const crashDetails: AppCrashDetails = {
+              source: 'polling',
+              processName: processNames[0],
+              pid: lastKnownPid,
+              summary: `${processNames[0] ?? bundleId} exited on device`,
+            };
+
+            base.recordCrashArtifact(crashDetails);
+            base.emit({
+              type: 'app_exited',
+              source: 'polling',
+              pid: lastKnownPid,
+              isConfirmed: true,
+              crashDetails,
+            });
+            wasRunning = false;
+          }
+        } catch (error) {
+          iosAppMonitorLogger.debug('iOS device process polling failed', error);
         }
-      } catch (error) {
-        iosAppMonitorLogger.debug(
-          'iOS libimobiledevice log monitor stopped',
-          error
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, APP_EXIT_POLL_INTERVAL_MS)
         );
       }
     })();
+
+    const initialArtifacts = await collectCrashArtifacts({
+      targetId: deviceId,
+      targetType: 'device',
+      bundleId,
+      processNames,
+      crashArtifactWriter,
+      minOccurredAt: monitorStartedAt,
+    });
+
+    for (const artifact of initialArtifacts) {
+      base.recordCrashArtifact(artifact);
+    }
   };
 
   const stopLogMonitor = async () => {
-    const currentProcess = logProcess;
-    const currentTask = logTask;
-
-    logProcess = null;
-    logTask = null;
-
-    await base.stopProcess(currentProcess);
-    await currentTask;
-  };
-
-  const waitForCrashArtifact = async (
-    options: CrashDetailsLookupOptions
-  ): Promise<AppCrashDetails | null> => {
-    let fallbackArtifact: AppCrashDetails | null = null;
-    const deadline = Date.now() + CRASH_ARTIFACT_WAIT_TIMEOUT_MS;
-
-    do {
-      const collectedArtifacts = await libimobiledevice.collectCrashReports({
-        targetId: libimobiledeviceUdid,
-        bundleId,
-        processNames,
-        crashArtifactWriter,
-        minOccurredAt: monitorStartedAt,
-      });
-
-      for (const artifact of collectedArtifacts) {
-        base.recordCrashArtifact(artifact);
-      }
-
-      const artifact = base.getLatestCrashArtifact(options);
-
-      if (artifact) {
-        if (artifact.artifactType === 'ios-crash-report') {
-          return artifact;
-        }
-
-        fallbackArtifact = artifact;
-      }
-
-      if (Date.now() >= deadline) {
-        return fallbackArtifact;
-      }
-
-      await new Promise((resolve) =>
-        setTimeout(resolve, CRASH_ARTIFACT_POLL_INTERVAL_MS)
-      );
-      // eslint-disable-next-line no-constant-condition
-    } while (true);
+    stopPolling = true;
+    await pollTask;
+    pollTask = null;
   };
 
   return base.createLifecycle({
     startLogMonitor,
     stopLogMonitor,
-    getCrashDetails: async (options) => {
-      await new Promise((resolve) =>
-        setTimeout(resolve, CRASH_ARTIFACT_SETTLE_DELAY_MS)
-      );
-
-      return waitForCrashArtifact(options);
-    },
+    getCrashDetails: (options) =>
+      createCrashDetailsLookup({
+        targetId: deviceId,
+        targetType: 'device',
+        bundleId,
+        processNames,
+        monitorStartedAt,
+        crashArtifactWriter,
+        base,
+      })(options),
   });
 };
 

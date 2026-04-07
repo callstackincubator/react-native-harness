@@ -79,11 +79,10 @@ Creates a physical Apple device configuration.
 ## Requirements
 
 - macOS with Xcode installed
-- `libimobiledevice` installed and available in `PATH` (`idevicesyslog`, `idevicecrashreport`, and `idevice_id`) for physical-device crash diagnostics
 - iOS Simulator or physical device connected
 - React Native project configured for iOS
 
-Harness uses `simctl` for simulator crash monitoring and `libimobiledevice` for physical-device crash diagnostics. Simulator crash details are best-effort from recent log blocks, while physical devices can additionally attach pulled `.crash` artifacts when available.
+Harness uses Apple-native Xcode tooling for crash diagnostics: `simctl diagnose` on simulators and `devicectl` crash log / diagnose flows on physical devices. Native crash monitoring stays internal to the platform package, so the implementation can evolve without changing the public API.
 
 ## Made with ❤️ at Callstack
 

@@ -22,7 +22,6 @@ import {
   createIosDeviceAppMonitor,
   createIosSimulatorAppMonitor,
 } from './app-monitor.js';
-import { assertLibimobiledeviceInstalled } from './libimobiledevice.js';
 import { HarnessAppPathError } from './errors.js';
 import { logger } from '@react-native-harness/tools';
 import fs from 'node:fs';
@@ -175,10 +174,6 @@ export const getApplePhysicalDevicePlatformInstance = async (
   assertAppleDevicePhysical(config.device);
   const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
 
-  if (detectNativeCrashes) {
-    await assertLibimobiledeviceInstalled();
-  }
-
   if (harnessConfig.metroPort !== DEFAULT_METRO_PORT) {
     throw new Error(
       `Custom Metro port ${harnessConfig.metroPort} is not supported on physical iOS devices. Physical devices always connect to port ${DEFAULT_METRO_PORT}.`
@@ -192,7 +187,6 @@ export const getApplePhysicalDevicePlatformInstance = async (
   }
 
   const deviceId = device.identifier;
-  const hardwareUdid = device.hardwareProperties.udid;
 
   const isAvailable = await devicectl.isAppInstalled(deviceId, config.bundleId);
 
@@ -237,7 +231,6 @@ export const getApplePhysicalDevicePlatformInstance = async (
 
       return createIosDeviceAppMonitor({
         deviceId,
-        libimobiledeviceUdid: hardwareUdid,
         bundleId: config.bundleId,
         crashArtifactWriter: options?.crashArtifactWriter,
       });

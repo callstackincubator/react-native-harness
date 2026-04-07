@@ -9,7 +9,6 @@ import {
 } from '../instance.js';
 import * as simctl from '../xcrun/simctl.js';
 import * as devicectl from '../xcrun/devicectl.js';
-import * as libimobiledevice from '../libimobiledevice.js';
 import { HarnessAppPathError } from '../errors.js';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -33,10 +32,7 @@ describe('iOS platform instance dependency validation', () => {
     vi.unstubAllEnvs();
   });
 
-  it('does not validate libimobiledevice before creating a simulator instance', async () => {
-    const assertInstalled = vi
-      .spyOn(libimobiledevice, 'assertLibimobiledeviceInstalled')
-      .mockResolvedValue(undefined);
+  it('does not require extra dependencies before creating a simulator instance', async () => {
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
@@ -57,62 +53,22 @@ describe('iOS platform instance dependency validation', () => {
     await expect(
       getAppleSimulatorPlatformInstance(config, harnessConfig, init)
     ).resolves.toBeDefined();
-    expect(assertInstalled).not.toHaveBeenCalled();
   });
 
-  it('validates libimobiledevice before creating a physical device instance when native crash detection is enabled', async () => {
-    const assertInstalled = vi
-      .spyOn(libimobiledevice, 'assertLibimobiledeviceInstalled')
-      .mockRejectedValue(new Error('missing'));
-
-    const config = {
-      name: 'ios-device',
-      device: { type: 'physical' as const, name: 'My iPhone' },
-      bundleId: 'com.harnessplayground',
-    };
-
-    await expect(
-      getApplePhysicalDevicePlatformInstance(config, harnessConfig)
-    ).rejects.toThrow('missing');
-    expect(assertInstalled).toHaveBeenCalled();
-  });
-
-  it('still discovers the simulator without libimobiledevice', async () => {
-    vi.spyOn(
-      libimobiledevice,
-      'assertLibimobiledeviceInstalled'
-    ).mockResolvedValue(undefined);
-    const getSimulatorId = vi
-      .spyOn(simctl, 'getSimulatorId')
-      .mockResolvedValue('sim-udid');
-    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
-    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
-    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
-      undefined
-    );
-
-    const config = {
-      name: 'ios',
-      device: {
-        type: 'simulator' as const,
-        name: 'iPhone 16 Pro',
-        systemVersion: '18.0',
+  it('discovers the physical device directly through devicectl', async () => {
+    const getDevice = vi.spyOn(devicectl, 'getDevice').mockResolvedValue({
+      identifier: 'physical-device-id',
+      deviceProperties: {
+        name: 'My iPhone',
+        osVersionNumber: '18.0',
       },
-      bundleId: 'com.harnessplayground',
-    };
-
-    await expect(
-      getAppleSimulatorPlatformInstance(config, harnessConfig, init)
-    ).resolves.toBeDefined();
-    expect(getSimulatorId).toHaveBeenCalled();
-  });
-
-  it('does not try to discover the physical device when the dependency is missing and native crash detection is enabled', async () => {
-    vi.spyOn(
-      libimobiledevice,
-      'assertLibimobiledeviceInstalled'
-    ).mockRejectedValue(new Error('missing'));
-    const getDeviceId = vi.spyOn(devicectl, 'getDeviceId');
+      hardwareProperties: {
+        marketingName: 'iPhone',
+        productType: 'iPhone17,1',
+        udid: '00008140-001600222422201C',
+      },
+    });
+    vi.spyOn(devicectl, 'isAppInstalled').mockResolvedValue(true);
 
     const config = {
       name: 'ios-device',
@@ -122,14 +78,11 @@ describe('iOS platform instance dependency validation', () => {
 
     await expect(
       getApplePhysicalDevicePlatformInstance(config, harnessConfig)
-    ).rejects.toThrow('missing');
-    expect(getDeviceId).not.toHaveBeenCalled();
+    ).resolves.toBeDefined();
+    expect(getDevice).toHaveBeenCalledWith('My iPhone');
   });
 
-  it('skips libimobiledevice validation when native crash detection is disabled', async () => {
-    const assertInstalled = vi
-      .spyOn(libimobiledevice, 'assertLibimobiledeviceInstalled')
-      .mockRejectedValue(new Error('missing'));
+  it('skips physical crash monitoring setup when native crash detection is disabled', async () => {
     vi.spyOn(devicectl, 'getDevice').mockResolvedValue({
       identifier: 'physical-device-id',
       deviceProperties: {
@@ -156,7 +109,6 @@ describe('iOS platform instance dependency validation', () => {
         harnessConfigWithoutNativeCrashDetection
       )
     ).resolves.toBeDefined();
-    expect(assertInstalled).not.toHaveBeenCalled();
   });
 
   it('returns a noop simulator app monitor when native crash detection is disabled', async () => {

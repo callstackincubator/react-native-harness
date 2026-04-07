@@ -21,11 +21,7 @@ export const devicectl = async <TOutput>(
           ...args.slice(separatorIndex),
         ];
 
-  await spawn('xcrun', [
-    'devicectl',
-    command,
-    ...argsWithJsonOutput,
-  ]);
+  await spawn('xcrun', ['devicectl', command, ...argsWithJsonOutput]);
 
   if (!fs.existsSync(tempFile)) {
     throw new Error(`devicectl did not produce JSON output at ${tempFile}`);
@@ -62,6 +58,17 @@ export type AppleAppInfo = {
   name: string;
   version: string;
   url: string;
+};
+
+type DevicectlFileInfo = {
+  path?: string;
+  filePath?: string;
+  relativePath?: string;
+  name?: string;
+};
+
+const getDevicectlPath = (file: DevicectlFileInfo): string | null => {
+  return file.path ?? file.filePath ?? file.relativePath ?? file.name ?? null;
 };
 
 export const listApps = async (identifier: string): Promise<AppleAppInfo[]> => {
@@ -103,7 +110,10 @@ export const startApp = async (
   bundleId: string,
   options?: AppleAppLaunchOptions
 ): Promise<void> => {
-  await devicectl('device', getDeviceCtlLaunchArgs(identifier, bundleId, options));
+  await devicectl(
+    'device',
+    getDeviceCtlLaunchArgs(identifier, bundleId, options)
+  );
 };
 
 export const getDeviceCtlLaunchArgs = (
@@ -141,6 +151,76 @@ export const getProcesses = async (
   );
 
   return result.runningProcesses;
+};
+
+export const listFiles = async (
+  identifier: string,
+  options: {
+    domainType: 'systemCrashLogs';
+    recursive?: boolean;
+    subdirectory?: string;
+  }
+): Promise<string[]> => {
+  const args = [
+    'info',
+    'files',
+    '--device',
+    identifier,
+    '--domain-type',
+    options.domainType,
+  ];
+
+  if (options.subdirectory) {
+    args.push('--subdirectory', options.subdirectory);
+  }
+
+  args.push(options.recursive === false ? '--no-recurse' : '--recurse');
+
+  const result = await devicectl<{
+    items?: DevicectlFileInfo[];
+    files?: DevicectlFileInfo[];
+  }>('device', args);
+  const items = result.items ?? result.files ?? [];
+
+  return items
+    .map(getDevicectlPath)
+    .filter((path): path is string => Boolean(path));
+};
+
+export const copyFileFrom = async (
+  identifier: string,
+  options: {
+    source: string;
+    destination: string;
+    domainType: 'systemCrashLogs';
+  }
+): Promise<void> => {
+  await devicectl('device', [
+    'copy',
+    'from',
+    '--device',
+    identifier,
+    '--source',
+    options.source,
+    '--destination',
+    options.destination,
+    '--domain-type',
+    options.domainType,
+  ]);
+};
+
+export const diagnose = async (
+  identifier: string,
+  outputDir: string
+): Promise<void> => {
+  await devicectl('diagnose', [
+    '--devices',
+    identifier,
+    '--no-archive',
+    '--archive-destination',
+    outputDir,
+    '--keep-temp-dir',
+  ]);
 };
 
 export const stopApp = async (

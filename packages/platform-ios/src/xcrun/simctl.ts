@@ -309,6 +309,22 @@ export const waitForBoot = async (
   });
 };
 
+export const diagnose = async (
+  udid: string,
+  outputDir: string
+): Promise<void> => {
+  await spawn('xcrun', [
+    'simctl',
+    'diagnose',
+    '--udid',
+    udid,
+    '--no-archive',
+    '--output',
+    outputDir,
+    '-b',
+  ]);
+};
+
 export const shutdownSimulator = async (udid: string): Promise<void> => {
   await spawnAndForget('xcrun', ['simctl', 'shutdown', udid]);
 };

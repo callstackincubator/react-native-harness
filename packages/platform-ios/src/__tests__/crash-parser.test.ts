@@ -49,10 +49,13 @@ describe('iosCrashParser.parse', () => {
             app_name: 'HarnessPlayground',
             bundleID: 'com.harnessplayground',
             name: 'HarnessPlayground',
+            timestamp: '2026-03-12 11:35:08 +0000',
           }),
           JSON.stringify({
             pid: 1234,
             procName: 'HarnessPlayground',
+            procPath:
+              '/Users/me/Library/Developer/CoreSimulator/Devices/sim-udid/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground',
             faultingThread: 0,
             threads: [
               {
@@ -75,11 +78,13 @@ describe('iosCrashParser.parse', () => {
         ].join('\n'),
       })
     ).toMatchObject({
-      occurredAt: 7890,
+      occurredAt: Date.parse('2026-03-12T11:35:08.000Z'),
       signal: 'SIGTRAP',
       exceptionType: 'EXC_BREAKPOINT',
+      bundleId: 'com.harnessplayground',
       processName: 'HarnessPlayground',
       pid: 1234,
+      targetId: 'sim-udid',
     });
 
     statSpy.mockRestore();
