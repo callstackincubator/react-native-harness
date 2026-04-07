@@ -43,6 +43,8 @@ This project uses GitHub Actions to run validation checks on your pull requests.
 
 Currently, releases are published by maintainers when they determine it's time to do so. Usually, there is at least one release per week as long as there are changes waiting to be published.
 
+The release workflow and branch conventions are documented in [RELEASING.md](/RELEASING.md).
+
 ## License
 
 By contributing to React Native Harness, you agree that your contributions will be licensed under its MIT license.

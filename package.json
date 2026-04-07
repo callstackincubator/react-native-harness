@@ -6,7 +6,8 @@
     "build:all": "nx run-many -t build",
     "lint:all": "nx run-many -t lint",
     "test:all": "nx run-many -t test",
-    "typecheck:all": "nx run-many -t typecheck"
+    "typecheck:all": "nx run-many -t typecheck",
+    "release:run": "node ./scripts/release/release.mjs"
   },
   "private": true,
   "devDependencies": {
