@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createResourceLockManager,
   hashResourceLockKey,
@@ -12,7 +12,7 @@ describe('resource lock manager', () => {
 
   beforeEach(async () => {
     rootDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'react-native-harness-resource-lock-test-')
+      path.join(os.tmpdir(), 'react-native-harness-resource-lock-test-'),
     );
   });
 
@@ -30,7 +30,7 @@ describe('resource lock manager', () => {
     const order: string[] = [];
 
     const firstLease = await manager.acquire(
-      'ios:simulator:iPhone 17 Pro:26.2'
+      'ios:simulator:iPhone 17 Pro:26.2',
     );
     const secondAcquire = manager
       .acquire('ios:simulator:iPhone 17 Pro:26.2', {
@@ -124,7 +124,7 @@ describe('resource lock manager', () => {
         createdAt: Date.now() - 1000,
         heartbeatAt: Date.now() - 1000,
       }),
-      'utf8'
+      'utf8',
     );
 
     const lease = await manager.acquire(key);
@@ -135,4 +135,58 @@ describe('resource lock manager', () => {
 
     await lease.release();
   });
+
+  it('keeps owner metadata valid when heartbeat writes overlap', async () => {
+    const manager = createResourceLockManager({
+      rootDir,
+      pollIntervalMs: 5,
+      heartbeatIntervalMs: 10,
+      staleLockTimeoutMs: 200,
+    });
+    const key = 'ios:simulator:iPhone 17 Pro:26.2';
+    const ownerFilePath = path.join(
+      rootDir,
+      hashResourceLockKey(key),
+      'owner.json',
+    );
+    const actualWriteFile = fs.writeFile.bind(fs);
+    const writeFileSpy = vi
+      .spyOn(fs, 'writeFile')
+      .mockImplementation(async (file, data, options) => {
+        if (
+          typeof file === 'string' &&
+          file.startsWith(ownerFilePath) &&
+          file !== ownerFilePath
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+
+        return await actualWriteFile(file, data, options);
+      });
+
+    try {
+      const lease = await manager.acquire(key);
+      const initialOwner = JSON.parse(
+        await fs.readFile(ownerFilePath, 'utf8'),
+      ) as ResourceLockOwner;
+
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      for (let index = 0; index < 5; index += 1) {
+        const owner = JSON.parse(
+          await fs.readFile(ownerFilePath, 'utf8'),
+        ) as ResourceLockOwner;
+        expect(owner.ticketId).toBe(initialOwner.ticketId);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      await lease.release();
+    } finally {
+      writeFileSpy.mockRestore();
+    }
+  });
 });
+
+type ResourceLockOwner = {
+  ticketId: string;
+};

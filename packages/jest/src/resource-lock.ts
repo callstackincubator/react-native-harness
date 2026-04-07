@@ -32,7 +32,7 @@ export type ResourceLease = {
 export type ResourceLockManager = {
   acquire: (
     key: string,
-    options?: ResourceLockAcquireOptions
+    options?: ResourceLockAcquireOptions,
   ) => Promise<ResourceLease>;
 };
 
@@ -115,6 +115,21 @@ const readJsonFile = async <T>(filePath: string): Promise<T | null> => {
   }
 };
 
+const writeJsonFileAtomic = async <T>(
+  filePath: string,
+  value: T,
+): Promise<void> => {
+  const tempPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+
+  try {
+    await fs.writeFile(tempPath, JSON.stringify(value), 'utf8');
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    await removeFileIfPresent(tempPath);
+    throw error;
+  }
+};
+
 const removeFileIfPresent = async (filePath: string): Promise<void> => {
   try {
     await fs.rm(filePath, { force: true });
@@ -143,7 +158,7 @@ const isMetadataStale = (
   metadata: ResourceLockMetadata,
   now: number,
   staleLockTimeoutMs: number,
-  isProcessActive: (pid: number) => boolean
+  isProcessActive: (pid: number) => boolean,
 ): boolean => {
   if (!isProcessActive(metadata.pid)) {
     return true;
@@ -154,14 +169,14 @@ const isMetadataStale = (
 
 const isQueuedTicketStale = (
   metadata: ResourceLockMetadata,
-  isProcessActive: (pid: number) => boolean
+  isProcessActive: (pid: number) => boolean,
 ): boolean => {
   return !isProcessActive(metadata.pid);
 };
 
 const waitForPollInterval = (
   ms: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<void> => {
   if (!signal) {
     return wait(ms);
@@ -187,7 +202,7 @@ const waitForPollInterval = (
 };
 
 const readQueueTickets = async (
-  queueDir: string
+  queueDir: string,
 ): Promise<ResourceLockMetadata[]> => {
   const ticketEntries = await fs.readdir(queueDir, { withFileTypes: true });
   const tickets = await Promise.all(
@@ -196,15 +211,15 @@ const readQueueTickets = async (
       .map(async (entry) => ({
         name: entry.name,
         metadata: await readJsonFile<ResourceLockMetadata>(
-          path.join(queueDir, entry.name)
+          path.join(queueDir, entry.name),
         ),
-      }))
+      })),
   );
 
   return tickets
     .filter(
       (entry): entry is { name: string; metadata: ResourceLockMetadata } =>
-        entry.metadata !== null
+        entry.metadata !== null,
     )
     .sort((left, right) => left.name.localeCompare(right.name))
     .map((entry) => entry.metadata);
@@ -229,10 +244,10 @@ const cleanupQueue = async (options: {
       logger.debug(
         'removing stale queued ticket %s for key %s',
         ticket.ticketId,
-        ticket.key
+        ticket.key,
       );
       await removeFileIfPresent(
-        path.join(paths.queueDir, `${ticket.ticketId}.json`)
+        path.join(paths.queueDir, `${ticket.ticketId}.json`),
       );
       continue;
     }
@@ -265,7 +280,7 @@ const maybeClearStaleOwner = async (options: {
   logger.debug(
     'removing stale owner ticket %s for key %s',
     owner.ticketId,
-    owner.key
+    owner.key,
   );
   await removeFileIfPresent(ownerFilePath);
   return null;
@@ -273,7 +288,7 @@ const maybeClearStaleOwner = async (options: {
 
 const claimOwnership = async (
   ownerFilePath: string,
-  metadata: ResourceLockMetadata
+  metadata: ResourceLockMetadata,
 ): Promise<boolean> => {
   try {
     await fs.writeFile(ownerFilePath, JSON.stringify(metadata), {
@@ -291,7 +306,7 @@ const claimOwnership = async (
 };
 
 export const createResourceLockManager = (
-  options: ResourceLockManagerOptions = {}
+  options: ResourceLockManagerOptions = {},
 ): ResourceLockManager => {
   const rootDir = options.rootDir ?? DEFAULT_ROOT_DIR;
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
@@ -323,6 +338,7 @@ export const createResourceLockManager = (
       scopedLogger.debug('queued ticket %s for key %s', ticketId, key);
 
       let heartbeatTimer: NodeJS.Timeout | null = null;
+      let heartbeatInFlight = false;
       let released = false;
       let didNotifyWait = false;
       const waitStartedAt = Date.now();
@@ -339,7 +355,7 @@ export const createResourceLockManager = (
         }
 
         const owner = await readJsonFile<ResourceLockMetadata>(
-          paths.ownerFilePath
+          paths.ownerFilePath,
         );
         if (owner?.ticketId === ticketId) {
           await removeFileIfPresent(paths.ownerFilePath);
@@ -351,30 +367,36 @@ export const createResourceLockManager = (
 
       const startHeartbeat = () => {
         heartbeatTimer = setInterval(async () => {
-          const nextHeartbeatAt = Date.now();
-          const owner = await readJsonFile<ResourceLockMetadata>(
-            paths.ownerFilePath
-          );
-
-          if (released || owner?.ticketId !== ticketId) {
+          if (heartbeatInFlight) {
             return;
           }
 
-          const nextMetadata: ResourceLockMetadata = {
-            ...owner,
-            heartbeatAt: nextHeartbeatAt,
-          };
+          heartbeatInFlight = true;
 
-          if (released) {
-            return;
+          try {
+            const nextHeartbeatAt = Date.now();
+            const owner = await readJsonFile<ResourceLockMetadata>(
+              paths.ownerFilePath,
+            );
+
+            if (released || owner?.ticketId !== ticketId) {
+              return;
+            }
+
+            const nextMetadata: ResourceLockMetadata = {
+              ...owner,
+              heartbeatAt: nextHeartbeatAt,
+            };
+
+            if (released) {
+              return;
+            }
+
+            await writeJsonFileAtomic(paths.ownerFilePath, nextMetadata);
+            scopedLogger.debug('refreshed heartbeat for ticket %s', ticketId);
+          } finally {
+            heartbeatInFlight = false;
           }
-
-          await fs.writeFile(
-            paths.ownerFilePath,
-            JSON.stringify(nextMetadata),
-            'utf8'
-          );
-          scopedLogger.debug('refreshed heartbeat for ticket %s', ticketId);
         }, heartbeatIntervalMs);
         heartbeatTimer.unref?.();
       };
@@ -391,12 +413,12 @@ export const createResourceLockManager = (
             isProcessActive,
           });
           const ownIndex = activeTickets.findIndex(
-            (entry) => entry.ticketId === ticketId
+            (entry) => entry.ticketId === ticketId,
           );
 
           if (ownIndex === -1) {
             throw new Error(
-              `Queued ticket ${ticketId} disappeared before acquisition.`
+              `Queued ticket ${ticketId} disappeared before acquisition.`,
             );
           }
 
@@ -420,7 +442,7 @@ export const createResourceLockManager = (
               scopedLogger.debug(
                 'acquired lock for key %s with ticket %s',
                 key,
-                ticketId
+                ticketId,
               );
               return { release };
             }
@@ -436,7 +458,7 @@ export const createResourceLockManager = (
             'waiting for key %s with ticket %s at queue position %d',
             key,
             ticketId,
-            ownIndex + 1
+            ownIndex + 1,
           );
 
           await waitForPollInterval(pollIntervalMs, acquireOptions.signal);
