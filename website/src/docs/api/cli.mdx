@@ -13,6 +13,7 @@ npx react-native-harness init
 ```
 
 The wizard will help you:
+
 - Detect your project type (Expo or React Native CLI).
 - Install required platform packages.
 - Configure Android, iOS, or Web runners.
@@ -30,10 +31,11 @@ npx react-native-harness [test-file-pattern] [options]
 
 ### Harness Specific Flags
 
-| Flag | Description |
-| :--- | :--- |
-| `--harnessRunner <name>` | Specify which runner from your `rn-harness.config.mjs` to use. **Note:** Only one runner can be specified per command execution. |
-| `--config, -c <path>` | Path to your Harness Jest configuration (defaults to `jest.harness.config.mjs`). |
+| Flag                     | Description                                                                                                                                                  |
+| :----------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--harnessRunner <name>` | Specify which runner from your `rn-harness.config.mjs` to use. **Note:** Only one runner can be specified per command execution.                             |
+| `--config, -c <path>`    | Path to your Harness Jest configuration (defaults to `jest.harness.config.mjs`).                                                                             |
+| `--metroPort <port>`     | Set the preferred Metro port for this run. If the selected runner supports it and the port is busy, Harness will try the next available ports automatically. |
 
 ### Running on Multiple Platforms
 
@@ -66,6 +68,7 @@ To ensure stability and compatibility with real native devices, React Native Har
 Harness executes tests **serially** (one at a time) on the target device to prevent native resource conflicts (like multiple tests trying to access the camera or filesystem simultaneously).
 
 The following Jest flags are **ignored or disabled**:
+
 - `--maxWorkers`
 - `--runInBand` (Implicitly always true)
 - `--maxConcurrency`
@@ -76,6 +79,7 @@ The following Jest flags are **ignored or disabled**:
 Harness manages the test environment, transformation, and module resolution internally to ensure tests can be bundled by Metro and run on-device.
 
 The following Jest configuration flags are **disabled**:
+
 - `--runner` / `--testRunner`
 - `--testEnvironment`
 - `--preset`

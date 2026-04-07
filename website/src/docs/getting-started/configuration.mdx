@@ -86,27 +86,33 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 
 ## All Configuration Options
 
-| Option                             | Description                                                                                                |
-| :--------------------------------- | :--------------------------------------------------------------------------------------------------------- |
-| `entryPoint`                       | **Required.** Path to your React Native app's entry point file.                                            |
-| `appRegistryComponentName`         | **Required.** Name of the component registered with AppRegistry.                                           |
-| `runners`                          | **Required.** Array of test runners (at least one required).                                               |
-| `defaultRunner`                    | Default runner to use when none specified.                                                                 |
-| `host`                             | Hostname or IP address to bind the Metro server to (default: Metro default).                               |
-| `metroPort`                        | Port used by Metro and Harness bridge traffic (default: `8081`).                                           |
-| `platformReadyTimeout`             | Platform-ready timeout in milliseconds (default: `300000`).                                                |
-| `bridgeTimeout`                    | Bridge timeout in milliseconds (default: `60000`).                                                         |
-| `bundleStartTimeout`               | Bundle start timeout in milliseconds (default: `60000`).                                                   |
-| `resetEnvironmentBetweenTestFiles` | Reset environment between test files (default: `true`).                                                    |
-| `detectNativeCrashes`              | Detect native app crashes during startup and test execution (default: `true`).                             |
-| `crashDetectionInterval`           | Interval in milliseconds to check for native crashes (default: `500`).                                     |
-| `disableViewFlattening`            | Disable view flattening in React Native (default: `false`).                                                |
-| `coverage`                         | Coverage configuration object.                                                                             |
-| `coverage.root`                    | Root directory for coverage instrumentation (default: `process.cwd()`).                                    |
-| `forwardClientLogs`                | Forward console logs from the app to the terminal (default: `false`).                                      |
-| `unstable__enableMetroCache`       | Enable Metro transformation cache under `.harness/metro-cache` and log when reusing it (default: `false`). |
+| Option                             | Description                                                                                                                                               |
+| :--------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entryPoint`                       | **Required.** Path to your React Native app's entry point file.                                                                                           |
+| `appRegistryComponentName`         | **Required.** Name of the component registered with AppRegistry.                                                                                          |
+| `runners`                          | **Required.** Array of test runners (at least one required).                                                                                              |
+| `defaultRunner`                    | Default runner to use when none specified.                                                                                                                |
+| `host`                             | Hostname or IP address to bind the Metro server to (default: Metro default).                                                                              |
+| `metroPort`                        | Preferred port used by Metro and Harness bridge traffic (default: `8081`). Harness falls back to the next available port when this one is already in use. |
+| `platformReadyTimeout`             | Platform-ready timeout in milliseconds (default: `300000`).                                                                                               |
+| `bridgeTimeout`                    | Bridge timeout in milliseconds (default: `60000`).                                                                                                        |
+| `bundleStartTimeout`               | Bundle start timeout in milliseconds (default: `60000`).                                                                                                  |
+| `resetEnvironmentBetweenTestFiles` | Reset environment between test files (default: `true`).                                                                                                   |
+| `detectNativeCrashes`              | Detect native app crashes during startup and test execution (default: `true`).                                                                            |
+| `crashDetectionInterval`           | Interval in milliseconds to check for native crashes (default: `500`).                                                                                    |
+| `disableViewFlattening`            | Disable view flattening in React Native (default: `false`).                                                                                               |
+| `coverage`                         | Coverage configuration object.                                                                                                                            |
+| `coverage.root`                    | Root directory for coverage instrumentation (default: `process.cwd()`).                                                                                   |
+| `forwardClientLogs`                | Forward console logs from the app to the terminal (default: `false`).                                                                                     |
+| `unstable__enableMetroCache`       | Enable Metro transformation cache under `.harness/metro-cache` and log when reusing it (default: `false`).                                                |
 
 ## Test Runners
+
+:::info Metro Port Fallback
+Harness treats `metroPort` as the preferred starting port. If that port is already in use, Harness tries the next available ports automatically and logs the port it selected for the run.
+
+Physical iOS devices are the exception: they always use the default Metro port and do not support custom or fallback ports.
+:::
 
 A test runner defines how tests are executed on a specific platform. React Native Harness uses platform-specific packages to create runners with type-safe configurations.
 

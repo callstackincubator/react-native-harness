@@ -43,10 +43,11 @@ applePlatform({
       FEATURE_X: '1',
     },
   },
-})
+});
 ```
 
 #### Finding Simulator Details
+
 You can list all available simulators using `xcrun`:
 
 ```bash
@@ -72,8 +73,10 @@ applePlatform({
       FEATURE_X: '1',
     },
   },
-})
+});
 ```
+
+Physical iOS devices always connect to the default Metro port (`8081`). Custom `metroPort` values and automatic port fallback are supported on simulators, but not on physical iOS devices.
 
 ## Requirements
 
