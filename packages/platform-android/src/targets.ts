@@ -1,9 +1,16 @@
 import { RunTarget } from '@react-native-harness/platforms';
 import * as adb from './adb.js';
-import { ensureAndroidDiscoveryEnvironment } from './environment.js';
+import {
+  ensureAndroidAdbAvailable,
+  ensureAndroidEmulatorAvailable,
+  initializeAndroidProcessEnv,
+} from './environment.js';
 
 export const getRunTargets = async (): Promise<RunTarget[]> => {
-  await ensureAndroidDiscoveryEnvironment();
+  initializeAndroidProcessEnv();
+
+  await ensureAndroidAdbAvailable();
+  await ensureAndroidEmulatorAvailable();
 
   const [avds, connectedDevices] = await Promise.all([
     adb.getAvds(),

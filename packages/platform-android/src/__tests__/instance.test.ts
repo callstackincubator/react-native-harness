@@ -36,7 +36,7 @@ describe('Android platform instance', () => {
     const ensureAndroidEmulatorEnvironment = vi
       .spyOn(
         await import('../environment.js'),
-        'ensureAndroidEmulatorEnvironment'
+        'ensureAndroidEmulatorEnvironment',
       )
       .mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
@@ -47,10 +47,10 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
-      undefined
+      undefined,
     );
     vi.spyOn(sharedPrefs, 'clearHarnessDebugHttpHost').mockResolvedValue(
-      undefined
+      undefined,
     );
     vi.spyOn(adb, 'stopApp').mockResolvedValue(undefined);
     const stopEmulator = vi.spyOn(adb, 'stopEmulator').mockResolvedValue();
@@ -72,19 +72,19 @@ describe('Android platform instance', () => {
         activityName: '.MainActivity',
       },
       harnessConfig,
-      init
+      init,
     );
 
     await instance.dispose();
 
-    expect(ensureAndroidEmulatorEnvironment).toHaveBeenCalledWith(35);
+    expect(ensureAndroidEmulatorEnvironment).not.toHaveBeenCalled();
     expect(stopEmulator).not.toHaveBeenCalled();
   });
 
   it('creates and boots an emulator when missing and shuts it down on dispose', async () => {
     vi.spyOn(
       await import('../environment.js'),
-      'ensureAndroidEmulatorEnvironment'
+      'ensureAndroidEmulatorEnvironment',
     ).mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue([]);
     vi.spyOn(adb, 'hasAvd').mockResolvedValue(false);
@@ -98,10 +98,10 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
-      undefined
+      undefined,
     );
     vi.spyOn(sharedPrefs, 'clearHarnessDebugHttpHost').mockResolvedValue(
-      undefined
+      undefined,
     );
     vi.spyOn(adb, 'stopApp').mockResolvedValue(undefined);
     const stopEmulator = vi.spyOn(adb, 'stopEmulator').mockResolvedValue();
@@ -123,7 +123,7 @@ describe('Android platform instance', () => {
         activityName: '.MainActivity',
       },
       harnessConfig,
-      init
+      init,
     );
 
     expect(createAvd).toHaveBeenCalledWith({
@@ -144,7 +144,7 @@ describe('Android platform instance', () => {
     const ensureAndroidEmulatorEnvironment = vi
       .spyOn(
         await import('../environment.js'),
-        'ensureAndroidEmulatorEnvironment'
+        'ensureAndroidEmulatorEnvironment',
       )
       .mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue([]);
@@ -159,7 +159,7 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
-      undefined
+      undefined,
     );
 
     await expect(
@@ -180,8 +180,8 @@ describe('Android platform instance', () => {
           activityName: '.MainActivity',
         },
         harnessConfig,
-        init
-      )
+        init,
+      ),
     ).resolves.toBeDefined();
 
     expect(ensureAndroidEmulatorEnvironment).toHaveBeenCalledWith(35);
@@ -193,7 +193,7 @@ describe('Android platform instance', () => {
     vi.stubEnv('HARNESS_AVD_CACHING', 'true');
     vi.spyOn(
       await import('../environment.js'),
-      'ensureAndroidEmulatorEnvironment'
+      'ensureAndroidEmulatorEnvironment',
     ).mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue([]);
     vi.spyOn(adb, 'hasAvd').mockResolvedValue(true);
@@ -211,7 +211,7 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
-      undefined
+      undefined,
     );
 
     await expect(
@@ -233,14 +233,14 @@ describe('Android platform instance', () => {
           activityName: '.MainActivity',
         },
         harnessConfig,
-        init
-      )
+        init,
+      ),
     ).resolves.toBeDefined();
 
     expect(adb.startEmulator).toHaveBeenCalledTimes(1);
     expect(adb.startEmulator).toHaveBeenCalledWith(
       'Pixel_8_API_35',
-      'snapshot-reuse'
+      'snapshot-reuse',
     );
   });
 
@@ -248,7 +248,7 @@ describe('Android platform instance', () => {
     vi.stubEnv('HARNESS_AVD_CACHING', 'true');
     vi.spyOn(
       await import('../environment.js'),
-      'ensureAndroidEmulatorEnvironment'
+      'ensureAndroidEmulatorEnvironment',
     ).mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue([]);
     vi.spyOn(adb, 'hasAvd').mockResolvedValue(true);
@@ -272,7 +272,7 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
-      undefined
+      undefined,
     );
 
     await expect(
@@ -294,8 +294,8 @@ describe('Android platform instance', () => {
           activityName: '.MainActivity',
         },
         harnessConfig,
-        init
-      )
+        init,
+      ),
     ).resolves.toBeDefined();
 
     expect(deleteAvd).toHaveBeenCalledWith('Pixel_8_API_35');
@@ -303,17 +303,17 @@ describe('Android platform instance', () => {
     expect(stopEmulator).toHaveBeenCalledWith('emulator-5554');
     expect(waitForEmulatorDisconnect).toHaveBeenCalledWith(
       'emulator-5554',
-      init.signal
+      init.signal,
     );
     expect(adb.startEmulator).toHaveBeenNthCalledWith(
       1,
       'Pixel_8_API_35',
-      'clean-snapshot-generation'
+      'clean-snapshot-generation',
     );
     expect(adb.startEmulator).toHaveBeenNthCalledWith(
       2,
       'Pixel_8_API_35',
-      'snapshot-reuse'
+      'snapshot-reuse',
     );
   });
 
@@ -321,7 +321,7 @@ describe('Android platform instance', () => {
     vi.stubEnv('HARNESS_AVD_CACHING', 'true');
     vi.spyOn(
       await import('../environment.js'),
-      'ensureAndroidEmulatorEnvironment'
+      'ensureAndroidEmulatorEnvironment',
     ).mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue([]);
     vi.spyOn(adb, 'hasAvd').mockResolvedValue(false);
@@ -339,7 +339,7 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
-      undefined
+      undefined,
     );
 
     await expect(
@@ -361,24 +361,24 @@ describe('Android platform instance', () => {
           activityName: '.MainActivity',
         },
         harnessConfig,
-        init
-      )
+        init,
+      ),
     ).resolves.toBeDefined();
 
     expect(startEmulator).toHaveBeenNthCalledWith(
       1,
       'Pixel_8_API_35',
-      'clean-snapshot-generation'
+      'clean-snapshot-generation',
     );
     expect(stopEmulator).toHaveBeenCalledWith('emulator-5554');
     expect(waitForEmulatorDisconnect).toHaveBeenCalledWith(
       'emulator-5554',
-      init.signal
+      init.signal,
     );
     expect(startEmulator).toHaveBeenNthCalledWith(
       2,
       'Pixel_8_API_35',
-      'snapshot-reuse'
+      'snapshot-reuse',
     );
   });
 
@@ -388,7 +388,7 @@ describe('Android platform instance', () => {
     vi.stubEnv('HARNESS_APP_PATH', appPath);
     vi.spyOn(
       await import('../environment.js'),
-      'ensureAndroidEmulatorEnvironment'
+      'ensureAndroidEmulatorEnvironment',
     ).mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
     vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
@@ -399,7 +399,7 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
-      undefined
+      undefined,
     );
 
     await expect(
@@ -420,8 +420,8 @@ describe('Android platform instance', () => {
           activityName: '.MainActivity',
         },
         harnessConfig,
-        init
-      )
+        init,
+      ),
     ).resolves.toBeDefined();
 
     expect(installApp).toHaveBeenCalledWith('emulator-5554', appPath);
@@ -453,8 +453,8 @@ describe('Android platform instance', () => {
           activityName: '.MainActivity',
         },
         harnessConfig,
-        init
-      )
+        init,
+      ),
     ).rejects.toBeInstanceOf(HarnessAppPathError);
   });
 
@@ -483,8 +483,8 @@ describe('Android platform instance', () => {
           activityName: '.MainActivity',
         },
         harnessConfig,
-        init
-      )
+        init,
+      ),
     ).rejects.toBeInstanceOf(HarnessAppPathError);
   });
 
@@ -503,15 +503,15 @@ describe('Android platform instance', () => {
           activityName: '.MainActivity',
         },
         harnessConfig,
-        init
-      )
+        init,
+      ),
     ).rejects.toBeInstanceOf(HarnessEmulatorConfigError);
   });
 
   it('returns a noop emulator app monitor when native crash detection is disabled', async () => {
     vi.spyOn(
       await import('../environment.js'),
-      'ensureAndroidEmulatorEnvironment'
+      'ensureAndroidEmulatorEnvironment',
     ).mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
     vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
@@ -521,7 +521,7 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
-      undefined
+      undefined,
     );
 
     const instance = await getAndroidEmulatorPlatformInstance(
@@ -541,7 +541,7 @@ describe('Android platform instance', () => {
         activityName: '.MainActivity',
       },
       harnessConfigWithoutNativeCrashDetection,
-      init
+      init,
     );
 
     const listener = vi.fn();
@@ -565,7 +565,7 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
-      undefined
+      undefined,
     );
 
     await expect(
@@ -580,8 +580,8 @@ describe('Android platform instance', () => {
           bundleId: 'com.harnessplayground',
           activityName: '.MainActivity',
         },
-        harnessConfigWithoutNativeCrashDetection
-      )
+        harnessConfigWithoutNativeCrashDetection,
+      ),
     ).resolves.toBeDefined();
 
     const instance = await getAndroidPhysicalDevicePlatformInstance(
@@ -595,7 +595,7 @@ describe('Android platform instance', () => {
         bundleId: 'com.harnessplayground',
         activityName: '.MainActivity',
       },
-      harnessConfigWithoutNativeCrashDetection
+      harnessConfigWithoutNativeCrashDetection,
     );
 
     const listener = vi.fn();

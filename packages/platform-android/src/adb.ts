@@ -5,6 +5,7 @@ import type { ChildProcessByStdio } from 'node:child_process';
 import { access, rm } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
 import {
+  ensureAndroidEmulatorAvailable,
   ensureAndroidSdkPackages,
   getAdbBinaryPath,
   getAndroidSystemImagePackage,
@@ -12,7 +13,6 @@ import {
   getEmulatorBinaryPath,
   getHostAndroidSystemImageArch,
   getRequiredAndroidSdkPackages,
-  getSdkManagerBinaryPath,
 } from './environment.js';
 import {
   getEmulatorStartupArgs,
@@ -36,14 +36,14 @@ const waitForAbort = (signal: AbortSignal): Promise<never> => {
       () => {
         reject(signal.reason);
       },
-      { once: true }
+      { once: true },
     );
   });
 };
 
 const waitWithSignal = async (
   ms: number,
-  signal: AbortSignal
+  signal: AbortSignal,
 ): Promise<void> => {
   if (signal.aborted) {
     throw signal.reason;
@@ -63,7 +63,7 @@ const EMULATOR_OUTPUT_BUFFER_LIMIT = 16 * 1024;
 export const emulatorProcess = {
   startDetachedProcess: (
     file: string,
-    args: readonly string[]
+    args: readonly string[],
   ): ChildProcessByStdio<null, Readable, Readable> =>
     nodeSpawn(file, args, {
       detached: true,
@@ -74,7 +74,7 @@ export const emulatorProcess = {
 const appendBoundedOutput = (
   output: string,
   chunk: string,
-  limit: number = EMULATOR_OUTPUT_BUFFER_LIMIT
+  limit: number = EMULATOR_OUTPUT_BUFFER_LIMIT,
 ): string => {
   const nextOutput = output + chunk;
 
@@ -131,16 +131,11 @@ const formatEmulatorStartupError = ({
 };
 
 const ensureEmulatorInstalled = async (): Promise<string> => {
-  const emulatorBinaryPath = getEmulatorBinaryPath();
+  await ensureAndroidEmulatorAvailable();
 
-  try {
-    await access(emulatorBinaryPath);
-    return emulatorBinaryPath;
-  } catch {
-    await spawn(getSdkManagerBinaryPath(), ['emulator']);
-    await access(emulatorBinaryPath);
-    return emulatorBinaryPath;
-  }
+  const emulatorBinaryPath = getEmulatorBinaryPath();
+  await access(emulatorBinaryPath);
+  return emulatorBinaryPath;
 };
 
 export type CreateAvdOptions = {
@@ -160,7 +155,7 @@ export const getRequiredEmulatorPackages = (apiLevel: number): string[] => {
 };
 
 export const verifyAndroidEmulatorSdk = async (
-  apiLevel: number
+  apiLevel: number,
 ): Promise<void> => {
   await ensureAndroidSdkPackages(getRequiredEmulatorPackages(apiLevel));
 };
@@ -168,7 +163,7 @@ export const verifyAndroidEmulatorSdk = async (
 export const getStartAppArgs = (
   bundleId: string,
   activityName: string,
-  options?: AndroidAppLaunchOptions
+  options?: AndroidAppLaunchOptions,
 ): string[] => {
   const args = [
     'shell',
@@ -197,7 +192,7 @@ export const getStartAppArgs = (
 
     if (!Number.isSafeInteger(value)) {
       throw new Error(
-        `Android app launch option "${key}" must be a safe integer.`
+        `Android app launch option "${key}" must be a safe integer.`,
       );
     }
 
@@ -209,7 +204,7 @@ export const getStartAppArgs = (
 
 export const isAppInstalled = async (
   adbId: string,
-  bundleId: string
+  bundleId: string,
 ): Promise<boolean> => {
   const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
@@ -226,7 +221,7 @@ export const isAppInstalled = async (
 export const reversePort = async (
   adbId: string,
   port: number,
-  hostPort: number = port
+  hostPort: number = port,
 ): Promise<void> => {
   await spawn(getAdbBinaryPath(), [
     '-s',
@@ -239,7 +234,7 @@ export const reversePort = async (
 
 export const stopApp = async (
   adbId: string,
-  bundleId: string
+  bundleId: string,
 ): Promise<void> => {
   await spawn(getAdbBinaryPath(), [
     '-s',
@@ -255,7 +250,7 @@ export const startApp = async (
   adbId: string,
   bundleId: string,
   activityName: string,
-  options?: AndroidAppLaunchOptions
+  options?: AndroidAppLaunchOptions,
 ): Promise<void> => {
   await spawn(getAdbBinaryPath(), [
     '-s',
@@ -274,7 +269,7 @@ export const getDeviceIds = async (): Promise<string[]> => {
 };
 
 export const getEmulatorName = async (
-  adbId: string
+  adbId: string,
 ): Promise<string | null> => {
   const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
@@ -288,7 +283,7 @@ export const getEmulatorName = async (
 
 export const getShellProperty = async (
   adbId: string,
-  property: string
+  property: string,
 ): Promise<string | null> => {
   const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
@@ -310,7 +305,7 @@ export type DeviceInfo = {
 };
 
 export const getDeviceInfo = async (
-  adbId: string
+  adbId: string,
 ): Promise<DeviceInfo | null> => {
   const manufacturer = await getShellProperty(adbId, 'ro.product.manufacturer');
   const model = await getShellProperty(adbId, 'ro.product.model');
@@ -336,7 +331,7 @@ export const stopEmulator = async (adbId: string): Promise<void> => {
 
 export const installApp = async (
   adbId: string,
-  appPath: string
+  appPath: string,
 ): Promise<void> => {
   await spawn(getAdbBinaryPath(), ['-s', adbId, 'install', '-r', appPath]);
 };
@@ -355,7 +350,7 @@ export const createAvd = async ({
 }: CreateAvdOptions): Promise<void> => {
   const systemImagePackage = getAndroidSystemImagePackage(
     apiLevel,
-    getHostAndroidSystemImageArch()
+    getHostAndroidSystemImageArch(),
   );
 
   await verifyAndroidEmulatorSdk(apiLevel);
@@ -366,7 +361,7 @@ export const createAvd = async ({
   await spawn('bash', [
     '-lc',
     `printf '%s\n%s\n' 'disk.dataPartition.size=${diskSize}' 'vm.heapSize=${heapSize}' >> "${getAvdConfigPath(
-      name
+      name,
     )}"`,
   ]);
 };
@@ -379,7 +374,7 @@ export const deleteAvd = async (name: string): Promise<void> => {
     {
       force: true,
       recursive: true,
-    }
+    },
   );
   await rm(
     `${
@@ -387,18 +382,18 @@ export const deleteAvd = async (name: string): Promise<void> => {
     }/${name}.ini`,
     {
       force: true,
-    }
+    },
   );
 };
 
 export const startEmulator = async (
   name: string,
-  mode: EmulatorBootMode = 'default-boot'
+  mode: EmulatorBootMode = 'default-boot',
 ): Promise<void> => {
   const emulatorBinaryPath = await ensureEmulatorInstalled();
   const childProcess = emulatorProcess.startDetachedProcess(
     emulatorBinaryPath,
-    getEmulatorStartupArgs(name, mode)
+    getEmulatorStartupArgs(name, mode),
   );
 
   let stdout = '';
@@ -434,7 +429,7 @@ export const startEmulator = async (
           stdout,
           stderr,
           error,
-        })
+        }),
       );
     });
 
@@ -446,7 +441,7 @@ export const startEmulator = async (
           stderr,
           exitCode,
           signal,
-        })
+        }),
       );
     });
   });
@@ -462,7 +457,7 @@ export const startEmulator = async (
     });
 
   const observationTimeout = wait(EMULATOR_STARTUP_OBSERVATION_TIMEOUT_MS).then(
-    () => 'timeout' as const
+    () => 'timeout' as const,
   );
 
   try {
@@ -478,7 +473,7 @@ export const startEmulator = async (
 
 export const waitForEmulator = async (
   name: string,
-  signal: AbortSignal
+  signal: AbortSignal,
 ): Promise<string> => {
   while (!signal.aborted) {
     const adbIds = await getDeviceIds();
@@ -503,7 +498,7 @@ export const waitForEmulator = async (
 
 export const waitForEmulatorDisconnect = async (
   adbId: string,
-  signal: AbortSignal
+  signal: AbortSignal,
 ): Promise<void> => {
   while (!signal.aborted) {
     const adbIds = await getDeviceIds();
@@ -520,7 +515,7 @@ export const waitForEmulatorDisconnect = async (
 
 export const waitForBoot = async (
   name: string,
-  signal: AbortSignal
+  signal: AbortSignal,
 ): Promise<string> => {
   while (!signal.aborted) {
     const adbIds = await getDeviceIds();
@@ -549,7 +544,7 @@ export const waitForBoot = async (
 
 export const isAppRunning = async (
   adbId: string,
-  bundleId: string
+  bundleId: string,
 ): Promise<boolean> => {
   try {
     const { stdout } = await spawn(getAdbBinaryPath(), [
@@ -571,7 +566,7 @@ export const isAppRunning = async (
 
 export const getAppUid = async (
   adbId: string,
-  bundleId: string
+  bundleId: string,
 ): Promise<number> => {
   const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
@@ -596,7 +591,7 @@ export const getAppUid = async (
 
 export const setHideErrorDialogs = async (
   adbId: string,
-  hide: boolean
+  hide: boolean,
 ): Promise<void> => {
   await spawn(getAdbBinaryPath(), [
     '-s',

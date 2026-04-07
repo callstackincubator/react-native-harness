@@ -21,7 +21,7 @@ type AndroidSdkRootOptions = {
 };
 
 const getConfiguredAndroidSdkRoot = (
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
 ): string | null => {
   return env.ANDROID_HOME ?? env.ANDROID_SDK_ROOT ?? null;
 };
@@ -42,7 +42,7 @@ export const getDefaultUnixAndroidSdkRoot = ({
 };
 
 const canBootstrapAndroidSdk = (
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
 ) => {
   return platform === 'darwin' || platform === 'linux';
 };
@@ -79,8 +79,8 @@ const downloadText = async (url: string): Promise<string> => {
         response.resume();
         reject(
           new Error(
-            `Failed to download Android repository index from ${url} (status ${statusCode}).`
-          )
+            `Failed to download Android repository index from ${url} (status ${statusCode}).`,
+          ),
         );
         return;
       }
@@ -102,7 +102,7 @@ const downloadText = async (url: string): Promise<string> => {
 
 const downloadFile = async (
   url: string,
-  destinationPath: string
+  destinationPath: string,
 ): Promise<void> => {
   await new Promise<void>((resolve, reject) => {
     const request = https.get(url, (response) => {
@@ -122,8 +122,8 @@ const downloadFile = async (
         response.resume();
         reject(
           new Error(
-            `Failed to download Android command-line tools from ${url} (status ${statusCode}).`
-          )
+            `Failed to download Android command-line tools from ${url} (status ${statusCode}).`,
+          ),
         );
         return;
       }
@@ -137,27 +137,27 @@ const downloadFile = async (
 };
 
 const getCommandLineToolsArchiveUrl = async (
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
 ): Promise<string> => {
   const archivePlatform =
     platform === 'darwin' ? 'mac' : platform === 'linux' ? 'linux' : null;
 
   if (!archivePlatform) {
     throw new Error(
-      'Automatic Android SDK bootstrap is only supported on macOS and Linux.'
+      'Automatic Android SDK bootstrap is only supported on macOS and Linux.',
     );
   }
 
   const repositoryIndex = await downloadText(ANDROID_REPOSITORY_INDEX_URL);
   const archivePattern = new RegExp(
     `commandlinetools-${archivePlatform}-(\\d+)_latest\\.zip`,
-    'g'
+    'g',
   );
   const matches = [...repositoryIndex.matchAll(archivePattern)];
 
   if (matches.length === 0) {
     throw new Error(
-      `Failed to resolve Android command-line tools archive for ${archivePlatform}.`
+      `Failed to resolve Android command-line tools archive for ${archivePlatform}.`,
     );
   }
 
@@ -173,7 +173,7 @@ const getCommandLineToolsArchiveUrl = async (
 
 const ensureAndroidCommandLineTools = async (
   sdkRoot: string,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
 ): Promise<void> => {
   if (
     (await pathExists(getSdkManagerBinaryPath(sdkRoot))) &&
@@ -184,19 +184,19 @@ const ensureAndroidCommandLineTools = async (
 
   if (!canBootstrapAndroidSdk(platform)) {
     throw new Error(
-      'Android command-line tools are missing. Set ANDROID_HOME or ANDROID_SDK_ROOT to an initialized SDK.'
+      'Android command-line tools are missing. Set ANDROID_HOME or ANDROID_SDK_ROOT to an initialized SDK.',
     );
   }
 
   androidEnvironmentLogger.info(
     'Bootstrapping Android command-line tools in %s',
-    sdkRoot
+    sdkRoot,
   );
 
   await mkdir(sdkRoot, { recursive: true });
 
   const temporaryDirectory = await mkdtemp(
-    path.join(os.tmpdir(), 'android-cmdline-tools-')
+    path.join(os.tmpdir(), 'android-cmdline-tools-'),
   );
   const archivePath = path.join(temporaryDirectory, 'cmdline-tools.zip');
   const extractedPath = path.join(temporaryDirectory, 'extracted');
@@ -206,7 +206,7 @@ const ensureAndroidCommandLineTools = async (
   try {
     await downloadFile(
       await getCommandLineToolsArchiveUrl(platform),
-      archivePath
+      archivePath,
     );
     await spawn('unzip', ['-q', archivePath, '-d', extractedPath]);
     await rm(targetDirectory, { force: true, recursive: true });
@@ -225,7 +225,7 @@ const acceptAndroidLicenses = async (sdkRoot: string): Promise<void> => {
     [
       '-lc',
       `yes | ${quoteShell(sdkManagerBinaryPath)} --sdk_root=${quoteShell(
-        sdkRoot
+        sdkRoot,
       )} --licenses >/dev/null`,
     ],
     {
@@ -234,13 +234,13 @@ const acceptAndroidLicenses = async (sdkRoot: string): Promise<void> => {
         ANDROID_HOME: sdkRoot,
         ANDROID_SDK_ROOT: sdkRoot,
       }),
-    }
+    },
   );
 };
 
 const getPackageVerificationPath = (
   sdkRoot: string,
-  packageName: string
+  packageName: string,
 ): string | null => {
   if (packageName === 'platform-tools') {
     return getAdbBinaryPath(sdkRoot);
@@ -263,7 +263,7 @@ const getPackageVerificationPath = (
 
 const getMissingAndroidSdkPackages = async (
   sdkRoot: string,
-  packages: readonly string[]
+  packages: readonly string[],
 ): Promise<string[]> => {
   const missingPackages: string[] = [];
 
@@ -284,7 +284,7 @@ const getMissingAndroidSdkPackages = async (
 
 const installAndroidSdkPackages = async (
   sdkRoot: string,
-  packages: readonly string[]
+  packages: readonly string[],
 ): Promise<void> => {
   if (packages.length === 0) {
     return;
@@ -297,7 +297,7 @@ const installAndroidSdkPackages = async (
 
   androidEnvironmentLogger.info(
     'Installing missing Android SDK packages: %s',
-    packages.join(', ')
+    packages.join(', '),
   );
 
   await acceptAndroidLicenses(sdkRoot);
@@ -306,7 +306,7 @@ const installAndroidSdkPackages = async (
     [
       '-lc',
       `yes | ${quoteShell(sdkManagerBinaryPath)} --sdk_root=${quoteShell(
-        sdkRoot
+        sdkRoot,
       )} ${packageArgs}`,
     ],
     {
@@ -315,13 +315,13 @@ const installAndroidSdkPackages = async (
         ANDROID_HOME: sdkRoot,
         ANDROID_SDK_ROOT: sdkRoot,
       }),
-    }
+    },
   );
 };
 
 export const getAndroidSdkRoot = (
   env: NodeJS.ProcessEnv = process.env,
-  options: Omit<AndroidSdkRootOptions, 'env'> = {}
+  options: Omit<AndroidSdkRootOptions, 'env'> = {},
 ): string | null => {
   return (
     getConfiguredAndroidSdkRoot(env) ?? getDefaultUnixAndroidSdkRoot(options)
@@ -330,13 +330,13 @@ export const getAndroidSdkRoot = (
 
 const getRequiredAndroidSdkRoot = (
   env: NodeJS.ProcessEnv = process.env,
-  options: Omit<AndroidSdkRootOptions, 'env'> = {}
+  options: Omit<AndroidSdkRootOptions, 'env'> = {},
 ): string => {
   const sdkRoot = getAndroidSdkRoot(env, options);
 
   if (!sdkRoot) {
     throw new Error(
-      'Android SDK root is not configured. Set ANDROID_HOME or ANDROID_SDK_ROOT.'
+      'Android SDK root is not configured. Set ANDROID_HOME or ANDROID_SDK_ROOT.',
     );
   }
 
@@ -344,7 +344,7 @@ const getRequiredAndroidSdkRoot = (
 };
 
 export const getHostAndroidSystemImageArch = (
-  architecture: string = process.arch
+  architecture: string = process.arch,
 ): AndroidSystemImageArch => {
   switch (architecture) {
     case 'arm64':
@@ -363,7 +363,7 @@ export const getAndroidPlatformPackage = (apiLevel: number): string => {
 
 export const getAndroidSystemImagePackage = (
   apiLevel: number,
-  architecture: AndroidSystemImageArch = getHostAndroidSystemImageArch()
+  architecture: AndroidSystemImageArch = getHostAndroidSystemImageArch(),
 ): string => {
   return `system-images;android-${apiLevel};default;${architecture}`;
 };
@@ -393,71 +393,115 @@ export const getRequiredAndroidSdkPackages = ({
   return packages;
 };
 
+const getMissingAndroidSdkPackagesForEnvironment = async (
+  packages: readonly string[],
+  {
+    env = process.env,
+    platform = process.platform,
+    homeDirectory = os.homedir(),
+  }: AndroidSdkRootOptions = {},
+): Promise<{ sdkRoot: string; missingPackages: string[] }> => {
+  const sdkRoot = getRequiredAndroidSdkRoot(env, { platform, homeDirectory });
+
+  await mkdir(sdkRoot, { recursive: true });
+
+  return {
+    sdkRoot,
+    missingPackages: await getMissingAndroidSdkPackages(sdkRoot, packages),
+  };
+};
+
 export const ensureAndroidSdkPackages = async (
   packages: readonly string[],
   {
     env = process.env,
     platform = process.platform,
     homeDirectory = os.homedir(),
-  }: AndroidSdkRootOptions = {}
+  }: AndroidSdkRootOptions = {},
 ): Promise<string> => {
-  const sdkRoot = getRequiredAndroidSdkRoot(env, { platform, homeDirectory });
+  const { sdkRoot, missingPackages } =
+    await getMissingAndroidSdkPackagesForEnvironment(packages, {
+      env,
+      platform,
+      homeDirectory,
+    });
 
-  await mkdir(sdkRoot, { recursive: true });
+  if (missingPackages.length === 0) {
+    return sdkRoot;
+  }
+
   await ensureAndroidCommandLineTools(sdkRoot, platform);
 
-  const missingPackages = await getMissingAndroidSdkPackages(sdkRoot, packages);
-
-  if (missingPackages.length > 0) {
-    await installAndroidSdkPackages(sdkRoot, missingPackages);
-  }
+  await installAndroidSdkPackages(sdkRoot, missingPackages);
 
   const unresolvedPackages = await getMissingAndroidSdkPackages(
     sdkRoot,
-    packages
+    packages,
   );
 
   if (unresolvedPackages.length > 0) {
     throw new Error(
       `Android SDK packages are still missing after installation: ${unresolvedPackages.join(
-        ', '
-      )}`
+        ', ',
+      )}`,
     );
   }
 
   return sdkRoot;
 };
 
+export const ensureAndroidAdbAvailable = async (
+  options: AndroidSdkRootOptions = {},
+): Promise<string> => {
+  return ensureAndroidSdkPackages(['platform-tools'], options);
+};
+
+export const ensureAndroidEmulatorAvailable = async (
+  options: AndroidSdkRootOptions = {},
+): Promise<string> => {
+  return ensureAndroidSdkPackages(['emulator'], options);
+};
+
+export const ensureAndroidAvdProvisioningAvailable = async (
+  apiLevel: number,
+  architecture: AndroidSystemImageArch = getHostAndroidSystemImageArch(),
+  options: AndroidSdkRootOptions = {},
+): Promise<string> => {
+  return ensureAndroidSdkPackages(
+    [
+      getAndroidPlatformPackage(apiLevel),
+      getAndroidSystemImagePackage(apiLevel, architecture),
+    ],
+    options,
+  );
+};
+
 export const ensureAndroidDiscoveryEnvironment = async (): Promise<string> => {
   initializeAndroidProcessEnv();
 
-  return ensureAndroidSdkPackages(
-    getRequiredAndroidSdkPackages({ includeEmulator: true })
-  );
+  return ensureAndroidAdbAvailable();
 };
 
 export const ensureAndroidPhysicalDeviceEnvironment =
   async (): Promise<string> => {
     initializeAndroidProcessEnv();
 
-    return ensureAndroidSdkPackages(getRequiredAndroidSdkPackages());
+    return ensureAndroidAdbAvailable();
   };
 
 export const ensureAndroidEmulatorEnvironment = async (
-  apiLevel: number
+  apiLevel: number,
 ): Promise<string> => {
   initializeAndroidProcessEnv();
 
-  return ensureAndroidSdkPackages(
-    getRequiredAndroidSdkPackages({
-      apiLevel,
-      includeEmulator: true,
-    })
-  );
+  await ensureAndroidAdbAvailable();
+  await ensureAndroidEmulatorAvailable();
+
+  return ensureAndroidAvdProvisioningAvailable(apiLevel);
 };
 
 export const getAndroidProcessEnv = (
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv => {
   const sdkRoot = getAndroidSdkRoot(env);
 
@@ -492,19 +536,19 @@ export const initializeAndroidProcessEnv = (): void => {
 };
 
 export const getAdbBinaryPath = (
-  sdkRoot: string = getRequiredAndroidSdkRoot()
+  sdkRoot: string = getRequiredAndroidSdkRoot(),
 ): string => path.join(sdkRoot, 'platform-tools', 'adb');
 
 export const getEmulatorBinaryPath = (
-  sdkRoot: string = getRequiredAndroidSdkRoot()
+  sdkRoot: string = getRequiredAndroidSdkRoot(),
 ): string => path.join(sdkRoot, 'emulator', 'emulator');
 
 export const getSdkManagerBinaryPath = (
-  sdkRoot: string = getRequiredAndroidSdkRoot()
+  sdkRoot: string = getRequiredAndroidSdkRoot(),
 ): string =>
   path.join(sdkRoot, ...CMDLINE_TOOLS_PATH_SEGMENTS, 'bin', 'sdkmanager');
 
 export const getAvdManagerBinaryPath = (
-  sdkRoot: string = getRequiredAndroidSdkRoot()
+  sdkRoot: string = getRequiredAndroidSdkRoot(),
 ): string =>
   path.join(sdkRoot, ...CMDLINE_TOOLS_PATH_SEGMENTS, 'bin', 'avdmanager');

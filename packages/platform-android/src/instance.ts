@@ -27,6 +27,7 @@ import { getDeviceName } from './utils.js';
 import { createAndroidAppMonitor } from './app-monitor.js';
 import { HarnessAppPathError, HarnessEmulatorConfigError } from './errors.js';
 import {
+  ensureAndroidEmulatorAvailable,
   ensureAndroidEmulatorEnvironment,
   getHostAndroidSystemImageArch,
 } from './environment.js';
@@ -61,7 +62,7 @@ const getHarnessAppPath = (): string => {
 const configureAndroidRuntime = async (
   adbId: string,
   config: AndroidPlatformConfig,
-  harnessConfig: HarnessConfig
+  harnessConfig: HarnessConfig,
 ): Promise<number> => {
   const metroPort = harnessConfig.metroPort;
 
@@ -84,6 +85,7 @@ const startAndWaitForBoot = async ({
   signal: AbortSignal;
   mode?: Parameters<typeof adb.startEmulator>[1];
 }): Promise<string> => {
+  await ensureAndroidEmulatorAvailable();
   await adb.startEmulator(emulatorName, mode);
   return adb.waitForBoot(emulatorName, signal);
 };
@@ -137,14 +139,14 @@ const prepareCachedAvd = async ({
       hasExistingAvd
         ? 'Recreating incompatible Android emulator %s...'
         : 'Creating Android emulator %s...',
-      emulatorName
+      emulatorName,
     );
 
     if (hasExistingAvd && !compatibility.compatible) {
       androidInstanceLogger.debug(
         'Android AVD %s is not reusable: %s',
         emulatorName,
-        compatibility.reason
+        compatibility.reason,
       );
       await adb.deleteAvd(emulatorName);
     }
@@ -174,7 +176,7 @@ const prepareCachedAvd = async ({
 export const getAndroidEmulatorPlatformInstance = async (
   config: AndroidPlatformConfig,
   harnessConfig: HarnessConfig,
-  init: HarnessPlatformInitOptions
+  init: HarnessPlatformInitOptions,
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDeviceEmulator(config.device);
   const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
@@ -192,7 +194,7 @@ export const getAndroidEmulatorPlatformInstance = async (
   androidInstanceLogger.debug(
     'resolved Android emulator %s with adb id %s',
     emulatorConfig.name,
-    adbId ?? 'not-found'
+    adbId ?? 'not-found',
   );
 
   if (!adbId) {
@@ -212,7 +214,7 @@ export const getAndroidEmulatorPlatformInstance = async (
             logger.info('Creating Android emulator %s...', emulatorName);
             androidInstanceLogger.debug(
               'creating Android AVD %s before startup',
-              emulatorConfig.name
+              emulatorConfig.name,
             );
             await recreateAvd({ emulatorConfig });
           } else {
@@ -221,7 +223,7 @@ export const getAndroidEmulatorPlatformInstance = async (
 
           androidInstanceLogger.debug(
             'starting Android emulator %s',
-            emulatorConfig.name
+            emulatorConfig.name,
           );
           return startAndWaitForBoot({
             emulatorName: emulatorConfig.name,
@@ -234,10 +236,8 @@ export const getAndroidEmulatorPlatformInstance = async (
     androidInstanceLogger.debug(
       'Android emulator %s connected as %s',
       emulatorConfig.name,
-      adbId
+      adbId,
     );
-  } else if (emulatorConfig.avd) {
-    await ensureAndroidEmulatorEnvironment(emulatorConfig.avd.apiLevel);
   }
 
   if (!adbId) {
@@ -246,7 +246,7 @@ export const getAndroidEmulatorPlatformInstance = async (
 
   androidInstanceLogger.debug(
     'waiting for Android emulator %s to finish booting',
-    adbId
+    adbId,
   );
 
   const isInstalled = await adb.isAppInstalled(adbId, config.bundleId);
@@ -265,7 +265,7 @@ export const getAndroidEmulatorPlatformInstance = async (
         config.bundleId,
         config.activityName,
         (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions
+          config.appLaunchOptions,
       );
     },
     restartApp: async (options) => {
@@ -275,7 +275,7 @@ export const getAndroidEmulatorPlatformInstance = async (
         config.bundleId,
         config.activityName,
         (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions
+          config.appLaunchOptions,
       );
     },
     stopApp: async () => {
@@ -311,7 +311,7 @@ export const getAndroidEmulatorPlatformInstance = async (
 
 export const getAndroidPhysicalDevicePlatformInstance = async (
   config: AndroidPlatformConfig,
-  harnessConfig: HarnessConfig
+  harnessConfig: HarnessConfig,
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDevicePhysical(config.device);
   const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
@@ -327,7 +327,7 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
   if (!isInstalled) {
     throw new AppNotInstalledError(
       config.bundleId,
-      getDeviceName(config.device)
+      getDeviceName(config.device),
     );
   }
 
@@ -340,7 +340,7 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
         config.bundleId,
         config.activityName,
         (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions
+          config.appLaunchOptions,
       );
     },
     restartApp: async (options) => {
@@ -350,7 +350,7 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
         config.bundleId,
         config.activityName,
         (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions
+          config.appLaunchOptions,
       );
     },
     stopApp: async () => {
