@@ -9,6 +9,10 @@ vi.mock('../utils/dev-server.js', () => ({
   getDevServerUrl: mocks.getDevServerUrl,
 }));
 
+vi.mock('react-native-url-polyfill', () => ({
+  URL,
+}));
+
 import { getWSServer } from './getWSServer.js';
 
 describe('getWSServer', () => {
@@ -30,12 +34,26 @@ describe('getWSServer', () => {
     expect(getWSServer()).toBe(`wss://example.com:19000${HARNESS_BRIDGE_PATH}`);
   });
 
+  it('preserves the explicit port for hostnames', () => {
+    mocks.getDevServerUrl.mockReturnValue('http://example.com:31337/status');
+
+    expect(getWSServer()).toBe(`ws://example.com:31337${HARNESS_BRIDGE_PATH}`);
+  });
+
   it('drops user info while preserving the host for ipv6 URLs', () => {
     mocks.getDevServerUrl.mockReturnValue(
       'http://user:secret@[::1]:8081/status',
     );
 
     expect(getWSServer()).toBe(`ws://[::1]:8081${HARNESS_BRIDGE_PATH}`);
+  });
+
+  it('preserves the port for ipv6 URLs without user info', () => {
+    mocks.getDevServerUrl.mockReturnValue('http://[2001:db8::1]:19001/status');
+
+    expect(getWSServer()).toBe(
+      `ws://[2001:db8::1]:19001${HARNESS_BRIDGE_PATH}`,
+    );
   });
 
   it('throws for non-absolute dev server URLs', () => {
