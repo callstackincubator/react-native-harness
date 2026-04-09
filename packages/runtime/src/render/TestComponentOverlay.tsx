@@ -52,7 +52,12 @@ export const TestComponentOverlay = (): React.ReactElement | null => {
   };
 
   return (
-    <View key={key} style={styles.overlay} onLayout={handleLayout}>
+    <View
+      key={key}
+      // Keep runtime buildable on RN 0.85+ so this branch stays focused on the Metro loading repro.
+      style={[StyleSheet.absoluteFill, styles.overlay]}
+      onLayout={handleLayout}
+    >
       <ErrorBoundary>{element}</ErrorBoundary>
     </View>
   );
@@ -60,7 +65,6 @@ export const TestComponentOverlay = (): React.ReactElement | null => {
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#0a1628',
     zIndex: 1000,
   },
