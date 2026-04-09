@@ -52,7 +52,11 @@ export const TestComponentOverlay = (): React.ReactElement | null => {
   };
 
   return (
-    <View key={key} style={styles.overlay} onLayout={handleLayout}>
+    <View
+      key={key}
+      style={[StyleSheet.absoluteFill, styles.overlay]}
+      onLayout={handleLayout}
+    >
       <ErrorBoundary>{element}</ErrorBoundary>
     </View>
   );
@@ -60,7 +64,6 @@ export const TestComponentOverlay = (): React.ReactElement | null => {
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#0a1628',
     zIndex: 1000,
   },
