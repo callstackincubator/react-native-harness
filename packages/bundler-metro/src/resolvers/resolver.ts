@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { MetroConfig } from '@react-native/metro-config';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
+import { getResolvedEntryPointWithoutExtension } from '../entry-point-utils.js';
 import { createHarnessResolver } from './composite-resolver.js';
 import { createTsConfigResolver } from './tsconfig-resolver.js';
 import type { HarnessResolver, MetroResolver } from './types.js';
@@ -10,7 +11,7 @@ const require = createRequire(import.meta.url);
 
 const getExtensionlessAbsolutePath = (
   basePath: string,
-  relativePath = ''
+  relativePath = '',
 ): string => {
   const fullPath = path.resolve(basePath, relativePath);
   const parsed = path.parse(fullPath);
@@ -18,16 +19,15 @@ const getExtensionlessAbsolutePath = (
 };
 
 export const createHarnessEntryPointResolver = (
-  harnessConfig: HarnessConfig
+  harnessConfig: HarnessConfig,
 ): HarnessResolver => {
   const rootPath = path.resolve(process.cwd());
-  const expectedEntryPoint = getExtensionlessAbsolutePath(
+  const expectedEntryPoint = path.resolve(
     rootPath,
-    harnessConfig.entryPoint
+    getResolvedEntryPointWithoutExtension(rootPath, harnessConfig.entryPoint),
   );
-  const resolvedHarnessPath = require.resolve(
-    '@react-native-harness/runtime/entry-point'
-  );
+  const resolvedHarnessPath =
+    require.resolve('@react-native-harness/runtime/entry-point');
 
   return (context, moduleName, platform) => {
     void platform;
@@ -39,7 +39,7 @@ export const createHarnessEntryPointResolver = (
 
     const requestedModule = getExtensionlessAbsolutePath(
       currentOrigin,
-      moduleName
+      moduleName,
     );
 
     if (requestedModule === expectedEntryPoint) {
@@ -68,12 +68,10 @@ export const createJestGlobalsResolver = (): HarnessResolver => {
 };
 
 export const createJsxRuntimeResolver = (): HarnessResolver => {
-  const resolvedJsxRuntimePath = require.resolve(
-    '@react-native-harness/runtime/jsx-runtime'
-  );
-  const resolvedJsxDevRuntimePath = require.resolve(
-    '@react-native-harness/runtime/jsx-dev-runtime'
-  );
+  const resolvedJsxRuntimePath =
+    require.resolve('@react-native-harness/runtime/jsx-runtime');
+  const resolvedJsxDevRuntimePath =
+    require.resolve('@react-native-harness/runtime/jsx-dev-runtime');
 
   return (_context, moduleName, platform) => {
     void platform;
@@ -97,7 +95,7 @@ export const createJsxRuntimeResolver = (): HarnessResolver => {
 
 export const getHarnessResolver = (
   metroConfig: MetroConfig,
-  harnessConfig: HarnessConfig
+  harnessConfig: HarnessConfig,
 ): MetroResolver => {
   const userResolver = metroConfig.resolver?.resolveRequest;
   const resolvers: HarnessResolver[] = [
