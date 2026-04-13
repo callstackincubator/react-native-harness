@@ -24,7 +24,7 @@ const createReporter = () => {
 
 const createProjectRoot = () => {
   const projectRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'rn-harness-bundle-request-')
+    path.join(os.tmpdir(), 'rn-harness-bundle-request-'),
   );
   tempDirs.push(projectRoot);
   fs.writeFileSync(path.join(projectRoot, 'index.js'), 'module.exports = {};');
@@ -50,7 +50,7 @@ describe('bundle request observer middleware', () => {
     const middleware = getBundleRequestObserverMiddleware(
       createProjectRoot(),
       createHarnessConfig(),
-      reporter
+      reporter,
     );
     const next = vi.fn();
 
@@ -60,7 +60,7 @@ describe('bundle request observer middleware', () => {
         url: '/index.bundle?platform=ios&dev=true',
       } as never,
       {} as never,
-      next
+      next,
     );
 
     expect(events).toEqual([
@@ -79,7 +79,7 @@ describe('bundle request observer middleware', () => {
     const middleware = getBundleRequestObserverMiddleware(
       createProjectRoot(),
       createHarnessConfig(),
-      reporter
+      reporter,
     );
 
     middleware(
@@ -90,7 +90,7 @@ describe('bundle request observer middleware', () => {
         url: '/index.bundle?platform=android',
       } as never,
       {} as never,
-      vi.fn()
+      vi.fn(),
     );
 
     expect(events).toEqual([
@@ -106,7 +106,7 @@ describe('bundle request observer middleware', () => {
     const middleware = getBundleRequestObserverMiddleware(
       createProjectRoot(),
       createHarnessConfig(),
-      reporter
+      reporter,
     );
 
     middleware(
@@ -115,9 +115,36 @@ describe('bundle request observer middleware', () => {
         url: '/other.bundle?platform=ios',
       } as never,
       {} as never,
-      vi.fn()
+      vi.fn(),
     );
 
     expect(events).toEqual([]);
+  });
+
+  it('emits Expo virtual metro entry requests as app requests', () => {
+    const { events, reporter } = createReporter();
+    const middleware = getBundleRequestObserverMiddleware(
+      createProjectRoot(),
+      createHarnessConfig(),
+      reporter,
+    );
+
+    middleware(
+      {
+        headers: {},
+        url: '/.expo/.virtual-metro-entry.bundle?platform=android&dev=true&runModule=true&app=com.example.app',
+      } as never,
+      {} as never,
+      vi.fn(),
+    );
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'bundle_request_observed',
+        platform: 'android',
+        requestKind: 'app',
+        url: '/.expo/.virtual-metro-entry.bundle?platform=android&dev=true&runModule=true&app=com.example.app',
+      }),
+    ]);
   });
 });

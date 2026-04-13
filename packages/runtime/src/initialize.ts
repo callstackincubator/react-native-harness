@@ -22,11 +22,17 @@ const HMRClient =
 
 // Wait for HMRClient to be initialized
 setTimeout(() => {
-  void disableHMRWhenReady(() => HMRClient.disable(), 50).then(() =>
-    getClient().then((client) =>
-      client.rpc.reportReady(getDeviceDescriptor())
-    )
-  );
+  void (async () => {
+    try {
+      await disableHMRWhenReady(() => HMRClient.disable(), 50);
+      const client = await getClient();
+
+      const deviceDescriptor = getDeviceDescriptor();
+      await client.rpc.reportReady(deviceDescriptor);
+    } catch (error) {
+      console.error('Failed to initialize React Native Harness', error);
+    }
+  })();
 });
 
 // Re-throw fatal errors
