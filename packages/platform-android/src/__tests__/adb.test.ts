@@ -17,6 +17,7 @@ import {
 } from '../adb.js';
 import * as tools from '@react-native-harness/tools';
 import * as environment from '../environment.js';
+import * as avdConfig from '../avd-config.js';
 
 const createAbortError = () =>
   new DOMException('The operation was aborted', 'AbortError');
@@ -48,7 +49,7 @@ describe('getStartAppArgs', () => {
           user_id: 42,
           mode: 'debug',
         },
-      })
+      }),
     ).toEqual([
       'shell',
       'am',
@@ -77,7 +78,7 @@ describe('getStartAppArgs', () => {
         extras: {
           count: Number.MAX_SAFE_INTEGER + 1,
         },
-      })
+      }),
     ).toThrow('must be a safe integer');
   });
 
@@ -88,7 +89,7 @@ describe('getStartAppArgs', () => {
     } as Awaited<ReturnType<typeof tools.spawn>>);
 
     await expect(getAppUid('emulator-5554', 'com.example.app')).resolves.toBe(
-      10234
+      10234,
     );
 
     expect(spawnSpy).toHaveBeenCalledWith(expect.stringMatching(/adb$/), [
@@ -108,7 +109,7 @@ describe('getStartAppArgs', () => {
     } as Awaited<ReturnType<typeof tools.spawn>>);
 
     await expect(getLogcatTimestamp('emulator-5554')).resolves.toBe(
-      '03-12 11:35:08.000'
+      '03-12 11:35:08.000',
     );
 
     expect(spawnSpy).toHaveBeenCalledWith(expect.stringMatching(/adb$/), [
@@ -146,14 +147,19 @@ describe('getStartAppArgs', () => {
   });
 
   it('creates an AVD and appends config overrides', async () => {
+    vi.spyOn(avdConfig, 'readAvdConfig').mockResolvedValue({});
     const spawnSpy = vi
       .spyOn(tools, 'spawn')
-      .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>);
+      .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>)
+      .mockResolvedValueOnce({
+        stdout:
+          'id: 0 or "pixel_8"\n    Name: Pixel 8\nid: 1 or "pixel_6"\n    Name: Pixel 6\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>);
     const verifyAndroidEmulatorSdk = vi
       .spyOn(environment, 'ensureAndroidSdkPackages')
       .mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(environment, 'getHostAndroidSystemImageArch').mockReturnValue(
-      'x86_64'
+      'x86_64',
     );
 
     await createAvd({
@@ -170,29 +176,128 @@ describe('getStartAppArgs', () => {
       'platforms;android-35',
       'system-images;android-35;default;x86_64',
     ]);
-    expect(spawnSpy).toHaveBeenNthCalledWith(1, 'bash', [
-      '-lc',
-      expect.stringContaining(
-        'create avd --force --name "Pixel_8_API_35" --package "system-images;android-35;default;x86_64" --device "pixel_8"'
-      ),
-    ]);
+    expect(spawnSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.stringMatching(/avdmanager$/),
+      ['list', 'device'],
+    );
     expect(spawnSpy).toHaveBeenNthCalledWith(2, 'bash', [
       '-lc',
       expect.stringContaining(
-        `'disk.dataPartition.size=1G' 'vm.heapSize=1G' >> `
+        'create avd --force --name "Pixel_8_API_35" --package "system-images;android-35;default;x86_64" --device "pixel_8" -p ',
+      ),
+    ]);
+    expect(spawnSpy).toHaveBeenNthCalledWith(3, 'bash', [
+      '-lc',
+      expect.stringContaining(`'avd.ini.encoding=UTF-8' 'path=`),
+    ]);
+    expect(spawnSpy).toHaveBeenNthCalledWith(4, 'bash', [
+      '-lc',
+      expect.stringContaining(
+        `'disk.dataPartition.size=1G' 'vm.heapSize=1G' >> `,
       ),
     ]);
   });
 
-  it('creates an AVD with arm64 system image packages on arm64 hosts', async () => {
-    vi.spyOn(tools, 'spawn').mockResolvedValue(
-      {} as Awaited<ReturnType<typeof tools.spawn>>
+  it('recreates the companion ini file when avdmanager leaves it missing', async () => {
+    vi.spyOn(avdConfig, 'readAvdConfig').mockResolvedValue({});
+    const spawnSpy = vi
+      .spyOn(tools, 'spawn')
+      .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>)
+      .mockResolvedValueOnce({
+        stdout: 'id: 0 or "pixel_6"\n    Name: Pixel 6\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>);
+    vi.spyOn(environment, 'ensureAndroidSdkPackages').mockResolvedValue(
+      '/tmp/android-sdk',
     );
+    vi.spyOn(environment, 'getHostAndroidSystemImageArch').mockReturnValue(
+      'x86_64',
+    );
+
+    await createAvd({
+      name: 'Pixel_6_API_35',
+      apiLevel: 35,
+      profile: 'pixel_6',
+      diskSize: '1G',
+      heapSize: '1G',
+    });
+
+    expect(spawnSpy).toHaveBeenNthCalledWith(3, 'bash', [
+      '-lc',
+      expect.stringContaining(`'avd.ini.encoding=UTF-8' 'path=`),
+    ]);
+    expect(spawnSpy).toHaveBeenNthCalledWith(4, 'bash', [
+      '-lc',
+      expect.stringContaining(
+        `'disk.dataPartition.size=1G' 'vm.heapSize=1G' >> `,
+      ),
+    ]);
+  });
+
+  it('throws an actionable error when the requested AVD profile is unavailable', async () => {
+    vi.spyOn(tools, 'spawn').mockResolvedValueOnce({
+      stdout:
+        'id: 0 or "pixel_8"\n    Name: Pixel 8\nid: 1 or "pixel_6"\n    Name: Pixel 6\n',
+    } as Awaited<ReturnType<typeof tools.spawn>>);
+    vi.spyOn(environment, 'ensureAndroidSdkPackages').mockResolvedValue(
+      '/tmp/android-sdk',
+    );
+    vi.spyOn(environment, 'getHostAndroidSystemImageArch').mockReturnValue(
+      'x86_64',
+    );
+
+    await expect(
+      createAvd({
+        name: 'Pixel_8_Pro_API_35',
+        apiLevel: 35,
+        profile: 'pixel_8_pro',
+        diskSize: '1G',
+        heapSize: '1G',
+      }),
+    ).rejects.toThrow(
+      'Android AVD profile "pixel_8_pro" is not available on this machine. Available profiles: pixel_8, pixel_6',
+    );
+  });
+
+  it('throws a clear error when avdmanager does not create config.ini', async () => {
+    vi.spyOn(avdConfig, 'readAvdConfig').mockResolvedValue(null);
+    vi.spyOn(tools, 'spawn')
+      .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>)
+      .mockResolvedValueOnce({
+        stdout: 'id: 0 or "pixel_6"\n    Name: Pixel 6\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>);
+    vi.spyOn(environment, 'ensureAndroidSdkPackages').mockResolvedValue(
+      '/tmp/android-sdk',
+    );
+    vi.spyOn(environment, 'getHostAndroidSystemImageArch').mockReturnValue(
+      'x86_64',
+    );
+
+    await expect(
+      createAvd({
+        name: 'Pixel_6_API_35',
+        apiLevel: 35,
+        profile: 'pixel_6',
+        diskSize: '1G',
+        heapSize: '1G',
+      }),
+    ).rejects.toThrow(
+      'Android AVD "Pixel_6_API_35" was created, but config.ini was not found at ',
+    );
+  });
+
+  it('creates an AVD with arm64 system image packages on arm64 hosts', async () => {
+    vi.spyOn(avdConfig, 'readAvdConfig').mockResolvedValue({});
+    vi.spyOn(tools, 'spawn')
+      .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>)
+      .mockResolvedValueOnce({
+        stdout: 'id: 0 or "pixel_8"\n    Name: Pixel 8\n',
+      } as Awaited<ReturnType<typeof tools.spawn>>);
     const ensureAndroidSdkPackages = vi
       .spyOn(environment, 'ensureAndroidSdkPackages')
       .mockResolvedValue('/tmp/android-sdk');
     vi.spyOn(environment, 'getHostAndroidSystemImageArch').mockReturnValue(
-      'arm64-v8a'
+      'arm64-v8a',
     );
 
     await createAvd({
@@ -241,7 +346,7 @@ describe('getStartAppArgs', () => {
     child.emit('close', 1, null);
 
     await expect(startPromise).rejects.toThrow(
-      'Unknown AVD name [Pixel_8_API_35]'
+      'Unknown AVD name [Pixel_8_API_35]',
     );
   });
 
@@ -271,7 +376,7 @@ describe('getStartAppArgs', () => {
     child.emit('close', 1, null);
 
     await expect(startPromise).rejects.toThrow(
-      'emulator: panic: broken config'
+      'emulator: panic: broken config',
     );
   });
 
@@ -291,7 +396,7 @@ describe('getStartAppArgs', () => {
     vi.spyOn(emulatorProcess, 'startDetachedProcess').mockReturnValue(
       child as unknown as ReturnType<
         typeof emulatorProcess.startDetachedProcess
-      >
+      >,
     );
 
     const startPromise = startEmulator('Pixel_8_API_35');
@@ -317,7 +422,7 @@ describe('getStartAppArgs', () => {
       .mockReturnValue(
         child as unknown as ReturnType<
           typeof emulatorProcess.startDetachedProcess
-        >
+        >,
       );
 
     const startPromise = startEmulator('Pixel_8_API_35');
@@ -326,7 +431,7 @@ describe('getStartAppArgs', () => {
 
     expect(startDetachedProcess).toHaveBeenCalledWith(
       expect.stringMatching(/emulator$/),
-      expect.arrayContaining(['-no-snapshot-load', '-no-snapshot-save'])
+      expect.arrayContaining(['-no-snapshot-load', '-no-snapshot-save']),
     );
   });
 
@@ -345,22 +450,22 @@ describe('getStartAppArgs', () => {
       .mockReturnValue(
         child as unknown as ReturnType<
           typeof emulatorProcess.startDetachedProcess
-        >
+        >,
       );
 
     const startPromise = startEmulator(
       'Pixel_8_API_35',
-      'clean-snapshot-generation'
+      'clean-snapshot-generation',
     );
     await vi.runAllTimersAsync();
     await startPromise;
 
     expect(startDetachedProcess).toHaveBeenCalledWith(
       expect.stringMatching(/emulator$/),
-      expect.arrayContaining(['-no-snapshot-load'])
+      expect.arrayContaining(['-no-snapshot-load']),
     );
     expect(startDetachedProcess.mock.calls[0]?.[1]).not.toContain(
-      '-no-snapshot-save'
+      '-no-snapshot-save',
     );
   });
 
@@ -379,7 +484,7 @@ describe('getStartAppArgs', () => {
       .mockReturnValue(
         child as unknown as ReturnType<
           typeof emulatorProcess.startDetachedProcess
-        >
+        >,
       );
 
     const startPromise = startEmulator('Pixel_8_API_35', 'snapshot-reuse');
@@ -388,10 +493,10 @@ describe('getStartAppArgs', () => {
 
     expect(startDetachedProcess).toHaveBeenCalledWith(
       expect.stringMatching(/emulator$/),
-      expect.arrayContaining(['-no-snapshot-save'])
+      expect.arrayContaining(['-no-snapshot-save']),
     );
     expect(startDetachedProcess.mock.calls[0]?.[1]).not.toContain(
-      '-no-snapshot-load'
+      '-no-snapshot-load',
     );
   });
 
@@ -459,7 +564,7 @@ describe('getStartAppArgs', () => {
 
     const waitPromise = waitForBoot(
       'Pixel_8_API_35',
-      new AbortController().signal
+      new AbortController().signal,
     );
 
     await vi.advanceTimersByTimeAsync(1000);
@@ -482,7 +587,7 @@ describe('getStartAppArgs', () => {
 
     const waitPromise = waitForEmulatorDisconnect(
       'emulator-5554',
-      new AbortController().signal
+      new AbortController().signal,
     );
 
     await vi.advanceTimersByTimeAsync(1000);

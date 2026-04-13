@@ -5,6 +5,11 @@ import type { ChildProcessByStdio } from 'node:child_process';
 import { access, rm } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
 import {
+  getAvdConfigPath,
+  getAvdDirectory,
+  readAvdConfig,
+} from './avd-config.js';
+import {
   ensureAndroidEmulatorAvailable,
   ensureAndroidSdkPackages,
   getAdbBinaryPath,
@@ -51,11 +56,6 @@ const waitWithSignal = async (
 
   await Promise.race([wait(ms), waitForAbort(signal)]);
 };
-
-const getAvdConfigPath = (name: string): string =>
-  `${
-    process.env.ANDROID_AVD_HOME ?? `${process.env.HOME}/.android/avd`
-  }/${name}.avd/config.ini`;
 
 const EMULATOR_STARTUP_OBSERVATION_TIMEOUT_MS = 5000;
 const EMULATOR_OUTPUT_BUFFER_LIMIT = 16 * 1024;
@@ -158,6 +158,68 @@ export const verifyAndroidEmulatorSdk = async (
   apiLevel: number,
 ): Promise<void> => {
   await ensureAndroidSdkPackages(getRequiredEmulatorPackages(apiLevel));
+};
+
+const listAvdProfiles = async (): Promise<string[]> => {
+  const { stdout } = await spawn(getAvdManagerBinaryPath(), ['list', 'device']);
+
+  return stdout
+    .split('\n')
+    .map((line) => line.match(/^id:\s+\d+\s+or\s+"([^"]+)"/i)?.[1]?.trim())
+    .filter((profile): profile is string => profile != null && profile !== '');
+};
+
+const ensureAvdProfileAvailable = async (profile: string): Promise<void> => {
+  const availableProfiles = await listAvdProfiles();
+
+  if (availableProfiles.includes(profile)) {
+    return;
+  }
+
+  const availableProfilesList =
+    availableProfiles.length > 0
+      ? availableProfiles.join(', ')
+      : 'None reported by avdmanager.';
+
+  throw new Error(
+    `Android AVD profile "${profile}" is not available on this machine. Available profiles: ${availableProfilesList}`,
+  );
+};
+
+const ensureAvdConfigExists = async (name: string): Promise<string> => {
+  const configPath = getAvdConfigPath(name);
+
+  if ((await readAvdConfig(name)) == null) {
+    throw new Error(
+      `Android AVD "${name}" was created, but config.ini was not found at ${configPath}.`,
+    );
+  }
+
+  return configPath;
+};
+
+const getAvdIniPath = (name: string): string => {
+  const avdHome =
+    process.env.ANDROID_AVD_HOME ?? `${process.env.HOME}/.android/avd`;
+  return `${avdHome}/${name}.ini`;
+};
+
+const ensureAvdIniExists = async ({
+  name,
+  apiLevel,
+}: {
+  name: string;
+  apiLevel: number;
+}): Promise<string> => {
+  const iniPath = getAvdIniPath(name);
+
+  const avdDirectory = getAvdDirectory(name);
+  await spawn('bash', [
+    '-lc',
+    `printf '%s\n%s\n%s\n%s\n' 'avd.ini.encoding=UTF-8' 'path=${avdDirectory}' 'path.rel=avd/${name}.avd' 'target=android-${apiLevel}' > "${iniPath}"`,
+  ]);
+
+  return iniPath;
 };
 
 export const getStartAppArgs = (
@@ -354,15 +416,16 @@ export const createAvd = async ({
   );
 
   await verifyAndroidEmulatorSdk(apiLevel);
+  await ensureAvdProfileAvailable(profile);
   await spawn('bash', [
     '-lc',
-    `printf 'no\n' | "${getAvdManagerBinaryPath()}" create avd --force --name "${name}" --package "${systemImagePackage}" --device "${profile}"`,
+    `printf 'no\n' | "${getAvdManagerBinaryPath()}" create avd --force --name "${name}" --package "${systemImagePackage}" --device "${profile}" -p "${getAvdDirectory(name)}"`,
   ]);
+  await ensureAvdIniExists({ name, apiLevel });
+  const configPath = await ensureAvdConfigExists(name);
   await spawn('bash', [
     '-lc',
-    `printf '%s\n%s\n' 'disk.dataPartition.size=${diskSize}' 'vm.heapSize=${heapSize}' >> "${getAvdConfigPath(
-      name,
-    )}"`,
+    `printf '%s\n%s\n' 'disk.dataPartition.size=${diskSize}' 'vm.heapSize=${heapSize}' >> "${configPath}"`,
   ]);
 };
 
