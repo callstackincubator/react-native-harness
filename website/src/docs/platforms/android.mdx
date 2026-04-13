@@ -43,16 +43,39 @@ androidPlatform({
       feature_enabled: true,
     },
   },
-})
+});
 ```
 
+If you want Harness and the official GitHub Action to create and cache a matching emulator setup reliably in CI, you can also provide AVD details:
+
+```javascript
+androidPlatform({
+  name: 'android',
+  device: androidEmulator('Pixel_8_API_35', {
+    apiLevel: 35,
+    profile: 'pixel_8',
+    diskSize: '6G',
+    heapSize: '1G',
+    snapshot: {
+      enabled: true,
+    },
+  }),
+  bundleId: 'com.yourapp.debug',
+});
+```
+
+Use the extra AVD configuration when you want more reproducible emulator setup in CI or when you plan to enable AVD snapshot caching in the official GitHub Action.
+
 #### Finding Emulator Names
+
 You can list all available AVDs on your system using the `emulator` command:
 
 ```bash
 emulator -list-avds
 ```
+
 Output example:
+
 ```
 Pixel_6_API_33
 Pixel_8_API_35
@@ -72,7 +95,7 @@ androidPlatform({
       launch_mode: 'test',
     },
   },
-})
+});
 ```
 
 The first argument is the manufacturer, and the second is the model name. These are used for reporting and logging purposes. Harness will automatically detect the connected device via ADB.
@@ -81,6 +104,10 @@ The first argument is the manufacturer, and the second is the model name. These 
 
 - **ADB**: The Android Debug Bridge (`adb`) must be installed and in your system PATH.
 - **Development Build**: You must have a debug build of your app installed on the device/emulator (`adb install ...`). Harness does not build your app; it injects the test bundle into the existing installed app.
+
+## CI Notes
+
+If you use the official GitHub Action with an Android emulator runner, `cacheAvd` works best when your runner includes the emulator's AVD configuration. This helps the action reuse the correct emulator snapshot between runs.
 
 ## App Launch Options
 

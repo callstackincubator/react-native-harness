@@ -16,12 +16,12 @@ import { iosCrashParser } from '../crash-parser.js';
 const simctlLogger = logger.child('simctl');
 
 const plistToJson = async (
-  plistOutput: string
+  plistOutput: string,
 ): Promise<Record<string, unknown>> => {
   const { stdout: jsonOutput } = await spawn(
     'plutil',
     ['-convert', 'json', '-o', '-', '-'],
-    { stdin: { string: plistOutput } }
+    { stdin: { string: plistOutput } },
   );
   return JSON.parse(jsonOutput) as Record<string, unknown>;
 };
@@ -83,16 +83,16 @@ export const collectCrashReports = async ({
   simctlLogger.debug(
     'found %d total entries and %d .ips files in DiagnosticReports',
     allEntries.length,
-    ipsEntries.length
+    ipsEntries.length,
   );
 
   // Crash files are named {ProcessName}-YYYY-MM-DD-HHMMSS.ips, so filter by filename prefix.
   const matchingEntries = ipsEntries.filter((entry) =>
-    processNames.some((name) => entry.startsWith(`${name}-`))
+    processNames.some((name) => entry.startsWith(`${name}-`)),
   );
   simctlLogger.debug(
     '%d crash report file(s) match process names by filename prefix',
-    matchingEntries.length
+    matchingEntries.length,
   );
 
   type CrashCandidate = AppleSimulatorCrashReport & { contents: string };
@@ -113,7 +113,7 @@ export const collectCrashReports = async ({
         'skipping %s: occurredAt=%d is older than minOccurredAt=%d',
         entry,
         report.occurredAt,
-        minOccurredAt
+        minOccurredAt,
       );
       continue;
     }
@@ -145,7 +145,7 @@ export const collectCrashReports = async ({
       simctlLogger.debug(
         'skipping candidate occurredAt=%d: report does not contain udid %s',
         candidate.occurredAt,
-        udid
+        udid,
       );
       continue;
     }
@@ -180,7 +180,7 @@ export const collectCrashReports = async ({
 
 export const getAppInfo = async (
   udid: string,
-  bundleId: string
+  bundleId: string,
 ): Promise<AppleAppInfo | null> => {
   const { stdout: plistOutput } = await spawn('xcrun', [
     'simctl',
@@ -203,13 +203,24 @@ export const getAppInfo = async (
 
 export const isAppInstalled = async (
   udid: string,
-  bundleId: string
+  bundleId: string,
 ): Promise<boolean> => {
   const appInfo = await getAppInfo(udid, bundleId);
   return appInfo !== null;
 };
 
-export type AppleSimulatorState = 'Booted' | 'Booting' | 'Shutdown';
+export type AppleSimulatorState =
+  | 'Booted'
+  | 'Booting'
+  | 'Shutdown'
+  | (string & {});
+
+export const isBootedSimulatorStatus = (status: AppleSimulatorState): boolean =>
+  status === 'Booted';
+
+export const isBootingSimulatorStatus = (
+  status: AppleSimulatorState,
+): boolean => status === 'Booting';
 
 export type AppleSimulatorInfo = {
   name: string;
@@ -243,7 +254,7 @@ export const getSimulators = async (): Promise<AppleSimulatorInfo[]> => {
 };
 
 export const getSimulatorStatus = async (
-  udid: string
+  udid: string,
 ): Promise<AppleSimulatorState> => {
   const simulators = await getSimulators();
   const simulator = simulators.find((s) => s.udid === udid);
@@ -256,19 +267,19 @@ export const getSimulatorStatus = async (
 };
 
 export const getSimctlChildEnvironment = (
-  options?: AppleAppLaunchOptions
+  options?: AppleAppLaunchOptions,
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(options?.environment ?? {}).map(([key, value]) => [
       `SIMCTL_CHILD_${key}`,
       value,
-    ])
+    ]),
   );
 
 export const startApp = async (
   udid: string,
   bundleId: string,
-  options?: AppleAppLaunchOptions
+  options?: AppleAppLaunchOptions,
 ): Promise<void> => {
   const environment = getSimctlChildEnvironment(options);
   const argumentsList = options?.arguments ?? [];
@@ -280,19 +291,63 @@ export const startApp = async (
 
 export const stopApp = async (
   udid: string,
-  bundleId: string
+  bundleId: string,
 ): Promise<void> => {
   await spawnAndForget('xcrun', ['simctl', 'terminate', udid, bundleId]);
 };
 
+export const bootSimulator = async (udid: string): Promise<void> => {
+  await spawn('xcrun', ['simctl', 'boot', udid]);
+};
+
+export const waitForBoot = async (
+  udid: string,
+  signal: AbortSignal,
+): Promise<void> => {
+  await spawn('xcrun', ['simctl', 'bootstatus', udid, '-b'], {
+    signal,
+  });
+};
+
+export const diagnose = async (
+  udid: string,
+  outputDir: string,
+): Promise<void> => {
+  await spawn(
+    'xcrun',
+    [
+      'simctl',
+      'diagnose',
+      `--udid=${udid}`,
+      '--no-archive',
+      `--output=${outputDir}`,
+      '-b',
+    ],
+    {
+      stdin: { string: '\n' },
+    },
+  );
+};
+
+export const shutdownSimulator = async (udid: string): Promise<void> => {
+  await spawnAndForget('xcrun', ['simctl', 'shutdown', udid]);
+};
+
+export const installApp = async (
+  udid: string,
+  appPath: string,
+): Promise<void> => {
+  await spawn('xcrun', ['simctl', 'install', udid, appPath]);
+};
+
 export const getSimulatorId = async (
   name: string,
-  systemVersion: string
+  systemVersion: string,
 ): Promise<string | null> => {
   const simulators = await getSimulators();
   const simulator = simulators.find(
     (s) =>
-      s.name === name && s.runtime.endsWith(systemVersion.replaceAll('.', '-'))
+      s.name === name && s.runtime.endsWith(systemVersion.replaceAll('.', '-')),
   );
 
   return simulator?.udid ?? null;
@@ -300,7 +355,7 @@ export const getSimulatorId = async (
 
 export const isAppRunning = async (
   udid: string,
-  bundleId: string
+  bundleId: string,
 ): Promise<boolean> => {
   try {
     const { stdout } = await spawn('xcrun', [
@@ -323,7 +378,7 @@ const HARNESS_MISSING_VALUE = '__RN_HARNESS_MISSING__';
 const getDefaultsValue = async (
   udid: string,
   bundleId: string,
-  key: string
+  key: string,
 ): Promise<string | null> => {
   try {
     const { stdout } = await spawn('xcrun', [
@@ -349,7 +404,7 @@ const writeDefaultsValue = async (
   udid: string,
   bundleId: string,
   key: string,
-  value: string
+  value: string,
 ): Promise<void> => {
   await spawn('xcrun', [
     'simctl',
@@ -366,7 +421,7 @@ const writeDefaultsValue = async (
 const deleteDefaultsValue = async (
   udid: string,
   bundleId: string,
-  key: string
+  key: string,
 ): Promise<void> => {
   try {
     await spawn('xcrun', [
@@ -390,21 +445,25 @@ const deleteDefaultsValue = async (
 export const applyHarnessJsLocationOverride = async (
   udid: string,
   bundleId: string,
-  host: string
+  host: string,
 ): Promise<void> => {
   const backupValue = await getDefaultsValue(
     udid,
     bundleId,
-    HARNESS_JS_LOCATION_BACKUP_KEY
+    HARNESS_JS_LOCATION_BACKUP_KEY,
   );
 
   if (backupValue === null) {
-    const existingValue = await getDefaultsValue(udid, bundleId, 'RCT_jsLocation');
+    const existingValue = await getDefaultsValue(
+      udid,
+      bundleId,
+      'RCT_jsLocation',
+    );
     await writeDefaultsValue(
       udid,
       bundleId,
       HARNESS_JS_LOCATION_BACKUP_KEY,
-      existingValue ?? HARNESS_MISSING_VALUE
+      existingValue ?? HARNESS_MISSING_VALUE,
     );
   }
 
@@ -413,12 +472,12 @@ export const applyHarnessJsLocationOverride = async (
 
 export const clearHarnessJsLocationOverride = async (
   udid: string,
-  bundleId: string
+  bundleId: string,
 ): Promise<void> => {
   const backupValue = await getDefaultsValue(
     udid,
     bundleId,
-    HARNESS_JS_LOCATION_BACKUP_KEY
+    HARNESS_JS_LOCATION_BACKUP_KEY,
   );
 
   if (backupValue === null) {
@@ -436,7 +495,7 @@ export const clearHarnessJsLocationOverride = async (
 
 export const screenshot = async (
   udid: string,
-  destination: string
+  destination: string,
 ): Promise<string> => {
   await spawn('xcrun', ['simctl', 'io', udid, 'screenshot', destination]);
   return destination;

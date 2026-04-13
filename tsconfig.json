@@ -34,9 +34,6 @@
       "path": "./packages/react-native-harness"
     },
     {
-      "path": "./packages/reporters"
-    },
-    {
       "path": "./packages/jest"
     },
     {

@@ -13,4 +13,5 @@ export const vegaPlatform = (
   config,
   runner: import.meta.resolve('./runner.js'),
   platformId: 'vega',
+  getResourceLockKey: () => `vega:${config.device.deviceId}`,
 });

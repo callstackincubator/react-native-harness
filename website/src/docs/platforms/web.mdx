@@ -13,12 +13,14 @@ The easiest way to set up Web support is through the [Initialization Wizard](/do
 ### Manual Setup
 
 1. **Install the platform package:**
+
    ```bash
    npm install --save-dev @react-native-harness/platform-web
    ```
 
 2. **Configure the runner:**
    Update your `rn-harness.config.mjs`:
+
    ```javascript
    import { webPlatform, chromium } from '@react-native-harness/platform-web';
 
@@ -46,11 +48,11 @@ Harness supports all major browser engines through helper factories.
 
 ### Options
 
-| Option | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `headless` | `boolean` | `true` | Whether to run the browser in headless mode. |
-| `channel` | `string` | - | Browser channel (e.g., `'chrome'`, `'msedge'`). |
-| `executablePath` | `string` | - | Path to a specific browser binary on your system. |
+| Option           | Type      | Default | Description                                       |
+| :--------------- | :-------- | :------ | :------------------------------------------------ |
+| `headless`       | `boolean` | `true`  | Whether to run the browser in headless mode.      |
+| `channel`        | `string`  | -       | Browser channel (e.g., `'chrome'`, `'msedge'`).   |
+| `executablePath` | `string`  | -       | Path to a specific browser binary on your system. |
 
 ## UI Testing on Web
 
@@ -64,3 +66,5 @@ When using `@react-native-harness/ui` on the Web, interactions are simulated usi
 
 - **Dev Server**: Your web application must be running (e.g., via `webpack-dev-server` or `expo start --web`) before running tests.
 - **Playwright Browsers**: Ensure Playwright browsers are installed in your environment.
+
+If you use the official GitHub Action for web runners, it installs Playwright Chromium automatically before running Harness.

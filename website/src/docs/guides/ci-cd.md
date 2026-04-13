@@ -42,7 +42,7 @@ The action accepts the following inputs:
 - `uploadVisualTestArtifacts` (optional): Whether to upload visual test diff and actual images as artifacts
 - `harnessArgs` (optional): Additional arguments to pass to the Harness CLI
 - `packageManager` (optional): Override package manager auto-detection. Supported values: `npm`, `yarn`, `pnpm`, `bun`, `deno`
-- `cacheAvd` (optional, Android only): Whether to cache the Android Virtual Device snapshot. Defaults to `true`
+- `cacheAvd` (optional, Android only): Whether to cache the Android Virtual Device snapshot. Defaults to `true`. This is most useful when your Android runner defines AVD details in `rn-harness.config.mjs`.
 - `preRunHook` (optional): Inline shell script run in `bash` immediately before Harness starts
 - `afterRunHook` (optional): Inline shell script run in `bash` immediately after Harness finishes and before artifacts are uploaded
 
@@ -233,11 +233,27 @@ The official action can run optional shell hooks around the Harness invocation:
 
 On Android, both hooks execute inside the `android-emulator-runner` session, so they can safely use `adb` against the active emulator. On iOS, the hooks run after the simulator is booted and the app is installed. On web, the same inputs are available for consistency and run immediately before and after the Harness command.
 
+## Android Emulator Caching
+
+For Android emulator runners, the official action can cache the emulator snapshot between runs.
+
+- Enable this with `cacheAvd: true`.
+- For best results, define the emulator's AVD details in your Android runner config.
+- Use this when you want faster CI runs and a more consistent emulator setup.
+
+If your workflow does not define AVD details, the action can still run the tests, but emulator snapshot caching is less useful.
+
 ## Metro cache
 
 React Native Harness can persist Metro's transformation cache under `.harness/metro-cache` in your project root. Enabling it in config (`unstable__enableMetroCache: true`) speeds up repeated Metro runs.
 
 When you use the `callstackincubator/react-native-harness` GitHub Action, Metro cache restoration and saving is handled automatically for the resolved `projectRoot`. You do not need to add a separate `actions/cache` step for `.harness/metro-cache`.
+
+## Web in CI
+
+The official action supports web runners as well. At the moment, the action installs Playwright Chromium automatically before running Harness.
+
+If your workflow depends on a different browser setup, make that expectation explicit in your CI configuration.
 
 ## Build Artifact Caching
 

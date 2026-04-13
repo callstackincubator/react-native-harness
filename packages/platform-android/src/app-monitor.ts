@@ -6,14 +6,30 @@ import {
   type AppMonitorEvent,
   type AppMonitorListener,
 } from '@react-native-harness/platforms';
-import { escapeRegExp, getEmitter, logger, spawn, SubprocessError, type Subprocess } from '@react-native-harness/tools';
+import {
+  escapeRegExp,
+  getEmitter,
+  logger,
+  spawn,
+  SubprocessError,
+  type Subprocess,
+} from '@react-native-harness/tools';
 import * as adb from './adb.js';
 import { androidCrashParser } from './crash-parser.js';
 
 const androidAppMonitorLogger = logger.child('android-app-monitor');
 
 const getLogcatArgs = (uid: number, fromTime: string) =>
-  ['logcat', '-v', 'threadtime', '-b', 'crash', `--uid=${uid}`, '-T', fromTime] as const;
+  [
+    'logcat',
+    '-v',
+    'threadtime',
+    '-b',
+    'crash',
+    `--uid=${uid}`,
+    '-T',
+    fromTime,
+  ] as const;
 const MAX_RECENT_LOG_LINES = 200;
 const MAX_RECENT_CRASH_ARTIFACTS = 10;
 const CRASH_ARTIFACT_SETTLE_DELAY_MS = 100;
@@ -29,7 +45,9 @@ const nativeCrashPattern = (bundleId: string) =>
 
 const processDiedPattern = (bundleId: string) =>
   new RegExp(
-    `Process\\s+${escapeRegExp(bundleId)}\\s+\\(pid\\s+(\\d+)\\)\\s+has\\s+died`,
+    `Process\\s+${escapeRegExp(
+      bundleId
+    )}\\s+\\(pid\\s+(\\d+)\\)\\s+has\\s+died`,
     'i'
   );
 
@@ -66,7 +84,11 @@ const getAndroidLogLineCrashDetails = ({
     summary: line.trim(),
     signal: getSignal(line),
     exceptionType: fatalExceptionMatch?.[1]?.trim(),
-    processName: processMatch ? bundleId : line.includes(bundleId) ? bundleId : undefined,
+    processName: processMatch
+      ? bundleId
+      : line.includes(bundleId)
+      ? bundleId
+      : undefined,
     pid: pid ?? (processMatch ? Number(processMatch[1]) : undefined),
     rawLines: [line],
   };
@@ -211,7 +233,9 @@ const createCrashArtifact = ({
     triggerOccurredAt,
     artifactType: 'logcat',
     rawLines:
-      rawLines.length > 0 ? rawLines : parsedDetails.rawLines ?? details.rawLines,
+      rawLines.length > 0
+        ? rawLines
+        : parsedDetails.rawLines ?? details.rawLines,
   };
 };
 
@@ -265,11 +289,12 @@ const getLatestCrashArtifact = ({
     matchingByPid.length > 0
       ? matchingByPid
       : matchingByProcess.length > 0
-        ? matchingByProcess
-        : crashArtifacts;
+      ? matchingByProcess
+      : crashArtifacts;
   const sortedCandidates = [...candidates].sort(
     (left, right) =>
-      Math.abs(left.occurredAt - occurredAt) - Math.abs(right.occurredAt - occurredAt)
+      Math.abs(left.occurredAt - occurredAt) -
+      Math.abs(right.occurredAt - occurredAt)
   );
 
   const artifact = sortedCandidates[0];
@@ -385,9 +410,10 @@ export const createAndroidAppMonitor = ({
   };
 
   const recordLogLine = (line: string) => {
-    recentLogLines = [...recentLogLines, { line, occurredAt: Date.now() }].slice(
-      -MAX_RECENT_LOG_LINES
-    );
+    recentLogLines = [
+      ...recentLogLines,
+      { line, occurredAt: Date.now() },
+    ].slice(-MAX_RECENT_LOG_LINES);
   };
 
   const recordCrashArtifact = (details?: AppCrashDetails) => {
@@ -419,10 +445,14 @@ export const createAndroidAppMonitor = ({
   const startLogcat = async () => {
     const logcatTimestamp = await adb.getLogcatTimestamp(adbId);
 
-    logcatProcess = spawn('adb', ['-s', adbId, ...getLogcatArgs(appUid, logcatTimestamp)], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
+    logcatProcess = spawn(
+      'adb',
+      ['-s', adbId, ...getLogcatArgs(appUid, logcatTimestamp)],
+      {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      }
+    );
 
     const currentProcess = logcatProcess;
 
@@ -439,15 +469,23 @@ export const createAndroidAppMonitor = ({
           const event = createAndroidLogEvent(line, bundleId);
 
           if (event) {
-            if (event.type === 'possible_crash' || event.type === 'app_exited') {
+            if (
+              event.type === 'possible_crash' ||
+              event.type === 'app_exited'
+            ) {
               recordCrashArtifact(event.crashDetails);
             }
             emit(event);
           }
         }
       } catch (error) {
-        if (!(error instanceof SubprocessError && error.signalName === 'SIGTERM')) {
-          androidAppMonitorLogger.debug('Android logcat monitor stopped', error);
+        if (
+          !(error instanceof SubprocessError && error.signalName === 'SIGTERM')
+        ) {
+          androidAppMonitorLogger.debug(
+            'Android logcat monitor stopped',
+            error
+          );
         }
       }
     })();

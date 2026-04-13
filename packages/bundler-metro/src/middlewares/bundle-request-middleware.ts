@@ -8,9 +8,9 @@ import {
   type HarnessBundleRequestKind,
 } from '../request-kind.js';
 
-const getRequestKind = (
-  req: IncomingMessage
-): HarnessBundleRequestKind => {
+const EXPO_VIRTUAL_ENTRY_BUNDLE = '/.expo/.virtual-metro-entry.bundle';
+
+const getRequestKind = (req: IncomingMessage): HarnessBundleRequestKind => {
   const header = req.headers[HARNESS_REQUEST_KIND_HEADER];
   const value = Array.isArray(header) ? header[0] : header;
 
@@ -20,27 +20,27 @@ const getRequestKind = (
 export const getBundleRequestObserverMiddleware = (
   projectRoot: string,
   harnessConfig: HarnessConfig,
-  reporter: Reporter
+  reporter: Reporter,
 ) => {
   const resolvedEntryPoint = getResolvedEntryPointWithoutExtension(
     projectRoot,
-    harnessConfig.entryPoint
+    harnessConfig.entryPoint,
   );
   const expectedPathname = `/${resolvedEntryPoint}.bundle`;
 
-  return (
-    req: IncomingMessage,
-    _res: ServerResponse,
-    next: NextFunction
-  ) => {
+  return (req: IncomingMessage, _res: ServerResponse, next: NextFunction) => {
     if (!req.url) {
       next();
       return;
     }
 
     const url = new URL(req.url, 'http://localhost');
+    const pathname = decodeURIComponent(url.pathname);
 
-    if (decodeURIComponent(url.pathname) === expectedPathname) {
+    if (
+      pathname === expectedPathname ||
+      pathname === EXPO_VIRTUAL_ENTRY_BUNDLE
+    ) {
       const platform = url.searchParams.get('platform');
 
       if (platform) {

@@ -8,9 +8,12 @@ A plugin can react to events such as:
 
 - Harness startup and teardown
 - run start and finish
+- runtime ready and disconnect events
 - Metro initialization and bundle events
 - app lifecycle signals
 - collection, suite, and test execution events
+
+Each plugin receives a context with useful runtime information such as a logger, project root, current runner, current config, and hook-specific data like the run ID or test file path.
 
 ## Defining a Plugin
 
@@ -48,22 +51,36 @@ export const loggingPlugin = () =>
 Then register it in `rn-harness.config.mjs`:
 
 ```ts
+import {
+  applePlatform,
+  appleSimulator,
+} from '@react-native-harness/platform-apple';
 import { loggingPlugin } from './logging-plugin';
 
 export default {
   entryPoint: './src/test.ts',
   appRegistryComponentName: 'App',
   runners: [
-    {
+    applePlatform({
       name: 'ios',
-      runner: '@react-native-harness/platform-ios',
-      platformId: 'ios',
-      config: {},
-    },
+      device: appleSimulator('iPhone 16 Pro', '18.0'),
+      bundleId: 'com.example.app',
+    }),
   ],
   plugins: [loggingPlugin()],
 };
 ```
+
+## Typical Uses
+
+Plugins are a good fit when you want to:
+
+- write custom logs for run start, finish, or failures
+- collect screenshots, crash artifacts, or extra diagnostics
+- send results to external reporting systems
+- trigger project-specific automation around test runs
+
+Keep plugins focused on workflow needs that are specific to your app or team.
 
 ## Available Events
 
@@ -71,4 +88,4 @@ The full list of plugin events is defined in the source here:
 
 - [packages/plugins/src/types.ts](https://github.com/callstackincubator/react-native-harness/blob/main/packages/plugins/src/types.ts)
 
-The public plugin shape is based on nested objects like `run.started`, `metro.bundleFinished`, or `harness.beforeDispose`.
+The public plugin shape is based on nested objects like `run.started`, `runtime.ready`, `metro.bundleFinished`, `app.exited`, or `harness.beforeDispose`.

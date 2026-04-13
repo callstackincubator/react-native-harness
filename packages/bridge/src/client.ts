@@ -11,13 +11,33 @@ export type BridgeClient = {
 
 const getBridgeClient = async (
   url: string,
-  handlers: BridgeClientFunctions
+  handlers: BridgeClientFunctions,
 ): Promise<BridgeClient> => {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const ws = new WebSocket(url);
     ws.binaryType = 'arraybuffer';
+    let settled = false;
+
+    const cleanup = () => {
+      ws.removeEventListener('open', handleOpen);
+      ws.removeEventListener('error', handleError);
+      ws.removeEventListener('close', handleClose);
+    };
+
+    const rejectConnection = (message: string) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      reject(new Error(message));
+    };
 
     const handleOpen = () => {
+      settled = true;
+      cleanup();
+
       const rpc = createBirpc<BridgeServerFunctions, BridgeClientFunctions>(
         handlers,
         {
@@ -31,7 +51,7 @@ const getBridgeClient = async (
           },
           serialize,
           deserialize,
-        }
+        },
       );
 
       const client: BridgeClient = {
@@ -48,7 +68,26 @@ const getBridgeClient = async (
       resolve(client);
     };
 
-    ws.addEventListener('open', handleOpen, { once: true });
+    const handleError = (event: Event & { message?: string }) => {
+      const reason =
+        typeof event.message === 'string' && event.message.length > 0
+          ? `: ${event.message}`
+          : '';
+
+      rejectConnection(
+        `Failed to connect to the Harness bridge at ${url}${reason}`,
+      );
+    };
+
+    const handleClose = (event: CloseEvent) => {
+      rejectConnection(
+        `Harness bridge connection to ${url} closed before it became ready (code ${event.code}${event.reason ? `, reason: ${event.reason}` : ''})`,
+      );
+    };
+
+    ws.addEventListener('open', handleOpen);
+    ws.addEventListener('error', handleError);
+    ws.addEventListener('close', handleClose);
   });
 };
 

@@ -32,7 +32,12 @@ const config = {
   runners: [
     androidPlatform({
       name: 'android',
-      device: androidEmulator('Pixel_8_API_35'),
+      device: androidEmulator('Pixel_8_API_35', {
+        apiLevel: 35,
+        profile: 'pixel_8',
+        diskSize: '1G',
+        heapSize: '1G',
+      }),
       bundleId: 'com.your.app',
     }),
     androidPlatform({
@@ -78,7 +83,9 @@ Creates a physical Android device configuration.
 
 ## Requirements
 
-- Android SDK installed
+- On macOS and Linux, Harness can resolve the SDK root from `ANDROID_HOME`, then `ANDROID_SDK_ROOT`, then the default SDK path (`~/Library/Android/sdk` on macOS or `~/Android/Sdk` on Linux)
+- For emulator runners with an `avd` config, Harness reads the runner config and automatically verifies or installs missing SDK packages, including `platform-tools`, `emulator`, `platforms;android-<apiLevel>`, and the matching system image for the host architecture
+- If the SDK root does not exist yet on macOS or Linux, Harness bootstraps Android command-line tools and accepts licenses for non-interactive installs
 - Android emulator or physical device connected
 - React Native project configured for Android
 

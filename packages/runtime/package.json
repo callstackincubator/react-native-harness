@@ -45,6 +45,7 @@
     "@vitest/spy": "4.0.16",
     "chai": "^6.2.2",
     "event-target-shim": "^6.0.2",
+    "react-native-url-polyfill": "^3.0.0",
     "use-sync-external-store": "^1.6.0",
     "zustand": "^5.0.5"
   },

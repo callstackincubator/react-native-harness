@@ -27,6 +27,28 @@ export class InitializationTimeoutError extends HarnessError {
   }
 }
 
+export class PlatformReadyTimeoutError extends HarnessError {
+  constructor(public readonly timeout: number) {
+    super(
+      `The platform did not become ready within ${timeout}ms. Increase "platformReadyTimeout" if your device, simulator, or emulator needs more time to start.`
+    );
+    this.name = 'PlatformReadyTimeoutError';
+  }
+}
+
+export class MetroPortRangeExhaustedError extends HarnessError {
+  constructor(
+    public readonly initialPort: number,
+    public readonly attempts: number
+  ) {
+    const finalPort = initialPort + attempts - 1;
+    super(
+      `Harness could not find an available Metro port in the range ${initialPort}-${finalPort}.`
+    );
+    this.name = 'MetroPortRangeExhaustedError';
+  }
+}
+
 export type NativeCrashPhase = 'startup' | 'execution';
 
 export type NativeCrashDetails = AppCrashDetails & {
@@ -51,10 +73,7 @@ const buildNativeCrashMessage = ({
   const hasCrashBlock = summary?.includes('\n') ?? false;
   const shouldRenderSummary =
     Boolean(summary) &&
-    !(
-      !hasCrashBlock &&
-      artifactType === 'ios-crash-report'
-    );
+    !(!hasCrashBlock && artifactType === 'ios-crash-report');
 
   if (shouldRenderSummary && summary) {
     lines.push('');

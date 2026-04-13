@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { View } from 'react-native';
 import * as ReactJSXRuntime from 'react/jsx-runtime';
 import { getHarnessGlobal } from '../globals.js';
@@ -35,4 +36,18 @@ export function jsxs(
   key?: React.Key,
 ): React.ReactElement {
   return wrap(type, props, key, true);
+}
+
+export function createElement(
+  type: React.ElementType,
+  props?: Record<string, unknown> | null,
+  ...children: React.ReactNode[]
+): React.ReactElement {
+  const disableViewFlattening = getHarnessGlobal().disableViewFlattening;
+
+  if (disableViewFlattening && type === View) {
+    props = { ...props, collapsable: false };
+  }
+
+  return React.createElement(type, props, ...children);
 }

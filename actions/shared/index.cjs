@@ -4196,8 +4196,11 @@ var NEVER = INVALID;
 
 // ../tools/dist/logger.js
 var import_node_util = __toESM(require("util"), 1);
+var import_picocolors = __toESM(require_picocolors(), 1);
 var verbose = !!process.env.HARNESS_DEBUG;
 var BASE_TAG = "[harness]";
+var INFO_TAG = import_picocolors.default.isColorSupported ? import_picocolors.default.reset(import_picocolors.default.inverse(import_picocolors.default.bold(import_picocolors.default.magenta(" HARNESS ")))) : "HARNESS";
+var ERROR_TAG = import_picocolors.default.isColorSupported ? import_picocolors.default.reset(import_picocolors.default.inverse(import_picocolors.default.bold(import_picocolors.default.red(" HARNESS ")))) : "HARNESS";
 var getTimestamp = () => (/* @__PURE__ */ new Date()).toISOString();
 var normalizeScope = (scope) => scope.trim().replace(/^\[+|\]+$/g, "").replace(/\]\[/g, "][");
 var formatPrefix = (scopes) => {
@@ -4206,7 +4209,20 @@ var formatPrefix = (scopes) => {
 };
 var mapLines = (text, prefix) => text.split("\n").map((line) => `${prefix} ${line}`).join("\n");
 var writeLog = (level, scopes, messages) => {
-  const method = level === "warn" ? console.warn : level === "error" ? console.error : level === "debug" ? console.debug : console.info;
+  if (!verbose && (level === "info" || level === "log" || level === "success")) {
+    const output2 = import_node_util.default.format(...messages);
+    const tag = INFO_TAG;
+    process.stderr.write(`${tag} ${output2}
+`);
+    return;
+  }
+  if (!verbose && level === "error") {
+    const output2 = import_node_util.default.format(...messages);
+    process.stderr.write(`${ERROR_TAG} ${output2}
+`);
+    return;
+  }
+  const method = level === "warn" ? console.warn : console.debug;
   const output = import_node_util.default.format(...messages);
   const prefix = `${getTimestamp()} ${formatPrefix(scopes)}`;
   method(mapLines(output, prefix));
@@ -4263,7 +4279,7 @@ var _ = { actions: new Set(At), aliases: /* @__PURE__ */ new Map([["k", "up"], [
 var bt = globalThis.process.platform.startsWith("win");
 
 // ../../node_modules/@clack/prompts/dist/index.mjs
-var import_picocolors = __toESM(require_picocolors(), 1);
+var import_picocolors2 = __toESM(require_picocolors(), 1);
 var import_node_process2 = __toESM(require("process"), 1);
 var import_node_fs = require("fs");
 var import_node_path = require("path");
@@ -4306,9 +4322,9 @@ var Ve = "[";
 var vt = "]";
 var we = `${vt}8;;`;
 var Ge = new RegExp(`(?:\\${Ve}(?<code>\\d+)m|\\${we}(?<uri>.*)${Ce})`, "y");
-var Ut = import_picocolors.default.magenta;
+var Ut = import_picocolors2.default.magenta;
 var Ye = { light: w("\u2500", "-"), heavy: w("\u2501", "="), block: w("\u2588", "#") };
-var ze = `${import_picocolors.default.gray(h)}  `;
+var ze = `${import_picocolors2.default.gray(h)}  `;
 
 // ../tools/dist/spawn.js
 var spawnLogger = logger.child("spawn");
@@ -4390,7 +4406,8 @@ var ConfigSchema = external_exports.object({
   metroPort: external_exports.number().int("Metro port must be an integer").min(1, "Metro port must be at least 1").max(65535, "Metro port must be at most 65535").optional().default(DEFAULT_METRO_PORT),
   webSocketPort: external_exports.number().optional().describe("Deprecated. Bridge traffic now uses metroPort and this value is ignored."),
   bridgeTimeout: external_exports.number().min(1e3, "Bridge timeout must be at least 1 second").default(6e4),
-  bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(15e3),
+  platformReadyTimeout: external_exports.number().min(1e3, "Platform ready timeout must be at least 1 second").default(3e5),
+  bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(6e4),
   maxAppRestarts: external_exports.number().min(0, "Max app restarts must be at least 0").default(2),
   resetEnvironmentBetweenTestFiles: external_exports.boolean().optional().default(true),
   unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().default(false),
@@ -4534,6 +4551,66 @@ var getConfig = async (dir) => {
 // src/shared/index.ts
 var import_node_path6 = __toESM(require("path"));
 var import_node_fs6 = __toESM(require("fs"));
+var getHostAndroidSystemImageArch = () => {
+  switch (process.arch) {
+    case "arm64":
+      return "arm64-v8a";
+    case "arm":
+      return "armeabi-v7a";
+    case "x64":
+    default:
+      return "x86_64";
+  }
+};
+var resolveAvdCachingEnabled = ({
+  snapshotEnabled
+}) => {
+  const override = process.env.HARNESS_AVD_CACHING;
+  const requestedValue = override == null ? snapshotEnabled : override.toLowerCase() === "true";
+  return requestedValue === true;
+};
+var getNormalizedAvdCacheConfig = ({
+  emulator,
+  hostArch
+}) => {
+  const avd = emulator.avd;
+  if (!avd) {
+    return null;
+  }
+  return {
+    name: emulator.name,
+    apiLevel: avd.apiLevel,
+    arch: hostArch,
+    profile: avd.profile.trim().toLowerCase(),
+    diskSize: avd.diskSize.trim().toLowerCase(),
+    heapSize: avd.heapSize.trim().toLowerCase()
+  };
+};
+var getResolvedRunner = (runner) => {
+  if (runner.platformId !== "android" || runner.config.device.type !== "emulator") {
+    return runner;
+  }
+  const avdCachingEnabled = resolveAvdCachingEnabled({
+    snapshotEnabled: runner.config.device.avd?.snapshot?.enabled
+  });
+  return {
+    ...runner,
+    config: {
+      ...runner.config,
+      device: {
+        ...runner.config.device,
+        avd: runner.config.device.avd
+      }
+    },
+    action: {
+      avdCachingEnabled,
+      avdCacheConfig: getNormalizedAvdCacheConfig({
+        emulator: runner.config.device,
+        hostArch: getHostAndroidSystemImageArch()
+      })
+    }
+  };
+};
 var run = async () => {
   try {
     const projectRootInput = process.env.INPUT_PROJECTROOT;
@@ -4543,7 +4620,9 @@ var run = async () => {
     }
     const projectRoot = projectRootInput ? import_node_path6.default.resolve(projectRootInput) : process.cwd();
     console.info(`Loading React Native Harness config from: ${projectRoot}`);
-    const { config, projectRoot: resolvedProjectRoot } = await getConfig(projectRoot);
+    const { config, projectRoot: resolvedProjectRoot } = await getConfig(
+      projectRoot
+    );
     const runner = config.runners.find((runner2) => runner2.name === runnerInput);
     if (!runner) {
       throw new Error(`Runner ${runnerInput} not found in config`);
@@ -4552,8 +4631,11 @@ var run = async () => {
     if (!githubOutput) {
       throw new Error("GITHUB_OUTPUT environment variable is not set");
     }
+    const resolvedRunner = getResolvedRunner(runner);
     const relativeProjectRoot = import_node_path6.default.relative(process.cwd(), resolvedProjectRoot) || ".";
-    const output = `config=${JSON.stringify(runner)}
+    const output = `config=${JSON.stringify(
+      resolvedRunner
+    )}
 projectRoot=${relativeProjectRoot}
 `;
     import_node_fs6.default.appendFileSync(githubOutput, output);
