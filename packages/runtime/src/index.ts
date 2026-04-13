@@ -1,6 +1,7 @@
 import './polyfills.js';
 import './globals.js';
 
+export { createElement } from './jsx/jsx-runtime.js';
 export { UI as ReactNativeHarness } from './ui/index.js';
 export * from './spy/index.js';
 export * from './expect/index.js';
