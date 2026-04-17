@@ -11,7 +11,7 @@ import type { NotReadOnly } from './utils.js';
 const require = createRequire(import.meta.url);
 
 const INTERNAL_CALLSITES_REGEX =
-  /(^|[\\/])((node_modules[/\\]@react-native-harness)|packages[/\\](babel-preset|bridge|bundler-metro|cli|config|github-action|jest|metro|platform-android|platform-apple|platform-vega|platform-web|platforms|plugins|react-native-harness|runtime|tools|ui))([\\/]|$)/;
+  /(^|[\\/])(node_modules[/\\]@react-native-harness)([\\/]|$)/;
 
 export const withRnHarness = <T extends MetroConfig>(
   config: T | Promise<T>,

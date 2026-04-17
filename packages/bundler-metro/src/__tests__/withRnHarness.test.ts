@@ -37,7 +37,7 @@ vi.mock('../resolvers/resolver.js', () => ({
 }));
 
 describe('withRnHarness', () => {
-  it('treats workspace Harness packages as internal callsites', async () => {
+  it('treats installed Harness packages as internal callsites', async () => {
     const { withRnHarness } = await import('../withRnHarness.js');
 
     const config = (await withRnHarness(
@@ -55,13 +55,13 @@ describe('withRnHarness', () => {
 
     expect(
       config.serializer?.isThirdPartyModule?.({
-        path: '/repo/packages/runtime/src/expect/errors.ts',
+        path: '/repo/node_modules/@react-native-harness/runtime/dist/expect/errors.js',
       }),
     ).toBe(true);
 
     await expect(
       config.symbolicator?.customizeFrame?.({
-        file: '/repo/packages/runtime/src/expect/errors.ts',
+        file: '/repo/node_modules/@react-native-harness/runtime/dist/expect/errors.js',
       }),
     ).resolves.toEqual({
       collapse: true,
