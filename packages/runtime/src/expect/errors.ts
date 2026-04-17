@@ -1,5 +1,11 @@
 import type { HarnessExpectTestState } from './context.js';
 
+type SerializedExpectError = {
+  name?: string;
+  message?: string;
+  stack?: string;
+};
+
 const formatErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
     return `${error.name}: ${error.message}`;
@@ -15,6 +21,31 @@ const formatErrorMessage = (error: unknown): string => {
   return String(error);
 };
 
+const createExpectError = (errors: unknown[], title?: string): Error => {
+  const message = [title, ...errors.map(formatErrorMessage)]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const error = new Error(message);
+  const firstError = errors.find(
+    (value): value is SerializedExpectError =>
+      !!value && typeof value === 'object',
+  );
+
+  if (firstError?.name) {
+    error.name = firstError.name;
+  }
+
+  if (firstError?.stack) {
+    error.stack = firstError.stack.replace(
+      /^([^\n]+)(\n|$)/,
+      `${error.name}: ${message}$2`,
+    );
+  }
+
+  return error;
+};
+
 export const flushExpectTestState = async (
   state: HarnessExpectTestState,
 ): Promise<void> => {
@@ -28,7 +59,7 @@ export const flushExpectTestState = async (
       .map((result) => result.reason);
 
     if (rejected.length > 0) {
-      throw new Error(rejected.map(formatErrorMessage).join('\n\n'));
+      throw createExpectError(rejected);
     }
   }
 
@@ -41,9 +72,5 @@ export const flushExpectTestState = async (
     return;
   }
 
-  throw new Error(
-    ['Soft assertion failures:', ...softErrors.map(formatErrorMessage)].join(
-      '\n\n',
-    ),
-  );
+  throw createExpectError(softErrors, 'Soft assertion failures:');
 };

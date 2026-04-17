@@ -1,6 +1,7 @@
 type HarnessExpectError = {
   name?: string;
   message?: string;
+  stack?: string;
 };
 
 export type HarnessExpectTestState = {

@@ -11,11 +11,11 @@ import type { NotReadOnly } from './utils.js';
 const require = createRequire(import.meta.url);
 
 const INTERNAL_CALLSITES_REGEX =
-  /(^|[\\/])(node_modules[/\\]@react-native-harness)([\\/]|$)/;
+  /(^|[\\/])((node_modules[/\\]@react-native-harness)|packages[/\\](babel-preset|bridge|bundler-metro|cli|config|github-action|jest|metro|platform-android|platform-apple|platform-vega|platform-web|platforms|plugins|react-native-harness|runtime|tools|ui))([\\/]|$)/;
 
 export const withRnHarness = <T extends MetroConfig>(
   config: T | Promise<T>,
-  isInvokedByHarness = false
+  isInvokedByHarness = false,
 ): (() => Promise<T>) => {
   return async () => {
     if (!isInvokedByHarness) {
@@ -42,9 +42,7 @@ export const withRnHarness = <T extends MetroConfig>(
         getPolyfills: (...args) => [
           ...(metroConfig.serializer?.getPolyfills?.(...args) ?? []),
           harnessManifest,
-          require.resolve(
-            '@react-native-harness/runtime/polyfills/harness-module-system'
-          ),
+          require.resolve('@react-native-harness/runtime/polyfills/harness-module-system'),
         ],
         isThirdPartyModule({ path: modulePath }) {
           const isThirdPartyByDefault =
