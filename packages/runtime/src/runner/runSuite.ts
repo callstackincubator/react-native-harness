@@ -4,6 +4,11 @@ import type {
   TestSuite,
   TestSuiteResult,
 } from '@react-native-harness/bridge';
+import {
+  setCurrentExpectTestState,
+  type HarnessExpectTestState,
+} from '../expect/context.js';
+import { flushExpectTestState } from '../expect/errors.js';
 import { runHooks } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
 import { TestRunnerContext } from './types.js';
@@ -15,7 +20,7 @@ declare global {
 const runTest = async (
   test: TestCase,
   suite: TestSuite,
-  context: TestRunnerContext
+  context: TestRunnerContext,
 ): Promise<TestResult> => {
   const startTime = Date.now();
 
@@ -69,14 +74,23 @@ const runTest = async (
       return result;
     }
 
-    // Run all beforeEach hooks from the current suite and its parents
-    await runHooks(suite, 'beforeEach');
+    const expectTestState: HarnessExpectTestState = {};
+    setCurrentExpectTestState(expectTestState);
 
-    // Run the actual test
-    await test.fn();
+    try {
+      // Run all beforeEach hooks from the current suite and its parents
+      await runHooks(suite, 'beforeEach');
 
-    // Run all afterEach hooks from the current suite and its parents
-    await runHooks(suite, 'afterEach');
+      // Run the actual test
+      await test.fn();
+
+      // Run all afterEach hooks from the current suite and its parents
+      await runHooks(suite, 'afterEach');
+
+      await flushExpectTestState(expectTestState);
+    } finally {
+      setCurrentExpectTestState(undefined);
+    }
 
     const duration = Date.now() - startTime;
 
@@ -102,7 +116,7 @@ const runTest = async (
       error,
       context.testFilePath,
       suite.name,
-      test.name
+      test.name,
     );
     const duration = Date.now() - startTime;
 
@@ -130,7 +144,7 @@ const runTest = async (
 
 export const runSuite = async (
   suite: TestSuite,
-  context: TestRunnerContext
+  context: TestRunnerContext,
 ): Promise<TestSuiteResult> => {
   const startTime = Date.now();
 
@@ -212,10 +226,10 @@ export const runSuite = async (
 
   // Check if any tests or child suites failed
   const hasFailedTests = testResults.some(
-    (result) => result.status === 'failed'
+    (result) => result.status === 'failed',
   );
   const hasFailedSuites = suiteResults.some(
-    (result) => result.status === 'failed'
+    (result) => result.status === 'failed',
   );
 
   if (hasFailedTests || hasFailedSuites) {

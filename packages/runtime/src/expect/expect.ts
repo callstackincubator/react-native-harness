@@ -13,6 +13,7 @@ import {
 import * as chai from 'chai';
 
 // Setup additional matchers
+import { getCurrentExpectTestState } from './context.js';
 import './setup.js';
 import { toMatchImageSnapshot } from './matchers/toMatchImageSnapshot.js';
 
@@ -20,12 +21,22 @@ export function createExpect(): ExpectStatic {
   const expect = ((value: unknown, message?: string): Assertion => {
     const { assertionCalls } = getState(expect);
     setState({ assertionCalls: assertionCalls + 1 }, expect);
-    return chai.expect(value, message) as unknown as Assertion;
+
+    const assertion = chai.expect(value, message) as unknown as Assertion & {
+      withTest?: (test: unknown) => Assertion;
+    };
+    const currentTest = getCurrentExpectTestState();
+
+    return currentTest && assertion.withTest
+      ? assertion.withTest(currentTest)
+      : assertion;
   }) as ExpectStatic;
   Object.assign(expect, chai.expect);
   Object.assign(
     expect,
-    globalThis[ASYMMETRIC_MATCHERS_OBJECT as unknown as keyof typeof globalThis]
+    globalThis[
+      ASYMMETRIC_MATCHERS_OBJECT as unknown as keyof typeof globalThis
+    ],
   );
 
   expect.getState = () => getState<MatcherState>(expect);
@@ -44,7 +55,7 @@ export function createExpect(): ExpectStatic {
       expectedAssertionsNumber: null,
       expectedAssertionsNumberErrorGen: null,
     },
-    expect
+    expect,
   );
 
   // @ts-expect-error untyped
@@ -62,7 +73,7 @@ export function createExpect(): ExpectStatic {
   // @ts-expect-error untyped
   expect.unreachable = (message?: string) => {
     chai.assert.fail(
-      `expected${message ? ` "${message}" ` : ' '}not to be reached`
+      `expected${message ? ` "${message}" ` : ' '}not to be reached`,
     );
   };
 
@@ -71,7 +82,7 @@ export function createExpect(): ExpectStatic {
       new Error(
         `expected number of assertions to be ${expected}, but got ${
           expect.getState().assertionCalls
-        }`
+        }`,
       );
     if (Error.captureStackTrace) {
       Error.captureStackTrace(errorGen(), assertions);
