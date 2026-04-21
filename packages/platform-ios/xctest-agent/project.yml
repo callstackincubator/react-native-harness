@@ -1,0 +1,44 @@
+name: HarnessXCTestAgent
+options:
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    IPHONEOS_DEPLOYMENT_TARGET: 16.0
+    MARKETING_VERSION: 1.0
+    CURRENT_PROJECT_VERSION: 1
+    CODE_SIGN_STYLE: Automatic
+targets:
+  HarnessXCTestAgentHost:
+    type: application
+    platform: iOS
+    sources:
+      - path: HarnessXCTestAgentHost
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: dev.reactnativeharness.xctest-agent.host
+        TARGETED_DEVICE_FAMILY: 1,2
+        SUPPORTED_PLATFORMS: iphoneos iphonesimulator
+  HarnessXCTestAgentTests:
+    type: bundle.ui-testing
+    platform: iOS
+    testTargetName: HarnessXCTestAgentHost
+    sources:
+      - path: HarnessXCTestAgentTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: dev.reactnativeharness.xctest-agent.tests
+        TARGETED_DEVICE_FAMILY: 1,2
+        SUPPORTED_PLATFORMS: iphoneos iphonesimulator
+schemes:
+  HarnessXCTestAgent:
+    build:
+      targets:
+        HarnessXCTestAgentHost: all
+        HarnessXCTestAgentTests: all
+    test:
+      gatherCoverageData: false
+      targets:
+        - name: HarnessXCTestAgentTests

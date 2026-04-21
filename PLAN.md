@@ -51,6 +51,8 @@ Parallelization:
 
 ## Phase 2: XCTest Agent Project
 
+Status: Completed
+
 Objective: create the reusable iOS XCTest agent project and prove it can be generated reproducibly.
 
 Deliverables:
