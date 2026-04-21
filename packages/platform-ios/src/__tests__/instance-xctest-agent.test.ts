@@ -71,6 +71,11 @@ describe('iOS XCTest agent runner integration', () => {
     await instance.disposeRun?.();
 
     expect(mocks.createXCTestAgentController).toHaveBeenCalledWith({
+      capabilities: [
+        expect.objectContaining({
+          getLaunchEnvironment: expect.any(Function),
+        }),
+      ],
       target: {
         kind: 'simulator',
         id: 'sim-udid',
@@ -115,6 +120,11 @@ describe('iOS XCTest agent runner integration', () => {
     await instance.disposeRun?.();
 
     expect(mocks.createXCTestAgentController).toHaveBeenCalledWith({
+      capabilities: [
+        expect.objectContaining({
+          getLaunchEnvironment: expect.any(Function),
+        }),
+      ],
       target: {
         kind: 'device',
         id: 'device-udid',

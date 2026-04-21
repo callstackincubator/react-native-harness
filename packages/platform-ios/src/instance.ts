@@ -26,6 +26,7 @@ import { HarnessAppPathError } from './errors.js';
 import { logger } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { createXCTestAgentController } from './xctest-agent.js';
+import { createPermissionPromptAutoAcceptCapability } from './xctest-agent-capabilities.js';
 
 const iosInstanceLogger = logger.child('ios-instance');
 
@@ -126,6 +127,7 @@ export const getAppleSimulatorPlatformInstance = async (
       kind: 'simulator',
       id: udid,
     },
+    capabilities: [createPermissionPromptAutoAcceptCapability()],
   });
 
   return {
@@ -218,6 +220,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
       kind: 'device',
       id: deviceId,
     },
+    capabilities: [createPermissionPromptAutoAcceptCapability()],
   });
 
   return {

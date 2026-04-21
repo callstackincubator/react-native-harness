@@ -18,6 +18,11 @@ The generated project is intentionally not committed. The source of truth is `xc
 - `HarnessXCTestAgentTests`: UI-testing bundle where agent capabilities live
 - `HarnessXCTestAgent` scheme: stable scheme name for future host-side orchestration
 
+## Current Capability
+
+- Best-effort permission prompt auto-accept for recognized positive actions
+- Unknown prompts are ignored silently so the generic agent can coexist with future capabilities
+
 ## Build Assumptions
 
 - `xcodegen` is available on the host machine
@@ -33,5 +38,7 @@ When build artifact caching is added, these files should be treated as the prima
 - `packages/platform-ios/xctest-agent/project.yml`
 - `packages/platform-ios/xctest-agent/HarnessXCTestAgentHost/AgentHostApp.swift`
 - `packages/platform-ios/xctest-agent/HarnessXCTestAgentTests/HarnessXCTestAgentTests.swift`
+- `packages/platform-ios/xctest-agent/HarnessXCTestAgentTests/AgentCapability.swift`
+- `packages/platform-ios/xctest-agent/HarnessXCTestAgentTests/PermissionPromptCapability.swift`
 
 The selected Xcode version and any injected signing settings should also be part of higher-level cache keys because they affect the produced artifacts.
