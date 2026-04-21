@@ -322,6 +322,7 @@ const getHarnessInternal = async (
     let activeTestFilePath: string | undefined;
     const pendingHookPromises = new Set<Promise<void>>();
     let pendingHookError: unknown;
+    let didPrepareRun = false;
 
     const getCurrentRunId = () => currentRun?.runId;
     const toRelativeTestFilePath = (testFilePath?: string) =>
@@ -650,7 +651,14 @@ const getHarnessInternal = async (
       harnessLogger.debug('client log forwarding enabled');
     }
 
-    let didPrepareRun = false;
+    const ensurePlatformRunPrepared = async () => {
+      if (didPrepareRun) {
+        return;
+      }
+
+      await platformInstance.prepareRun?.();
+      didPrepareRun = true;
+    };
 
     const dispose = async (reason: 'normal' | 'abort' | 'error' = 'normal') => {
       harnessLogger.debug('disposing Harness (reason=%s)', reason);
@@ -724,8 +732,6 @@ const getHarnessInternal = async (
         appLaunchOptions,
       });
       await flushPendingHooks();
-      await platformInstance.prepareRun?.();
-      didPrepareRun = true;
       await appMonitor.start();
       harnessLogger.debug('app monitor started');
       await pluginManager.callHook('harness:before-run', {
@@ -776,6 +782,10 @@ const getHarnessInternal = async (
         testFilePath,
         crashSupervisor,
         appLaunchOptions,
+        launchApp: async () => {
+          await ensurePlatformRunPrepared();
+          await platformInstance.restartApp(appLaunchOptions);
+        },
       });
       await flushPendingHooks();
       harnessLogger.debug('app is ready for %s', testFilePath);
@@ -796,6 +806,7 @@ const getHarnessInternal = async (
         await platformInstance.stopApp();
       } else {
         harnessLogger.debug('requesting direct app restart');
+        await ensurePlatformRunPrepared();
         await platformInstance.restartApp(appLaunchOptions);
       }
 

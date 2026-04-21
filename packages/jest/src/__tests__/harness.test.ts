@@ -397,14 +397,18 @@ describe('getHarness', () => {
     await harness.dispose();
   });
 
-  it('prepares the platform runner once during harness creation and disposes it during teardown', async () => {
-    const { serverBridge } = createBridgeServer();
+  it('prepares the platform runner lazily before first app launch and disposes it during teardown', async () => {
+    const { serverBridge, emitReady } = createBridgeServer();
     const appMonitor = createAppMonitor();
     const callOrder: string[] = [];
+    const restartApp = vi.fn(async () => {
+      callOrder.push('restartApp');
+    });
     const platformInstance = createPlatformRunner({
       prepareRun: vi.fn(async () => {
         callOrder.push('prepareRun');
       }),
+      restartApp,
       createAppMonitor: () => appMonitor.appMonitor,
       disposeRun: vi.fn(async () => {
         callOrder.push('disposeRun');
@@ -417,6 +421,14 @@ describe('getHarness', () => {
 
     mocks.getBridgeServer.mockResolvedValue(serverBridge);
     mocks.getMetroInstance.mockResolvedValue(metroInstance);
+    mocks.waitForMetroBackedAppReady.mockImplementationOnce(
+      async (options: WaitForMetroBackedAppReadyOptions) => {
+        await options.startAttempt();
+        const readyPromise = options.waitForReady(new AbortController().signal);
+        emitReady();
+        await readyPromise;
+      },
+    );
 
     (
       globalThis as typeof globalThis & {
@@ -440,15 +452,26 @@ describe('getHarness', () => {
       '/tmp/project',
     );
 
-    expect(platformInstance.prepareRun).toHaveBeenCalledTimes(1);
+    expect(platformInstance.prepareRun).not.toHaveBeenCalled();
     expect(appMonitor.appMonitor.start).toHaveBeenCalledTimes(1);
-    expect(callOrder).toEqual(['prepareRun']);
+    expect(callOrder).toEqual([]);
+
+    await harness.ensureAppReady('/tmp/example.harness.ts');
+
+    expect(platformInstance.prepareRun).toHaveBeenCalledTimes(1);
+    expect(restartApp).toHaveBeenCalledTimes(1);
+    expect(callOrder).toEqual(['prepareRun', 'restartApp']);
 
     await harness.dispose();
 
     expect(platformInstance.disposeRun).toHaveBeenCalledTimes(1);
     expect(platformInstance.dispose).toHaveBeenCalledTimes(1);
-    expect(callOrder).toEqual(['prepareRun', 'disposeRun', 'dispose']);
+    expect(callOrder).toEqual([
+      'prepareRun',
+      'restartApp',
+      'disposeRun',
+      'dispose',
+    ]);
   });
 
   it('resolves and exposes a fallback Metro port before platform init', async () => {
@@ -565,7 +588,7 @@ describe('getHarness', () => {
     await harness.dispose();
   });
 
-  it('disposes a prepared platform runner when harness creation fails after prepareRun', async () => {
+  it('disposes a prepared platform runner when first app launch fails after prepareRun', async () => {
     const { serverBridge } = createBridgeServer();
     const appMonitor = createAppMonitor();
     const disposeRun = vi.fn(async () => undefined);
@@ -576,17 +599,15 @@ describe('getHarness', () => {
       dispose,
     });
     const metroInstance = createMetroInstance();
-    const plugin = definePlugin<{}, HarnessConfig, HarnessPlatform>({
-      name: 'failing-before-run-plugin',
-      createState: () => ({}),
-      hooks: {
-        harness: {
-          beforeRun: () => {
-            throw new Error('before-run failed');
-          },
-        },
+    const restartApp = vi
+      .spyOn(platformInstance, 'restartApp')
+      .mockRejectedValueOnce(new Error('restart failed'));
+
+    mocks.waitForMetroBackedAppReady.mockImplementationOnce(
+      async (options: WaitForMetroBackedAppReadyOptions) => {
+        await options.startAttempt();
       },
-    });
+    );
 
     mocks.getBridgeServer.mockResolvedValue(serverBridge);
     mocks.getMetroInstance.mockResolvedValue(metroInstance);
@@ -607,19 +628,94 @@ describe('getHarness', () => {
       )}`,
     };
 
+    const harness = await getHarness(
+      createHarnessConfig(),
+      platform,
+      '/tmp/project',
+    );
+
     await expect(
-      getHarness(
-        createHarnessConfig({
-          plugins: [plugin],
-        }),
-        platform,
-        '/tmp/project',
-      ),
-    ).rejects.toThrow('before-run failed');
+      harness.ensureAppReady('/tmp/example.harness.ts'),
+    ).rejects.toThrow('restart failed');
 
     expect(platformInstance.prepareRun).toHaveBeenCalledTimes(1);
+    expect(restartApp).toHaveBeenCalledTimes(1);
+
+    await harness.dispose();
+
     expect(disposeRun).toHaveBeenCalledTimes(1);
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('prepares the platform runner only once across multiple app launches in the same run', async () => {
+    const { serverBridge, emitReady } = createBridgeServer();
+    const appMonitor = createAppMonitor();
+    const prepareRun = vi.fn(async () => undefined);
+    const restartApp = vi.fn(async () => undefined);
+    const stopApp = vi.fn(async () => undefined);
+    const platformInstance = createPlatformRunner({
+      prepareRun,
+      restartApp,
+      stopApp,
+      isAppRunning: vi.fn(async () => false),
+      createAppMonitor: () => appMonitor.appMonitor,
+    });
+    const metroInstance = createMetroInstance();
+
+    mocks.getBridgeServer.mockResolvedValue(serverBridge);
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
+    mocks.waitForMetroBackedAppReady
+      .mockImplementationOnce(
+        async (options: WaitForMetroBackedAppReadyOptions) => {
+          await options.startAttempt();
+          const readyPromise = options.waitForReady(
+            new AbortController().signal,
+          );
+          emitReady();
+          await readyPromise;
+        },
+      )
+      .mockImplementationOnce(
+        async (options: WaitForMetroBackedAppReadyOptions) => {
+          await options.startAttempt();
+          const readyPromise = options.waitForReady(
+            new AbortController().signal,
+          );
+          emitReady();
+          await readyPromise;
+        },
+      );
+
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = vi.fn(async () => platformInstance);
+
+    const platform: HarnessPlatform = {
+      config: {},
+      getResourceLockKey: () => 'ios:test-platform-run-lifecycle-once',
+      name: 'ios',
+      platformId: 'ios',
+      runner: `data:text/javascript,${encodeURIComponent(
+        'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);',
+      )}`,
+    };
+
+    const harness = await getHarness(
+      createHarnessConfig(),
+      platform,
+      '/tmp/project',
+    );
+
+    await harness.ensureAppReady('/tmp/first.harness.ts');
+    await harness.restart('/tmp/second.harness.ts');
+
+    expect(prepareRun).toHaveBeenCalledTimes(1);
+    expect(restartApp).toHaveBeenCalledTimes(2);
+    expect(stopApp).toHaveBeenCalledTimes(1);
+
+    await harness.dispose();
   });
 
   it('routes ensureAppReady through the shared Metro startup helper', async () => {

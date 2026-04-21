@@ -121,6 +121,8 @@ Parallelization:
 
 ## Phase 5: End-to-End iOS Wiring
 
+Status: Completed
+
 Objective: connect the generic lifecycle, iOS orchestration, and permission capability into the actual Harness run flow.
 
 Deliverables:
