@@ -165,6 +165,48 @@ describe('xctest-agent orchestration', () => {
 
     expect(mocks.kill).toHaveBeenCalledTimes(1);
   });
+
+  it('rebuilds when the cached build manifest no longer matches project inputs', async () => {
+    fs.mkdirSync(path.join(buildRoot, 'simulator', 'Build', 'Products'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(buildRoot, 'simulator', 'build-manifest.json'),
+      JSON.stringify({
+        buildInputsHash: 'stale-manifest-hash',
+        destinationKind: 'simulator',
+      }),
+    );
+
+    const controller = createXCTestAgentController({
+      target: {
+        kind: 'simulator',
+        id: 'sim-123',
+      },
+    });
+
+    await controller.prepare();
+
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+    expect(mocks.spawn).toHaveBeenNthCalledWith(
+      2,
+      'xcodebuild',
+      expect.arrayContaining(['build-for-testing']),
+    );
+  });
+
+  it('skips killing the agent process when dispose is called before startup', async () => {
+    const controller = createXCTestAgentController({
+      target: {
+        kind: 'device',
+        id: 'device-123',
+      },
+    });
+
+    await controller.dispose();
+
+    expect(mocks.kill).not.toHaveBeenCalled();
+  });
 });
 
 const rmBuildRoot = () => {

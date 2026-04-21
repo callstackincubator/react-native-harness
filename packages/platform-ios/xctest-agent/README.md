@@ -23,6 +23,36 @@ The generated project is intentionally not committed. The source of truth is `xc
 - Best-effort permission prompt auto-accept for recognized positive actions
 - Unknown prompts are ignored silently so the generic agent can coexist with future capabilities
 
+## Operations
+
+Validate the generated scheme and targets:
+
+```bash
+xcodebuild -project "packages/platform-ios/xctest-agent/HarnessXCTestAgent.xcodeproj" -list
+```
+
+Run the host-side validation and hardening tests from `packages/platform-ios`:
+
+```bash
+pnpm vitest run src/__tests__/xctest-agent-capabilities.test.ts src/__tests__/xctest-agent.test.ts src/__tests__/instance-xctest-agent.test.ts src/__tests__/instance.test.ts
+```
+
+Build and cache behavior:
+
+- The project is regenerated from `xctest-agent/project.yml` during prepare
+- Build artifacts are cached under `packages/platform-ios/xctest-agent/build/`
+- Simulator and physical-device builds use separate derived-data roots
+- Cache reuse depends on the XcodeGen inputs hash matching the stored build manifest
+
+Manual validation checklist:
+
+1. Build an iOS app artifact and set `HARNESS_APP_PATH` when simulator installation is needed.
+2. Run Harness against an iOS simulator and confirm the first run triggers XCTest agent generation and build.
+3. Run Harness a second time on the same target and confirm cached artifacts are reused.
+4. Trigger a real permission prompt, such as camera access, and confirm the positive action is tapped automatically.
+5. Confirm Harness teardown does not leave a stuck `xcodebuild` XCTest agent process behind.
+6. Repeat the same flow on a connected physical iOS device with the required signing inputs available.
+
 ## Build Assumptions
 
 - `xcodegen` is available on the host machine
