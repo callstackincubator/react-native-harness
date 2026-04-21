@@ -78,7 +78,7 @@ export type Harness = {
   config: HarnessConfig;
   runTests: (
     path: string,
-    options: HarnessRunTestsOptions
+    options: HarnessRunTestsOptions,
   ) => Promise<TestSuiteResult>;
   ensureAppReady: (testFilePath: string) => Promise<void>;
   restart: (testFilePath?: string) => Promise<void>;
@@ -92,7 +92,7 @@ export type Harness = {
 export const maybeLogMetroCacheReuse = (
   config: HarnessConfig,
   platform: HarnessPlatform,
-  projectRoot: string
+  projectRoot: string,
 ): void => {
   if (config.unstable__enableMetroCache && isMetroCacheReusable(projectRoot)) {
     logMetroCacheReused(platform);
@@ -116,7 +116,7 @@ const waitForAbort = (signal: AbortSignal): Promise<never> => {
       () => {
         reject(signal.reason ?? createAbortError());
       },
-      { once: true }
+      { once: true },
     );
   });
 };
@@ -239,7 +239,7 @@ const getHarnessInternal = async (
   config: HarnessConfig,
   platform: HarnessPlatform,
   projectRoot: string,
-  signal: AbortSignal
+  signal: AbortSignal,
 ): Promise<Harness> => {
   const context: HarnessContext = {
     platform,
@@ -247,7 +247,7 @@ const getHarnessInternal = async (
   harnessLogger.debug(
     'creating Harness internals for runner=%s platform=%s',
     platform.name,
-    platform.platformId
+    platform.platformId,
   );
   const resourceLockKey = await (platform.getResourceLockKey?.() ??
     getDefaultResourceLockKey(platform));
@@ -261,7 +261,7 @@ const getHarnessInternal = async (
       harnessLogger.debug(
         'waiting in queue for runner=%s key=%s',
         platform.name,
-        resourceLockKey
+        resourceLockKey,
       );
     },
     onStillWaiting: (elapsedMs) => {
@@ -275,7 +275,7 @@ const getHarnessInternal = async (
         'still waiting in queue for runner=%s key=%s elapsedMs=%d',
         platform.name,
         resourceLockKey,
-        elapsedMs
+        elapsedMs,
       );
     },
   });
@@ -285,7 +285,7 @@ const getHarnessInternal = async (
   harnessLogger.debug(
     'resource lock acquired for runner=%s key=%s',
     platform.name,
-    resourceLockKey
+    resourceLockKey,
   );
   try {
     const {
@@ -358,7 +358,7 @@ const getHarnessInternal = async (
         object,
         HarnessConfig,
         HarnessPlatform
-      >
+      >,
     >(
       name: TName,
       payload: Omit<
@@ -373,7 +373,7 @@ const getHarnessInternal = async (
         | 'timestamp'
         | 'abortSignal'
         | 'meta'
-      >
+      >,
     ) => {
       trackHook(pluginManager.callHook(name, payload));
     };
@@ -384,11 +384,11 @@ const getHarnessInternal = async (
       context,
     });
     harnessLogger.debug(
-      'starting Metro, platform runner, and bridge initialization'
+      'starting Metro, platform runner, and bridge initialization',
     );
     harnessLogger.debug(
       'bridge server initialized on Metro websocket path %s',
-      HARNESS_BRIDGE_PATH
+      HARNESS_BRIDGE_PATH,
     );
     const [metroInstance, platformInstance] = await (async () => {
       try {
@@ -402,7 +402,7 @@ const getHarnessInternal = async (
                   serverBridge.ws as unknown as MetroWebSocketEndpoint,
               },
             },
-            signal
+            signal,
           ).then((instance) => {
             harnessLogger.debug('Metro initialized');
             return instance;
@@ -415,7 +415,7 @@ const getHarnessInternal = async (
                 .then((module) =>
                   module.default(platform.config, runtimeConfig, {
                     signal,
-                  } satisfies HarnessPlatformInitOptions)
+                  } satisfies HarnessPlatformInitOptions),
                 )
                 .then((instance) => {
                   harnessLogger.debug('platform runner initialized');
@@ -650,6 +650,8 @@ const getHarnessInternal = async (
       harnessLogger.debug('client log forwarding enabled');
     }
 
+    let didPrepareRun = false;
+
     const dispose = async (reason: 'normal' | 'abort' | 'error' = 'normal') => {
       harnessLogger.debug('disposing Harness (reason=%s)', reason);
       let hookError: unknown;
@@ -689,6 +691,7 @@ const getHarnessInternal = async (
         await Promise.all([
           crashSupervisor.dispose(),
           serverBridge.dispose(),
+          didPrepareRun ? platformInstance.disposeRun?.() : undefined,
           platformInstance.dispose(),
           metroInstance.dispose(),
           metroPortLease?.release(),
@@ -721,6 +724,8 @@ const getHarnessInternal = async (
         appLaunchOptions,
       });
       await flushPendingHooks();
+      await platformInstance.prepareRun?.();
+      didPrepareRun = true;
       await appMonitor.start();
       harnessLogger.debug('app monitor started');
       await pluginManager.callHook('harness:before-run', {
@@ -737,7 +742,7 @@ const getHarnessInternal = async (
       await dispose(
         error instanceof DOMException && error.name === 'AbortError'
           ? 'abort'
-          : 'error'
+          : 'error',
       );
       throw error;
     }
@@ -758,7 +763,7 @@ const getHarnessInternal = async (
 
       crashSupervisor.reset();
       harnessLogger.debug(
-        'app not ready, waiting for launch and runtime readiness'
+        'app not ready, waiting for launch and runtime readiness',
       );
       await waitForAppReady({
         metroInstance,
@@ -783,7 +788,7 @@ const getHarnessInternal = async (
       harnessLogger.debug(
         'restarting app (testFile=%s mode=%s)',
         testFilePath ?? 'n/a',
-        testFilePath ? 'stop-and-ensure-ready' : 'direct-restart'
+        testFilePath ? 'stop-and-ensure-ready' : 'direct-restart',
       );
 
       if (testFilePath) {
@@ -848,17 +853,17 @@ const getHarnessInternal = async (
 export const getHarness = async (
   config: HarnessConfig,
   platform: HarnessPlatform,
-  projectRoot: string
+  projectRoot: string,
 ): Promise<Harness> => {
   harnessLogger.debug(
     'creating Harness with platform ready timeout %dms',
-    config.platformReadyTimeout
+    config.platformReadyTimeout,
   );
 
   return await getHarnessInternal(
     config,
     platform,
     projectRoot,
-    new AbortController().signal
+    new AbortController().signal,
   );
 };

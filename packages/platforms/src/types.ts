@@ -99,14 +99,16 @@ export type AppLaunchOptions =
   | VegaAppLaunchOptions;
 
 export type HarnessPlatformRunner = {
+  prepareRun?: () => Promise<void>;
   startApp: (options?: AppLaunchOptions) => Promise<void>;
   restartApp: (options?: AppLaunchOptions) => Promise<void>;
   stopApp: () => Promise<void>;
+  disposeRun?: () => Promise<void>;
   dispose: () => Promise<void>;
   isAppRunning: () => Promise<boolean>;
   createAppMonitor: (options?: CreateAppMonitorOptions) => AppMonitor;
   getCrashDetails?: (
-    options: CrashDetailsLookupOptions
+    options: CrashDetailsLookupOptions,
   ) => Promise<AppCrashDetails | null>;
 };
 
