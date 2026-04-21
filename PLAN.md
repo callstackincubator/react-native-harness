@@ -74,6 +74,8 @@ Parallelization:
 
 ## Phase 3: iOS XCTest Agent Orchestration
 
+Status: Completed
+
 Objective: add host-side orchestration in `platform-ios` to build, cache, start, and stop the XCTest agent.
 
 Deliverables:

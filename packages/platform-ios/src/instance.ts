@@ -25,6 +25,7 @@ import {
 import { HarnessAppPathError } from './errors.js';
 import { logger } from '@react-native-harness/tools';
 import fs from 'node:fs';
+import { createXCTestAgentController } from './xctest-agent.js';
 
 const iosInstanceLogger = logger.child('ios-instance');
 
@@ -53,14 +54,14 @@ const createNoopAppMonitor = (): AppMonitor => ({
 export const getAppleSimulatorPlatformInstance = async (
   config: ApplePlatformConfig,
   harnessConfig: HarnessConfig,
-  init: HarnessPlatformInitOptions
+  init: HarnessPlatformInitOptions,
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDeviceSimulator(config.device);
   const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
 
   const udid = await simctl.getSimulatorId(
     config.device.name,
-    config.device.systemVersion
+    config.device.systemVersion,
   );
 
   if (!udid) {
@@ -73,7 +74,7 @@ export const getAppleSimulatorPlatformInstance = async (
   iosInstanceLogger.debug(
     'resolved iOS simulator %s with status %s',
     udid,
-    simulatorStatus
+    simulatorStatus,
   );
 
   if (
@@ -84,7 +85,7 @@ export const getAppleSimulatorPlatformInstance = async (
     iosInstanceLogger.debug(
       'booting iOS simulator %s from status %s',
       udid,
-      simulatorStatus
+      simulatorStatus,
     );
     await simctl.bootSimulator(udid);
     startedByHarness = true;
@@ -95,14 +96,14 @@ export const getAppleSimulatorPlatformInstance = async (
   } else if (simctl.isBootingSimulatorStatus(simulatorStatus)) {
     logger.info(
       'Waiting for iOS simulator %s to finish booting...',
-      config.device.name
+      config.device.name,
     );
   }
 
   if (!simctl.isBootedSimulatorStatus(simulatorStatus)) {
     iosInstanceLogger.debug(
       'waiting for iOS simulator %s to finish booting',
-      udid
+      udid,
     );
     await simctl.waitForBoot(udid, init.signal);
   }
@@ -117,29 +118,44 @@ export const getAppleSimulatorPlatformInstance = async (
   await simctl.applyHarnessJsLocationOverride(
     udid,
     config.bundleId,
-    `localhost:${harnessConfig.metroPort}`
+    `localhost:${harnessConfig.metroPort}`,
   );
 
+  const xctestAgent = createXCTestAgentController({
+    target: {
+      kind: 'simulator',
+      id: udid,
+    },
+  });
+
   return {
+    prepareRun: async () => {
+      await xctestAgent.prepare();
+    },
     startApp: async (options) => {
+      await xctestAgent.ensureStarted();
       await simctl.startApp(
         udid,
         config.bundleId,
         (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions
+          config.appLaunchOptions,
       );
     },
     restartApp: async (options) => {
+      await xctestAgent.ensureStarted();
       await simctl.stopApp(udid, config.bundleId);
       await simctl.startApp(
         udid,
         config.bundleId,
         (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions
+          config.appLaunchOptions,
       );
     },
     stopApp: async () => {
       await simctl.stopApp(udid, config.bundleId);
+    },
+    disposeRun: async () => {
+      await xctestAgent.dispose();
     },
     dispose: async () => {
       await simctl.stopApp(udid, config.bundleId);
@@ -169,14 +185,14 @@ export const getAppleSimulatorPlatformInstance = async (
 
 export const getApplePhysicalDevicePlatformInstance = async (
   config: ApplePlatformConfig,
-  harnessConfig: HarnessConfig
+  harnessConfig: HarnessConfig,
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDevicePhysical(config.device);
   const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
 
   if (harnessConfig.metroPort !== DEFAULT_METRO_PORT) {
     throw new Error(
-      `Custom Metro port ${harnessConfig.metroPort} is not supported on physical iOS devices. Physical devices always connect to port ${DEFAULT_METRO_PORT}.`
+      `Custom Metro port ${harnessConfig.metroPort} is not supported on physical iOS devices. Physical devices always connect to port ${DEFAULT_METRO_PORT}.`,
     );
   }
 
@@ -193,30 +209,45 @@ export const getApplePhysicalDevicePlatformInstance = async (
   if (!isAvailable) {
     throw new AppNotInstalledError(
       config.bundleId,
-      getDeviceName(config.device)
+      getDeviceName(config.device),
     );
   }
 
+  const xctestAgent = createXCTestAgentController({
+    target: {
+      kind: 'device',
+      id: deviceId,
+    },
+  });
+
   return {
+    prepareRun: async () => {
+      await xctestAgent.prepare();
+    },
     startApp: async (options) => {
+      await xctestAgent.ensureStarted();
       await devicectl.startApp(
         deviceId,
         config.bundleId,
         (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions
+          config.appLaunchOptions,
       );
     },
     restartApp: async (options) => {
+      await xctestAgent.ensureStarted();
       await devicectl.stopApp(deviceId, config.bundleId);
       await devicectl.startApp(
         deviceId,
         config.bundleId,
         (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions
+          config.appLaunchOptions,
       );
     },
     stopApp: async () => {
       await devicectl.stopApp(deviceId, config.bundleId);
+    },
+    disposeRun: async () => {
+      await xctestAgent.dispose();
     },
     dispose: async () => {
       await devicectl.stopApp(deviceId, config.bundleId);
