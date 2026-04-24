@@ -37,7 +37,7 @@ describe('iOS XCTest agent runner integration', () => {
     });
   });
 
-  it('prepares and lazily starts the simulator XCTest agent', async () => {
+  it('starts the simulator XCTest agent during platform initialization', async () => {
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
@@ -66,11 +66,11 @@ describe('iOS XCTest agent runner integration', () => {
       },
     );
 
-    await instance.prepareRun?.();
     await instance.startApp();
-    await instance.disposeRun?.();
+    await instance.dispose();
 
     expect(mocks.createXCTestAgentController).toHaveBeenCalledWith({
+      appBundleId: 'com.harnessplayground',
       capabilities: [
         expect.objectContaining({
           getLaunchEnvironment: expect.any(Function),
@@ -81,12 +81,12 @@ describe('iOS XCTest agent runner integration', () => {
         id: 'sim-udid',
       },
     });
-    expect(mocks.prepare).toHaveBeenCalledTimes(1);
+    expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.ensureStarted).toHaveBeenCalledTimes(1);
     expect(mocks.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('prepares and lazily starts the physical-device XCTest agent', async () => {
+  it('starts the physical-device XCTest agent during platform initialization', async () => {
     vi.spyOn(devicectl, 'getDevice').mockResolvedValue({
       identifier: 'device-udid',
       deviceProperties: {
@@ -115,11 +115,11 @@ describe('iOS XCTest agent runner integration', () => {
       harnessConfig,
     );
 
-    await instance.prepareRun?.();
     await instance.restartApp();
-    await instance.disposeRun?.();
+    await instance.dispose();
 
     expect(mocks.createXCTestAgentController).toHaveBeenCalledWith({
+      appBundleId: 'com.harnessplayground',
       capabilities: [
         expect.objectContaining({
           getLaunchEnvironment: expect.any(Function),
@@ -130,7 +130,7 @@ describe('iOS XCTest agent runner integration', () => {
         id: 'device-udid',
       },
     });
-    expect(mocks.prepare).toHaveBeenCalledTimes(1);
+    expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.ensureStarted).toHaveBeenCalledTimes(1);
     expect(mocks.dispose).toHaveBeenCalledTimes(1);
   });

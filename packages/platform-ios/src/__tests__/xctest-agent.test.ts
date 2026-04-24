@@ -1,10 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const mocks = vi.hoisted(() => ({
+  activeAgentStops: [] as Array<() => void>,
+  configurePermissions: vi.fn(async () => ({ autoAcceptPermissions: true })),
+  disposeClient: vi.fn(async () => undefined),
+  disposeTransport: vi.fn(async () => undefined),
+  health: vi.fn(async () => ({
+    permissions: {
+      autoAcceptPermissions: false,
+    },
+    status: 'ok',
+  })),
   kill: vi.fn(),
   spawn: vi.fn(),
 }));
@@ -20,7 +31,32 @@ vi.mock('@react-native-harness/tools', async () => {
   };
 });
 
+vi.mock('../xctest-agent-client.js', () => ({
+  createXCTestAgentClient: vi.fn(() => ({
+    configurePermissions: mocks.configurePermissions,
+    dispose: mocks.disposeClient,
+    getPermissionsConfig: vi.fn(),
+    health: mocks.health,
+  })),
+}));
+
+vi.mock('../xctest-agent-transport-simulator.js', () => ({
+  createSimulatorXCTestAgentTransport: vi.fn(() => ({
+    dispose: mocks.disposeTransport,
+    request: vi.fn(),
+  })),
+}));
+
+vi.mock('../xctest-agent-transport-device.js', () => ({
+  createDeviceXCTestAgentTransport: vi.fn(() => ({
+    dispose: mocks.disposeTransport,
+    request: vi.fn(),
+  })),
+}));
+
 import { createXCTestAgentController } from '../xctest-agent.js';
+import { createDeviceXCTestAgentTransport } from '../xctest-agent-transport-device.js';
+import { createSimulatorXCTestAgentTransport } from '../xctest-agent-transport-simulator.js';
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -28,15 +64,21 @@ const projectRoot = path.resolve(
   '..',
   'xctest-agent',
 );
-const buildRoot = path.join(projectRoot, 'build');
+let buildRoot = '';
+let tempProjectRoot = '';
+const originalCwd = process.cwd();
 
 const createLongRunningSubprocess = () => {
   let stopped = false;
 
+  const stop = () => {
+    stopped = true;
+  };
+
   const iterable = {
     nodeChildProcess: Promise.resolve({
       kill: vi.fn(() => {
-        stopped = true;
+        stop();
         mocks.kill();
       }),
     }),
@@ -47,24 +89,38 @@ const createLongRunningSubprocess = () => {
     },
   };
 
-  return iterable;
+  return {
+    stop,
+    subprocess: iterable,
+  };
 };
 
 describe('xctest-agent orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    tempProjectRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'rn-harness-xctest-agent-'),
+    );
+    process.chdir(tempProjectRoot);
+    buildRoot = path.join(tempProjectRoot, '.harness', 'xctest-agent');
     rmBuildRoot();
+    mocks.activeAgentStops.length = 0;
     mocks.spawn.mockImplementation((file: string, args?: string[]) => {
       if (file === 'xcodebuild' && args?.[0] === 'test-without-building') {
-        return createLongRunningSubprocess();
+        const process = createLongRunningSubprocess();
+        mocks.activeAgentStops.push(process.stop);
+        return process.subprocess;
       }
 
-      return createLongRunningSubprocess();
+      return createLongRunningSubprocess().subprocess;
     });
   });
 
   afterEach(() => {
     rmBuildRoot();
+    process.chdir(originalCwd);
+    fs.rmSync(tempProjectRoot, { recursive: true, force: true });
+    tempProjectRoot = '';
   });
 
   it('builds the simulator agent artifacts and writes a cache manifest', async () => {
@@ -79,15 +135,6 @@ describe('xctest-agent orchestration', () => {
 
     expect(mocks.spawn).toHaveBeenNthCalledWith(
       1,
-      'xcodegen',
-      expect.arrayContaining([
-        'generate',
-        '--spec',
-        expect.stringContaining('project.yml'),
-      ]),
-    );
-    expect(mocks.spawn).toHaveBeenNthCalledWith(
-      2,
       'xcodebuild',
       expect.arrayContaining([
         'build-for-testing',
@@ -121,15 +168,12 @@ describe('xctest-agent orchestration', () => {
 
     await controller.prepare();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(1);
-    expect(mocks.spawn).toHaveBeenCalledWith(
-      'xcodegen',
-      expect.arrayContaining(['generate']),
-    );
+    expect(mocks.spawn).not.toHaveBeenCalled();
   });
 
-  it('starts the agent lazily and stops the long-lived test process on dispose', async () => {
+  it('starts the agent lazily, waits for readiness, and configures permissions', async () => {
     const controller = createXCTestAgentController({
+      port: 49152,
       target: {
         kind: 'simulator',
         id: 'sim-999',
@@ -139,6 +183,13 @@ describe('xctest-agent orchestration', () => {
           getLaunchEnvironment: () => ({
             HARNESS_XCTEST_AGENT_MODE: 'test',
           }),
+          updateConfiguration: (configuration) => ({
+            ...configuration,
+            permissions: {
+              ...configuration.permissions,
+              autoAcceptPermissions: true,
+            },
+          }),
         },
       ],
     });
@@ -146,7 +197,7 @@ describe('xctest-agent orchestration', () => {
     await controller.ensureStarted();
     await controller.ensureStarted();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(3);
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
     expect(mocks.spawn).toHaveBeenLastCalledWith(
       'xcodebuild',
       expect.arrayContaining([
@@ -157,10 +208,52 @@ describe('xctest-agent orchestration', () => {
       expect.objectContaining({
         env: expect.objectContaining({
           HARNESS_XCTEST_AGENT_MODE: 'test',
+          HARNESS_XCTEST_AGENT_PORT: '49152',
         }),
       }),
     );
+    expect(createSimulatorXCTestAgentTransport).toHaveBeenCalledWith({
+      port: 49152,
+    });
+    expect(mocks.health).toHaveBeenCalledTimes(1);
+    expect(mocks.configurePermissions).toHaveBeenCalledWith({
+      autoAcceptPermissions: true,
+    });
 
+    await controller.dispose();
+
+    expect(mocks.kill).toHaveBeenCalledTimes(1);
+    expect(mocks.disposeClient).toHaveBeenCalledTimes(1);
+  });
+
+  it('selects the device transport for physical devices', async () => {
+    const controller = createXCTestAgentController({
+      port: 49153,
+      target: {
+        kind: 'device',
+        id: 'device-555',
+      },
+    });
+
+    await controller.ensureStarted();
+
+    expect(createDeviceXCTestAgentTransport).toHaveBeenCalledWith({
+      deviceId: 'device-555',
+      port: 49153,
+    });
+  });
+
+  it('kills the agent process during disposal', async () => {
+    const controller = createXCTestAgentController({
+      port: 49154,
+      shutdownTimeoutMs: 1,
+      target: {
+        kind: 'simulator',
+        id: 'sim-timeout',
+      },
+    });
+
+    await controller.ensureStarted();
     await controller.dispose();
 
     expect(mocks.kill).toHaveBeenCalledTimes(1);
@@ -187,12 +280,38 @@ describe('xctest-agent orchestration', () => {
 
     await controller.prepare();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
     expect(mocks.spawn).toHaveBeenNthCalledWith(
-      2,
+      1,
       'xcodebuild',
       expect.arrayContaining(['build-for-testing']),
     );
+  });
+
+  it('fails fast when the checked-in xcode project is missing', async () => {
+    const projectPath = path.join(projectRoot, 'HarnessXCTestAgent.xcodeproj');
+    const hiddenProjectPath = path.join(
+      projectRoot,
+      'HarnessXCTestAgent.xcodeproj.test-hidden',
+    );
+
+    fs.renameSync(projectPath, hiddenProjectPath);
+
+    try {
+      const controller = createXCTestAgentController({
+        target: {
+          kind: 'simulator',
+          id: 'sim-404',
+        },
+      });
+
+      await expect(controller.prepare()).rejects.toThrow(
+        'Missing checked-in XCTest agent project',
+      );
+      expect(mocks.spawn).not.toHaveBeenCalled();
+    } finally {
+      fs.renameSync(hiddenProjectPath, projectPath);
+    }
   });
 
   it('skips killing the agent process when dispose is called before startup', async () => {
@@ -234,11 +353,7 @@ const getInputFiles = (root: string): string[] => {
   const files: string[] = [];
 
   for (const entry of entries) {
-    if (
-      entry.name === 'build' ||
-      entry.name.endsWith('.xcodeproj') ||
-      entry.name === '.gitignore'
-    ) {
+    if (entry.name === 'build' || entry.name === '.gitignore') {
       continue;
     }
 

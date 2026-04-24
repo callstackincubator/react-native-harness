@@ -1,0 +1,43 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -project HarnessXCTestAgent.xcodeproj -scheme HarnessXCTestAgent -destination "platform=iOS Simulator,id=CE6BE68F-A9BD-4A3A-8F57-37FEA8AC3FB8" -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 -derivedDataPath build/simulator
+
+2026-04-22 18:02:23.825 xcodebuild[72153:11965075] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+2026-04-22 18:02:42.554208-0400 HarnessXCTestAgentUITests-Runner[72652:11967943] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-04-22 18:02:42.755.
+Test Suite 'HarnessXCTestAgentUITests.xctest' started at 2026-04-22 18:02:42.755.
+Test Suite 'HarnessXCTestAgentUITests' started at 2026-04-22 18:02:42.755.
+Test Case '-[HarnessXCTestAgentUITests.HarnessXCTestAgentUITests testAgentSession]' started.
+    t =     0.00s Start Test at 2026-04-22 18:02:42.756
+    t =     0.13s Set Up
+2026-04-22 18:02:42.891067-0400 HarnessXCTestAgentUITests-Runner[72652:11967943] [HarnessXCTestAgent] setUpWithError started
+2026-04-22 18:02:42.896411-0400 HarnessXCTestAgentUITests-Runner[72652:11967943] [HarnessXCTestAgent] enabled capabilities: PermissionPromptCapability
+    t =     0.14s     Open com.callstackincubator.HarnessXCTestAgent
+    t =     0.14s         Launch com.callstackincubator.HarnessXCTestAgent
+    t =     0.95s             Setting up automation session
+    t =     1.59s             Wait for com.callstackincubator.HarnessXCTestAgent to idle
+2026-04-22 18:02:45.495856-0400 HarnessXCTestAgentUITests-Runner[72652:11967943] [HarnessXCTestAgent] HTTP server started on port 49200
+2026-04-22 18:02:45.495989-0400 HarnessXCTestAgentUITests-Runner[72652:11967943] [HarnessXCTestAgent] setUpWithError completed
+2026-04-22 18:02:45.496398-0400 HarnessXCTestAgentUITests-Runner[72652:11968142] [] nw_listener_socket_inbox_create_socket setsockopt SO_NECP_LISTENUUID failed [2: No such file or directory]
+2026-04-22 18:02:45.496553-0400 HarnessXCTestAgentUITests-Runner[72652:11967943] [HarnessXCTestAgent] testAgentSession started
+2026-04-22 18:02:45.502439-0400 HarnessXCTestAgentUITests-Runner[72652:11968142] [HarnessXCTestAgent] HTTP listener state: ready
+2026-04-22 18:03:44.727750-0400 HarnessXCTestAgentUITests-Runner[72652:11967943] [HarnessXCTestAgent] testAgentSession completed
+    t =    61.97s Tear Down
+2026-04-22 18:03:44.730653-0400 HarnessXCTestAgentUITests-Runner[72652:11968236] [HarnessXCTestAgent] HTTP listener state: cancelled
+Test Case '-[HarnessXCTestAgentUITests.HarnessXCTestAgentUITests testAgentSession]' passed (62.334 seconds).
+Test Suite 'HarnessXCTestAgentUITests' passed at 2026-04-22 18:03:45.091.
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.334 (62.335) seconds
+Test Suite 'HarnessXCTestAgentUITests.xctest' passed at 2026-04-22 18:03:45.092.
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.334 (62.336) seconds
+Test Suite 'All tests' passed at 2026-04-22 18:03:45.092.
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.334 (62.337) seconds
+2026-04-22 18:03:45.424 xcodebuild[72153:11965075] [MT] IDETestOperationsObserverDebug: 81.245 elapsed -- Testing started completed.
+2026-04-22 18:03:45.424 xcodebuild[72153:11965075] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-04-22 18:03:45.424 xcodebuild[72153:11965075] [MT] IDETestOperationsObserverDebug: 81.245 sec, +81.245 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/szymon.chmal/Projects/react-native-harness/packages/platform-ios/xctest-agent/build/simulator/Logs/Test/Test-HarnessXCTestAgent-2026.04.22_18-02-23--0400.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

@@ -3,11 +3,27 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  createXCTestAgentClient,
+  type XCTestAgentPermissionsConfiguration,
+} from './xctest-agent-client.js';
+import type { XCTestAgentTransport } from './xctest-agent-transport.js';
+import { createDeviceXCTestAgentTransport } from './xctest-agent-transport-device.js';
+import { createSimulatorXCTestAgentTransport } from './xctest-agent-transport-simulator.js';
 
 const xctestAgentLogger = logger.child('ios-xctest-agent');
 
 const XCTEST_AGENT_PROJECT_NAME = 'HarnessXCTestAgent';
 const XCTEST_AGENT_SCHEME_NAME = 'HarnessXCTestAgent';
+const XCTEST_AGENT_DEFAULT_PORT = 49_200;
+const XCTEST_AGENT_PORT_ENV = 'HARNESS_XCTEST_AGENT_PORT';
+const XCTEST_AGENT_TARGET_BUNDLE_ID_ENV =
+  'HARNESS_XCTEST_AGENT_TARGET_BUNDLE_ID';
+const XCTEST_AGENT_STARTUP_TIMEOUT_MS = 30_000;
+const XCTEST_AGENT_SHUTDOWN_TIMEOUT_MS = 5_000;
+const XCTEST_AGENT_STARTUP_POLL_INTERVAL_MS = 250;
+const HARNESS_DIRNAME = '.harness';
+const XCTEST_AGENT_BUILD_DIRNAME = 'xctest-agent';
 
 type XCTestAgentTarget =
   | {
@@ -21,6 +37,13 @@ type XCTestAgentTarget =
 
 export type XCTestAgentCapability = {
   getLaunchEnvironment?: () => Record<string, string>;
+  updateConfiguration?: (
+    configuration: XCTestAgentRuntimeConfiguration,
+  ) => XCTestAgentRuntimeConfiguration;
+};
+
+export type XCTestAgentRuntimeConfiguration = {
+  permissions: XCTestAgentPermissionsConfiguration;
 };
 
 type XCTestAgentBuildManifest = {
@@ -46,12 +69,20 @@ const getXCTestAgentProjectFilePath = (): string => {
   );
 };
 
-const getXCTestAgentSpecPath = (): string => {
-  return path.join(getXCTestAgentProjectRoot(), 'project.yml');
+const assertXCTestAgentProjectExists = () => {
+  const projectFilePath = getXCTestAgentProjectFilePath();
+
+  if (fs.existsSync(projectFilePath)) {
+    return;
+  }
+
+  throw new Error(
+    `Missing checked-in XCTest agent project at ${projectFilePath}. Include the checked-in project in the package artifact.`,
+  );
 };
 
 const getXCTestAgentBuildRoot = (): string => {
-  return path.join(getXCTestAgentProjectRoot(), 'build');
+  return path.join(process.cwd(), HARNESS_DIRNAME, XCTEST_AGENT_BUILD_DIRNAME);
 };
 
 const getXCTestAgentDerivedDataPath = (target: XCTestAgentTarget): string => {
@@ -105,11 +136,7 @@ const getProjectInputFilePaths = (root: string): string[] => {
   const files: string[] = [];
 
   for (const entry of entries) {
-    if (
-      entry.name === 'build' ||
-      entry.name.endsWith('.xcodeproj') ||
-      entry.name === '.gitignore'
-    ) {
+    if (entry.name === 'build' || entry.name === '.gitignore') {
       continue;
     }
 
@@ -172,23 +199,118 @@ const createProcessStopper = async (process: Subprocess | null) => {
   }
 };
 
+const getDefaultRuntimeConfiguration = (): XCTestAgentRuntimeConfiguration => {
+  return {
+    permissions: {
+      autoAcceptPermissions: false,
+    },
+  };
+};
+
+const getRuntimeConfiguration = (
+  capabilities: XCTestAgentCapability[],
+): XCTestAgentRuntimeConfiguration => {
+  return capabilities.reduce((configuration, capability) => {
+    return capability.updateConfiguration?.(configuration) ?? configuration;
+  }, getDefaultRuntimeConfiguration());
+};
+
+const delay = async (ms: number) => {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+};
+
+const waitForAgentReady = async (options: {
+  client: ReturnType<typeof createXCTestAgentClient>;
+  startupTimeoutMs: number;
+}) => {
+  const deadline = Date.now() + options.startupTimeoutMs;
+  let lastError: unknown = null;
+
+  while (Date.now() < deadline) {
+    try {
+      await options.client.health();
+      return;
+    } catch (error) {
+      lastError = error;
+      await delay(XCTEST_AGENT_STARTUP_POLL_INTERVAL_MS);
+    }
+  }
+
+  throw new Error(
+    `Timed out waiting for XCTest agent readiness: ${getErrorMessage(lastError)}`,
+  );
+};
+
+const waitForShutdown = async (options: {
+  processTask: Promise<void> | null;
+  shutdownTimeoutMs: number;
+}): Promise<void> => {
+  if (!options.processTask) {
+    return;
+  }
+
+  await Promise.race([
+    options.processTask,
+    delay(options.shutdownTimeoutMs),
+  ]);
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (!error) {
+    return 'unknown error';
+  }
+
+  return error instanceof Error ? error.message : String(error);
+};
+
 export const createXCTestAgentController = (options: {
+  appBundleId?: string;
   target: XCTestAgentTarget;
   capabilities?: XCTestAgentCapability[];
+  port?: number;
+  shutdownTimeoutMs?: number;
+  startupTimeoutMs?: number;
 }): XCTestAgentController => {
   const { target } = options;
   const capabilities = options.capabilities ?? [];
+  const startupTimeoutMs =
+    options.startupTimeoutMs ?? XCTEST_AGENT_STARTUP_TIMEOUT_MS;
+  const shutdownTimeoutMs =
+    options.shutdownTimeoutMs ?? XCTEST_AGENT_SHUTDOWN_TIMEOUT_MS;
   let prepared = false;
   let agentProcess: Subprocess | null = null;
+  let agentClient: ReturnType<typeof createXCTestAgentClient> | null = null;
   let processTask: Promise<void> | null = null;
 
   const getLaunchEnvironment = (): Record<string, string> => {
     return Object.assign(
       {},
+      options.appBundleId
+        ? {
+            [XCTEST_AGENT_TARGET_BUNDLE_ID_ENV]: options.appBundleId,
+          }
+        : {},
       ...capabilities.map(
         (capability) => capability.getLaunchEnvironment?.() ?? {},
       ),
     );
+  };
+
+  const getPort = async (): Promise<number> => {
+    return options.port ?? XCTEST_AGENT_DEFAULT_PORT;
+  };
+
+  const createTransport = async (): Promise<XCTestAgentTransport> => {
+    const port = await getPort();
+
+    if (target.kind === 'simulator') {
+      return createSimulatorXCTestAgentTransport({ port });
+    }
+
+    return createDeviceXCTestAgentTransport({
+      deviceId: target.id,
+      port,
+    });
   };
 
   const prepare = async () => {
@@ -196,23 +318,24 @@ export const createXCTestAgentController = (options: {
       return;
     }
 
-    const projectRoot = getXCTestAgentProjectRoot();
     const buildInputsHash = getProjectInputsHash();
 
     xctestAgentLogger.debug(
-      'generating XCTest agent project for %s',
+      'verifying checked-in XCTest agent project for %s',
       target.kind,
     );
-    await spawn('xcodegen', [
-      'generate',
-      '--spec',
-      getXCTestAgentSpecPath(),
-      '--project',
-      projectRoot,
-    ]);
+    xctestAgentLogger.info(
+      'Using checked-in XCTest agent project for %s target',
+      target.kind,
+    );
+    assertXCTestAgentProjectExists();
 
     if (shouldReuseBuildArtifacts(target, buildInputsHash)) {
       prepared = true;
+      xctestAgentLogger.info(
+        'Reusing cached XCTest agent build for %s target',
+        target.kind,
+      );
       xctestAgentLogger.debug(
         'reusing cached XCTest agent build for %s',
         target.kind,
@@ -223,6 +346,7 @@ export const createXCTestAgentController = (options: {
     fs.mkdirSync(getXCTestAgentBuildRoot(), { recursive: true });
 
     xctestAgentLogger.debug('building XCTest agent for %s', target.kind);
+    xctestAgentLogger.info('Building XCTest agent for %s target', target.kind);
     await spawn('xcodebuild', [
       'build-for-testing',
       '-project',
@@ -239,17 +363,25 @@ export const createXCTestAgentController = (options: {
       buildInputsHash,
       destinationKind: target.kind,
     });
+    xctestAgentLogger.info('Built XCTest agent for %s target', target.kind);
     prepared = true;
   };
 
   const ensureStarted = async () => {
     await prepare();
 
-    if (agentProcess) {
+    if (agentProcess && agentClient) {
       return;
     }
 
+    const port = await getPort();
+    const runtimeConfiguration = getRuntimeConfiguration(capabilities);
+
     xctestAgentLogger.debug('starting XCTest agent for %s', target.kind);
+    xctestAgentLogger.info(
+      'Starting XCTest agent session for %s target',
+      target.kind,
+    );
     agentProcess = spawn(
       'xcodebuild',
       [
@@ -260,6 +392,10 @@ export const createXCTestAgentController = (options: {
         XCTEST_AGENT_SCHEME_NAME,
         '-destination',
         getXCTestAgentDestination(target),
+        '-parallel-testing-enabled',
+        'NO',
+        '-maximum-parallel-testing-workers',
+        '1',
         '-derivedDataPath',
         getXCTestAgentDerivedDataPath(target),
       ],
@@ -267,6 +403,7 @@ export const createXCTestAgentController = (options: {
         cwd: getXCTestAgentProjectRoot(),
         env: {
           ...process.env,
+          [XCTEST_AGENT_PORT_ENV]: String(port),
           ...getLaunchEnvironment(),
         },
         stdout: 'pipe',
@@ -275,30 +412,65 @@ export const createXCTestAgentController = (options: {
     );
 
     const currentProcess = agentProcess;
+    const transport = await createTransport();
+    const client = createXCTestAgentClient(transport);
+    agentClient = client;
 
     processTask = (async () => {
       try {
         for await (const line of currentProcess) {
-          xctestAgentLogger.debug('[agent:%s] %s', target.kind, line);
+          xctestAgentLogger.info('[agent:%s] %s', target.kind, line);
         }
       } catch (error) {
         xctestAgentLogger.debug('XCTest agent process stopped', error);
       } finally {
         if (agentProcess === currentProcess) {
           agentProcess = null;
+          agentClient = null;
           processTask = null;
         }
       }
     })();
+
+    try {
+      await waitForAgentReady({
+        client,
+        startupTimeoutMs,
+      });
+      await client.configurePermissions(runtimeConfiguration.permissions);
+    } catch (error) {
+      xctestAgentLogger.warn(
+        'XCTest agent startup failed for %s: %s',
+        target.kind,
+        getErrorMessage(error),
+      );
+      await transport.dispose();
+      agentClient = null;
+      await createProcessStopper(currentProcess);
+      await processTask;
+      throw error;
+    }
   };
 
   const stop = async () => {
     const currentProcess = agentProcess;
+    const currentClient = agentClient;
+    const currentProcessTask = processTask;
     agentProcess = null;
+    agentClient = null;
+    processTask = null;
+
+    xctestAgentLogger.info(
+      'Stopping XCTest agent session for %s target',
+      target.kind,
+    );
 
     await createProcessStopper(currentProcess);
-    await processTask;
-    processTask = null;
+    await waitForShutdown({
+      processTask: currentProcessTask,
+      shutdownTimeoutMs,
+    });
+    await currentClient?.dispose();
   };
 
   return {

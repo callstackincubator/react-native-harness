@@ -14,6 +14,17 @@ import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+const xctestAgentMocks = vi.hoisted(() => ({
+  createXCTestAgentController: vi.fn(),
+  dispose: vi.fn(async () => undefined),
+  ensureStarted: vi.fn(async () => undefined),
+  prepare: vi.fn(async () => undefined),
+}));
+
+vi.mock('../xctest-agent.js', () => ({
+  createXCTestAgentController: xctestAgentMocks.createXCTestAgentController,
+}));
+
 const harnessConfig = {
   metroPort: DEFAULT_METRO_PORT,
 } as HarnessConfig;
@@ -30,6 +41,12 @@ describe('iOS platform instance dependency validation', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    xctestAgentMocks.createXCTestAgentController.mockReturnValue({
+      prepare: xctestAgentMocks.prepare,
+      ensureStarted: xctestAgentMocks.ensureStarted,
+      stop: vi.fn(async () => undefined),
+      dispose: xctestAgentMocks.dispose,
+    });
   });
 
   it('does not require extra dependencies before creating a simulator instance', async () => {
@@ -37,7 +54,7 @@ describe('iOS platform instance dependency validation', () => {
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
     vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
-      undefined
+      undefined,
     );
 
     const config = {
@@ -51,7 +68,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getAppleSimulatorPlatformInstance(config, harnessConfig, init)
+      getAppleSimulatorPlatformInstance(config, harnessConfig, init),
     ).resolves.toBeDefined();
   });
 
@@ -77,7 +94,7 @@ describe('iOS platform instance dependency validation', () => {
     };
 
     await expect(
-      getApplePhysicalDevicePlatformInstance(config, harnessConfig)
+      getApplePhysicalDevicePlatformInstance(config, harnessConfig),
     ).resolves.toBeDefined();
     expect(getDevice).toHaveBeenCalledWith('My iPhone');
   });
@@ -106,8 +123,8 @@ describe('iOS platform instance dependency validation', () => {
     await expect(
       getApplePhysicalDevicePlatformInstance(
         config,
-        harnessConfigWithoutNativeCrashDetection
-      )
+        harnessConfigWithoutNativeCrashDetection,
+      ),
     ).resolves.toBeDefined();
   });
 
@@ -116,7 +133,7 @@ describe('iOS platform instance dependency validation', () => {
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
     vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
-      undefined
+      undefined,
     );
 
     const instance = await getAppleSimulatorPlatformInstance(
@@ -130,7 +147,7 @@ describe('iOS platform instance dependency validation', () => {
         bundleId: 'com.harnessplayground',
       },
       harnessConfigWithoutNativeCrashDetection,
-      init
+      init,
     );
 
     const listener = vi.fn();
@@ -169,13 +186,13 @@ describe('iOS platform instance dependency validation', () => {
         bundleId: 'com.harnessplayground',
       },
       harnessConfig,
-      init
+      init,
     );
 
     expect(applyOverride).toHaveBeenCalledWith(
       'sim-udid',
       'com.harnessplayground',
-      'localhost:8081'
+      'localhost:8081',
     );
 
     await instance.dispose();
@@ -183,7 +200,7 @@ describe('iOS platform instance dependency validation', () => {
     expect(stopApp).toHaveBeenCalledWith('sim-udid', 'com.harnessplayground');
     expect(clearOverride).toHaveBeenCalledWith(
       'sim-udid',
-      'com.harnessplayground'
+      'com.harnessplayground',
     );
     expect(shutdownSimulator).not.toHaveBeenCalled();
   });
@@ -199,11 +216,11 @@ describe('iOS platform instance dependency validation', () => {
       .mockResolvedValue(undefined);
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
-      undefined
+      undefined,
     );
     vi.spyOn(simctl, 'stopApp').mockResolvedValue(undefined);
     vi.spyOn(simctl, 'clearHarnessJsLocationOverride').mockResolvedValue(
-      undefined
+      undefined,
     );
     const shutdownSimulator = vi
       .spyOn(simctl, 'shutdownSimulator')
@@ -220,7 +237,7 @@ describe('iOS platform instance dependency validation', () => {
         bundleId: 'com.harnessplayground',
       },
       harnessConfig,
-      init
+      init,
     );
 
     expect(bootSimulator).toHaveBeenCalledWith('sim-udid');
@@ -242,11 +259,11 @@ describe('iOS platform instance dependency validation', () => {
       .mockResolvedValue(undefined);
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
-      undefined
+      undefined,
     );
     vi.spyOn(simctl, 'stopApp').mockResolvedValue(undefined);
     vi.spyOn(simctl, 'clearHarnessJsLocationOverride').mockResolvedValue(
-      undefined
+      undefined,
     );
     const shutdownSimulator = vi
       .spyOn(simctl, 'shutdownSimulator')
@@ -263,7 +280,7 @@ describe('iOS platform instance dependency validation', () => {
         bundleId: 'com.harnessplayground',
       },
       harnessConfig,
-      init
+      init,
     );
 
     expect(bootSimulator).not.toHaveBeenCalled();
@@ -285,11 +302,11 @@ describe('iOS platform instance dependency validation', () => {
       .mockResolvedValue(undefined);
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
-      undefined
+      undefined,
     );
     vi.spyOn(simctl, 'stopApp').mockResolvedValue(undefined);
     vi.spyOn(simctl, 'clearHarnessJsLocationOverride').mockResolvedValue(
-      undefined
+      undefined,
     );
     const shutdownSimulator = vi
       .spyOn(simctl, 'shutdownSimulator')
@@ -306,7 +323,7 @@ describe('iOS platform instance dependency validation', () => {
         bundleId: 'com.harnessplayground',
       },
       harnessConfig,
-      init
+      init,
     );
 
     expect(bootSimulator).toHaveBeenCalledWith('sim-udid');
@@ -329,7 +346,7 @@ describe('iOS platform instance dependency validation', () => {
       .spyOn(simctl, 'installApp')
       .mockResolvedValue(undefined);
     vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
-      undefined
+      undefined,
     );
 
     try {
@@ -345,8 +362,8 @@ describe('iOS platform instance dependency validation', () => {
             bundleId: 'com.harnessplayground',
           },
           harnessConfig,
-          init
-        )
+          init,
+        ),
       ).resolves.toBeDefined();
 
       expect(installApp).toHaveBeenCalledWith('sim-udid', bundlePath);
@@ -372,15 +389,15 @@ describe('iOS platform instance dependency validation', () => {
           bundleId: 'com.harnessplayground',
         },
         harnessConfig,
-        init
-      )
+        init,
+      ),
     ).rejects.toBeInstanceOf(HarnessAppPathError);
   });
 
   it('throws a HarnessAppPathError when HARNESS_APP_PATH points to a missing app', async () => {
     vi.stubEnv(
       'HARNESS_APP_PATH',
-      join(tmpdir(), 'rn-harness-ios-missing-app', 'Missing.app')
+      join(tmpdir(), 'rn-harness-ios-missing-app', 'Missing.app'),
     );
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
@@ -398,8 +415,8 @@ describe('iOS platform instance dependency validation', () => {
           bundleId: 'com.harnessplayground',
         },
         harnessConfig,
-        init
-      )
+        init,
+      ),
     ).rejects.toBeInstanceOf(HarnessAppPathError);
   });
 });

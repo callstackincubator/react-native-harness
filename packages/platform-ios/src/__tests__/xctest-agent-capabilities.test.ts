@@ -9,4 +9,20 @@ describe('xctest agent capabilities', () => {
       HARNESS_XCTEST_AGENT_AUTO_ACCEPT_PERMISSIONS: '1',
     });
   });
+
+  it('enables permission auto-accept in the runtime configuration', () => {
+    const capability = createPermissionPromptAutoAcceptCapability();
+
+    expect(
+      capability.updateConfiguration?.({
+        permissions: {
+          autoAcceptPermissions: false,
+        },
+      }),
+    ).toEqual({
+      permissions: {
+        autoAcceptPermissions: true,
+      },
+    });
+  });
 });

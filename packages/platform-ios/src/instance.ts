@@ -123,6 +123,7 @@ export const getAppleSimulatorPlatformInstance = async (
   );
 
   const xctestAgent = createXCTestAgentController({
+    appBundleId: config.bundleId,
     target: {
       kind: 'simulator',
       id: udid,
@@ -130,12 +131,10 @@ export const getAppleSimulatorPlatformInstance = async (
     capabilities: [createPermissionPromptAutoAcceptCapability()],
   });
 
+  await xctestAgent.ensureStarted();
+
   return {
-    prepareRun: async () => {
-      await xctestAgent.prepare();
-    },
     startApp: async (options) => {
-      await xctestAgent.ensureStarted();
       await simctl.startApp(
         udid,
         config.bundleId,
@@ -144,7 +143,6 @@ export const getAppleSimulatorPlatformInstance = async (
       );
     },
     restartApp: async (options) => {
-      await xctestAgent.ensureStarted();
       await simctl.stopApp(udid, config.bundleId);
       await simctl.startApp(
         udid,
@@ -156,10 +154,8 @@ export const getAppleSimulatorPlatformInstance = async (
     stopApp: async () => {
       await simctl.stopApp(udid, config.bundleId);
     },
-    disposeRun: async () => {
-      await xctestAgent.dispose();
-    },
     dispose: async () => {
+      await xctestAgent.dispose();
       await simctl.stopApp(udid, config.bundleId);
       await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
 
@@ -216,6 +212,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
   }
 
   const xctestAgent = createXCTestAgentController({
+    appBundleId: config.bundleId,
     target: {
       kind: 'device',
       id: deviceId,
@@ -223,12 +220,10 @@ export const getApplePhysicalDevicePlatformInstance = async (
     capabilities: [createPermissionPromptAutoAcceptCapability()],
   });
 
+  await xctestAgent.ensureStarted();
+
   return {
-    prepareRun: async () => {
-      await xctestAgent.prepare();
-    },
     startApp: async (options) => {
-      await xctestAgent.ensureStarted();
       await devicectl.startApp(
         deviceId,
         config.bundleId,
@@ -237,7 +232,6 @@ export const getApplePhysicalDevicePlatformInstance = async (
       );
     },
     restartApp: async (options) => {
-      await xctestAgent.ensureStarted();
       await devicectl.stopApp(deviceId, config.bundleId);
       await devicectl.startApp(
         deviceId,
@@ -249,10 +243,8 @@ export const getApplePhysicalDevicePlatformInstance = async (
     stopApp: async () => {
       await devicectl.stopApp(deviceId, config.bundleId);
     },
-    disposeRun: async () => {
-      await xctestAgent.dispose();
-    },
     dispose: async () => {
+      await xctestAgent.dispose();
       await devicectl.stopApp(deviceId, config.bundleId);
     },
     isAppRunning: async () => {

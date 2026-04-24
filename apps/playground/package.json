@@ -9,24 +9,27 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.82.1",
+    "react-native-nitro-image": "^0.13.1",
+    "react-native-nitro-modules": "^0.35.4",
+    "react-native-vision-camera": "^5.0.4",
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
-    "react-native-harness": "workspace:*",
-    "@react-native-harness/runtime": "workspace:*",
-    "@react-native-harness/ui": "workspace:*",
     "@react-native-community/cli": "20.0.0",
     "@react-native-community/cli-platform-android": "20.0.0",
     "@react-native-community/cli-platform-ios": "20.0.0",
+    "@react-native-harness/jest": "workspace:*",
+    "@react-native-harness/platform-android": "workspace:*",
+    "@react-native-harness/platform-apple": "workspace:*",
+    "@react-native-harness/platform-vega": "workspace:*",
+    "@react-native-harness/platform-web": "workspace:*",
+    "@react-native-harness/runtime": "workspace:*",
+    "@react-native-harness/ui": "workspace:*",
     "@react-native/babel-preset": "0.82.1",
     "@react-native/eslint-config": "0.82.1",
     "@react-native/metro-config": "0.82.1",
     "@react-native/typescript-config": "0.82.1",
-    "@react-native-harness/jest": "workspace:*",
     "jest": "^30.2.0",
-    "@react-native-harness/platform-android": "workspace:*",
-    "@react-native-harness/platform-apple": "workspace:*",
-    "@react-native-harness/platform-vega": "workspace:*",
-    "@react-native-harness/platform-web": "workspace:*"
+    "react-native-harness": "workspace:*"
   }
 }

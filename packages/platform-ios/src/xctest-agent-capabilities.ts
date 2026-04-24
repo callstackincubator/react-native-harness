@@ -9,5 +9,12 @@ export const createPermissionPromptAutoAcceptCapability =
       getLaunchEnvironment: () => ({
         [ENABLE_PERMISSION_PROMPT_AUTO_ACCEPT]: '1',
       }),
+      updateConfiguration: (configuration) => ({
+        ...configuration,
+        permissions: {
+          ...configuration.permissions,
+          autoAcceptPermissions: true,
+        },
+      }),
     };
   };
