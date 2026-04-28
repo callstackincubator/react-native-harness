@@ -1,6 +1,11 @@
 [
   {
     "type": "file",
+    "name": "permissions",
+    "label": "Permissions"
+  },
+  {
+    "type": "file",
     "name": "ui-testing",
     "label": "UI Testing"
   },

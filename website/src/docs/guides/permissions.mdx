@@ -1,0 +1,76 @@
+import { PackageManagerTabs } from '@theme';
+
+# Permissions
+
+Harness exposes a single top-level `permissions` flag:
+
+```javascript
+{
+  permissions: true,
+}
+```
+
+This setting is currently **all-or-nothing**.
+You can enable permission automation for the whole run or disable it completely.
+Harness does not yet support selecting individual permission types or per-platform overrides.
+
+## Current Behavior
+
+When `permissions` is `false`:
+
+- Harness does not start permission automation helpers.
+- On iOS, this means the XCTest-based permission helper is not started.
+
+When `permissions` is `true`:
+
+- On iOS simulators, Harness starts the XCTest agent and enables best-effort permission prompt auto-accept.
+- On iOS physical devices, Harness also starts the XCTest agent when the runner is configured with `device.codeSign`.
+- On Android, the shared config flag exists, but there is currently no dedicated Android permission automation implementation in the codebase.
+
+## What iOS Actually Automates
+
+The current iOS implementation does **not** pre-approve every permission up front.
+Instead, it runs a best-effort watchdog that taps known positive system-prompt buttons such as:
+
+- `Allow`
+- `OK`
+- `Continue`
+- `While Using the App`
+- `Always Allow`
+- `Allow Once`
+
+Because this is button-based automation, it should be treated as a practical helper for common prompts rather than a guarantee that every permission dialog will be handled.
+
+## Performance Impact
+
+Enabling `permissions` can make Harness heavier on iOS because it starts an additional XCTest agent session alongside the normal run.
+
+This can have a negative impact on:
+
+- startup time
+- device preparation time
+- overall run performance
+
+The impact is most important to keep in mind for iOS physical devices, where the XCTest agent requires code signing and extra setup, but the same helper is also started on iOS simulators when permissions are enabled.
+
+## Physical iOS Devices
+
+To use permission automation on a physical iOS device, the runner must provide `device.codeSign`.
+
+```javascript
+applePlatform({
+  name: 'iphone',
+  device: applePhysicalDevice('My iPhone', {
+    codeSign: { teamId: 'TEAMID1234' },
+  }),
+  bundleId: 'com.example.myapp',
+})
+```
+
+If `permissions: true` is set without `device.codeSign`, Harness skips the XCTest agent for that physical device.
+
+## Recommendation
+
+Leave `permissions` disabled unless your tests actually need system permission prompts to be handled automatically.
+
+That keeps the default Harness startup path lighter and avoids paying the extra iOS XCTest overhead on runs that do not need it.
