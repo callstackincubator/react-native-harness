@@ -34,6 +34,7 @@ import {
 import { isInteractive } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import type { AppMonitor } from '@react-native-harness/platforms';
+import { getDefaultAndroidPermissions } from './permissions.js';
 
 const androidInstanceLogger = logger.child('android-instance');
 
@@ -180,6 +181,7 @@ export const getAndroidEmulatorPlatformInstance = async (
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDeviceEmulator(config.device);
   const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
+  const permissionsEnabled = harnessConfig.permissions ?? false;
   const emulatorConfig = config.device;
   const emulatorName = emulatorConfig.name;
   const avdConfig = emulatorConfig.avd;
@@ -258,6 +260,11 @@ export const getAndroidEmulatorPlatformInstance = async (
 
   const appUid = await configureAndroidRuntime(adbId, config, harnessConfig);
 
+  if (permissionsEnabled) {
+    const defaultPermissions = getDefaultAndroidPermissions();
+    await adb.grantPermissions(adbId, config.bundleId, defaultPermissions);
+  }
+
   return {
     startApp: async (options) => {
       await adb.startApp(
@@ -315,6 +322,7 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDevicePhysical(config.device);
   const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
+  const permissionsEnabled = harnessConfig.permissions ?? false;
 
   const adbId = await getAdbId(config.device);
 
@@ -332,6 +340,11 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
   }
 
   const appUid = await configureAndroidRuntime(adbId, config, harnessConfig);
+
+  if (permissionsEnabled) {
+    const defaultPermissions = getDefaultAndroidPermissions();
+    await adb.grantPermissions(adbId, config.bundleId, defaultPermissions);
+  }
 
   return {
     startApp: async (options) => {

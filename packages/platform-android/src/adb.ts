@@ -730,3 +730,27 @@ export const getConnectedDevices = async (): Promise<AdbDevice[]> => {
 
   return devices;
 };
+
+export const grantPermissions = async (
+  adbId: string,
+  bundleId: string,
+  permissions: string[],
+): Promise<void> => {
+  if (permissions.length === 0) {
+    return;
+  }
+
+  const grantCommands = permissions.map((permission) => [
+    '-s',
+    adbId,
+    'shell',
+    'pm',
+    'grant',
+    bundleId,
+    permission,
+  ]);
+
+  await Promise.all(
+    grantCommands.map((args) => spawn(getAdbBinaryPath(), args as string[])),
+  );
+};
