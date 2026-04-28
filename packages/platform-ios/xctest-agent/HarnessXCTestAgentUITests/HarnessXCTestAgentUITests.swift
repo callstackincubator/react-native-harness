@@ -257,9 +257,8 @@ final class HarnessXCTestAgentUITests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = false
     capabilities = [
-      PermissionPromptCapability(
+      PermissionPromptWatchdog(
         state: state,
-        application: targetApplication,
         springboard: springboard
       )
     ]
@@ -268,15 +267,6 @@ final class HarnessXCTestAgentUITests: XCTestCase {
     log("enabled capabilities: \(capabilities.map { String(describing: type(of: $0)) }.joined(separator: ", "))")
 
     targetApplication.launch()
-
-    for capability in capabilities {
-      if let permissionPromptCapability = capability as? PermissionPromptCapability {
-        addUIInterruptionMonitor(withDescription: "Harness permission prompt handler") { alert in
-          permissionPromptCapability.logInterruption(alert.label)
-          return permissionPromptCapability.handleInterruption(alert)
-        }
-      }
-    }
 
     for capability in capabilities {
       try capability.setUp()
