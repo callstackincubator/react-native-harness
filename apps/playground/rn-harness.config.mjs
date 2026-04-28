@@ -23,7 +23,6 @@ export default {
   entryPoint: './index.js',
   appRegistryComponentName: 'HarnessPlayground',
   plugins: [harnessLoggingPlugin()],
-detectNativeCrashes: false,
 
   runners: [
     androidPlatform({
@@ -121,6 +120,8 @@ detectNativeCrashes: false,
   platformReadyTimeout: 300000,
   bridgeTimeout: 120000,
 
+  permissions: true,
+  detectNativeCrashes: true,
   resetEnvironmentBetweenTestFiles: true,
   unstable__enableMetroCache: true,
   unstable__skipAlreadyIncludedModules: false,

@@ -100,6 +100,7 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `bridgeTimeout`                    | Bridge timeout in milliseconds (default: `60000`).                                                                                                        |
 | `bundleStartTimeout`               | Bundle start timeout in milliseconds (default: `60000`).                                                                                                  |
 | `maxAppRestarts`                   | Maximum number of automatic app relaunch attempts while Harness is waiting for startup (default: `2`).                                                    |
+| `permissions`                      | Enable platform-specific permission prompt automation (default: `false`). On iOS, this controls whether Harness starts the XCTest-based permission helper. |
 | `resetEnvironmentBetweenTestFiles` | Reset environment between test files (default: `true`).                                                                                                   |
 | `detectNativeCrashes`              | Detect native app crashes during startup and test execution (default: `true`).                                                                            |
 | `crashDetectionInterval`           | Interval in milliseconds to check for native crashes (default: `500`).                                                                                    |
@@ -175,6 +176,20 @@ react-native-harness --harnessRunner ios
 ```
 
 ## Platform Ready Timeout
+
+## Permissions
+
+Use the `permissions` flag to opt into Harness-managed permission prompt handling.
+
+```javascript
+{
+  permissions: true,
+}
+```
+
+**Default:** `false`
+
+When `permissions` is `false`, Harness does not start platform-specific permission automation helpers. On iOS that means no XCTest agent session is started for permission auto-accept. Physical iOS devices still require `device.codeSign` in the runner config when you set `permissions: true`.
 
 The platform ready timeout controls how long React Native Harness waits for the selected device, simulator, or emulator to become usable. This includes device discovery, simulator or emulator boot, and platform runtime setup before the app is launched.
 

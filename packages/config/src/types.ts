@@ -69,6 +69,13 @@ export const ConfigSchema = z
     resetEnvironmentBetweenTestFiles: z.boolean().optional().default(true),
     unstable__skipAlreadyIncludedModules: z.boolean().optional().default(false),
     unstable__enableMetroCache: z.boolean().optional().default(false),
+    permissions: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        'Enable platform-specific permission prompt automation. When false, Harness does not start permission-handling helpers such as the iOS XCTest agent.'
+      ),
 
     detectNativeCrashes: z.boolean().optional().default(true),
     crashDetectionInterval: z

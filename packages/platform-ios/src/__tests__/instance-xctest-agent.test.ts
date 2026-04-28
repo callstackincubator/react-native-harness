@@ -25,6 +25,10 @@ import {
 const harnessConfig = {
   metroPort: DEFAULT_METRO_PORT,
 } as HarnessConfig;
+const harnessConfigWithPermissionsEnabled = {
+  metroPort: DEFAULT_METRO_PORT,
+  permissions: true,
+} as HarnessConfig;
 
 describe('iOS XCTest agent runner integration', () => {
   beforeEach(() => {
@@ -37,7 +41,7 @@ describe('iOS XCTest agent runner integration', () => {
     });
   });
 
-  it('starts the simulator XCTest agent during platform initialization', async () => {
+  it('starts the simulator XCTest agent during platform initialization when permissions are enabled', async () => {
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
@@ -60,7 +64,7 @@ describe('iOS XCTest agent runner integration', () => {
         },
         bundleId: 'com.harnessplayground',
       },
-      harnessConfig,
+      harnessConfigWithPermissionsEnabled,
       {
         signal: new AbortController().signal,
       },
@@ -86,7 +90,7 @@ describe('iOS XCTest agent runner integration', () => {
     expect(mocks.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('starts the physical-device XCTest agent during platform initialization', async () => {
+  it('starts the physical-device XCTest agent during platform initialization when permissions are enabled', async () => {
     vi.spyOn(devicectl, 'getDevice').mockResolvedValue({
       identifier: 'device-udid',
       deviceProperties: {
@@ -112,7 +116,7 @@ describe('iOS XCTest agent runner integration', () => {
         },
         bundleId: 'com.harnessplayground',
       },
-      harnessConfig,
+      harnessConfigWithPermissionsEnabled,
     );
 
     await instance.restartApp();
@@ -133,5 +137,33 @@ describe('iOS XCTest agent runner integration', () => {
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.ensureStarted).toHaveBeenCalledTimes(1);
     expect(mocks.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start the simulator XCTest agent when permissions are disabled', async () => {
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+
+    await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfig,
+      {
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(mocks.createXCTestAgentController).not.toHaveBeenCalled();
+    expect(mocks.ensureStarted).not.toHaveBeenCalled();
   });
 });

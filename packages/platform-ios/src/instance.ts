@@ -59,6 +59,7 @@ export const getAppleSimulatorPlatformInstance = async (
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDeviceSimulator(config.device);
   const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
+  const permissionsEnabled = harnessConfig.permissions ?? false;
 
   const udid = await simctl.getSimulatorId(
     config.device.name,
@@ -122,22 +123,24 @@ export const getAppleSimulatorPlatformInstance = async (
     `localhost:${harnessConfig.metroPort}`,
   );
 
-  const xctestAgent = createXCTestAgentController({
-    appBundleId: config.bundleId,
-    target: {
-      kind: 'simulator',
-      id: udid,
-    },
-    capabilities: [createPermissionPromptAutoAcceptCapability()],
-  });
+  const xctestAgent = permissionsEnabled
+    ? createXCTestAgentController({
+        appBundleId: config.bundleId,
+        target: {
+          kind: 'simulator',
+          id: udid,
+        },
+        capabilities: [createPermissionPromptAutoAcceptCapability()],
+      })
+    : null;
 
   let agentStarted = false;
   try {
-    await xctestAgent.ensureStarted();
+    await xctestAgent?.ensureStarted();
     agentStarted = true;
   } finally {
     if (!agentStarted) {
-      await xctestAgent.dispose();
+      await xctestAgent?.dispose();
       await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
       if (startedByHarness) {
         await simctl.shutdownSimulator(udid);
@@ -167,7 +170,7 @@ export const getAppleSimulatorPlatformInstance = async (
       await simctl.stopApp(udid, config.bundleId);
     },
     dispose: async () => {
-      await xctestAgent.dispose();
+      await xctestAgent?.dispose();
       await simctl.stopApp(udid, config.bundleId);
       await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
 
@@ -199,6 +202,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDevicePhysical(config.device);
   const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
+  const permissionsEnabled = harnessConfig.permissions ?? false;
 
   if (harnessConfig.metroPort !== DEFAULT_METRO_PORT) {
     throw new Error(
@@ -223,7 +227,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
     );
   }
 
-  const xctestAgent = config.device.codeSign
+  const xctestAgent = permissionsEnabled && config.device.codeSign
     ? createXCTestAgentController({
         appBundleId: config.bundleId,
         target: {
@@ -245,7 +249,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
         await xctestAgent.dispose();
       }
     }
-  } else {
+  } else if (permissionsEnabled) {
     iosInstanceLogger.info(
       'Skipping XCTest agent for physical device (no codeSign config provided)',
     );

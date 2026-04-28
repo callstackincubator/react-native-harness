@@ -28,6 +28,10 @@ vi.mock('../xctest-agent.js', () => ({
 const harnessConfig = {
   metroPort: DEFAULT_METRO_PORT,
 } as HarnessConfig;
+const harnessConfigWithPermissionsEnabled = {
+  metroPort: DEFAULT_METRO_PORT,
+  permissions: true,
+} as HarnessConfig;
 const init = {
   signal: new AbortController().signal,
 };
@@ -72,6 +76,31 @@ describe('iOS platform instance dependency validation', () => {
     ).resolves.toBeDefined();
   });
 
+  it('does not start the simulator XCTest agent when permissions are disabled', async () => {
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+
+    await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfig,
+      init,
+    );
+
+    expect(xctestAgentMocks.createXCTestAgentController).not.toHaveBeenCalled();
+  });
+
   it('discovers the physical device directly through devicectl', async () => {
     const getDevice = vi.spyOn(devicectl, 'getDevice').mockResolvedValue({
       identifier: 'physical-device-id',
@@ -97,6 +126,37 @@ describe('iOS platform instance dependency validation', () => {
       getApplePhysicalDevicePlatformInstance(config, harnessConfig),
     ).resolves.toBeDefined();
     expect(getDevice).toHaveBeenCalledWith('My iPhone');
+  });
+
+  it('does not start the physical-device XCTest agent when permissions are disabled', async () => {
+    vi.spyOn(devicectl, 'getDevice').mockResolvedValue({
+      identifier: 'physical-device-id',
+      deviceProperties: {
+        name: 'My iPhone',
+        osVersionNumber: '18.0',
+      },
+      hardwareProperties: {
+        marketingName: 'iPhone',
+        productType: 'iPhone17,1',
+        udid: '00008140-001600222422201C',
+      },
+    });
+    vi.spyOn(devicectl, 'isAppInstalled').mockResolvedValue(true);
+
+    await getApplePhysicalDevicePlatformInstance(
+      {
+        name: 'ios-device',
+        device: {
+          type: 'physical',
+          name: 'My iPhone',
+          codeSign: { teamId: 'TESTTEAM01' },
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfig,
+    );
+
+    expect(xctestAgentMocks.createXCTestAgentController).not.toHaveBeenCalled();
   });
 
   it('skips physical crash monitoring setup when native crash detection is disabled', async () => {
@@ -185,7 +245,7 @@ describe('iOS platform instance dependency validation', () => {
         },
         bundleId: 'com.harnessplayground',
       },
-      harnessConfig,
+      harnessConfigWithPermissionsEnabled,
       init,
     );
 
