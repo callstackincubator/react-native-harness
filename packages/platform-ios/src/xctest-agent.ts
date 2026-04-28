@@ -278,7 +278,6 @@ const stopProcess = async (options: {
   targetKind: XCTestAgentTarget['kind'];
 }) => {
   if (!options.process) {
-    console.log('[xctest dispose] no agent process to stop');
     return;
   }
 
@@ -286,14 +285,11 @@ const stopProcess = async (options: {
 
   try {
     childProcess = await options.process.nodeChildProcess;
-    console.log('[xctest dispose] resolved child process');
   } catch {
-    console.log('[xctest dispose] failed to resolve child process');
     return;
   }
 
   childProcess.kill('SIGTERM');
-  console.log('[xctest dispose] sent SIGTERM');
 
   if (
     await waitForShutdown({
@@ -301,11 +297,8 @@ const stopProcess = async (options: {
       shutdownTimeoutMs: options.shutdownTimeoutMs,
     })
   ) {
-    console.log('[xctest dispose] process stopped after SIGTERM');
     return;
   }
-
-  console.log('[xctest dispose] SIGTERM wait timed out');
 
   xctestAgentLogger.warn(
     'XCTest agent session for %s target did not stop after %dms; forcing shutdown',
@@ -313,75 +306,11 @@ const stopProcess = async (options: {
     options.shutdownTimeoutMs,
   );
   childProcess.kill('SIGKILL');
-  console.log('[xctest dispose] sent SIGKILL');
 
-  if (
-    await waitForShutdown({
-      processTask: options.processTask,
-      shutdownTimeoutMs: options.shutdownTimeoutMs,
-    })
-  ) {
-    console.log('[xctest dispose] process stopped after SIGKILL');
-    return;
-  }
-
-  console.log('[xctest dispose] SIGKILL wait timed out');
-};
-
-const logActiveHandles = () => {
-  const getActiveHandles = (process as unknown as {
-    _getActiveHandles?: () => unknown[];
-  })._getActiveHandles;
-
-  if (!getActiveHandles) {
-    return;
-  }
-
-  console.log(
-    '[xctest dispose] active handles',
-    getActiveHandles().map((handle) => {
-      const constructorName = handle?.constructor?.name;
-
-      if (constructorName !== 'ChildProcess') {
-        return constructorName;
-      }
-
-      const childProcess = handle as {
-        exitCode?: number | null;
-        killed?: boolean;
-        pid?: number;
-        signalCode?: NodeJS.Signals | null;
-        spawnargs?: string[];
-        spawnfile?: string;
-      };
-
-      return {
-        type: constructorName,
-        exitCode: childProcess.exitCode,
-        killed: childProcess.killed,
-        pid: childProcess.pid,
-        signalCode: childProcess.signalCode,
-        spawnargs: childProcess.spawnargs,
-        spawnfile: childProcess.spawnfile,
-      };
-    }),
-  );
-};
-
-const stopProcessAndLogHandles = async (options: {
-  process: Subprocess | null;
-  processTask: Promise<void> | null;
-  shutdownTimeoutMs: number;
-  targetKind: XCTestAgentTarget['kind'];
-}) => {
-  await stopProcess({
-    process: options.process,
+  await waitForShutdown({
     processTask: options.processTask,
     shutdownTimeoutMs: options.shutdownTimeoutMs,
-    targetKind: options.targetKind,
   });
-
-  logActiveHandles();
 };
 
 const getErrorMessage = (error: unknown): string => {
@@ -545,15 +474,8 @@ export const createXCTestAgentController = (options: {
     const client = createXCTestAgentClient(transport);
     agentClient = client;
 
-    void Promise.resolve(currentProcess).catch((error) => {
-      xctestAgentLogger.debug('XCTest agent process exited', error);
-    });
-
     processTask = waitForChildProcessExit(currentProcess).finally(() => {
-      console.log('[xctest process] child process completed');
-
       if (agentProcess === currentProcess) {
-        console.log('[xctest process] clearing active agent process reference');
         agentProcess = null;
         agentClient = null;
         processTask = null;
@@ -567,8 +489,6 @@ export const createXCTestAgentController = (options: {
         }
       } catch (error) {
         xctestAgentLogger.debug('XCTest agent process stopped', error);
-      } finally {
-        console.log('[xctest process] output stream completed');
       }
     })();
 
@@ -586,7 +506,7 @@ export const createXCTestAgentController = (options: {
       );
       await transport.dispose();
       agentClient = null;
-      await stopProcessAndLogHandles({
+      await stopProcess({
         process: currentProcess,
         processTask,
         shutdownTimeoutMs,
@@ -610,8 +530,7 @@ export const createXCTestAgentController = (options: {
     );
 
     await currentClient?.dispose();
-    console.log('[xctest dispose] client disposed');
-    await stopProcessAndLogHandles({
+    await stopProcess({
       process: currentProcess,
       processTask: currentProcessTask,
       shutdownTimeoutMs,
