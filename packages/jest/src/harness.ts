@@ -600,8 +600,6 @@ const getHarnessInternal = async (
         return;
       }
 
-      const shouldReportCrashEvent = crashSupervisor.isArmed();
-
       if (event.type === 'app_started') {
         scheduleHook('app:started', {
           runId,
@@ -614,10 +612,6 @@ const getHarnessInternal = async (
       }
 
       if (event.type === 'app_exited') {
-        if (!shouldReportCrashEvent) {
-          return;
-        }
-
         scheduleHook('app:exited', {
           runId,
           testFile: activeTestFilePath,
@@ -631,10 +625,6 @@ const getHarnessInternal = async (
       }
 
       if (event.type === 'possible_crash') {
-        if (!shouldReportCrashEvent) {
-          return;
-        }
-
         scheduleHook('app:possible-crash', {
           runId,
           testFile: activeTestFilePath,

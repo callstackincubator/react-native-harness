@@ -65,7 +65,7 @@ describe('collectCrashArtifacts', () => {
     });
   });
 
-  it('collects device crash artifacts from systemCrashLogs before falling back to diagnose', async () => {
+  it('collects device crash artifacts from systemCrashLogs', async () => {
     const outputRoot = fs.mkdtempSync(
       join(tmpdir(), 'rn-harness-devicectl-crash-logs-'),
     );
@@ -89,10 +89,6 @@ describe('collectCrashArtifacts', () => {
         fs.copyFileSync(crashPath, options.destination);
       },
     );
-    const diagnoseSpy = vi
-      .spyOn(devicectl, 'diagnose')
-      .mockResolvedValue(undefined);
-
     const artifacts = await collectCrashArtifacts({
       targetId: 'device-udid',
       targetType: 'device',
@@ -108,7 +104,6 @@ describe('collectCrashArtifacts', () => {
       bundleId: 'com.harnessplayground',
       signal: 'SIGABRT',
     });
-    expect(diagnoseSpy).not.toHaveBeenCalled();
   });
 
   it('persists matched crash artifacts with the provided writer', async () => {

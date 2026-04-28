@@ -16,6 +16,7 @@ import {
 import * as devicectl from './xcrun/devicectl.js';
 import * as simctl from './xcrun/simctl.js';
 import {
+  collectCrashArtifacts,
   waitForCrashArtifact,
 } from './crash-diagnostics.js';
 
@@ -580,6 +581,18 @@ export const createIosDeviceAppMonitor = ({
       }
     })();
 
+    const initialArtifacts = await collectCrashArtifacts({
+      targetId: deviceId,
+      targetType: 'device',
+      bundleId,
+      processNames,
+      crashArtifactWriter,
+      minOccurredAt: monitorStartedAt,
+    });
+
+    for (const artifact of initialArtifacts) {
+      base.recordCrashArtifact(artifact);
+    }
   };
 
   const stopLogMonitor = async () => {

@@ -4,6 +4,10 @@ import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {
+  DeviceHostnameLookupError,
+  DeviceNotFoundError,
+} from './devicectl-errors.js';
 
 export const devicectl = async <TOutput>(
   command: string,
@@ -121,16 +125,25 @@ export const getDeviceConnectionHost = (
 export const getDeviceHostname = async (
   identifier: string
 ): Promise<string> => {
-  const details = await getDeviceDetails(identifier);
-  const hostname = getDeviceConnectionHost(details);
+  try {
+    const details = await getDeviceDetails(identifier);
+    const hostname = getDeviceConnectionHost(details);
 
-  if (!hostname) {
-    throw new Error(
-      `Could not determine iOS device hostname for ${identifier}. Run "xcrun devicectl device info details --device ${identifier} --json-output <path>" and verify that CoreDevice reports connectionProperties.tunnelIPAddress or a DNS hostname.`
-    );
+    if (!hostname) {
+      throw new DeviceHostnameLookupError(
+        identifier,
+        'CoreDevice did not report a network address'
+      );
+    }
+
+    return hostname;
+  } catch (error) {
+    if (error instanceof DeviceHostnameLookupError) {
+      throw error;
+    }
+
+    throw new DeviceNotFoundError(identifier);
   }
-
-  return hostname;
 };
 
 export type AppleAppInfo = {
@@ -286,20 +299,6 @@ export const copyFileFrom = async (
     options.destination,
     '--domain-type',
     options.domainType,
-  ]);
-};
-
-export const diagnose = async (
-  identifier: string,
-  outputDir: string
-): Promise<void> => {
-  await devicectl('diagnose', [
-    '--devices',
-    identifier,
-    '--no-archive',
-    '--archive-destination',
-    outputDir,
-    '--keep-temp-dir',
   ]);
 };
 

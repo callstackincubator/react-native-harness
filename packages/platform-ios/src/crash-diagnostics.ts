@@ -5,7 +5,7 @@ import type {
 } from '@react-native-harness/platforms';
 import { logger } from '@react-native-harness/tools';
 import fs from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { iosCrashParser } from './crash-parser.js';
@@ -237,6 +237,72 @@ const collectSimulatorCrashArtifacts = async ({
   }
 };
 
+const collectCrashArtifactsFromDiagnosticReports = (
+  options: CollectCrashArtifactsOptions,
+): DiagnosedCrashArtifact[] => {
+  const diagnosticReportsDir = join(
+    homedir(),
+    'Library',
+    'Logs',
+    'DiagnosticReports',
+  );
+
+  if (!fs.existsSync(diagnosticReportsDir)) {
+    return [];
+  }
+
+  const matchingEntries = fs
+    .readdirSync(diagnosticReportsDir)
+    .filter((entry) => entry.endsWith('.ips'))
+    .filter((entry) =>
+      options.processNames.some((name) => entry.startsWith(`${name}-`)),
+    );
+
+  const artifacts: DiagnosedCrashArtifact[] = [];
+
+  for (const entry of matchingEntries) {
+    const path = join(diagnosticReportsDir, entry);
+    const contents = fs.readFileSync(path, 'utf8');
+    const parsed = iosCrashParser.parse({ path, contents });
+
+    if (!parsed) {
+      continue;
+    }
+
+    if (
+      options.minOccurredAt !== undefined &&
+      parsed.occurredAt < options.minOccurredAt
+    ) {
+      continue;
+    }
+
+    const artifactPath = options.crashArtifactWriter
+      ? options.crashArtifactWriter.persistArtifact({
+          artifactKind: 'ios-crash-report',
+          source: { kind: 'file', path },
+        })
+      : path;
+
+    const artifact: DiagnosedCrashArtifact = {
+      ...parsed,
+      artifactType: 'ios-crash-report',
+      artifactPath,
+      occurredAt: parsed.occurredAt,
+    };
+
+    artifact.score = scoreCrashArtifact({ artifact, options });
+    artifacts.push(artifact);
+  }
+
+  return artifacts.sort((left, right) => {
+    if ((right.score ?? 0) !== (left.score ?? 0)) {
+      return (right.score ?? 0) - (left.score ?? 0);
+    }
+
+    return right.occurredAt - left.occurredAt;
+  });
+};
+
 const collectPhysicalCrashArtifacts = async ({
   targetId,
   processNames,
@@ -286,28 +352,18 @@ const collectPhysicalCrashArtifacts = async ({
         return copiedArtifacts;
       }
     }
-
-    const outputDir = createTempDirectory('rn-harness-devicectl-diagnose');
-
-    try {
-      await devicectl.diagnose(targetId, outputDir);
-      return parseCrashArtifacts({
-        rootDir: outputDir,
-        options: {
-          targetId,
-          targetType: 'device',
-          processNames,
-          bundleId,
-          crashArtifactWriter,
-          minOccurredAt,
-        },
-      });
-    } finally {
-      fs.rmSync(outputDir, { recursive: true, force: true });
-    }
   } finally {
     fs.rmSync(crashLogsDir, { recursive: true, force: true });
   }
+
+  return collectCrashArtifactsFromDiagnosticReports({
+    targetId,
+    targetType: 'device',
+    processNames,
+    bundleId,
+    crashArtifactWriter,
+    minOccurredAt,
+  });
 };
 
 export const collectCrashArtifacts = async (

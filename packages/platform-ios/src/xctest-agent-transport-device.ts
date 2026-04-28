@@ -13,7 +13,14 @@ export const createDeviceXCTestAgentTransport = (options: {
 }): XCTestAgentTransport => {
   const timeoutMs = options.timeoutMs ?? 5000;
   const agent = new http.Agent({ keepAlive: false });
-  const host = devicectl.getDeviceHostname(options.deviceId);
+  let hostPromise: Promise<string> | null = null;
+
+  const getHost = (): Promise<string> => {
+    if (!hostPromise) {
+      hostPromise = devicectl.getDeviceHostname(options.deviceId);
+    }
+    return hostPromise;
+  };
 
   return {
     request: async (
@@ -22,7 +29,7 @@ export const createDeviceXCTestAgentTransport = (options: {
       return await performHttpRequest({
         agent,
         body: request.body,
-        host: await host,
+        host: await getHost(),
         method: request.method,
         path: request.path,
         port: options.port,

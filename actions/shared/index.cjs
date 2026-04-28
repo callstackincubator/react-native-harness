@@ -4415,6 +4415,7 @@ var ConfigSchema = external_exports.object({
   resetEnvironmentBetweenTestFiles: external_exports.boolean().optional().default(true),
   unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().default(false),
   unstable__enableMetroCache: external_exports.boolean().optional().default(false),
+  permissions: external_exports.boolean().optional().default(false).describe("Enable platform-specific permission prompt automation. When false, Harness does not start permission-handling helpers such as the iOS XCTest agent."),
   detectNativeCrashes: external_exports.boolean().optional().default(true),
   crashDetectionInterval: external_exports.number().min(100, "Crash detection interval must be at least 100ms").default(500),
   disableViewFlattening: external_exports.boolean().optional().default(false).describe("Disable view flattening in React Native. This will set collapsable={true} for all View components to ensure they are not flattened by the native layout engine."),

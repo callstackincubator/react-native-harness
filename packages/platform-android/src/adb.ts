@@ -23,6 +23,10 @@ import {
   getEmulatorStartupArgs,
   type EmulatorBootMode,
 } from './emulator-startup.js';
+import {
+  AdbAppNotInstalledError,
+  AdbPermissionGrantError,
+} from './adb-errors.js';
 
 const wait = async (ms: number): Promise<void> => {
   await new Promise((resolve) => {
@@ -740,6 +744,11 @@ export const grantPermissions = async (
     return;
   }
 
+  const isInstalled = await isAppInstalled(adbId, bundleId);
+  if (!isInstalled) {
+    throw new AdbAppNotInstalledError(bundleId, adbId);
+  }
+
   const grantCommands = permissions.map((permission) => [
     '-s',
     adbId,
@@ -750,7 +759,11 @@ export const grantPermissions = async (
     permission,
   ]);
 
-  await Promise.all(
-    grantCommands.map((args) => spawn(getAdbBinaryPath(), args as string[])),
-  );
+  try {
+    await Promise.all(
+      grantCommands.map((args) => spawn(getAdbBinaryPath(), args as string[])),
+    );
+  } catch (error) {
+    throw new AdbPermissionGrantError(bundleId, permissions, adbId);
+  }
 };
