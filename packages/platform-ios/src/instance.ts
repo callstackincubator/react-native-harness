@@ -156,12 +156,16 @@ export const getAppleSimulatorPlatformInstance = async (
     },
     dispose: async () => {
       await xctestAgent.dispose();
+      console.log('[ios dispose] XCTest agent disposed');
       await simctl.stopApp(udid, config.bundleId);
+      console.log('[ios dispose] app stopped');
       await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
+      console.log('[ios dispose] JS location override cleared');
 
       if (startedByHarness) {
         logger.info('Shutting down iOS simulator %s...', config.device.name);
         await simctl.shutdownSimulator(udid);
+        console.log('[ios dispose] simulator shut down');
       }
     },
     isAppRunning: async () => {
@@ -245,7 +249,9 @@ export const getApplePhysicalDevicePlatformInstance = async (
     },
     dispose: async () => {
       await xctestAgent.dispose();
+      console.log('[ios-device dispose] XCTest agent disposed');
       await devicectl.stopApp(deviceId, config.bundleId);
+      console.log('[ios-device dispose] app stopped');
     },
     isAppRunning: async () => {
       return await devicectl.isAppRunning(deviceId, config.bundleId);

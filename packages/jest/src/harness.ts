@@ -322,8 +322,6 @@ const getHarnessInternal = async (
     let activeTestFilePath: string | undefined;
     const pendingHookPromises = new Set<Promise<void>>();
     let pendingHookError: unknown;
-    let didPrepareRun = false;
-
     const getCurrentRunId = () => currentRun?.runId;
     const toRelativeTestFilePath = (testFilePath?: string) =>
       testFilePath == null
@@ -651,15 +649,6 @@ const getHarnessInternal = async (
       harnessLogger.debug('client log forwarding enabled');
     }
 
-    const ensurePlatformRunPrepared = async () => {
-      if (didPrepareRun) {
-        return;
-      }
-
-      await platformInstance.prepareRun?.();
-      didPrepareRun = true;
-    };
-
     const dispose = async (reason: 'normal' | 'abort' | 'error' = 'normal') => {
       harnessLogger.debug('disposing Harness (reason=%s)', reason);
       let hookError: unknown;
@@ -699,7 +688,6 @@ const getHarnessInternal = async (
         await Promise.all([
           crashSupervisor.dispose(),
           serverBridge.dispose(),
-          didPrepareRun ? platformInstance.disposeRun?.() : undefined,
           platformInstance.dispose(),
           metroInstance.dispose(),
           metroPortLease?.release(),
@@ -782,10 +770,6 @@ const getHarnessInternal = async (
         testFilePath,
         crashSupervisor,
         appLaunchOptions,
-        launchApp: async () => {
-          await ensurePlatformRunPrepared();
-          await platformInstance.restartApp(appLaunchOptions);
-        },
       });
       await flushPendingHooks();
       harnessLogger.debug('app is ready for %s', testFilePath);
@@ -806,7 +790,6 @@ const getHarnessInternal = async (
         await platformInstance.stopApp();
       } else {
         harnessLogger.debug('requesting direct app restart');
-        await ensurePlatformRunPrepared();
         await platformInstance.restartApp(appLaunchOptions);
       }
 

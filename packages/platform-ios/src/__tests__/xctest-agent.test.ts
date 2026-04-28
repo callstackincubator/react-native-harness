@@ -68,20 +68,43 @@ let buildRoot = '';
 let tempProjectRoot = '';
 const originalCwd = process.cwd();
 
-const createLongRunningSubprocess = () => {
+const createLongRunningSubprocess = (options?: {
+  ignoreSignal?: NodeJS.Signals;
+}) => {
   let stopped = false;
+  const listeners = new Set<() => void>();
 
   const stop = () => {
     stopped = true;
+    for (const listener of listeners) {
+      listener();
+    }
+  };
+
+  const childProcess = {
+    exitCode: null,
+    kill: vi.fn((signal?: NodeJS.Signals) => {
+      mocks.kill(signal);
+
+      if (signal === options?.ignoreSignal) {
+        return;
+      }
+
+      stop();
+    }),
+    off: vi.fn((_event: string, listener: () => void) => {
+      listeners.delete(listener);
+      return childProcess;
+    }),
+    once: vi.fn((_event: string, listener: () => void) => {
+      listeners.add(listener);
+      return childProcess;
+    }),
+    signalCode: null,
   };
 
   const iterable = {
-    nodeChildProcess: Promise.resolve({
-      kill: vi.fn(() => {
-        stop();
-        mocks.kill();
-      }),
-    }),
+    nodeChildProcess: Promise.resolve(childProcess),
     async *[Symbol.asyncIterator]() {
       while (!stopped) {
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -257,6 +280,34 @@ describe('xctest-agent orchestration', () => {
     await controller.dispose();
 
     expect(mocks.kill).toHaveBeenCalledTimes(1);
+    expect(mocks.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('force kills the agent process when graceful shutdown times out', async () => {
+    mocks.spawn.mockImplementation((file: string, args?: string[]) => {
+      if (file === 'xcodebuild' && args?.[0] === 'test-without-building') {
+        return createLongRunningSubprocess({ ignoreSignal: 'SIGTERM' })
+          .subprocess;
+      }
+
+      return createLongRunningSubprocess().subprocess;
+    });
+
+    const controller = createXCTestAgentController({
+      port: 49155,
+      shutdownTimeoutMs: 1,
+      target: {
+        kind: 'simulator',
+        id: 'sim-timeout',
+      },
+    });
+
+    await controller.ensureStarted();
+    await controller.dispose();
+
+    expect(mocks.kill).toHaveBeenCalledTimes(2);
+    expect(mocks.kill).toHaveBeenNthCalledWith(1, 'SIGTERM');
+    expect(mocks.kill).toHaveBeenNthCalledWith(2, 'SIGKILL');
   });
 
   it('rebuilds when the cached build manifest no longer matches project inputs', async () => {
