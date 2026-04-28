@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getDeviceConnectionHost,
   getDeviceCtlLaunchArgs,
 } from '../xcrun/devicectl.js';
 import { getSimctlChildEnvironment } from '../xcrun/simctl.js';
@@ -39,5 +40,26 @@ describe('Apple app launch options', () => {
       '--mode=test',
       '--retry=1',
     ]);
+  });
+
+  it('uses the CoreDevice tunnel IP as the direct device connection host', () => {
+    expect(
+      getDeviceConnectionHost({
+        identifier: 'device-id',
+        connectionProperties: {
+          tunnelIPAddress: 'fd12:3456:789a::1',
+          potentialHostnames: ['my-iphone.local'],
+        },
+        deviceProperties: {
+          name: 'My iPhone',
+          osVersionNumber: '18.0',
+        },
+        hardwareProperties: {
+          marketingName: 'iPhone',
+          productType: 'iPhone17,1',
+          udid: '00008140-001600222422201C',
+        },
+      })
+    ).toBe('fd12:3456:789a::1');
   });
 });

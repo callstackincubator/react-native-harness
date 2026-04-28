@@ -2,6 +2,7 @@ import { HarnessPlatform } from '@react-native-harness/platforms';
 import type {
   AppleSimulator,
   ApplePhysicalDevice,
+  ApplePhysicalDeviceCodeSign,
   ApplePlatformConfig,
 } from './config.js';
 
@@ -14,9 +15,13 @@ export const appleSimulator = (
   systemVersion,
 });
 
-export const applePhysicalDevice = (name: string): ApplePhysicalDevice => ({
+export const applePhysicalDevice = (
+  name: string,
+  options?: { codeSign?: ApplePhysicalDeviceCodeSign },
+): ApplePhysicalDevice => ({
   type: 'physical',
   name,
+  codeSign: options?.codeSign,
 });
 
 export const applePlatform = (

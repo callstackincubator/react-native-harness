@@ -11,9 +11,16 @@ export const AppleSimulatorSchema = z.object({
   systemVersion: z.string().min(1, 'System version is required'),
 });
 
+export const ApplePhysicalDeviceCodeSignSchema = z.object({
+  teamId: z.string().min(1, 'Team ID is required'),
+  signingIdentity: z.string().optional(),
+  provisioningProfile: z.string().optional(),
+});
+
 export const ApplePhysicalDeviceSchema = z.object({
   type: z.literal('physical'),
   name: z.string().min(1, 'Name is required'),
+  codeSign: ApplePhysicalDeviceCodeSignSchema.optional(),
 });
 
 export const AppleDeviceSchema = z.discriminatedUnion('type', [
@@ -29,6 +36,7 @@ export const ApplePlatformConfigSchema = z.object({
 });
 
 export type AppleSimulator = z.infer<typeof AppleSimulatorSchema>;
+export type ApplePhysicalDeviceCodeSign = z.infer<typeof ApplePhysicalDeviceCodeSignSchema>;
 export type ApplePhysicalDevice = z.infer<typeof ApplePhysicalDeviceSchema>;
 export type AppleDevice = z.infer<typeof AppleDeviceSchema>;
 export type ApplePlatformConfig = z.infer<typeof ApplePlatformConfigSchema>;

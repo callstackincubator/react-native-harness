@@ -1,5 +1,5 @@
-import { utilities } from 'appium-ios-device';
-import type net from 'node:net';
+import http from 'node:http';
+import * as devicectl from './xcrun/devicectl.js';
 import type {
   XCTestAgentTransport,
   XCTestAgentTransportRequest,
@@ -12,139 +12,105 @@ export const createDeviceXCTestAgentTransport = (options: {
   timeoutMs?: number;
 }): XCTestAgentTransport => {
   const timeoutMs = options.timeoutMs ?? 5000;
+  const agent = new http.Agent({ keepAlive: false });
+  const host = devicectl.getDeviceHostname(options.deviceId);
 
   return {
     request: async (
-      request: XCTestAgentTransportRequest,
+      request: XCTestAgentTransportRequest
     ): Promise<XCTestAgentTransportResponse> => {
-      const socket = (await utilities.connectPort(
-        options.deviceId,
-        options.port,
-      )) as net.Socket;
-
-      return await performSocketRequest(socket, request, timeoutMs);
+      return await performHttpRequest({
+        agent,
+        body: request.body,
+        host: await host,
+        method: request.method,
+        path: request.path,
+        port: options.port,
+        timeoutMs,
+      });
     },
-    dispose: async () => undefined,
+    dispose: async () => {
+      agent.destroy();
+    },
   };
 };
 
-const performSocketRequest = async (
-  socket: net.Socket,
-  request: XCTestAgentTransportRequest,
-  timeoutMs: number,
-): Promise<XCTestAgentTransportResponse> => {
+const performHttpRequest = async (options: {
+  agent: http.Agent;
+  body?: string;
+  host: string;
+  method: 'GET' | 'POST';
+  path: string;
+  port: number;
+  timeoutMs: number;
+}): Promise<XCTestAgentTransportResponse> => {
   return await new Promise<XCTestAgentTransportResponse>((resolve, reject) => {
-    let settled = false;
-    const chunks: Buffer[] = [];
+    const request = http.request(
+      {
+        agent: options.agent,
+        host: options.host,
+        method: options.method,
+        path: options.path,
+        port: options.port,
+        timeout: options.timeoutMs,
+        headers: {
+          ...(options.body === undefined
+            ? {}
+            : {
+                'content-type': 'application/json',
+                'content-length': Buffer.byteLength(options.body, 'utf8'),
+              }),
+          connection: 'close',
+        },
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
 
-    const finish = (callback: () => void) => {
-      if (settled) {
-        return;
+        response.on('data', (chunk: Buffer | string) => {
+          chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+        });
+
+        response.on('end', () => {
+          resolve({
+            statusCode: response.statusCode ?? 0,
+            body: Buffer.concat(chunks).toString('utf8'),
+            headers: getResponseHeaders(response.headers),
+          });
+        });
+
+        response.on('error', reject);
       }
+    );
 
-      settled = true;
-      socket.removeAllListeners();
-      socket.destroy();
-      callback();
-    };
-
-    socket.setTimeout(timeoutMs, () => {
-      finish(() => {
-        reject(
-          new Error(
-            `Timed out waiting for XCTest agent response after ${timeoutMs}ms`,
-          ),
-        );
-      });
+    request.on('timeout', () => {
+      request.destroy(
+        new Error(
+          `Timed out waiting for XCTest agent response after ${options.timeoutMs}ms`
+        )
+      );
     });
+    request.on('error', reject);
 
-    socket.on('data', (chunk: Buffer) => {
-      chunks.push(chunk);
-    });
+    if (options.body !== undefined) {
+      request.write(options.body);
+    }
 
-    socket.on('end', () => {
-      finish(() => {
-        try {
-          resolve(parseHttpResponse(Buffer.concat(chunks).toString('utf8')));
-        } catch (error) {
-          reject(error);
-        }
-      });
-    });
-
-    socket.on('error', (error) => {
-      finish(() => {
-        reject(error);
-      });
-    });
-
-    socket.write(serializeHttpRequest(request));
-    socket.end();
+    request.end();
   });
 };
 
-const serializeHttpRequest = (request: XCTestAgentTransportRequest): string => {
-  const body = request.body ?? '';
-  const bodyLength = Buffer.byteLength(body, 'utf8');
-  const headers = [
-    `Host: localhost`,
-    'Connection: close',
-    'Accept: application/json',
-  ];
+const getResponseHeaders = (
+  headers: http.IncomingHttpHeaders
+): Record<string, string> => {
+  const values: Record<string, string> = {};
 
-  if (request.body !== undefined) {
-    headers.push('Content-Type: application/json');
-    headers.push(`Content-Length: ${bodyLength}`);
-  }
-
-  return [
-    `${request.method} ${request.path} HTTP/1.1`,
-    ...headers,
-    '',
-    body,
-  ].join('\r\n');
-};
-
-const parseHttpResponse = (
-  responseText: string,
-): XCTestAgentTransportResponse => {
-  const separatorIndex = responseText.indexOf('\r\n\r\n');
-
-  if (separatorIndex === -1) {
-    throw new Error(`Invalid XCTest agent HTTP response: ${responseText}`);
-  }
-
-  const rawHeaders = responseText.slice(0, separatorIndex).split('\r\n');
-  const statusLine = rawHeaders.shift();
-
-  if (!statusLine) {
-    throw new Error('Missing XCTest agent HTTP status line');
-  }
-
-  const [, rawStatusCode] = statusLine.split(' ');
-  const statusCode = Number(rawStatusCode);
-
-  if (!Number.isFinite(statusCode)) {
-    throw new Error(`Invalid XCTest agent HTTP status code: ${statusLine}`);
-  }
-
-  const headers: Record<string, string> = {};
-
-  for (const header of rawHeaders) {
-    const separator = header.indexOf(':');
-
-    if (separator === -1) {
+  for (const [key, value] of Object.entries(headers)) {
+    if (value === undefined) {
       continue;
     }
 
-    const name = header.slice(0, separator).trim().toLowerCase();
-    const value = header.slice(separator + 1).trim();
-    headers[name] = value;
+    values[key] = Array.isArray(value) ? value.join(', ') : value;
   }
 
-  return {
-    statusCode,
-    headers,
-    body: responseText.slice(separatorIndex + 4),
-  };
+  return values;
 };

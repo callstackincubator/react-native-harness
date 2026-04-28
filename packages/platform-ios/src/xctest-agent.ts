@@ -1,4 +1,9 @@
-import { logger, spawn, type Subprocess } from '@react-native-harness/tools';
+import {
+  getAvailablePort,
+  logger,
+  spawn,
+  type Subprocess,
+} from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -7,6 +12,7 @@ import {
   createXCTestAgentClient,
   type XCTestAgentPermissionsConfiguration,
 } from './xctest-agent-client.js';
+import type { ApplePhysicalDeviceCodeSign } from './config.js';
 import type { XCTestAgentTransport } from './xctest-agent-transport.js';
 import { createDeviceXCTestAgentTransport } from './xctest-agent-transport-device.js';
 import { createSimulatorXCTestAgentTransport } from './xctest-agent-transport-simulator.js';
@@ -15,7 +21,6 @@ const xctestAgentLogger = logger.child('ios-xctest-agent');
 
 const XCTEST_AGENT_PROJECT_NAME = 'HarnessXCTestAgent';
 const XCTEST_AGENT_SCHEME_NAME = 'HarnessXCTestAgent';
-const XCTEST_AGENT_DEFAULT_PORT = 49_200;
 const XCTEST_AGENT_PORT_ENV = 'HARNESS_XCTEST_AGENT_PORT';
 const XCTEST_AGENT_TARGET_BUNDLE_ID_ENV =
   'HARNESS_XCTEST_AGENT_TARGET_BUNDLE_ID';
@@ -33,12 +38,13 @@ type XCTestAgentTarget =
   | {
       kind: 'device';
       id: string;
+      codeSign: ApplePhysicalDeviceCodeSign;
     };
 
 export type XCTestAgentCapability = {
   getLaunchEnvironment?: () => Record<string, string>;
   updateConfiguration?: (
-    configuration: XCTestAgentRuntimeConfiguration,
+    configuration: XCTestAgentRuntimeConfiguration
   ) => XCTestAgentRuntimeConfiguration;
 };
 
@@ -49,6 +55,7 @@ export type XCTestAgentRuntimeConfiguration = {
 type XCTestAgentBuildManifest = {
   buildInputsHash: string;
   destinationKind: XCTestAgentTarget['kind'];
+  codeSign?: ApplePhysicalDeviceCodeSign;
 };
 
 export type XCTestAgentController = {
@@ -65,7 +72,7 @@ const getXCTestAgentProjectRoot = (): string => {
 const getXCTestAgentProjectFilePath = (): string => {
   return path.join(
     getXCTestAgentProjectRoot(),
-    `${XCTEST_AGENT_PROJECT_NAME}.xcodeproj`,
+    `${XCTEST_AGENT_PROJECT_NAME}.xcodeproj`
   );
 };
 
@@ -77,7 +84,7 @@ const assertXCTestAgentProjectExists = () => {
   }
 
   throw new Error(
-    `Missing checked-in XCTest agent project at ${projectFilePath}. Include the checked-in project in the package artifact.`,
+    `Missing checked-in XCTest agent project at ${projectFilePath}. Include the checked-in project in the package artifact.`
   );
 };
 
@@ -92,14 +99,46 @@ const getXCTestAgentDerivedDataPath = (target: XCTestAgentTarget): string => {
 const getXCTestAgentBuildManifestPath = (target: XCTestAgentTarget): string => {
   return path.join(
     getXCTestAgentDerivedDataPath(target),
-    'build-manifest.json',
+    'build-manifest.json'
   );
 };
 
-const getXCTestAgentDestination = (target: XCTestAgentTarget): string => {
+const getXCTestAgentBuildDestination = (target: XCTestAgentTarget): string => {
+  return target.kind === 'simulator'
+    ? `platform=iOS Simulator,id=${target.id}`
+    : `generic/platform=iOS`;
+};
+
+const getXCTestAgentRunDestination = (target: XCTestAgentTarget): string => {
   return target.kind === 'simulator'
     ? `platform=iOS Simulator,id=${target.id}`
     : `platform=iOS,id=${target.id}`;
+};
+
+const getXCTestAgentBuildSigningArgs = (
+  target: XCTestAgentTarget
+): string[] => {
+  if (target.kind === 'simulator') {
+    return [
+      'CODE_SIGNING_ALLOWED=NO',
+      'CODE_SIGNING_REQUIRED=NO',
+      'CODE_SIGN_IDENTITY=',
+      'DEVELOPMENT_TEAM=',
+    ];
+  }
+
+  const { teamId, signingIdentity, provisioningProfile } = target.codeSign;
+  const args = [
+    'CODE_SIGN_STYLE=Automatic',
+    `DEVELOPMENT_TEAM=${teamId}`,
+    `CODE_SIGN_IDENTITY=${signingIdentity ?? 'Apple Development'}`,
+  ];
+
+  if (provisioningProfile) {
+    args.push(`PROVISIONING_PROFILE_SPECIFIER=${provisioningProfile}`);
+  }
+
+  return args;
 };
 
 const getXCTestAgentBuildProductsPath = (target: XCTestAgentTarget): string => {
@@ -107,7 +146,7 @@ const getXCTestAgentBuildProductsPath = (target: XCTestAgentTarget): string => {
 };
 
 const readBuildManifest = (
-  target: XCTestAgentTarget,
+  target: XCTestAgentTarget
 ): XCTestAgentBuildManifest | null => {
   const manifestPath = getXCTestAgentBuildManifestPath(target);
 
@@ -116,18 +155,18 @@ const readBuildManifest = (
   }
 
   return JSON.parse(
-    fs.readFileSync(manifestPath, 'utf8'),
+    fs.readFileSync(manifestPath, 'utf8')
   ) as XCTestAgentBuildManifest;
 };
 
 const writeBuildManifest = (
   target: XCTestAgentTarget,
-  manifest: XCTestAgentBuildManifest,
+  manifest: XCTestAgentBuildManifest
 ) => {
   fs.mkdirSync(getXCTestAgentDerivedDataPath(target), { recursive: true });
   fs.writeFileSync(
     getXCTestAgentBuildManifestPath(target),
-    JSON.stringify(manifest, null, 2),
+    JSON.stringify(manifest, null, 2)
   );
 };
 
@@ -169,7 +208,7 @@ const getProjectInputsHash = (): string => {
 
 const shouldReuseBuildArtifacts = (
   target: XCTestAgentTarget,
-  buildInputsHash: string,
+  buildInputsHash: string
 ): boolean => {
   const manifest = readBuildManifest(target);
 
@@ -184,6 +223,17 @@ const shouldReuseBuildArtifacts = (
     return false;
   }
 
+  if (target.kind === 'device') {
+    if (
+      manifest.codeSign?.teamId !== target.codeSign.teamId ||
+      manifest.codeSign?.signingIdentity !== target.codeSign.signingIdentity ||
+      manifest.codeSign?.provisioningProfile !==
+        target.codeSign.provisioningProfile
+    ) {
+      return false;
+    }
+  }
+
   return fs.existsSync(getXCTestAgentBuildProductsPath(target));
 };
 
@@ -196,7 +246,7 @@ const getDefaultRuntimeConfiguration = (): XCTestAgentRuntimeConfiguration => {
 };
 
 const getRuntimeConfiguration = (
-  capabilities: XCTestAgentCapability[],
+  capabilities: XCTestAgentCapability[]
 ): XCTestAgentRuntimeConfiguration => {
   return capabilities.reduce((configuration, capability) => {
     return capability.updateConfiguration?.(configuration) ?? configuration;
@@ -225,7 +275,9 @@ const waitForAgentReady = async (options: {
   }
 
   throw new Error(
-    `Timed out waiting for XCTest agent readiness: ${getErrorMessage(lastError)}`,
+    `Timed out waiting for XCTest agent readiness: ${getErrorMessage(
+      lastError
+    )}`
   );
 };
 
@@ -257,7 +309,6 @@ const waitForChildProcessExit = async (subprocess: Subprocess) => {
     const cleanup = () => {
       childProcess.off('close', finish);
       childProcess.off('error', finish);
-      childProcess.off('exit', finish);
     };
 
     const finish = () => {
@@ -267,7 +318,6 @@ const waitForChildProcessExit = async (subprocess: Subprocess) => {
 
     childProcess.once('close', finish);
     childProcess.once('error', finish);
-    childProcess.once('exit', finish);
   });
 };
 
@@ -303,7 +353,7 @@ const stopProcess = async (options: {
   xctestAgentLogger.warn(
     'XCTest agent session for %s target did not stop after %dms; forcing shutdown',
     options.targetKind,
-    options.shutdownTimeoutMs,
+    options.shutdownTimeoutMs
   );
   childProcess.kill('SIGKILL');
 
@@ -312,6 +362,11 @@ const stopProcess = async (options: {
     shutdownTimeoutMs: options.shutdownTimeoutMs,
   });
 };
+
+const toTestRunnerEnv = (env: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(env).map(([key, value]) => [`TEST_RUNNER_${key}`, value])
+  );
 
 const getErrorMessage = (error: unknown): string => {
   if (!error) {
@@ -349,18 +404,12 @@ export const createXCTestAgentController = (options: {
           }
         : {},
       ...capabilities.map(
-        (capability) => capability.getLaunchEnvironment?.() ?? {},
-      ),
+        (capability) => capability.getLaunchEnvironment?.() ?? {}
+      )
     );
   };
 
-  const getPort = async (): Promise<number> => {
-    return options.port ?? XCTEST_AGENT_DEFAULT_PORT;
-  };
-
-  const createTransport = async (): Promise<XCTestAgentTransport> => {
-    const port = await getPort();
-
+  const createTransport = (port: number): XCTestAgentTransport => {
     if (target.kind === 'simulator') {
       return createSimulatorXCTestAgentTransport({ port });
     }
@@ -380,11 +429,11 @@ export const createXCTestAgentController = (options: {
 
     xctestAgentLogger.debug(
       'verifying checked-in XCTest agent project for %s',
-      target.kind,
+      target.kind
     );
     xctestAgentLogger.info(
       'Using checked-in XCTest agent project for %s target',
-      target.kind,
+      target.kind
     );
     assertXCTestAgentProjectExists();
 
@@ -392,11 +441,11 @@ export const createXCTestAgentController = (options: {
       prepared = true;
       xctestAgentLogger.info(
         'Reusing cached XCTest agent build for %s target',
-        target.kind,
+        target.kind
       );
       xctestAgentLogger.debug(
         'reusing cached XCTest agent build for %s',
-        target.kind,
+        target.kind
       );
       return;
     }
@@ -412,14 +461,17 @@ export const createXCTestAgentController = (options: {
       '-scheme',
       XCTEST_AGENT_SCHEME_NAME,
       '-destination',
-      getXCTestAgentDestination(target),
+      getXCTestAgentBuildDestination(target),
       '-derivedDataPath',
       getXCTestAgentDerivedDataPath(target),
+      ...(target.kind === 'device' ? ['-allowProvisioningUpdates'] : []),
+      ...getXCTestAgentBuildSigningArgs(target),
     ]);
 
     writeBuildManifest(target, {
       buildInputsHash,
       destinationKind: target.kind,
+      codeSign: target.kind === 'device' ? target.codeSign : undefined,
     });
     xctestAgentLogger.info('Built XCTest agent for %s target', target.kind);
     prepared = true;
@@ -432,14 +484,15 @@ export const createXCTestAgentController = (options: {
       return;
     }
 
-    const port = await getPort();
+    const port = options.port ?? (await getAvailablePort());
     const runtimeConfiguration = getRuntimeConfiguration(capabilities);
 
     xctestAgentLogger.debug('starting XCTest agent for %s', target.kind);
     xctestAgentLogger.info(
       'Starting XCTest agent session for %s target',
-      target.kind,
+      target.kind
     );
+    xctestAgentLogger.debug('Using XCTest agent port %d', port);
     agentProcess = spawn(
       'xcodebuild',
       [
@@ -449,7 +502,7 @@ export const createXCTestAgentController = (options: {
         '-scheme',
         XCTEST_AGENT_SCHEME_NAME,
         '-destination',
-        getXCTestAgentDestination(target),
+        getXCTestAgentRunDestination(target),
         '-parallel-testing-enabled',
         'NO',
         '-maximum-parallel-testing-workers',
@@ -461,16 +514,23 @@ export const createXCTestAgentController = (options: {
         cwd: getXCTestAgentProjectRoot(),
         env: {
           ...process.env,
-          [XCTEST_AGENT_PORT_ENV]: String(port),
-          ...getLaunchEnvironment(),
+          ...toTestRunnerEnv({
+            [XCTEST_AGENT_PORT_ENV]: String(port),
+            ...getLaunchEnvironment(),
+          }),
         },
-        stdout: 'pipe',
-        stderr: 'pipe',
-      },
+        stdout: 'ignore',
+        stderr: 'ignore',
+      }
     );
 
     const currentProcess = agentProcess;
-    const transport = await createTransport();
+    if (typeof currentProcess.catch === 'function') {
+      void currentProcess.catch((error) => {
+        xctestAgentLogger.debug('XCTest agent process stopped', error);
+      });
+    }
+    const transport = createTransport(port);
     const client = createXCTestAgentClient(transport);
     agentClient = client;
 
@@ -482,16 +542,6 @@ export const createXCTestAgentController = (options: {
       }
     });
 
-    void (async () => {
-      try {
-        for await (const line of currentProcess) {
-          xctestAgentLogger.info('[agent:%s] %s', target.kind, line);
-        }
-      } catch (error) {
-        xctestAgentLogger.debug('XCTest agent process stopped', error);
-      }
-    })();
-
     try {
       await waitForAgentReady({
         client,
@@ -502,7 +552,7 @@ export const createXCTestAgentController = (options: {
       xctestAgentLogger.warn(
         'XCTest agent startup failed for %s: %s',
         target.kind,
-        getErrorMessage(error),
+        getErrorMessage(error)
       );
       await transport.dispose();
       agentClient = null;
@@ -526,7 +576,7 @@ export const createXCTestAgentController = (options: {
 
     xctestAgentLogger.info(
       'Stopping XCTest agent session for %s target',
-      target.kind,
+      target.kind
     );
 
     await currentClient?.dispose();

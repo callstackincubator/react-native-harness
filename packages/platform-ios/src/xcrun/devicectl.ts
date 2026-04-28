@@ -35,7 +35,11 @@ export const devicectl = async <TOutput>(
 
 export type AppleDeviceInfo = {
   identifier: string;
+  connectionProperties?: AppleDeviceConnectionProperties;
   deviceProperties: {
+    dnsName?: string;
+    hostname?: string;
+    hostName?: string;
     name: string;
     osVersionNumber: string;
   };
@@ -44,6 +48,23 @@ export type AppleDeviceInfo = {
     productType: string;
     udid: string;
   };
+  networkProperties?: AppleDeviceNetworkProperties;
+};
+
+type AppleDeviceConnectionProperties = {
+  dnsName?: string;
+  hostname?: string;
+  hostName?: string;
+  potentialHostnames?: string[];
+  tunnelIPAddress?: string;
+  tunnelIPHostname?: string;
+};
+
+type AppleDeviceNetworkProperties = {
+  dnsName?: string;
+  hostname?: string;
+  hostName?: string;
+  ipAddress?: string;
 };
 
 export const listDevices = async (): Promise<AppleDeviceInfo[]> => {
@@ -51,6 +72,65 @@ export const listDevices = async (): Promise<AppleDeviceInfo[]> => {
     'devices',
   ]);
   return result.devices;
+};
+
+type AppleDeviceDetailsResult =
+  | AppleDeviceInfo
+  | {
+      device: AppleDeviceInfo;
+    };
+
+export const getDeviceDetails = async (
+  identifier: string
+): Promise<AppleDeviceInfo> => {
+  const result = await devicectl<AppleDeviceDetailsResult>('device', [
+    'info',
+    'details',
+    '--device',
+    identifier,
+  ]);
+
+  return 'device' in result ? result.device : result;
+};
+
+export const getDeviceConnectionHost = (
+  device: AppleDeviceInfo
+): string | null => {
+  const connection = device.connectionProperties;
+  const network = device.networkProperties;
+
+  const candidates = [
+    connection?.tunnelIPAddress,
+    connection?.tunnelIPHostname,
+    connection?.dnsName,
+    connection?.hostName,
+    connection?.hostname,
+    network?.ipAddress,
+    network?.dnsName,
+    network?.hostName,
+    network?.hostname,
+    device.deviceProperties.dnsName,
+    device.deviceProperties.hostName,
+    device.deviceProperties.hostname,
+    ...(connection?.potentialHostnames ?? []),
+  ].filter((host): host is string => Boolean(host));
+
+  return candidates[0] ?? null;
+};
+
+export const getDeviceHostname = async (
+  identifier: string
+): Promise<string> => {
+  const details = await getDeviceDetails(identifier);
+  const hostname = getDeviceConnectionHost(details);
+
+  if (!hostname) {
+    throw new Error(
+      `Could not determine iOS device hostname for ${identifier}. Run "xcrun devicectl device info details --device ${identifier} --json-output <path>" and verify that CoreDevice reports connectionProperties.tunnelIPAddress or a DNS hostname.`
+    );
+  }
+
+  return hostname;
 };
 
 export type AppleAppInfo = {

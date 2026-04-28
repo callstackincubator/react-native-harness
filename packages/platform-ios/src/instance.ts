@@ -223,23 +223,32 @@ export const getApplePhysicalDevicePlatformInstance = async (
     );
   }
 
-  const xctestAgent = createXCTestAgentController({
-    appBundleId: config.bundleId,
-    target: {
-      kind: 'device',
-      id: deviceId,
-    },
-    capabilities: [createPermissionPromptAutoAcceptCapability()],
-  });
+  const xctestAgent = config.device.codeSign
+    ? createXCTestAgentController({
+        appBundleId: config.bundleId,
+        target: {
+          kind: 'device',
+          id: device.hardwareProperties.udid,
+          codeSign: config.device.codeSign,
+        },
+        capabilities: [createPermissionPromptAutoAcceptCapability()],
+      })
+    : null;
 
-  let agentStarted = false;
-  try {
-    await xctestAgent.ensureStarted();
-    agentStarted = true;
-  } finally {
-    if (!agentStarted) {
-      await xctestAgent.dispose();
+  if (xctestAgent) {
+    let agentStarted = false;
+    try {
+      await xctestAgent.ensureStarted();
+      agentStarted = true;
+    } finally {
+      if (!agentStarted) {
+        await xctestAgent.dispose();
+      }
     }
+  } else {
+    iosInstanceLogger.info(
+      'Skipping XCTest agent for physical device (no codeSign config provided)',
+    );
   }
 
   return {
@@ -264,7 +273,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
       await devicectl.stopApp(deviceId, config.bundleId);
     },
     dispose: async () => {
-      await xctestAgent.dispose();
+      await xctestAgent?.dispose();
       await devicectl.stopApp(deviceId, config.bundleId);
     },
     isAppRunning: async () => {

@@ -23,6 +23,7 @@ export default {
   entryPoint: './index.js',
   appRegistryComponentName: 'HarnessPlayground',
   plugins: [harnessLoggingPlugin()],
+detectNativeCrashes: false,
 
   runners: [
     androidPlatform({
@@ -72,8 +73,10 @@ export default {
     }),
     applePlatform({
       name: 'iphone-16-pro',
-      device: applePhysicalDevice('iPhone (Szymon) (2)'),
-      bundleId: 'react-native-harness',
+      device: applePhysicalDevice('iPhone (Szymon) (2)', {
+        codeSign: { teamId: 'BAJL5U28HC' },
+      }),
+      bundleId: 'com.harnessplayground',
     }),
     applePlatform({
       name: 'ios',

@@ -10,10 +10,9 @@ export const spawn = (
   args?: readonly string[],
   options?: SpawnOptions
 ): Subprocess => {
-  const defaultStream = 'pipe';
   const defaultOptions: Options = {
-    stdin: defaultStream,
-    stdout: defaultStream,
+    stdin: 'ignore',
+    stdout: 'pipe',
     // Always 'pipe' stderr to handle errors properly down the line
     stderr: 'pipe',
   };
@@ -25,7 +24,11 @@ export const spawn = (
   return childProcess;
 };
 
-export const spawnAndForget = async (file: string, args?: readonly string[], options?: SpawnOptions): Promise<void> => {
+export const spawnAndForget = async (
+  file: string,
+  args?: readonly string[],
+  options?: SpawnOptions
+): Promise<void> => {
   try {
     await spawn(file, args, options);
   } catch {

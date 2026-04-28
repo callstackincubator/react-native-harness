@@ -649,7 +649,10 @@ const getHarnessInternal = async (
       harnessLogger.debug('client log forwarding enabled');
     }
 
-    const dispose = async (reason: 'normal' | 'abort' | 'error' = 'normal') => {
+    let disposePromise: Promise<void> | null = null;
+    const disposeOnce = async (
+      reason: 'normal' | 'abort' | 'error' = 'normal'
+    ) => {
       harnessLogger.debug('disposing Harness (reason=%s)', reason);
       let hookError: unknown;
 
@@ -707,6 +710,10 @@ const getHarnessInternal = async (
       if (cleanupError) {
         throw cleanupError;
       }
+    };
+    const dispose = (reason: 'normal' | 'abort' | 'error' = 'normal') => {
+      disposePromise ??= disposeOnce(reason);
+      return disposePromise;
     };
 
     if (signal.aborted) {

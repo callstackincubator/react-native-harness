@@ -186,6 +186,7 @@ describe('xctest-agent orchestration', () => {
       target: {
         kind: 'device',
         id: 'device-123',
+        codeSign: { teamId: 'TESTTEAM01' },
       },
     });
 
@@ -255,6 +256,7 @@ describe('xctest-agent orchestration', () => {
       target: {
         kind: 'device',
         id: 'device-555',
+        codeSign: { teamId: 'TESTTEAM01' },
       },
     });
 
@@ -370,6 +372,7 @@ describe('xctest-agent orchestration', () => {
       target: {
         kind: 'device',
         id: 'device-123',
+        codeSign: { teamId: 'TESTTEAM01' },
       },
     });
 

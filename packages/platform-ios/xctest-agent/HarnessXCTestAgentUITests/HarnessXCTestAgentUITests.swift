@@ -190,7 +190,7 @@ final class HarnessXCTestAgentUITests: XCTestCase {
   private let state = HarnessXCTestAgentState(
     permissions: PermissionPromptConfiguration.fromEnvironment()
   )
-  private lazy var targetApplication = makeTargetApplication()
+  private var lastTargetApplicationState: XCUIApplication.State?
   private let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
   private var capabilities: [AgentCapability] = []
   private var httpServer: XCTestAgentHTTPServer?
@@ -199,12 +199,26 @@ final class HarnessXCTestAgentUITests: XCTestCase {
     NSLog("[HarnessXCTestAgent] %@", message)
   }
 
-  private func makeTargetApplication() -> XCUIApplication {
+  private func makeTargetApplication() -> XCUIApplication? {
     if let bundleIdentifier = ProcessInfo.processInfo.environment[Environment.targetBundleIdentifier], !bundleIdentifier.isEmpty {
       return XCUIApplication(bundleIdentifier: bundleIdentifier)
     }
 
-    return XCUIApplication()
+    return nil
+  }
+
+  private func observeTargetApplication() {
+    guard let targetApplication = makeTargetApplication() else {
+      return
+    }
+
+    let currentState = targetApplication.state
+    if currentState == lastTargetApplicationState {
+      return
+    }
+
+    lastTargetApplicationState = currentState
+    log("target application state changed: \(String(describing: currentState))")
   }
 
   private func jsonResponse<T: Encodable>(_ value: T) -> XCTestAgentResponse {
@@ -266,8 +280,6 @@ final class HarnessXCTestAgentUITests: XCTestCase {
     log("setUpWithError started")
     log("enabled capabilities: \(capabilities.map { String(describing: type(of: $0)) }.joined(separator: ", "))")
 
-    targetApplication.launch()
-
     for capability in capabilities {
       try capability.setUp()
     }
@@ -290,6 +302,8 @@ final class HarnessXCTestAgentUITests: XCTestCase {
     let sessionDeadline = Date().addingTimeInterval(Constants.defaultSessionDuration)
 
     while Date() < sessionDeadline {
+      observeTargetApplication()
+
       for capability in capabilities {
         try? capability.tick()
       }

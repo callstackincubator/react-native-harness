@@ -4194,6 +4194,9 @@ var coerce = {
 };
 var NEVER = INVALID;
 
+// ../tools/dist/net.js
+var import_node_net = __toESM(require("net"), 1);
+
 // ../tools/dist/logger.js
 var import_node_util = __toESM(require("util"), 1);
 var import_picocolors = __toESM(require_picocolors(), 1);
