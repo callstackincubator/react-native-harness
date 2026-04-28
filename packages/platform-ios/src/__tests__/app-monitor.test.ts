@@ -290,6 +290,30 @@ describe('createIosDeviceAppMonitor', () => {
     expect(events.some((event) => event.type === 'app_exited')).toBe(true);
   });
 
+  it('does not collect device crash artifacts during monitor startup', async () => {
+    vi.spyOn(devicectl, 'getAppInfo').mockResolvedValue({
+      bundleIdentifier: 'com.harnessplayground',
+      name: 'HarnessPlayground',
+      version: '1.0',
+      url: '/private/var/HarnessPlayground.app',
+    });
+    vi.spyOn(devicectl, 'getProcesses').mockResolvedValue([]);
+    const collectCrashArtifactsSpy = vi.spyOn(
+      diagnostics,
+      'collectCrashArtifacts',
+    );
+
+    const monitor = createIosDeviceAppMonitor({
+      deviceId: 'device-udid',
+      bundleId: 'com.harnessplayground',
+    });
+
+    await monitor.start();
+    await monitor.stop();
+
+    expect(collectCrashArtifactsSpy).not.toHaveBeenCalled();
+  });
+
   it('enriches device crashes with Apple-native pulled crash reports', async () => {
     vi.spyOn(devicectl, 'getAppInfo').mockResolvedValue({
       bundleIdentifier: 'com.harnessplayground',

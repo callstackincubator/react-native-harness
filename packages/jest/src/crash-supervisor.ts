@@ -26,6 +26,7 @@ export type CrashSupervisor = {
   beginLaunch: (testFilePath: string) => void;
   markReady: () => void;
   beginTestRun: (testFilePath: string) => void;
+  isArmed: () => boolean;
   stop: () => Promise<void>;
   start: () => Promise<void>;
   waitForCrash: (testFilePath: string) => Promise<never>;
@@ -255,6 +256,9 @@ export const createCrashSupervisor = ({
     state = 'running';
   };
 
+  const isArmed = () =>
+    state === 'launching' || state === 'ready' || state === 'running';
+
   const stop = async () => {
     monitoring = false;
     await appMonitor.stop();
@@ -310,6 +314,7 @@ export const createCrashSupervisor = ({
     beginLaunch,
     markReady,
     beginTestRun,
+    isArmed,
     stop,
     start,
     waitForCrash,

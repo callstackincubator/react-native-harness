@@ -16,7 +16,6 @@ import {
 import * as devicectl from './xcrun/devicectl.js';
 import * as simctl from './xcrun/simctl.js';
 import {
-  collectCrashArtifacts,
   waitForCrashArtifact,
 } from './crash-diagnostics.js';
 
@@ -184,15 +183,15 @@ const createAppMonitorBase = () => {
       : [];
     const matchingByProcess = options.processName
       ? recentCrashArtifacts.filter(
-          (artifact) => artifact.processName === options.processName
-        )
+        (artifact) => artifact.processName === options.processName
+      )
       : [];
     const candidates =
       matchingByPid.length > 0
         ? matchingByPid
         : matchingByProcess.length > 0
-        ? matchingByProcess
-        : recentCrashArtifacts;
+          ? matchingByProcess
+          : recentCrashArtifacts;
     const preferredCandidates = candidates.filter(
       (artifact) => artifact.artifactType === 'ios-crash-report'
     );
@@ -581,18 +580,6 @@ export const createIosDeviceAppMonitor = ({
       }
     })();
 
-    const initialArtifacts = await collectCrashArtifacts({
-      targetId: deviceId,
-      targetType: 'device',
-      bundleId,
-      processNames,
-      crashArtifactWriter,
-      minOccurredAt: monitorStartedAt,
-    });
-
-    for (const artifact of initialArtifacts) {
-      base.recordCrashArtifact(artifact);
-    }
   };
 
   const stopLogMonitor = async () => {
