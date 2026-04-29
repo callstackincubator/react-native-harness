@@ -378,6 +378,79 @@ export const getDeviceInfo = async (
   return { manufacturer, model };
 };
 
+const getRequestedPermissions = async (
+  adbId: string,
+  bundleId: string,
+): Promise<string[]> => {
+  const { stdout } = await spawn(getAdbBinaryPath(), [
+    '-s',
+    adbId,
+    'shell',
+    'dumpsys',
+    'package',
+    bundleId,
+  ]);
+
+  const requestedPermissions = new Set<string>();
+  const lines = stdout.split('\n');
+  let inRequestedPermissionsSection = false;
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+
+    if (trimmedLine === 'requested permissions:') {
+      inRequestedPermissionsSection = true;
+      continue;
+    }
+
+    if (!inRequestedPermissionsSection) {
+      continue;
+    }
+
+    if (trimmedLine === '') {
+      continue;
+    }
+
+    if (trimmedLine.endsWith(':')) {
+      break;
+    }
+
+    if (/^[a-zA-Z0-9_.]+$/.test(trimmedLine)) {
+      requestedPermissions.add(trimmedLine);
+      continue;
+    }
+
+    break;
+  }
+
+  return [...requestedPermissions];
+};
+
+const getDangerousPermissions = async (adbId: string): Promise<Set<string>> => {
+  const { stdout } = await spawn(getAdbBinaryPath(), [
+    '-s',
+    adbId,
+    'shell',
+    'pm',
+    'list',
+    'permissions',
+    '-g',
+    '-d',
+  ]);
+
+  const dangerousPermissions = new Set<string>();
+
+  for (const match of stdout.matchAll(/permission:([a-zA-Z0-9_.]+)/g)) {
+    const permission = match[1]?.trim();
+
+    if (permission) {
+      dangerousPermissions.add(permission);
+    }
+  }
+
+  return dangerousPermissions;
+};
+
 export const isBootCompleted = async (adbId: string): Promise<boolean> => {
   try {
     const bootCompleted = await getShellProperty(adbId, 'sys.boot_completed');
@@ -738,15 +811,22 @@ export const getConnectedDevices = async (): Promise<AdbDevice[]> => {
 export const grantPermissions = async (
   adbId: string,
   bundleId: string,
-  permissions: string[],
 ): Promise<void> => {
-  if (permissions.length === 0) {
-    return;
-  }
-
   const isInstalled = await isAppInstalled(adbId, bundleId);
   if (!isInstalled) {
     throw new AdbAppNotInstalledError(bundleId, adbId);
+  }
+
+  const [requestedPermissions, dangerousPermissions] = await Promise.all([
+    getRequestedPermissions(adbId, bundleId),
+    getDangerousPermissions(adbId),
+  ]);
+  const permissions = requestedPermissions.filter((permission) =>
+    dangerousPermissions.has(permission),
+  );
+
+  if (permissions.length === 0) {
+    return;
   }
 
   const grantCommands = permissions.map((permission) => [
