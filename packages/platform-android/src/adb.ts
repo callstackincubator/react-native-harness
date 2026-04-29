@@ -1,5 +1,5 @@
 import { type AndroidAppLaunchOptions } from '@react-native-harness/platforms';
-import { spawn, SubprocessError } from '@react-native-harness/tools';
+import { logger, spawn, SubprocessError } from '@react-native-harness/tools';
 import { spawn as nodeSpawn } from 'node:child_process';
 import type { ChildProcessByStdio } from 'node:child_process';
 import { access, rm } from 'node:fs/promises';
@@ -63,6 +63,7 @@ const waitWithSignal = async (
 
 const EMULATOR_STARTUP_OBSERVATION_TIMEOUT_MS = 5000;
 const EMULATOR_OUTPUT_BUFFER_LIMIT = 16 * 1024;
+const androidAdbLogger = logger.child('android-adb');
 
 export const emulatorProcess = {
   startDetachedProcess: (
@@ -812,6 +813,11 @@ export const grantPermissions = async (
   adbId: string,
   bundleId: string,
 ): Promise<void> => {
+  androidAdbLogger.debug('grantPermissions:start %o', {
+    adbId,
+    bundleId,
+  });
+
   const isInstalled = await isAppInstalled(adbId, bundleId);
   if (!isInstalled) {
     throw new AdbAppNotInstalledError(bundleId, adbId);
@@ -825,7 +831,18 @@ export const grantPermissions = async (
     dangerousPermissions.has(permission),
   );
 
+  androidAdbLogger.debug('grantPermissions:resolved %o', {
+    adbId,
+    bundleId,
+    requestedPermissions,
+    permissions,
+  });
+
   if (permissions.length === 0) {
+    androidAdbLogger.debug('grantPermissions:skip %o', {
+      adbId,
+      bundleId,
+    });
     return;
   }
 
@@ -840,10 +857,28 @@ export const grantPermissions = async (
   ]);
 
   try {
+    androidAdbLogger.debug('grantPermissions:commands %o', {
+      adbId,
+      bundleId,
+      grantCommands,
+    });
+
     await Promise.all(
       grantCommands.map((args) => spawn(getAdbBinaryPath(), args as string[])),
     );
+
+    androidAdbLogger.debug('grantPermissions:success %o', {
+      adbId,
+      bundleId,
+      permissions,
+    });
   } catch (error) {
+    androidAdbLogger.debug('grantPermissions:error %o', {
+      adbId,
+      bundleId,
+      permissions,
+      error,
+    });
     throw new AdbPermissionGrantError(bundleId, permissions, adbId);
   }
 };
