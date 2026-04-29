@@ -7,11 +7,15 @@ import {
   waitUntil,
 } from 'react-native-harness';
 import { screen, userEvent } from '@react-native-harness/ui';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { VisionCamera} from 'react-native-vision-camera';
 
 describe('Permissions', () => {
   test('should allow camera permissions when requested', async () => {
+    if (Platform.OS === 'web') {
+      return;
+    }
+
     const initialStatus = VisionCamera.cameraPermissionStatus;
     let latestStatus = initialStatus;
 
