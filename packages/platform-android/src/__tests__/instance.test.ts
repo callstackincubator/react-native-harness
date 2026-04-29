@@ -655,11 +655,6 @@ describe('Android platform instance', () => {
     expect(grantPermissions).toHaveBeenCalledWith(
       'emulator-5554',
       'com.harnessplayground',
-      expect.arrayContaining([
-        'android.permission.CAMERA',
-        'android.permission.RECORD_AUDIO',
-        'android.permission.ACCESS_FINE_LOCATION',
-      ]),
     );
   });
 
@@ -744,11 +739,6 @@ describe('Android platform instance', () => {
     expect(grantPermissions).toHaveBeenCalledWith(
       '012345',
       'com.harnessplayground',
-      expect.arrayContaining([
-        'android.permission.CAMERA',
-        'android.permission.RECORD_AUDIO',
-        'android.permission.ACCESS_FINE_LOCATION',
-      ]),
     );
   });
 });

@@ -7,16 +7,11 @@ import {
   waitUntil,
 } from 'react-native-harness';
 import { screen, userEvent } from '@react-native-harness/ui';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { VisionCamera} from 'react-native-vision-camera';
 
 describe('Permissions', () => {
-  test('should allow iOS camera permissions through the system prompt', async () => {
-    if (Platform.OS !== 'ios') {
-      return;
-    }
-
-    const { VisionCamera } =
-      require('react-native-vision-camera') as typeof import('react-native-vision-camera');
+  test('should allow camera permissions when requested', async () => {
     const initialStatus = VisionCamera.cameraPermissionStatus;
     let latestStatus = initialStatus;
 

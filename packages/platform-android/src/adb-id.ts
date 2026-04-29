@@ -16,6 +16,10 @@ export const getAdbId = async (
 
   for (const adbId of adbIds) {
     if (isAndroidDeviceEmulator(device)) {
+      if (!isAdbIdEmulator(adbId)) {
+        continue;
+      }
+
       const emulatorName = await adb.getEmulatorName(adbId);
 
       if (emulatorName === device.name) {
