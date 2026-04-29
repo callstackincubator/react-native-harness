@@ -9,8 +9,6 @@ const COMMON_EMULATOR_ARGS = [
   'swiftshader_indirect',
   '-noaudio',
   '-no-boot-anim',
-  '-camera-back',
-  'none',
 ] as const;
 
 export const getEmulatorStartupArgs = (

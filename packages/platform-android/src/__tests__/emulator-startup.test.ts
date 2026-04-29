@@ -10,6 +10,9 @@ describe('emulator startup modes', () => {
         '-no-snapshot-save',
       ])
     );
+    expect(getEmulatorStartupArgs('Pixel_8_API_35', 'default-boot')).not.toEqual(
+      expect.arrayContaining(['-camera-back', 'none'])
+    );
   });
 
   it('builds clean snapshot generation args', () => {
