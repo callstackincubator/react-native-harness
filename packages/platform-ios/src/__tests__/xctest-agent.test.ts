@@ -105,10 +105,16 @@ const createLongRunningSubprocess = (options?: {
 
   const iterable = {
     nodeChildProcess: Promise.resolve(childProcess),
-    async *[Symbol.asyncIterator]() {
-      while (!stopped) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
+    [Symbol.asyncIterator]() {
+      return {
+        next: async () => {
+          while (!stopped) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+
+          return { done: true, value: undefined };
+        },
+      };
     },
   };
 
