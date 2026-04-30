@@ -9,5 +9,6 @@ export * from './error.js';
 export * from './events.js';
 export * from './packages.js';
 export * from './crash-artifacts.js';
+export * from './harness-artifacts.js';
 export * from './regex.js';
 export * from './isInteractive.js';

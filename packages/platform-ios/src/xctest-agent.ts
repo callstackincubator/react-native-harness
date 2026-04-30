@@ -1,4 +1,5 @@
 import {
+  createHarnessArtifactDirectory,
   getAvailablePort,
   logger,
   spawn,
@@ -6,6 +7,8 @@ import {
 } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
+import { PassThrough, pipeline } from 'node:stream';
+import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -24,11 +27,12 @@ const XCTEST_AGENT_SCHEME_NAME = 'HarnessXCTestAgent';
 const XCTEST_AGENT_PORT_ENV = 'HARNESS_XCTEST_AGENT_PORT';
 const XCTEST_AGENT_TARGET_BUNDLE_ID_ENV =
   'HARNESS_XCTEST_AGENT_TARGET_BUNDLE_ID';
-const XCTEST_AGENT_STARTUP_TIMEOUT_MS = 30_000;
+const XCTEST_AGENT_STARTUP_TIMEOUT_MS = 60_000;
 const XCTEST_AGENT_SHUTDOWN_TIMEOUT_MS = 5_000;
 const XCTEST_AGENT_STARTUP_POLL_INTERVAL_MS = 250;
 const HARNESS_DIRNAME = '.harness';
 const XCTEST_AGENT_BUILD_DIRNAME = 'xctest-agent';
+const pipelineAsync = promisify(pipeline);
 
 type XCTestAgentTarget =
   | {
@@ -376,6 +380,53 @@ const getErrorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : String(error);
 };
 
+const attachProcessOutputLog = async (options: {
+  command: string;
+  logFilePath: string;
+  process: Subprocess;
+}) => {
+  fs.mkdirSync(path.dirname(options.logFilePath), { recursive: true });
+  fs.writeFileSync(
+    options.logFilePath,
+    [
+      `timestamp=${new Date().toISOString()}`,
+      `command=${options.command}`,
+      '',
+    ].join('\n'),
+    'utf8'
+  );
+  const output = fs.createWriteStream(options.logFilePath, { flags: 'a' });
+
+  const childProcess = await options.process.nodeChildProcess;
+  const mergedOutput = new PassThrough();
+  const forwardStream = async (
+    stream: NodeJS.ReadableStream | null | undefined,
+    label: 'stdout' | 'stderr'
+  ) => {
+    if (!stream) {
+      return;
+    }
+
+    for await (const chunk of stream) {
+      mergedOutput.write(`[${label}] `);
+      mergedOutput.write(chunk);
+      if (Buffer.isBuffer(chunk) ? !chunk.includes(0x0a) : !String(chunk).endsWith('\n')) {
+        mergedOutput.write('\n');
+      }
+    }
+  };
+
+  const pipeTask = pipelineAsync(mergedOutput, output);
+  const forwardTask = Promise.all([
+    forwardStream(childProcess.stdout, 'stdout'),
+    forwardStream(childProcess.stderr, 'stderr'),
+  ]).finally(() => {
+    mergedOutput.end();
+  });
+
+  void Promise.allSettled([pipeTask, forwardTask]);
+};
+
 export const createXCTestAgentController = (options: {
   appBundleId?: string;
   target: XCTestAgentTarget;
@@ -390,6 +441,13 @@ export const createXCTestAgentController = (options: {
     options.startupTimeoutMs ?? XCTEST_AGENT_STARTUP_TIMEOUT_MS;
   const shutdownTimeoutMs =
     options.shutdownTimeoutMs ?? XCTEST_AGENT_SHUTDOWN_TIMEOUT_MS;
+  const logArtifacts = createHarnessArtifactDirectory({
+    artifactType: 'logs',
+    bundleId: options.appBundleId,
+    platformId: 'ios',
+    runnerName: `xctest-agent-${target.kind}`,
+  });
+  const xcodebuildLogPath = path.join(logArtifacts.directoryPath, 'xcodebuild.log');
   let prepared = false;
   let agentProcess: Subprocess | null = null;
   let agentClient: ReturnType<typeof createXCTestAgentClient> | null = null;
@@ -493,23 +551,24 @@ export const createXCTestAgentController = (options: {
       target.kind
     );
     xctestAgentLogger.debug('Using XCTest agent port %d', port);
+    const xcodebuildArgs = [
+      'test-without-building',
+      '-project',
+      getXCTestAgentProjectFilePath(),
+      '-scheme',
+      XCTEST_AGENT_SCHEME_NAME,
+      '-destination',
+      getXCTestAgentRunDestination(target),
+      '-parallel-testing-enabled',
+      'NO',
+      '-maximum-parallel-testing-workers',
+      '1',
+      '-derivedDataPath',
+      getXCTestAgentDerivedDataPath(target),
+    ];
     agentProcess = spawn(
       'xcodebuild',
-      [
-        'test-without-building',
-        '-project',
-        getXCTestAgentProjectFilePath(),
-        '-scheme',
-        XCTEST_AGENT_SCHEME_NAME,
-        '-destination',
-        getXCTestAgentRunDestination(target),
-        '-parallel-testing-enabled',
-        'NO',
-        '-maximum-parallel-testing-workers',
-        '1',
-        '-derivedDataPath',
-        getXCTestAgentDerivedDataPath(target),
-      ],
+      xcodebuildArgs,
       {
         cwd: getXCTestAgentProjectRoot(),
         env: {
@@ -519,10 +578,14 @@ export const createXCTestAgentController = (options: {
             ...getLaunchEnvironment(),
           }),
         },
-        stdout: 'ignore',
-        stderr: 'ignore',
       }
     );
+    void attachProcessOutputLog({
+      command: ['xcodebuild', ...xcodebuildArgs].join(' '),
+      logFilePath: xcodebuildLogPath,
+      process: agentProcess,
+    });
+    xctestAgentLogger.info('Saving XCTest agent xcodebuild logs to %s', xcodebuildLogPath);
 
     const currentProcess = agentProcess;
     if (typeof currentProcess.catch === 'function') {
@@ -550,9 +613,10 @@ export const createXCTestAgentController = (options: {
       await client.configurePermissions(runtimeConfiguration.permissions);
     } catch (error) {
       xctestAgentLogger.warn(
-        'XCTest agent startup failed for %s: %s',
+        'XCTest agent startup failed for %s: %s (logs: %s)',
         target.kind,
-        getErrorMessage(error)
+        getErrorMessage(error),
+        xcodebuildLogPath
       );
       await transport.dispose();
       agentClient = null;

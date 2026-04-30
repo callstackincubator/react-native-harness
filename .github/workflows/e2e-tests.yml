@@ -104,6 +104,14 @@ jobs:
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
             echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
 
+      - name: Upload Harness logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-logs-e2e-android
+          path: apps/playground/.harness/logs
+          if-no-files-found: ignore
+
   e2e-ios:
     name: E2E iOS
     runs-on: macos-latest
@@ -197,6 +205,14 @@ jobs:
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
             echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
 
+      - name: Upload Harness logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-logs-e2e-ios
+          path: apps/playground/.harness/logs
+          if-no-files-found: ignore
+
   e2e-web:
     name: E2E Web
     runs-on: ubuntu-22.04
@@ -242,6 +258,14 @@ jobs:
           afterRunHook: |
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
             echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
+
+      - name: Upload Harness logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-logs-e2e-web
+          path: apps/playground/.harness/logs
+          if-no-files-found: ignore
 
   crash-validate-android:
     name: Crash Validation Android
@@ -348,6 +372,14 @@ jobs:
             echo "ERROR: No crash report artifacts found in $CRASH_DIR"
             exit 1
           fi
+
+      - name: Upload Harness logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-logs-crash-validate-android
+          path: apps/playground/.harness/logs
+          if-no-files-found: ignore
 
   crash-validate-ios:
     name: Crash Validation iOS
@@ -465,3 +497,11 @@ jobs:
             echo "ERROR: No crash report artifacts found in $CRASH_DIR"
             exit 1
           fi
+
+      - name: Upload Harness logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-logs-crash-validate-ios
+          path: apps/playground/.harness/logs
+          if-no-files-found: ignore

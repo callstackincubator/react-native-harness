@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
 const mocks = vi.hoisted(() => ({
@@ -101,6 +102,8 @@ const createLongRunningSubprocess = (options?: {
       return childProcess;
     }),
     signalCode: null,
+    stderr: new PassThrough(),
+    stdout: new PassThrough(),
   };
 
   const iterable = {
@@ -184,6 +187,9 @@ describe('xctest-agent orchestration', () => {
       path.join(buildRoot, 'device', 'build-manifest.json'),
       JSON.stringify({
         buildInputsHash: getCurrentInputsHash(),
+        codeSign: {
+          teamId: 'TESTTEAM01',
+        },
         destinationKind: 'device',
       }),
     );
@@ -237,8 +243,8 @@ describe('xctest-agent orchestration', () => {
       ]),
       expect.objectContaining({
         env: expect.objectContaining({
-          HARNESS_XCTEST_AGENT_MODE: 'test',
-          HARNESS_XCTEST_AGENT_PORT: '49152',
+          TEST_RUNNER_HARNESS_XCTEST_AGENT_MODE: 'test',
+          TEST_RUNNER_HARNESS_XCTEST_AGENT_PORT: '49152',
         }),
       }),
     );
@@ -249,6 +255,19 @@ describe('xctest-agent orchestration', () => {
     expect(mocks.configurePermissions).toHaveBeenCalledWith({
       autoAcceptPermissions: true,
     });
+    const logDirectories = fs.readdirSync(path.join(tempProjectRoot, '.harness', 'logs'));
+    expect(logDirectories).toHaveLength(1);
+    const xcodebuildLogPath = path.join(
+      tempProjectRoot,
+      '.harness',
+      'logs',
+      logDirectories[0]!,
+      'xcodebuild.log'
+    );
+    expect(fs.existsSync(xcodebuildLogPath)).toBe(true);
+    expect(fs.readFileSync(xcodebuildLogPath, 'utf8')).toContain(
+      'command=xcodebuild test-without-building'
+    );
 
     await controller.dispose();
 
