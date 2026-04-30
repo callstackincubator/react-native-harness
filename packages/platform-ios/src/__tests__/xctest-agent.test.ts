@@ -65,7 +65,7 @@ const projectRoot = path.resolve(
   '..',
   'xctest-agent'
 );
-let simulatorBuildRoot = '';
+let simulatorCacheRoot = '';
 let deviceBuildRoot = '';
 let tempProjectRoot = '';
 const originalCwd = process.cwd();
@@ -138,12 +138,7 @@ describe('xctest-agent orchestration', () => {
       path.join(os.tmpdir(), 'rn-harness-xctest-agent-')
     );
     process.chdir(tempProjectRoot);
-    simulatorBuildRoot = path.join(
-      tempProjectRoot,
-      '.harness',
-      'cache',
-      'xctest-agent-simulator'
-    );
+    simulatorCacheRoot = path.join(tempProjectRoot, '.harness', 'cache');
     deviceBuildRoot = path.join(tempProjectRoot, '.harness', 'xctest-agent');
     rmBuildRoot();
     mocks.activeAgentStops.length = 0;
@@ -257,9 +252,14 @@ describe('xctest-agent orchestration', () => {
         'platform=iOS Simulator,id=sim-123',
       ])
     );
-    expect(fs.existsSync(path.join(simulatorBuildRoot, 'cache.json'))).toBe(
-      true
-    );
+    const cacheDirectories = fs.readdirSync(simulatorCacheRoot);
+    expect(cacheDirectories).toHaveLength(1);
+    expect(cacheDirectories[0]).toMatch(/^xctest-agent-simulator-/);
+    expect(
+      fs.existsSync(
+        path.join(simulatorCacheRoot, cacheDirectories[0]!, 'cache.json')
+      )
+    ).toBe(true);
   });
 
   it('reuses cached build artifacts for repeated prepares on the same destination kind', async () => {
@@ -434,18 +434,24 @@ describe('xctest-agent orchestration', () => {
       }
 
       if (file === 'xcodebuild' && args?.[0] === 'build-for-testing') {
-        fs.mkdirSync(path.join(simulatorBuildRoot, 'Build', 'Products'), {
-          recursive: true,
-        });
-        fs.writeFileSync(
-          path.join(
-            simulatorBuildRoot,
-            'Build',
-            'Products',
-            'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun'
-          ),
-          'cached xctestrun'
-        );
+        const derivedDataIndex = args.indexOf('-derivedDataPath');
+        const derivedDataPath =
+          derivedDataIndex === -1 ? undefined : args[derivedDataIndex + 1];
+
+        if (derivedDataPath) {
+          fs.mkdirSync(path.join(derivedDataPath, 'Build', 'Products'), {
+            recursive: true,
+          });
+          fs.writeFileSync(
+            path.join(
+              derivedDataPath,
+              'Build',
+              'Products',
+              'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun'
+            ),
+            'cached xctestrun'
+          );
+        }
       }
 
       return createLongRunningSubprocess().subprocess;
@@ -469,33 +475,10 @@ describe('xctest-agent orchestration', () => {
   });
 
   it('rebuilds when the cached build manifest no longer matches project inputs', async () => {
-    fs.mkdirSync(path.join(simulatorBuildRoot, 'Build', 'Products'), {
-      recursive: true,
+    writeSimulatorCacheDirectory({
+      buildInputsHash: 'stale-manifest-hash',
+      directoryName: 'xctest-agent-simulator-stale',
     });
-    fs.writeFileSync(
-      path.join(
-        simulatorBuildRoot,
-        'Build',
-        'Products',
-        'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun'
-      ),
-      'cached xctestrun'
-    );
-    fs.writeFileSync(
-      path.join(simulatorBuildRoot, 'cache.json'),
-      JSON.stringify({
-        artifactName: 'xctest-agent-simulator',
-        buildInputsHash: 'stale-manifest-hash',
-        destinationKind: 'simulator',
-        hostArchitecture: process.arch,
-        schemaVersion: 1,
-        simulatorRuntime,
-        simulatorSdkVersion,
-        xcodeVersion,
-        xctestrunRelativePath:
-          'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun',
-      })
-    );
 
     const controller = createXCTestAgentController({
       target: {
@@ -515,33 +498,10 @@ describe('xctest-agent orchestration', () => {
   });
 
   it('reuses simulator build artifacts only when the cache metadata matches', async () => {
-    fs.mkdirSync(path.join(simulatorBuildRoot, 'Build', 'Products'), {
-      recursive: true,
+    writeSimulatorCacheDirectory({
+      buildInputsHash: getCurrentInputsHash(),
+      directoryName: 'xctest-agent-simulator-existing',
     });
-    fs.writeFileSync(
-      path.join(
-        simulatorBuildRoot,
-        'Build',
-        'Products',
-        'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun'
-      ),
-      'cached xctestrun'
-    );
-    fs.writeFileSync(
-      path.join(simulatorBuildRoot, 'cache.json'),
-      JSON.stringify({
-        artifactName: 'xctest-agent-simulator',
-        buildInputsHash: getCurrentInputsHash(),
-        destinationKind: 'simulator',
-        hostArchitecture: process.arch,
-        schemaVersion: 1,
-        simulatorRuntime,
-        simulatorSdkVersion,
-        xcodeVersion,
-        xctestrunRelativePath:
-          'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun',
-      })
-    );
 
     const controller = createXCTestAgentController({
       target: {
@@ -597,7 +557,7 @@ describe('xctest-agent orchestration', () => {
 });
 
 const rmBuildRoot = () => {
-  fs.rmSync(simulatorBuildRoot, {
+  fs.rmSync(simulatorCacheRoot, {
     force: true,
     recursive: true,
   });
@@ -628,6 +588,41 @@ const getCurrentInputsHash = (): string => {
   hash.update('\0');
 
   return hash.digest('hex');
+};
+
+const writeSimulatorCacheDirectory = (options: {
+  buildInputsHash: string;
+  directoryName: string;
+}) => {
+  const derivedDataPath = path.join(simulatorCacheRoot, options.directoryName);
+
+  fs.mkdirSync(path.join(derivedDataPath, 'Build', 'Products'), {
+    recursive: true,
+  });
+  fs.writeFileSync(
+    path.join(
+      derivedDataPath,
+      'Build',
+      'Products',
+      'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun'
+    ),
+    'cached xctestrun'
+  );
+  fs.writeFileSync(
+    path.join(derivedDataPath, 'cache.json'),
+    JSON.stringify({
+      artifactName: 'xctest-agent-simulator',
+      buildInputsHash: options.buildInputsHash,
+      destinationKind: 'simulator',
+      hostArchitecture: process.arch,
+      schemaVersion: 1,
+      simulatorRuntime,
+      simulatorSdkVersion,
+      xcodeVersion,
+      xctestrunRelativePath:
+        'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun',
+    })
+  );
 };
 
 const getInputFiles = (root: string): string[] => {

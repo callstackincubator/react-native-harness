@@ -165,8 +165,8 @@ jobs:
         id: cache-xctest-agent-restore
         uses: actions/cache/restore@v4
         with:
-          path: ./apps/playground/.harness/cache/xctest-agent-simulator
-          key: xctest-agent-${{ runner.os }}-xcode-26.0-${{ hashFiles('packages/platform-ios/xctest-agent/**', 'packages/platform-ios/src/xctest-agent.ts') }}
+          path: ./apps/playground/.harness/cache
+          key: xctest-agent-${{ runner.os }}-xcode-26.0-${{ hashFiles('apps/playground/.harness/cache/*/cache.json') }}
           restore-keys: |
             xctest-agent-${{ runner.os }}-xcode-26.
 
@@ -218,8 +218,8 @@ jobs:
         if: steps.cache-xctest-agent-restore.outputs.cache-hit != 'true' && success()
         uses: actions/cache/save@v4
         with:
-          path: ./apps/playground/.harness/cache/xctest-agent-simulator
-          key: xctest-agent-${{ runner.os }}-xcode-26.0-${{ hashFiles('packages/platform-ios/xctest-agent/**', 'packages/platform-ios/src/xctest-agent.ts') }}
+          path: ./apps/playground/.harness/cache
+          key: xctest-agent-${{ runner.os }}-xcode-26.0-${{ hashFiles('apps/playground/.harness/cache/*/cache.json') }}
 
       - name: Upload Harness logs
         if: always()
