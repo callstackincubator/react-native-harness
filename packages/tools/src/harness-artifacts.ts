@@ -12,6 +12,9 @@ const sanitizePathSegment = (value: string) =>
 const formatRunTimestamp = (value: Date) =>
   value.toISOString().replace(/[:.]/g, '-');
 
+const isDefined = (value: string | undefined): value is string =>
+  value !== undefined;
+
 export const createHarnessArtifactDirectory = ({
   artifactType,
   bundleId,
@@ -34,7 +37,7 @@ export const createHarnessArtifactDirectory = ({
     runnerName,
     bundleId,
   ]
-    .filter(Boolean)
+    .filter(isDefined)
     .map((value) => sanitizePathSegment(value))
     .join('--');
   const directoryPath = path.join(artifactRoot, runDirName);
