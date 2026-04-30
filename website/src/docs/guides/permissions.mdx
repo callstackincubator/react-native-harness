@@ -25,7 +25,7 @@ When `permissions` is `true`:
 
 - On iOS simulators, Harness starts the XCTest agent and enables best-effort permission prompt auto-accept.
 - On iOS physical devices, Harness also starts the XCTest agent when the runner is configured with `device.codeSign`.
-- On Android emulators and physical devices, Harness uses `adb shell pm grant` to automatically grant a set of common permissions.
+- On Android emulators and physical devices, Harness uses `adb shell pm grant` to automatically grant the app's requested dangerous permissions.
 
 ## Platform-Specific Implementation Details
 
@@ -45,23 +45,19 @@ Because this is button-based automation, it should be treated as a practical hel
 
 ### Android
 
-On Android, Harness pre-grants a comprehensive set of common dangerous permissions using `adb shell pm grant`. This approach:
+On Android, Harness inspects the installed app and grants only the permissions that meet both of these conditions:
+
+- The app declares the permission in its manifest
+- The permission is currently classified by the device as a dangerous permission
+
+This approach:
 
 - Grants permissions **proactively** before the app runs, avoiding permission dialogs during testing
 - Works on both emulators and physical devices
-- Includes location, camera, microphone, contacts, calendar, storage, SMS, and other common test permissions
-- Uses the `pm grant` command which requires API 23+ or emulated environment support
+- Avoids trying to grant normal permissions such as `INTERNET` that do not require a runtime grant
+- Uses `adb shell pm grant` for each matching permission
 
-The default set of granted permissions includes:
-- Location (fine and coarse)
-- Camera and microphone
-- Contacts and calendar (read/write)
-- Call log (read/write)
-- Storage (read/write)
-- Phone state and calling
-- SMS (read/send/receive)
-- Body sensors
-- Network state and internet
+In practice, apps commonly end up having permissions such as camera, microphone, location, contacts, calendar, storage, SMS, or sensors granted automatically, but the exact set depends on what the app requests.
 
 ## Performance Impact
 
