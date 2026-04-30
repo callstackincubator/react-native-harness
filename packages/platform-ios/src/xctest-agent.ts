@@ -27,7 +27,7 @@ const XCTEST_AGENT_SCHEME_NAME = 'HarnessXCTestAgent';
 const XCTEST_AGENT_PORT_ENV = 'HARNESS_XCTEST_AGENT_PORT';
 const XCTEST_AGENT_TARGET_BUNDLE_ID_ENV =
   'HARNESS_XCTEST_AGENT_TARGET_BUNDLE_ID';
-const XCTEST_AGENT_STARTUP_TIMEOUT_MS = 60_000;
+const XCTEST_AGENT_STARTUP_TIMEOUT_MS = 120_000;
 const XCTEST_AGENT_SHUTDOWN_TIMEOUT_MS = 5_000;
 const XCTEST_AGENT_STARTUP_POLL_INTERVAL_MS = 250;
 const HARNESS_DIRNAME = '.harness';
@@ -36,14 +36,14 @@ const pipelineAsync = promisify(pipeline);
 
 type XCTestAgentTarget =
   | {
-      kind: 'simulator';
-      id: string;
-    }
+    kind: 'simulator';
+    id: string;
+  }
   | {
-      kind: 'device';
-      id: string;
-      codeSign: ApplePhysicalDeviceCodeSign;
-    };
+    kind: 'device';
+    id: string;
+    codeSign: ApplePhysicalDeviceCodeSign;
+  };
 
 export type XCTestAgentCapability = {
   getLaunchEnvironment?: () => Record<string, string>;
@@ -232,7 +232,7 @@ const shouldReuseBuildArtifacts = (
       manifest.codeSign?.teamId !== target.codeSign.teamId ||
       manifest.codeSign?.signingIdentity !== target.codeSign.signingIdentity ||
       manifest.codeSign?.provisioningProfile !==
-        target.codeSign.provisioningProfile
+      target.codeSign.provisioningProfile
     ) {
       return false;
     }
@@ -458,8 +458,8 @@ export const createXCTestAgentController = (options: {
       {},
       options.appBundleId
         ? {
-            [XCTEST_AGENT_TARGET_BUNDLE_ID_ENV]: options.appBundleId,
-          }
+          [XCTEST_AGENT_TARGET_BUNDLE_ID_ENV]: options.appBundleId,
+        }
         : {},
       ...capabilities.map(
         (capability) => capability.getLaunchEnvironment?.() ?? {}
