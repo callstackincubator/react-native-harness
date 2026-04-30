@@ -12,6 +12,7 @@ import {
   hasAvd,
   installApp,
   startEmulator,
+  uninstallApp,
   waitForBoot,
   waitForEmulatorDisconnect,
 } from '../adb.js';
@@ -143,6 +144,21 @@ describe('getStartAppArgs', () => {
       'install',
       '-r',
       '/tmp/app.apk',
+    ]);
+  });
+
+  it('uninstalls the app via adb', async () => {
+    const spawnSpy = vi
+      .spyOn(tools, 'spawn')
+      .mockResolvedValueOnce({} as Awaited<ReturnType<typeof tools.spawn>>);
+
+    await uninstallApp('emulator-5554', 'com.example.app');
+
+    expect(spawnSpy).toHaveBeenCalledWith(expect.stringMatching(/adb$/), [
+      '-s',
+      'emulator-5554',
+      'uninstall',
+      'com.example.app',
     ]);
   });
 

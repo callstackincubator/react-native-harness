@@ -476,6 +476,13 @@ export const installApp = async (
   await spawn(getAdbBinaryPath(), ['-s', adbId, 'install', '-r', appPath]);
 };
 
+export const uninstallApp = async (
+  adbId: string,
+  bundleId: string,
+): Promise<void> => {
+  await spawn(getAdbBinaryPath(), ['-s', adbId, 'uninstall', bundleId]);
+};
+
 export const hasAvd = async (name: string): Promise<boolean> => {
   const avds = await getAvds();
   return avds.includes(name);
