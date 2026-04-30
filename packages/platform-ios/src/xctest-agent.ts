@@ -1,5 +1,6 @@
 import {
   createHarnessArtifactDirectory,
+  getHarnessCacheArtifactPath,
   getAvailablePort,
   logger,
   spawn,
@@ -16,6 +17,7 @@ import {
   type XCTestAgentPermissionsConfiguration,
 } from './xctest-agent-client.js';
 import type { ApplePhysicalDeviceCodeSign } from './config.js';
+import { getSimulators } from './xcrun/simctl.js';
 import type { XCTestAgentTransport } from './xctest-agent-transport.js';
 import { createDeviceXCTestAgentTransport } from './xctest-agent-transport-device.js';
 import { createSimulatorXCTestAgentTransport } from './xctest-agent-transport-simulator.js';
@@ -32,18 +34,20 @@ const XCTEST_AGENT_SHUTDOWN_TIMEOUT_MS = 5_000;
 const XCTEST_AGENT_STARTUP_POLL_INTERVAL_MS = 250;
 const HARNESS_DIRNAME = '.harness';
 const XCTEST_AGENT_BUILD_DIRNAME = 'xctest-agent';
+const XCTEST_AGENT_SIMULATOR_CACHE_ARTIFACT = 'xctest-agent-simulator';
+const XCTEST_AGENT_SIMULATOR_CACHE_SCHEMA_VERSION = 1;
 const pipelineAsync = promisify(pipeline);
 
 type XCTestAgentTarget =
   | {
-    kind: 'simulator';
-    id: string;
-  }
+      kind: 'simulator';
+      id: string;
+    }
   | {
-    kind: 'device';
-    id: string;
-    codeSign: ApplePhysicalDeviceCodeSign;
-  };
+      kind: 'device';
+      id: string;
+      codeSign: ApplePhysicalDeviceCodeSign;
+    };
 
 export type XCTestAgentCapability = {
   getLaunchEnvironment?: () => Record<string, string>;
@@ -61,6 +65,23 @@ type XCTestAgentBuildManifest = {
   destinationKind: XCTestAgentTarget['kind'];
   codeSign?: ApplePhysicalDeviceCodeSign;
 };
+
+type SimulatorXCTestAgentCacheManifest = {
+  artifactName: typeof XCTEST_AGENT_SIMULATOR_CACHE_ARTIFACT;
+  buildInputsHash: string;
+  destinationKind: 'simulator';
+  hostArchitecture: string;
+  schemaVersion: typeof XCTEST_AGENT_SIMULATOR_CACHE_SCHEMA_VERSION;
+  simulatorRuntime: string;
+  simulatorSdkVersion: string;
+  xcodeVersion: string;
+  xctestrunRelativePath: string;
+};
+
+type SimulatorXCTestAgentCacheContext = Omit<
+  SimulatorXCTestAgentCacheManifest,
+  'artifactName' | 'destinationKind' | 'schemaVersion' | 'xctestrunRelativePath'
+>;
 
 export type XCTestAgentController = {
   prepare: () => Promise<void>;
@@ -97,10 +118,18 @@ const getXCTestAgentBuildRoot = (): string => {
 };
 
 const getXCTestAgentDerivedDataPath = (target: XCTestAgentTarget): string => {
+  if (target.kind === 'simulator') {
+    return getHarnessCacheArtifactPath(XCTEST_AGENT_SIMULATOR_CACHE_ARTIFACT);
+  }
+
   return path.join(getXCTestAgentBuildRoot(), target.kind);
 };
 
 const getXCTestAgentBuildManifestPath = (target: XCTestAgentTarget): string => {
+  if (target.kind === 'simulator') {
+    return path.join(getXCTestAgentDerivedDataPath(target), 'cache.json');
+  }
+
   return path.join(
     getXCTestAgentDerivedDataPath(target),
     'build-manifest.json'
@@ -147,6 +176,10 @@ const getXCTestAgentBuildSigningArgs = (
 
 const getXCTestAgentBuildProductsPath = (target: XCTestAgentTarget): string => {
   return path.join(getXCTestAgentDerivedDataPath(target), 'Build', 'Products');
+};
+
+const getXCTestAgentSourceFilePath = (): string => {
+  return fileURLToPath(import.meta.url);
 };
 
 const readBuildManifest = (
@@ -207,13 +240,166 @@ const getProjectInputsHash = (): string => {
     hash.update('\0');
   }
 
+  const sourceFilePath = getXCTestAgentSourceFilePath();
+  hash.update(path.basename(sourceFilePath));
+  hash.update('\0');
+  hash.update(fs.readFileSync(sourceFilePath));
+  hash.update('\0');
+
   return hash.digest('hex');
+};
+
+const getXCTestRunRelativePath = (target: XCTestAgentTarget): string | null => {
+  const buildProductsPath = getXCTestAgentBuildProductsPath(target);
+
+  if (!fs.existsSync(buildProductsPath)) {
+    return null;
+  }
+
+  const entries = fs.readdirSync(buildProductsPath, { recursive: true });
+  const xctestrunEntry = entries.find(
+    (entry) => typeof entry === 'string' && entry.endsWith('.xctestrun')
+  );
+
+  return typeof xctestrunEntry === 'string' ? xctestrunEntry : null;
+};
+
+const readSimulatorBuildManifest =
+  (): SimulatorXCTestAgentCacheManifest | null => {
+    const manifestPath = getXCTestAgentBuildManifestPath({
+      kind: 'simulator',
+      id: 'unused',
+    });
+
+    if (!fs.existsSync(manifestPath)) {
+      return null;
+    }
+
+    const manifest = JSON.parse(
+      fs.readFileSync(manifestPath, 'utf8')
+    ) as Partial<SimulatorXCTestAgentCacheManifest>;
+
+    if (
+      manifest.schemaVersion !== XCTEST_AGENT_SIMULATOR_CACHE_SCHEMA_VERSION ||
+      manifest.artifactName !== XCTEST_AGENT_SIMULATOR_CACHE_ARTIFACT ||
+      manifest.destinationKind !== 'simulator' ||
+      typeof manifest.buildInputsHash !== 'string' ||
+      typeof manifest.hostArchitecture !== 'string' ||
+      typeof manifest.simulatorRuntime !== 'string' ||
+      typeof manifest.simulatorSdkVersion !== 'string' ||
+      typeof manifest.xcodeVersion !== 'string' ||
+      typeof manifest.xctestrunRelativePath !== 'string'
+    ) {
+      return null;
+    }
+
+    return manifest as SimulatorXCTestAgentCacheManifest;
+  };
+
+const writeSimulatorBuildManifest = (
+  manifest: SimulatorXCTestAgentCacheManifest
+) => {
+  const derivedDataPath = getXCTestAgentDerivedDataPath({
+    kind: 'simulator',
+    id: 'unused',
+  });
+  fs.mkdirSync(derivedDataPath, { recursive: true });
+  fs.writeFileSync(
+    path.join(derivedDataPath, 'cache.json'),
+    JSON.stringify(manifest, null, 2)
+  );
+};
+
+const getCurrentXcodeVersion = async (): Promise<string> => {
+  const { stdout } = await spawn('xcodebuild', ['-version']);
+  return stdout.trim();
+};
+
+const getCurrentSimulatorSdkVersion = async (): Promise<string> => {
+  const { stdout } = await spawn('xcodebuild', [
+    '-version',
+    '-sdk',
+    'iphonesimulator',
+    'SDKVersion',
+  ]);
+  return stdout.trim();
+};
+
+const getCurrentSimulatorRuntime = async (
+  simulatorId: string
+): Promise<string> => {
+  const simulators = await getSimulators();
+  const simulator = simulators.find(
+    (candidate) => candidate.udid === simulatorId
+  );
+
+  if (!simulator) {
+    throw new Error(`Simulator with UDID ${simulatorId} not found`);
+  }
+
+  return simulator.runtime;
+};
+
+const getSimulatorCacheContext = async (
+  target: Extract<XCTestAgentTarget, { kind: 'simulator' }>,
+  buildInputsHash: string
+): Promise<SimulatorXCTestAgentCacheContext> => {
+  const [xcodeVersion, simulatorSdkVersion, simulatorRuntime] =
+    await Promise.all([
+      getCurrentXcodeVersion(),
+      getCurrentSimulatorSdkVersion(),
+      getCurrentSimulatorRuntime(target.id),
+    ]);
+
+  return {
+    buildInputsHash,
+    hostArchitecture: process.arch,
+    simulatorRuntime,
+    simulatorSdkVersion,
+    xcodeVersion,
+  };
+};
+
+const shouldReuseSimulatorBuildArtifacts = (
+  context: SimulatorXCTestAgentCacheContext
+): boolean => {
+  const manifest = readSimulatorBuildManifest();
+
+  if (!manifest) {
+    return false;
+  }
+
+  if (
+    manifest.buildInputsHash !== context.buildInputsHash ||
+    manifest.hostArchitecture !== context.hostArchitecture ||
+    manifest.simulatorRuntime !== context.simulatorRuntime ||
+    manifest.simulatorSdkVersion !== context.simulatorSdkVersion ||
+    manifest.xcodeVersion !== context.xcodeVersion
+  ) {
+    return false;
+  }
+
+  const buildProductsPath = getXCTestAgentBuildProductsPath({
+    kind: 'simulator',
+    id: 'unused',
+  });
+
+  return (
+    fs.existsSync(buildProductsPath) &&
+    fs.existsSync(path.join(buildProductsPath, manifest.xctestrunRelativePath))
+  );
 };
 
 const shouldReuseBuildArtifacts = (
   target: XCTestAgentTarget,
   buildInputsHash: string
 ): boolean => {
+  if (target.kind === 'simulator') {
+    throw new Error(
+      'Simulator build reuse must be validated with cache compatibility metadata'
+    );
+  }
+
   const manifest = readBuildManifest(target);
 
   if (!manifest) {
@@ -232,7 +418,7 @@ const shouldReuseBuildArtifacts = (
       manifest.codeSign?.teamId !== target.codeSign.teamId ||
       manifest.codeSign?.signingIdentity !== target.codeSign.signingIdentity ||
       manifest.codeSign?.provisioningProfile !==
-      target.codeSign.provisioningProfile
+        target.codeSign.provisioningProfile
     ) {
       return false;
     }
@@ -410,7 +596,11 @@ const attachProcessOutputLog = async (options: {
     for await (const chunk of stream) {
       mergedOutput.write(`[${label}] `);
       mergedOutput.write(chunk);
-      if (Buffer.isBuffer(chunk) ? !chunk.includes(0x0a) : !String(chunk).endsWith('\n')) {
+      if (
+        Buffer.isBuffer(chunk)
+          ? !chunk.includes(0x0a)
+          : !String(chunk).endsWith('\n')
+      ) {
         mergedOutput.write('\n');
       }
     }
@@ -447,7 +637,10 @@ export const createXCTestAgentController = (options: {
     platformId: 'ios',
     runnerName: `xctest-agent-${target.kind}`,
   });
-  const xcodebuildLogPath = path.join(logArtifacts.directoryPath, 'xcodebuild.log');
+  const xcodebuildLogPath = path.join(
+    logArtifacts.directoryPath,
+    'xcodebuild.log'
+  );
   let prepared = false;
   let agentProcess: Subprocess | null = null;
   let agentClient: ReturnType<typeof createXCTestAgentClient> | null = null;
@@ -458,8 +651,8 @@ export const createXCTestAgentController = (options: {
       {},
       options.appBundleId
         ? {
-          [XCTEST_AGENT_TARGET_BUNDLE_ID_ENV]: options.appBundleId,
-        }
+            [XCTEST_AGENT_TARGET_BUNDLE_ID_ENV]: options.appBundleId,
+          }
         : {},
       ...capabilities.map(
         (capability) => capability.getLaunchEnvironment?.() ?? {}
@@ -495,7 +688,25 @@ export const createXCTestAgentController = (options: {
     );
     assertXCTestAgentProjectExists();
 
-    if (shouldReuseBuildArtifacts(target, buildInputsHash)) {
+    if (target.kind === 'simulator') {
+      const cacheContext = await getSimulatorCacheContext(
+        target,
+        buildInputsHash
+      );
+
+      if (shouldReuseSimulatorBuildArtifacts(cacheContext)) {
+        prepared = true;
+        xctestAgentLogger.info(
+          'Reusing cached XCTest agent build for %s target',
+          target.kind
+        );
+        xctestAgentLogger.debug(
+          'reusing cached XCTest agent build for %s',
+          target.kind
+        );
+        return;
+      }
+    } else if (shouldReuseBuildArtifacts(target, buildInputsHash)) {
       prepared = true;
       xctestAgentLogger.info(
         'Reusing cached XCTest agent build for %s target',
@@ -508,7 +719,7 @@ export const createXCTestAgentController = (options: {
       return;
     }
 
-    fs.mkdirSync(getXCTestAgentBuildRoot(), { recursive: true });
+    fs.mkdirSync(getXCTestAgentDerivedDataPath(target), { recursive: true });
 
     xctestAgentLogger.debug('building XCTest agent for %s', target.kind);
     xctestAgentLogger.info('Building XCTest agent for %s target', target.kind);
@@ -526,11 +737,35 @@ export const createXCTestAgentController = (options: {
       ...getXCTestAgentBuildSigningArgs(target),
     ]);
 
-    writeBuildManifest(target, {
-      buildInputsHash,
-      destinationKind: target.kind,
-      codeSign: target.kind === 'device' ? target.codeSign : undefined,
-    });
+    if (target.kind === 'simulator') {
+      const cacheContext = await getSimulatorCacheContext(
+        target,
+        buildInputsHash
+      );
+      const xctestrunRelativePath = getXCTestRunRelativePath(target);
+
+      if (!xctestrunRelativePath) {
+        throw new Error(
+          `Missing generated .xctestrun file in ${getXCTestAgentBuildProductsPath(
+            target
+          )}`
+        );
+      }
+
+      writeSimulatorBuildManifest({
+        artifactName: XCTEST_AGENT_SIMULATOR_CACHE_ARTIFACT,
+        destinationKind: 'simulator',
+        schemaVersion: XCTEST_AGENT_SIMULATOR_CACHE_SCHEMA_VERSION,
+        xctestrunRelativePath,
+        ...cacheContext,
+      });
+    } else {
+      writeBuildManifest(target, {
+        buildInputsHash,
+        destinationKind: target.kind,
+        codeSign: target.codeSign,
+      });
+    }
     xctestAgentLogger.info('Built XCTest agent for %s target', target.kind);
     prepared = true;
   };
@@ -566,26 +801,25 @@ export const createXCTestAgentController = (options: {
       '-derivedDataPath',
       getXCTestAgentDerivedDataPath(target),
     ];
-    agentProcess = spawn(
-      'xcodebuild',
-      xcodebuildArgs,
-      {
-        cwd: getXCTestAgentProjectRoot(),
-        env: {
-          ...process.env,
-          ...toTestRunnerEnv({
-            [XCTEST_AGENT_PORT_ENV]: String(port),
-            ...getLaunchEnvironment(),
-          }),
-        },
-      }
-    );
+    agentProcess = spawn('xcodebuild', xcodebuildArgs, {
+      cwd: getXCTestAgentProjectRoot(),
+      env: {
+        ...process.env,
+        ...toTestRunnerEnv({
+          [XCTEST_AGENT_PORT_ENV]: String(port),
+          ...getLaunchEnvironment(),
+        }),
+      },
+    });
     void attachProcessOutputLog({
       command: ['xcodebuild', ...xcodebuildArgs].join(' '),
       logFilePath: xcodebuildLogPath,
       process: agentProcess,
     });
-    xctestAgentLogger.info('Saving XCTest agent xcodebuild logs to %s', xcodebuildLogPath);
+    xctestAgentLogger.info(
+      'Saving XCTest agent xcodebuild logs to %s',
+      xcodebuildLogPath
+    );
 
     const currentProcess = agentProcess;
     if (typeof currentProcess.catch === 'function') {

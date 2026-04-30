@@ -63,11 +63,15 @@ const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
   '..',
-  'xctest-agent',
+  'xctest-agent'
 );
-let buildRoot = '';
+let simulatorBuildRoot = '';
+let deviceBuildRoot = '';
 let tempProjectRoot = '';
 const originalCwd = process.cwd();
+const simulatorRuntime = 'com.apple.CoreSimulator.SimRuntime.iOS-26-0';
+const simulatorSdkVersion = '26.0';
+const xcodeVersion = 'Xcode 26.0\nBuild version 17A123';
 
 const createLongRunningSubprocess = (options?: {
   ignoreSignal?: NodeJS.Signals;
@@ -131,17 +135,96 @@ describe('xctest-agent orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tempProjectRoot = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'rn-harness-xctest-agent-'),
+      path.join(os.tmpdir(), 'rn-harness-xctest-agent-')
     );
     process.chdir(tempProjectRoot);
-    buildRoot = path.join(tempProjectRoot, '.harness', 'xctest-agent');
+    simulatorBuildRoot = path.join(
+      tempProjectRoot,
+      '.harness',
+      'cache',
+      'xctest-agent-simulator'
+    );
+    deviceBuildRoot = path.join(tempProjectRoot, '.harness', 'xctest-agent');
     rmBuildRoot();
     mocks.activeAgentStops.length = 0;
     mocks.spawn.mockImplementation((file: string, args?: string[]) => {
+      if (file === 'xcodebuild' && args?.join(' ') === '-version') {
+        return Promise.resolve({ stdout: xcodeVersion });
+      }
+
+      if (
+        file === 'xcodebuild' &&
+        args?.join(' ') === '-version -sdk iphonesimulator SDKVersion'
+      ) {
+        return Promise.resolve({ stdout: simulatorSdkVersion });
+      }
+
+      if (
+        file === 'xcrun' &&
+        args?.join(' ') === 'simctl list devices --json'
+      ) {
+        return Promise.resolve({
+          stdout: JSON.stringify({
+            devices: {
+              [simulatorRuntime]: [
+                {
+                  isAvailable: true,
+                  name: 'iPhone 16',
+                  state: 'Shutdown',
+                  udid: 'sim-123',
+                },
+                {
+                  isAvailable: true,
+                  name: 'iPhone 16 Pro',
+                  state: 'Shutdown',
+                  udid: 'sim-999',
+                },
+                {
+                  isAvailable: true,
+                  name: 'iPhone 16 Plus',
+                  state: 'Shutdown',
+                  udid: 'sim-timeout',
+                },
+                {
+                  isAvailable: true,
+                  name: 'iPhone 16 Mini',
+                  state: 'Shutdown',
+                  udid: 'sim-404',
+                },
+              ],
+            },
+          }),
+        });
+      }
+
       if (file === 'xcodebuild' && args?.[0] === 'test-without-building') {
         const process = createLongRunningSubprocess();
         mocks.activeAgentStops.push(process.stop);
         return process.subprocess;
+      }
+
+      if (file === 'xcodebuild' && args?.[0] === 'build-for-testing') {
+        const derivedDataIndex = args.indexOf('-derivedDataPath');
+        const derivedDataPath =
+          derivedDataIndex === -1 ? undefined : args[derivedDataIndex + 1];
+
+        if (derivedDataPath) {
+          const buildProductsPath = path.join(
+            derivedDataPath,
+            'Build',
+            'Products'
+          );
+          fs.mkdirSync(path.join(buildProductsPath, 'Debug-iphonesimulator'), {
+            recursive: true,
+          });
+          fs.writeFileSync(
+            path.join(
+              buildProductsPath,
+              'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun'
+            ),
+            'cached xctestrun'
+          );
+        }
       }
 
       return createLongRunningSubprocess().subprocess;
@@ -166,32 +249,32 @@ describe('xctest-agent orchestration', () => {
     await controller.prepare();
 
     expect(mocks.spawn).toHaveBeenNthCalledWith(
-      1,
+      4,
       'xcodebuild',
       expect.arrayContaining([
         'build-for-testing',
         '-destination',
         'platform=iOS Simulator,id=sim-123',
-      ]),
+      ])
     );
-    expect(
-      fs.existsSync(path.join(buildRoot, 'simulator', 'build-manifest.json')),
-    ).toBe(true);
+    expect(fs.existsSync(path.join(simulatorBuildRoot, 'cache.json'))).toBe(
+      true
+    );
   });
 
   it('reuses cached build artifacts for repeated prepares on the same destination kind', async () => {
-    fs.mkdirSync(path.join(buildRoot, 'device', 'Build', 'Products'), {
+    fs.mkdirSync(path.join(deviceBuildRoot, 'device', 'Build', 'Products'), {
       recursive: true,
     });
     fs.writeFileSync(
-      path.join(buildRoot, 'device', 'build-manifest.json'),
+      path.join(deviceBuildRoot, 'device', 'build-manifest.json'),
       JSON.stringify({
         buildInputsHash: getCurrentInputsHash(),
         codeSign: {
           teamId: 'TESTTEAM01',
         },
         destinationKind: 'device',
-      }),
+      })
     );
 
     const controller = createXCTestAgentController({
@@ -233,7 +316,7 @@ describe('xctest-agent orchestration', () => {
     await controller.ensureStarted();
     await controller.ensureStarted();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+    expect(mocks.spawn).toHaveBeenCalledTimes(8);
     expect(mocks.spawn).toHaveBeenLastCalledWith(
       'xcodebuild',
       expect.arrayContaining([
@@ -246,7 +329,7 @@ describe('xctest-agent orchestration', () => {
           TEST_RUNNER_HARNESS_XCTEST_AGENT_MODE: 'test',
           TEST_RUNNER_HARNESS_XCTEST_AGENT_PORT: '49152',
         }),
-      }),
+      })
     );
     expect(createSimulatorXCTestAgentTransport).toHaveBeenCalledWith({
       port: 49152,
@@ -255,7 +338,9 @@ describe('xctest-agent orchestration', () => {
     expect(mocks.configurePermissions).toHaveBeenCalledWith({
       autoAcceptPermissions: true,
     });
-    const logDirectories = fs.readdirSync(path.join(tempProjectRoot, '.harness', 'logs'));
+    const logDirectories = fs.readdirSync(
+      path.join(tempProjectRoot, '.harness', 'logs')
+    );
     expect(logDirectories).toHaveLength(1);
     const xcodebuildLogPath = path.join(
       tempProjectRoot,
@@ -312,9 +397,55 @@ describe('xctest-agent orchestration', () => {
 
   it('force kills the agent process when graceful shutdown times out', async () => {
     mocks.spawn.mockImplementation((file: string, args?: string[]) => {
+      if (file === 'xcodebuild' && args?.join(' ') === '-version') {
+        return Promise.resolve({ stdout: xcodeVersion });
+      }
+
+      if (
+        file === 'xcodebuild' &&
+        args?.join(' ') === '-version -sdk iphonesimulator SDKVersion'
+      ) {
+        return Promise.resolve({ stdout: simulatorSdkVersion });
+      }
+
+      if (
+        file === 'xcrun' &&
+        args?.join(' ') === 'simctl list devices --json'
+      ) {
+        return Promise.resolve({
+          stdout: JSON.stringify({
+            devices: {
+              [simulatorRuntime]: [
+                {
+                  isAvailable: true,
+                  name: 'iPhone 16 Plus',
+                  state: 'Shutdown',
+                  udid: 'sim-timeout',
+                },
+              ],
+            },
+          }),
+        });
+      }
+
       if (file === 'xcodebuild' && args?.[0] === 'test-without-building') {
         return createLongRunningSubprocess({ ignoreSignal: 'SIGTERM' })
           .subprocess;
+      }
+
+      if (file === 'xcodebuild' && args?.[0] === 'build-for-testing') {
+        fs.mkdirSync(path.join(simulatorBuildRoot, 'Build', 'Products'), {
+          recursive: true,
+        });
+        fs.writeFileSync(
+          path.join(
+            simulatorBuildRoot,
+            'Build',
+            'Products',
+            'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun'
+          ),
+          'cached xctestrun'
+        );
       }
 
       return createLongRunningSubprocess().subprocess;
@@ -338,15 +469,32 @@ describe('xctest-agent orchestration', () => {
   });
 
   it('rebuilds when the cached build manifest no longer matches project inputs', async () => {
-    fs.mkdirSync(path.join(buildRoot, 'simulator', 'Build', 'Products'), {
+    fs.mkdirSync(path.join(simulatorBuildRoot, 'Build', 'Products'), {
       recursive: true,
     });
     fs.writeFileSync(
-      path.join(buildRoot, 'simulator', 'build-manifest.json'),
+      path.join(
+        simulatorBuildRoot,
+        'Build',
+        'Products',
+        'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun'
+      ),
+      'cached xctestrun'
+    );
+    fs.writeFileSync(
+      path.join(simulatorBuildRoot, 'cache.json'),
       JSON.stringify({
+        artifactName: 'xctest-agent-simulator',
         buildInputsHash: 'stale-manifest-hash',
         destinationKind: 'simulator',
-      }),
+        hostArchitecture: process.arch,
+        schemaVersion: 1,
+        simulatorRuntime,
+        simulatorSdkVersion,
+        xcodeVersion,
+        xctestrunRelativePath:
+          'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun',
+      })
     );
 
     const controller = createXCTestAgentController({
@@ -358,19 +506,60 @@ describe('xctest-agent orchestration', () => {
 
     await controller.prepare();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(mocks.spawn).toHaveBeenCalledTimes(7);
     expect(mocks.spawn).toHaveBeenNthCalledWith(
-      1,
+      4,
       'xcodebuild',
-      expect.arrayContaining(['build-for-testing']),
+      expect.arrayContaining(['build-for-testing'])
     );
+  });
+
+  it('reuses simulator build artifacts only when the cache metadata matches', async () => {
+    fs.mkdirSync(path.join(simulatorBuildRoot, 'Build', 'Products'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(
+        simulatorBuildRoot,
+        'Build',
+        'Products',
+        'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun'
+      ),
+      'cached xctestrun'
+    );
+    fs.writeFileSync(
+      path.join(simulatorBuildRoot, 'cache.json'),
+      JSON.stringify({
+        artifactName: 'xctest-agent-simulator',
+        buildInputsHash: getCurrentInputsHash(),
+        destinationKind: 'simulator',
+        hostArchitecture: process.arch,
+        schemaVersion: 1,
+        simulatorRuntime,
+        simulatorSdkVersion,
+        xcodeVersion,
+        xctestrunRelativePath:
+          'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun',
+      })
+    );
+
+    const controller = createXCTestAgentController({
+      target: {
+        kind: 'simulator',
+        id: 'sim-123',
+      },
+    });
+
+    await controller.prepare();
+
+    expect(mocks.spawn).toHaveBeenCalledTimes(3);
   });
 
   it('fails fast when the checked-in xcode project is missing', async () => {
     const projectPath = path.join(projectRoot, 'HarnessXCTestAgent.xcodeproj');
     const hiddenProjectPath = path.join(
       projectRoot,
-      'HarnessXCTestAgent.xcodeproj.test-hidden',
+      'HarnessXCTestAgent.xcodeproj.test-hidden'
     );
 
     fs.renameSync(projectPath, hiddenProjectPath);
@@ -384,7 +573,7 @@ describe('xctest-agent orchestration', () => {
       });
 
       await expect(controller.prepare()).rejects.toThrow(
-        'Missing checked-in XCTest agent project',
+        'Missing checked-in XCTest agent project'
       );
       expect(mocks.spawn).not.toHaveBeenCalled();
     } finally {
@@ -408,7 +597,11 @@ describe('xctest-agent orchestration', () => {
 });
 
 const rmBuildRoot = () => {
-  fs.rmSync(buildRoot, {
+  fs.rmSync(simulatorBuildRoot, {
+    force: true,
+    recursive: true,
+  });
+  fs.rmSync(deviceBuildRoot, {
     force: true,
     recursive: true,
   });
@@ -423,6 +616,16 @@ const getCurrentInputsHash = (): string => {
     hash.update(fs.readFileSync(filePath));
     hash.update('\0');
   }
+
+  const sourceFilePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    'xctest-agent.ts'
+  );
+  hash.update(path.basename(sourceFilePath));
+  hash.update('\0');
+  hash.update(fs.readFileSync(sourceFilePath));
+  hash.update('\0');
 
   return hash.digest('hex');
 };

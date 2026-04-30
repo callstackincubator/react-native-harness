@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { createHarnessArtifactDirectory } from '../harness-artifacts.js';
+import {
+  createHarnessArtifactDirectory,
+  getHarnessCacheArtifactPath,
+  getHarnessCacheRootPath,
+  getHarnessRootPath,
+} from '../harness-artifacts.js';
 
 describe('createHarnessArtifactDirectory', () => {
   const rootDir = fs.mkdtempSync(
@@ -33,5 +38,15 @@ describe('createHarnessArtifactDirectory', () => {
       )
     );
     expect(fs.existsSync(artifacts.directoryPath)).toBe(true);
+  });
+
+  it('resolves the shared harness cache paths', () => {
+    expect(getHarnessRootPath(rootDir)).toBe(path.join(rootDir, '.harness'));
+    expect(getHarnessCacheRootPath(rootDir)).toBe(
+      path.join(rootDir, '.harness', 'cache')
+    );
+    expect(getHarnessCacheArtifactPath('xctest-agent simulator', rootDir)).toBe(
+      path.join(rootDir, '.harness', 'cache', 'xctest-agent-simulator')
+    );
   });
 });
