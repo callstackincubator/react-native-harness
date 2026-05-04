@@ -64,13 +64,22 @@ runs:
           echo "Please provide the path to the built app (.apk for Android, .app for iOS)"
           exit 1
         fi
-    - name: Metro cache
+    - name: Metro bundler cache (.harness/metro-cache)
       uses: actions/cache@v4
       with:
         path: ${{ steps.load-config.outputs.projectRoot }}/.harness/metro-cache
         key: ${{ runner.os }}-metro-cache-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/metro.config.js', '**/metro.config.cjs', '**/metro.config.mjs', '**/metro.config.ts', '**/babel.config.js', '**/babel.config.cjs', '**/babel.config.mjs', '**/babel.config.ts', '**/babel.config.json') }}
         restore-keys: |
           ${{ runner.os }}-metro-cache-
+    - name: Restore Harness cache
+      id: cache-harness-restore
+      if: fromJson(steps.load-config.outputs.config).platformId == 'ios'
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache
+        key: harness-ios-${{ runner.os }}-${{ hashFiles(format('{0}/.harness/cache/**/cache.json', steps.load-config.outputs.projectRoot)) }}
+        restore-keys: |
+          harness-ios-${{ runner.os }}-
 
     # ── iOS ──────────────────────────────────────────────────────────────────
     # iOS simulator boot and app installation are handled by Harness itself.
@@ -227,6 +236,12 @@ runs:
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
+    - name: Save Harness cache
+      if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'ios' && steps.cache-harness-restore.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache
+        key: harness-ios-${{ runner.os }}-${{ hashFiles(format('{0}/.harness/cache/**/cache.json', steps.load-config.outputs.projectRoot)) }}
     - name: Upload crash report artifacts
       if: always()
       uses: actions/upload-artifact@v4

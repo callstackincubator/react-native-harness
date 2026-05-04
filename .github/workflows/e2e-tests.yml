@@ -161,15 +161,6 @@ jobs:
           path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-playground
 
-      - name: Restore XCTest agent cache
-        id: cache-xctest-agent-restore
-        uses: actions/cache/restore@v4
-        with:
-          path: ./apps/playground/.harness/cache
-          key: xctest-agent-${{ runner.os }}-xcode-26.0-${{ hashFiles('apps/playground/.harness/cache/*/cache.json') }}
-          restore-keys: |
-            xctest-agent-${{ runner.os }}-xcode-26.
-
       - name: CocoaPods cache
         if: steps.cache-app-restore.outputs.cache-hit != 'true'
         uses: actions/cache@v4
@@ -213,13 +204,6 @@ jobs:
           afterRunHook: |
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
             echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
-
-      - name: Save XCTest agent cache
-        if: steps.cache-xctest-agent-restore.outputs.cache-hit != 'true' && success()
-        uses: actions/cache/save@v4
-        with:
-          path: ./apps/playground/.harness/cache
-          key: xctest-agent-${{ runner.os }}-xcode-26.0-${{ hashFiles('apps/playground/.harness/cache/*/cache.json') }}
 
       - name: Upload Harness logs
         if: always()
