@@ -33,13 +33,13 @@ jobs:
       DEBUG: 'Metro:*'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
 
       - name: Reclaim disk space
-        uses: AdityaGarg8/remove-unwanted-software@v5
+        uses: AdityaGarg8/remove-unwanted-software@90e01b21170618765a73370fcc3abbd1684a7793 # v5
         with:
           remove-dotnet: true
           remove-haskell: true
@@ -47,12 +47,12 @@ jobs:
           remove-docker-images: true
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.10.0'
           cache: 'pnpm'
@@ -66,14 +66,14 @@ jobs:
           pnpm nx run-many -t build --projects="packages/*"
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@17f84c3641ba7b8f6deff6309fc4c864478f5d62 # v3.14.1
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Restore APK from cache
         id: cache-apk-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
           key: apk-playground
@@ -86,7 +86,7 @@ jobs:
 
       - name: Save APK to cache
         if: steps.cache-apk-restore.outputs.cache-hit != 'true' && success()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
           key: apk-playground
@@ -106,7 +106,7 @@ jobs:
 
       - name: Upload Harness logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: harness-logs-e2e-android
           path: apps/playground/.harness/logs
@@ -122,24 +122,24 @@ jobs:
       DEBUG: 'Metro:*'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.10.0'
           cache: 'pnpm'
 
       - name: Setup Xcode 26
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: '26.0'
 
@@ -156,14 +156,14 @@ jobs:
 
       - name: Restore app from cache
         id: cache-app-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-playground
 
       - name: CocoaPods cache
         if: steps.cache-app-restore.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ./apps/playground/ios/Pods
@@ -187,7 +187,7 @@ jobs:
 
       - name: Save app to cache
         if: steps.cache-app-restore.outputs.cache-hit != 'true' && success()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-playground
@@ -207,7 +207,7 @@ jobs:
 
       - name: Upload Harness logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: harness-logs-e2e-ios
           path: apps/playground/.harness/logs
@@ -223,18 +223,18 @@ jobs:
       DEBUG: 'Metro:*'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.10.0'
           cache: 'pnpm'
@@ -261,7 +261,7 @@ jobs:
 
       - name: Upload Harness logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: harness-logs-e2e-web
           path: apps/playground/.harness/logs
@@ -278,13 +278,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
 
       - name: Reclaim disk space
-        uses: AdityaGarg8/remove-unwanted-software@v5
+        uses: AdityaGarg8/remove-unwanted-software@90e01b21170618765a73370fcc3abbd1684a7793 # v5
         with:
           remove-dotnet: true
           remove-haskell: true
@@ -292,12 +292,12 @@ jobs:
           remove-docker-images: true
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.10.0'
           cache: 'pnpm'
@@ -311,14 +311,14 @@ jobs:
           pnpm nx run-many -t build --projects="packages/*"
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@17f84c3641ba7b8f6deff6309fc4c864478f5d62 # v3.14.1
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Restore APK from cache
         id: cache-apk-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
           key: apk-playground
@@ -331,7 +331,7 @@ jobs:
 
       - name: Save APK to cache
         if: steps.cache-apk-restore.outputs.cache-hit != 'true' && success()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
           key: apk-playground
@@ -375,7 +375,7 @@ jobs:
 
       - name: Upload Harness logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: harness-logs-crash-validate-android
           path: apps/playground/.harness/logs
@@ -391,24 +391,24 @@ jobs:
       DEBUG: 'Metro:*'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
         with:
           version: latest
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.10.0'
           cache: 'pnpm'
 
       - name: Setup Xcode 26
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: '26.0'
 
@@ -425,14 +425,14 @@ jobs:
 
       - name: Restore app from cache
         id: cache-app-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-playground
 
       - name: CocoaPods cache
         if: steps.cache-app-restore.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ./apps/playground/ios/Pods
@@ -456,7 +456,7 @@ jobs:
 
       - name: Save app to cache
         if: steps.cache-app-restore.outputs.cache-hit != 'true' && success()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-playground
@@ -500,7 +500,7 @@ jobs:
 
       - name: Upload Harness logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: harness-logs-crash-validate-ios
           path: apps/playground/.harness/logs

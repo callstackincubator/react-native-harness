@@ -65,7 +65,7 @@ runs:
           exit 1
         fi
     - name: Metro bundler cache (.harness/metro-cache)
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.load-config.outputs.projectRoot }}/.harness/metro-cache
         key: ${{ runner.os }}-metro-cache-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/metro.config.js', '**/metro.config.cjs', '**/metro.config.mjs', '**/metro.config.ts', '**/babel.config.js', '**/babel.config.cjs', '**/babel.config.mjs', '**/babel.config.ts', '**/babel.config.json') }}
@@ -74,7 +74,7 @@ runs:
     - name: Restore Harness cache
       id: cache-harness-restore
       if: fromJson(steps.load-config.outputs.config).platformId == 'ios'
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache
         key: harness-ios-${{ runner.os }}-${{ hashFiles(format('{0}/.harness/cache/**/cache.json', steps.load-config.outputs.projectRoot)) }}
@@ -132,7 +132,7 @@ runs:
         CACHE_KEY="avd-$AVD_NAME-$ARCH-$AVD_CONFIG_HASH"
         echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
     - name: Restore AVD cache
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       id: avd-cache
       if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled }}
       with:
@@ -221,7 +221,7 @@ runs:
         fi
     - name: Upload visual test artifacts
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: visual-test-diffs-${{ fromJson(steps.load-config.outputs.config).platformId }}
         path: |
@@ -230,7 +230,7 @@ runs:
         if-no-files-found: ignore
     - name: Save AVD cache
       if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled && steps.avd-cache.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: |
           ~/.android/avd
@@ -238,13 +238,13 @@ runs:
         key: ${{ steps.avd-key.outputs.key }}
     - name: Save Harness cache
       if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'ios' && steps.cache-harness-restore.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache
         key: ${{ steps.cache-harness-restore.outputs.cache-primary-key }}
     - name: Upload crash report artifacts
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: harness-crash-reports-${{ fromJson(steps.load-config.outputs.config).platformId }}
         path: ${{ steps.load-config.outputs.projectRoot }}/.harness/crash-reports/**/*
