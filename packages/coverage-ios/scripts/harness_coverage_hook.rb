@@ -15,14 +15,8 @@ module HarnessCoverageHook
   private
 
   def resolve_coverage_pods
-    project_dir = Dir.pwd
-    config_json = `node -e "
-      import('#{project_dir}/rn-harness.config.mjs')
-        .then(m => console.log(JSON.stringify(
-          m.default?.coverage?.native?.ios?.pods || []
-        )))
-        .catch(() => console.log('[]'))
-    "`.strip
+    script = File.expand_path('resolve-coverage-pods.mjs', __dir__)
+    config_json = `node #{script}`.strip
     JSON.parse(config_json)
   rescue => e
     Pod::UI.warn "[HarnessCoverage] Failed to read config: #{e.message}"

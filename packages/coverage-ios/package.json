@@ -40,10 +40,10 @@
     "name": "Margelo",
     "email": "hello@margelo.com"
   },
-  "homepage": "https://github.com/margelo/react-native-harness",
+  "homepage": "https://github.com/callstackincubator/react-native-harness",
   "repository": {
     "type": "git",
-    "url": "https://github.com/margelo/react-native-harness.git"
+    "url": "https://github.com/callstackincubator/react-native-harness.git"
   },
   "license": "MIT"
 }
