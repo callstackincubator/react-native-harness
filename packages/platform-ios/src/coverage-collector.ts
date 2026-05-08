@@ -29,17 +29,27 @@ export const getAppBundlePath = async (
   return stdout.trim();
 };
 
-export const collectProfrawFiles = (dataContainer: string): string[] => {
-  const documentsDir = path.join(dataContainer, 'Documents');
-  if (!fs.existsSync(documentsDir)) {
-    logger.debug('[coverage] Documents directory does not exist');
+const PROFRAW_DIR = '/tmp/harness-coverage';
+
+export const collectProfrawFiles = (): string[] => {
+  if (!fs.existsSync(PROFRAW_DIR)) {
+    logger.debug('[coverage] Profraw directory does not exist: %s', PROFRAW_DIR);
     return [];
   }
 
   return fs
-    .readdirSync(documentsDir)
+    .readdirSync(PROFRAW_DIR)
     .filter((f) => f.endsWith('.profraw'))
-    .map((f) => path.join(documentsDir, f));
+    .map((f) => path.join(PROFRAW_DIR, f));
+};
+
+export const cleanProfrawDir = (): void => {
+  if (fs.existsSync(PROFRAW_DIR)) {
+    for (const f of fs.readdirSync(PROFRAW_DIR)) {
+      fs.unlinkSync(path.join(PROFRAW_DIR, f));
+    }
+    logger.debug('[coverage] Cleaned profraw directory: %s', PROFRAW_DIR);
+  }
 };
 
 export const mergeProfdata = async (
@@ -120,17 +130,9 @@ export const collectNativeCoverage = async (
 
   logger.debug('[coverage] Collecting native iOS coverage', { udid, bundleId, pods });
 
-  let dataContainer: string;
-  try {
-    dataContainer = await getAppDataContainer(udid, bundleId);
-  } catch (error) {
-    logger.debug('[coverage] Failed to get app data container', error);
-    return null;
-  }
-
-  const profrawFiles = collectProfrawFiles(dataContainer);
+  const profrawFiles = collectProfrawFiles();
   if (profrawFiles.length === 0) {
-    logger.debug('[coverage] No .profraw files found');
+    logger.debug('[coverage] No .profraw files found in %s', PROFRAW_DIR);
     return null;
   }
 
@@ -173,6 +175,8 @@ export const collectNativeCoverage = async (
       outputPath: lcovPath,
     });
   }
+
+  cleanProfrawDir();
 
   logger.debug(`[coverage] Native coverage written to: ${lcovPath}`);
   return lcovPath;

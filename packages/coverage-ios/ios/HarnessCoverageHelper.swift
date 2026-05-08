@@ -16,8 +16,9 @@ func __llvm_profile_set_filename(_ filename: UnsafePointer<CChar>)
     guard !isSetUp else { return }
     isSetUp = true
 
-    let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-    let profrawPath = docs.appendingPathComponent("harness-\(ProcessInfo.processInfo.processIdentifier).profraw").path
+    let profrawDir = "/tmp/harness-coverage"
+    try? FileManager.default.createDirectory(atPath: profrawDir, withIntermediateDirectories: true)
+    let profrawPath = "\(profrawDir)/harness-\(ProcessInfo.processInfo.processIdentifier).profraw"
     __llvm_profile_set_filename(profrawPath)
 
     startFlushTimer()
