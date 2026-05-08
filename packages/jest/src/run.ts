@@ -5,7 +5,7 @@ import type {
   TestSuiteResult as HarnessTestSuiteResult,
   TestResult as HarnessTestResult,
 } from '@react-native-harness/bridge';
-import type { Harness } from './harness.js';
+import type { HarnessSession } from './harness-session.js';
 import { formatResultsErrors } from 'jest-message-util';
 import { toTestResult } from './toTestResult.js';
 
@@ -62,7 +62,7 @@ const calculateStats = (tests: HarnessTestResult[]) => {
 
 export type RunHarnessTestFile = (options: {
   testPath: string;
-  harness: Harness;
+  session: HarnessSession;
   projectConfig: JestConfig.ProjectConfig;
   globalConfig: JestConfig.GlobalConfig;
 }) => Promise<{
@@ -76,7 +76,7 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
   testPath,
   globalConfig,
   projectConfig,
-  harness,
+  session,
 }) => {
   const start = Date.now();
   const relativeTestPath = path.relative(globalConfig.rootDir, testPath);
@@ -89,11 +89,11 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
     (setupFile) => path.relative(globalConfig.rootDir, setupFile)
   );
 
-  const harnessResult = await harness.runTests(relativeTestPath, {
+  const harnessResult = await session.runTestFile(relativeTestPath, {
     testNamePattern: globalConfig.testNamePattern,
     setupFiles,
     setupFilesAfterEnv,
-    runner: harness.context.platform.runner,
+    runner: session.context.platform.runner,
   });
   const end = Date.now();
 
