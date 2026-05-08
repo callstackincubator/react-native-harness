@@ -225,12 +225,19 @@ export const createHarnessBridge = async (
     get connection() {
       return currentConnection;
     },
-    nextConnection: (signal) =>
-      new Promise((resolve, reject) => {
-        if (signal?.aborted) {
-          reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-          return;
-        }
+    nextConnection: (signal) => {
+      if (signal?.aborted) {
+        return Promise.reject(
+          signal.reason ?? new DOMException('Aborted', 'AbortError'),
+        );
+      }
+      // If the app already connected before this call (e.g. fast simulator
+      // startup between startAttempt and waitForReady), return it immediately
+      // rather than waiting for a second reportReady that will never come.
+      if (currentConnection) {
+        return Promise.resolve(currentConnection);
+      }
+      return new Promise((resolve, reject) => {
         const entry = { resolve, reject };
         connectionWaiters.push(entry);
         signal?.addEventListener(
@@ -242,7 +249,8 @@ export const createHarnessBridge = async (
           },
           { once: true },
         );
-      }),
+      });
+    },
     on: (event, listener) => emitter.on(event, listener),
     off: (event, listener) => emitter.off(event, listener),
     dispose: () => {
