@@ -51,7 +51,11 @@ import { createCrashMonitor, type CrashMonitor } from './crash-monitor.js';
 import { createHookQueue, type HookQueue } from './hook-queue.js';
 import { createClientLogListener } from './client-log-handler.js';
 import { createActionHooksPlugin } from './action-hooks.js';
-import { createResourceLockManager } from './resource-lock.js';
+import {
+  createResourceLockManager,
+  type ResourceLockManager,
+  type ResourceLease,
+} from './resource-lock.js';
 import { resolveHarnessMetroPort } from './metro-port.js';
 import { getAdditionalCliArgs } from './cli-args.js';
 import {
@@ -65,7 +69,7 @@ import {
 } from './logs.js';
 
 const sessionLogger = logger.child('runtime');
-const resourceLockManager = createResourceLockManager();
+const defaultResourceLockManager = createResourceLockManager();
 
 export type HarnessRunState = {
   readonly runId: string;
@@ -308,6 +312,7 @@ const loadConfig = async (globalConfig: JestConfig.GlobalConfig): Promise<{
 
 export const createHarnessSession = async (
   globalConfig: JestConfig.GlobalConfig,
+  { lockManager = defaultResourceLockManager }: { lockManager?: ResourceLockManager } = {},
 ): Promise<HarnessSession> => {
   preRunMessage.remove(process.stderr);
 
@@ -334,7 +339,7 @@ export const createHarnessSession = async (
 
   logTestRunHeader(platform);
 
-  const resourceLease = await resourceLockManager.acquire(resourceLockKey, {
+  const resourceLease = await lockManager.acquire(resourceLockKey, {
     signal: setupController.signal,
     onWait: () => {
       didWaitForResourceLock = true;
@@ -352,14 +357,19 @@ export const createHarnessSession = async (
   if (didWaitForResourceLock) logRunnerStarting(platform);
   sessionLogger.debug('resource lock acquired for runner=%s key=%s', platform.name, resourceLockKey);
 
+  // Hoisted so the outer catch can release it even if an error occurs after
+  // port resolution but before the inner try/catch (e.g. bridge creation failure).
+  let metroPortLease: ResourceLease | null = null;
+
   try {
-    const { config: runtimeConfig, metroPortLease, initialMetroPort, didFallback } =
-      await resolveHarnessMetroPort({
-        config: harnessConfig,
-        platform,
-        resourceLockManager,
-        signal: setupController.signal,
-      });
+    const resolution = await resolveHarnessMetroPort({
+      config: harnessConfig,
+      platform,
+      resourceLockManager: lockManager,
+      signal: setupController.signal,
+    });
+    metroPortLease = resolution.metroPortLease;
+    const { config: runtimeConfig, initialMetroPort, didFallback } = resolution;
 
     if (didFallback) logMetroPortFallback(initialMetroPort, runtimeConfig.metroPort);
 
@@ -423,11 +433,8 @@ export const createHarnessSession = async (
         }),
       ]);
     } catch (error) {
-      await Promise.allSettled([
-        resourceLease.release(),
-        metroPortLease?.release(),
-        bridge.dispose(),
-      ]);
+      // Only bridge needs cleanup here; leases are released by the outer catch.
+      await bridge.dispose();
       throw error;
     }
 
@@ -680,7 +687,7 @@ export const createHarnessSession = async (
   } catch (error) {
     process.off('SIGTERM', onEarlySignal);
     process.off('SIGINT', onEarlySignal);
-    await resourceLease.release();
+    await Promise.allSettled([resourceLease.release(), metroPortLease?.release()]);
     throw error;
   }
 };
