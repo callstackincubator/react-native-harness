@@ -8,7 +8,7 @@ func __llvm_profile_write_file() -> Int32
 @_silgen_name("__llvm_profile_set_filename")
 func __llvm_profile_set_filename(_ filename: UnsafePointer<CChar>)
 
-@objc public class HarnessCoverageHelper: NSObject {
+@objc(HarnessCoverageHelper) public class HarnessCoverageHelper: NSObject {
   private static var isSetUp = false
   private static var flushThread: Thread?
 

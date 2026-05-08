@@ -75,6 +75,41 @@ module HarnessCoverageHook
         end
       end
     end
+
+    apply_app_target_linker_flags
+  end
+
+  def apply_app_target_linker_flags
+    sandbox_root = config.sandbox.root
+    target_support_dir = sandbox_root.join('Target Support Files')
+
+    Dir.glob(target_support_dir.join('Pods-*', '*.xcconfig').to_s).each do |xcconfig_path|
+      content = File.read(xcconfig_path)
+
+      modified = false
+
+      unless content.include?('-fprofile-instr-generate')
+        content = content.gsub(
+          /^(OTHER_LDFLAGS\s*=\s*)/,
+          "\\1-fprofile-instr-generate "
+        )
+        modified = true
+      end
+
+      force_load = '-force_load "${PODS_CONFIGURATION_BUILD_DIR}/HarnessCoverage/libHarnessCoverage.a"'
+      unless content.include?('libHarnessCoverage.a')
+        content = content.gsub(
+          /^(OTHER_LDFLAGS\s*=\s*)/,
+          "\\1#{force_load} "
+        )
+        modified = true
+      end
+
+      if modified
+        File.write(xcconfig_path, content)
+        Pod::UI.puts "[HarnessCoverage]   -> patched #{File.basename(xcconfig_path)}"
+      end
+    end
   end
 end
 
