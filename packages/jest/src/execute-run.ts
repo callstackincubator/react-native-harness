@@ -10,7 +10,6 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { type HarnessSession, type HarnessRunState } from './harness-session.js';
 import { runHarnessTestFile } from './run.js';
-import { CrashWatchCancelledError } from './crash-monitor.js';
 import {
   NativeCrashError,
   StartupStallError,
@@ -95,6 +94,7 @@ export const executeRun = async (
 
   const shouldResetEnv = session.config.resetEnvironmentBetweenTestFiles;
   let isFirstTest = true;
+  let runError: unknown;
 
   try {
     for (const test of tests) {
@@ -130,31 +130,14 @@ export const executeRun = async (
         await onStart(test);
         await session.ensureAppReady(test.path);
 
-        let result: Awaited<ReturnType<typeof runHarnessTestFile>>;
-
-        if (!session.config.detectNativeCrashes) {
-          result = await runHarnessTestFile({
-            testPath: test.path,
-            session,
-            globalConfig,
-            projectConfig: test.context.config,
-          });
-        } else {
-          const crashWatch = session.crashMonitor.watch(test.path, 'execution');
-          try {
-            result = await Promise.race([
-              runHarnessTestFile({
-                testPath: test.path,
-                session,
-                globalConfig,
-                projectConfig: test.context.config,
-              }),
-              crashWatch.promise,
-            ]);
-          } finally {
-            crashWatch.cancel();
-          }
-        }
+        // Crash detection is handled inside session.runTestFile; NativeCrashError
+        // propagates here if a crash wins the race.
+        const result = await runHarnessTestFile({
+          testPath: test.path,
+          session,
+          globalConfig,
+          projectConfig: test.context.config,
+        });
 
         applyJestResultToSummary(summary, result.jestResult);
         updateRunState();
@@ -165,11 +148,6 @@ export const executeRun = async (
         });
         await onResult(test, result.jestResult);
       } catch (err) {
-        if (err instanceof CrashWatchCancelledError) {
-          // Race resolved in favour of the test run — not a real error.
-          continue;
-        }
-
         if (!emittedTestFileFinished) {
           await emitTestFileFinished({
             status: 'failed',
@@ -189,55 +167,28 @@ export const executeRun = async (
         }
 
         if (err instanceof NativeCrashError) {
-          session.crashMonitor.reset();
-        }
-
-        if (err instanceof CancelRun) {
-          updateRunState({ error: err });
-          // Let the outer try/catch handle it.
-          throw err;
+          session.resetCrashState();
         }
 
         updateRunState({ error: isRuntimeFailure ? undefined : err });
         onFailure(test, buildTestFailure(err));
       }
     }
-
-    const runState = updateRunState();
+  } catch (err) {
+    runError = err;
+    if (!(err instanceof CancelRun)) throw err;
+  } finally {
+    const runState = updateRunState(
+      runError != null ? { error: runError, status: 'failed' } : {},
+    );
     await session.callHook('run:finished', {
       runId,
       startTime,
       duration: Date.now() - startTime,
       testFiles,
       summary,
-      status: runState.status ?? 'passed',
+      status: runState.status ?? (runError != null ? 'failed' : 'passed'),
+      ...(runError != null ? { error: runError } : {}),
     });
-  } catch (error) {
-    if (error instanceof CancelRun) {
-      // Watcher interrupted — still emit run:finished with current state.
-      const runState = updateRunState({ error, status: 'failed' });
-      await session.callHook('run:finished', {
-        runId,
-        startTime,
-        duration: Date.now() - startTime,
-        testFiles,
-        summary,
-        status: runState.status ?? 'failed',
-        error,
-      });
-      return;
-    }
-
-    const runState = updateRunState({ error, status: 'failed' });
-    await session.callHook('run:finished', {
-      runId,
-      startTime,
-      duration: Date.now() - startTime,
-      testFiles,
-      summary,
-      status: runState.status ?? 'failed',
-      error,
-    });
-    throw error;
   }
 };

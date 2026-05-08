@@ -83,13 +83,13 @@ export type HarnessRunTestsOptions = Exclude<TestExecutionOptions, 'platform'>;
 export type HarnessSession = {
   readonly config: HarnessConfig;
   readonly context: HarnessContext;
-  readonly crashMonitor: CrashMonitor;
   runTestFile: (path: string, options: HarnessRunTestsOptions) => Promise<TestSuiteResult>;
   ensureAppReady: (testFilePath: string) => Promise<void>;
   restartApp: (testFilePath?: string) => Promise<void>;
+  resetCrashState: () => void;
   callHook: HarnessPluginManager<HarnessConfig, HarnessPlatform>['callHook'];
   setRunState: (state: HarnessRunState | null) => void;
-  dispose: () => Promise<void>;
+  dispose: (reason?: 'normal' | 'abort' | 'error') => Promise<void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -134,7 +134,7 @@ const withPlatformReadyTimeout = async <T>(options: {
   }
 };
 
-const waitForAppReady = async (options: {
+type AppReadyOptions = {
   metroInstance: MetroInstance;
   serverBridge: BridgeServer;
   platformInstance: HarnessPlatformRunner;
@@ -142,12 +142,14 @@ const waitForAppReady = async (options: {
   bundleStartTimeout: number;
   readyTimeout: number;
   maxAppRestarts: number;
-  testFilePath: string;
   crashMonitor: CrashMonitor;
-  signal?: AbortSignal;
   appLaunchOptions?: AppLaunchOptions;
-  launchApp?: () => Promise<void>;
-}): Promise<void> => {
+};
+
+const waitForAppReady = async (
+  base: AppReadyOptions,
+  testFilePath: string,
+): Promise<void> => {
   const {
     metroInstance,
     serverBridge,
@@ -156,12 +158,9 @@ const waitForAppReady = async (options: {
     bundleStartTimeout,
     readyTimeout,
     maxAppRestarts,
-    testFilePath,
     crashMonitor,
     appLaunchOptions,
-    launchApp = () => platformInstance.restartApp(appLaunchOptions),
-  } = options;
-  const signal = options.signal ?? new AbortController().signal;
+  } = base;
 
   const logWait = (message: string, ...args: unknown[]) =>
     sessionLogger.debug(`waitForAppReady: ${message}`, ...args);
@@ -172,10 +171,10 @@ const waitForAppReady = async (options: {
     bundleStartTimeout,
     readyTimeout,
     maxAppRestarts,
-    signal,
+    signal: new AbortController().signal,
     startAttempt: async () => {
       logWait('launching app for %s', testFilePath);
-      await launchApp();
+      await platformInstance.restartApp(appLaunchOptions);
       logWait('launch request completed, waiting for bridge ready');
     },
     waitForReady: async (signal) => {
@@ -200,6 +199,7 @@ const waitForAppReady = async (options: {
     },
     waitForCrash: async (signal) => {
       const watch = crashMonitor.watch(testFilePath, 'startup');
+      watch.promise.catch(() => {}); // handled below; suppress unhandled-rejection when abort wins race
       try {
         logWait('waiting for crash or runtime ready');
         return await Promise.race([watch.promise, waitForAbort(signal)]);
@@ -261,8 +261,23 @@ const buildBridgeHookScheduler = (
 };
 
 // ---------------------------------------------------------------------------
-// Session creation
+// Config loading
 // ---------------------------------------------------------------------------
+
+const applyEnvVars = (
+  harnessConfig: HarnessConfig,
+  globalConfig: JestConfig.GlobalConfig,
+): void => {
+  if (globalConfig.collectCoverage) {
+    process.env.RN_HARNESS_COLLECT_COVERAGE = 'true';
+    if (harnessConfig.coverage?.root) {
+      process.env.RN_HARNESS_COVERAGE_ROOT = harnessConfig.coverage.root;
+    }
+  }
+  if (harnessConfig.disableViewFlattening) {
+    process.env.RN_HARNESS_VIEW_FLATTENING = 'false';
+  }
+};
 
 const loadConfig = async (globalConfig: JestConfig.GlobalConfig): Promise<{
   harnessConfig: HarnessConfig;
@@ -284,23 +299,6 @@ const loadConfig = async (globalConfig: JestConfig.GlobalConfig): Promise<{
     });
   }
 
-  if (globalConfig.collectCoverage) {
-    process.env.RN_HARNESS_COLLECT_COVERAGE = 'true';
-    if (harnessConfig.coverage?.root) {
-      process.env.RN_HARNESS_COVERAGE_ROOT = harnessConfig.coverage.root;
-    }
-  }
-
-  if (harnessConfig.disableViewFlattening) {
-    process.env.RN_HARNESS_VIEW_FLATTENING = 'false';
-  }
-
-  const selectedRunnerName = cliArgs.harnessRunner ?? harnessConfig.defaultRunner;
-  if (!selectedRunnerName) throw new NoRunnerSpecifiedError();
-
-  const platform = harnessConfig.runners.find((r) => r.name === selectedRunnerName);
-  if (!platform) throw new RunnerNotFoundError(selectedRunnerName);
-
   if (
     harnessConfig.webSocketPort != null &&
     harnessConfig.webSocketPort !== harnessConfig.metroPort
@@ -310,8 +308,18 @@ const loadConfig = async (globalConfig: JestConfig.GlobalConfig): Promise<{
     );
   }
 
+  const selectedRunnerName = cliArgs.harnessRunner ?? harnessConfig.defaultRunner;
+  if (!selectedRunnerName) throw new NoRunnerSpecifiedError();
+
+  const platform = harnessConfig.runners.find((r) => r.name === selectedRunnerName);
+  if (!platform) throw new RunnerNotFoundError(selectedRunnerName);
+
   return { harnessConfig, platform, projectRoot };
 };
+
+// ---------------------------------------------------------------------------
+// Session creation
+// ---------------------------------------------------------------------------
 
 export const createHarnessSession = async (
   globalConfig: JestConfig.GlobalConfig,
@@ -319,12 +327,21 @@ export const createHarnessSession = async (
   preRunMessage.remove(process.stderr);
 
   const { harnessConfig, platform, projectRoot } = await loadConfig(globalConfig);
+  applyEnvVars(harnessConfig, globalConfig);
 
   sessionLogger.debug(
     'creating session for runner=%s platform=%s',
     platform.name,
     platform.platformId,
   );
+
+  // Single AbortController for the entire setup phase. Registered signal
+  // handlers abort this so that slow inflight operations (Metro init, platform
+  // runner startup) are cancelled promptly on SIGTERM/SIGINT.
+  const setupController = new AbortController();
+  const onEarlySignal = () => setupController.abort();
+  process.once('SIGTERM', onEarlySignal);
+  process.once('SIGINT', onEarlySignal);
 
   const resourceLockKey = await (platform.getResourceLockKey?.() ?? getDefaultResourceLockKey(platform));
   let didWaitForResourceLock = false;
@@ -333,6 +350,7 @@ export const createHarnessSession = async (
   logTestRunHeader(platform);
 
   const resourceLease = await resourceLockManager.acquire(resourceLockKey, {
+    signal: setupController.signal,
     onWait: () => {
       didWaitForResourceLock = true;
       logRunnerWaitingInQueue(platform);
@@ -355,7 +373,7 @@ export const createHarnessSession = async (
         config: harnessConfig,
         platform,
         resourceLockManager,
-        signal: new AbortController().signal,
+        signal: setupController.signal,
       });
 
     if (didFallback) logMetroPortFallback(initialMetroPort, runtimeConfig.metroPort);
@@ -399,18 +417,18 @@ export const createHarnessSession = async (
               [HARNESS_BRIDGE_PATH]: serverBridge.ws as unknown as MetroWebSocketEndpoint,
             },
           },
-          new AbortController().signal,
+          setupController.signal,
         ).then((instance) => {
           sessionLogger.debug('Metro initialized');
           return instance;
         }),
         withPlatformReadyTimeout({
           timeout: runtimeConfig.platformReadyTimeout,
-          signal: new AbortController().signal,
-          work: async () => {
+          signal: setupController.signal,
+          work: async (signal) => {
             return await import(platform.runner).then((module) =>
               module.default(platform.config, runtimeConfig, {
-                signal: new AbortController().signal,
+                signal,
               } satisfies HarnessPlatformInitOptions),
             ).then((instance) => {
               sessionLogger.debug('platform runner initialized');
@@ -436,6 +454,20 @@ export const createHarnessSession = async (
     const appLaunchOptions = (platform.config as { appLaunchOptions?: AppLaunchOptions }).appLaunchOptions;
 
     const crashMonitor = createCrashMonitor({ appMonitor, platformRunner: platformInstance });
+
+    // Pre-build the options that are constant across all app-ready calls;
+    // only testFilePath varies per call.
+    const appReadyBaseOptions: AppReadyOptions = {
+      metroInstance,
+      serverBridge,
+      platformInstance,
+      platformId: platform.platformId,
+      bundleStartTimeout: runtimeConfig.bundleStartTimeout ?? 60000,
+      readyTimeout: runtimeConfig.bridgeTimeout,
+      maxAppRestarts: runtimeConfig.maxAppRestarts ?? 2,
+      crashMonitor,
+      appLaunchOptions,
+    };
 
     // --- Event listeners ---
 
@@ -476,10 +508,8 @@ export const createHarnessSession = async (
 
     let disposePromise: Promise<void> | null = null;
 
-    const disposeOnce = async () => {
-      sessionLogger.debug('disposing session');
-
-      const reason = 'normal';
+    const disposeOnce = async (reason: 'normal' | 'abort' | 'error') => {
+      sessionLogger.debug('disposing session (reason=%s)', reason);
       let hookError: unknown;
 
       try {
@@ -534,15 +564,16 @@ export const createHarnessSession = async (
       if (cleanupError) throw cleanupError;
     };
 
-    const dispose = () => {
-      disposePromise ??= disposeOnce();
+    const dispose = (reason: 'normal' | 'abort' | 'error' = 'normal') => {
+      disposePromise ??= disposeOnce(reason);
       return disposePromise;
     };
 
-    // Register signal handlers so dispose actually runs on process exit
-    const onSignal = () => {
-      void dispose().then(() => process.exit(0));
-    };
+    // Switch from setup-phase signal handling to dispose-based handling now
+    // that all infrastructure is up.
+    process.off('SIGTERM', onEarlySignal);
+    process.off('SIGINT', onEarlySignal);
+    const onSignal = () => void dispose('abort').then(() => process.exit(0));
     process.once('SIGTERM', onSignal);
     process.once('SIGINT', onSignal);
 
@@ -558,7 +589,7 @@ export const createHarnessSession = async (
     } catch (error) {
       process.off('SIGTERM', onSignal);
       process.off('SIGINT', onSignal);
-      await dispose();
+      await dispose('error');
       throw error;
     }
 
@@ -578,20 +609,7 @@ export const createHarnessSession = async (
 
       crashMonitor.reset();
       sessionLogger.debug('app not ready, waiting for launch and runtime readiness');
-
-      await waitForAppReady({
-        metroInstance,
-        serverBridge,
-        platformInstance,
-        platformId: platform.platformId,
-        bundleStartTimeout: runtimeConfig.bundleStartTimeout ?? 60000,
-        readyTimeout: runtimeConfig.bridgeTimeout,
-        maxAppRestarts: runtimeConfig.maxAppRestarts ?? 2,
-        testFilePath,
-        crashMonitor,
-        appLaunchOptions,
-      });
-
+      await waitForAppReady(appReadyBaseOptions, testFilePath);
       await hooks.drain();
       sessionLogger.debug('app is ready for %s', testFilePath);
     };
@@ -630,18 +648,36 @@ export const createHarnessSession = async (
       const client = serverBridge.rpc.clients.at(-1);
       if (!client) throw new Error('No client found');
       sessionLogger.debug('running test file on client: %s', testPath);
-      const result = await client.runTests(testPath, { ...options, runner: platform.runner });
-      await hooks.drain();
-      return result;
+
+      if (!runtimeConfig.detectNativeCrashes) {
+        const result = await client.runTests(testPath, { ...options, runner: platform.runner });
+        await hooks.drain();
+        return result;
+      }
+
+      const crashWatch = crashMonitor.watch(testPath, 'execution');
+      // Attach a handler now so the rejection is always observed, whether the
+      // crash wins the race or cancel() is called after the test run wins.
+      crashWatch.promise.catch(() => {});
+      try {
+        const result = await Promise.race([
+          client.runTests(testPath, { ...options, runner: platform.runner }),
+          crashWatch.promise,
+        ]);
+        await hooks.drain();
+        return result;
+      } finally {
+        crashWatch.cancel();
+      }
     };
 
     return {
       config: runtimeConfig,
       context,
-      crashMonitor,
       runTestFile,
       ensureAppReady,
       restartApp,
+      resetCrashState: () => crashMonitor.reset(),
       callHook: async (name, payload) => {
         await hooks.drain();
         await pluginManager.callHook(name, payload);
@@ -650,13 +686,15 @@ export const createHarnessSession = async (
       setRunState: (state) => {
         currentRun = state;
       },
-      dispose: () => {
+      dispose: (reason = 'normal') => {
         process.off('SIGTERM', onSignal);
         process.off('SIGINT', onSignal);
-        return dispose();
+        return dispose(reason);
       },
     };
   } catch (error) {
+    process.off('SIGTERM', onEarlySignal);
+    process.off('SIGINT', onEarlySignal);
     await resourceLease.release();
     throw error;
   }

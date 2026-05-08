@@ -76,8 +76,9 @@ export const createCrashMonitor = ({
   let isResolvingCrash = false;
   let disposed = false;
 
-  // Current phase is set when a watch is created and used when a crash fires
-  // without a watch (e.g. during app launch via waitForAppReady).
+  // Both updated when watch() is called so crashes are attributed to the
+  // correct test file and lifecycle phase.
+  let currentTestFilePath = '';
   let currentPhase: NativeCrashPhase = 'startup';
   const watchers = new Set<(err: NativeCrashError) => void>();
 
@@ -127,7 +128,7 @@ export const createCrashMonitor = ({
         processName: merged.processName,
         pid: merged.pid,
       });
-      notifyCrash(new NativeCrashError('', merged));
+      notifyCrash(new NativeCrashError(currentTestFilePath, merged));
     } finally {
       isResolvingCrash = false;
     }
@@ -199,6 +200,7 @@ export const createCrashMonitor = ({
   appMonitor.addListener(appMonitorListener);
 
   const watch = (testFilePath: string, phase: NativeCrashPhase): CrashWatch => {
+    currentTestFilePath = testFilePath;
     currentPhase = phase;
     let rejectFn!: (err: Error) => void;
 
@@ -232,6 +234,7 @@ export const createCrashMonitor = ({
       alive = false;
       watchers.clear();
       isResolvingCrash = false;
+      currentTestFilePath = '';
     },
     dispose: async () => {
       disposed = true;
