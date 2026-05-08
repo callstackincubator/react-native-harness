@@ -4,9 +4,21 @@ import { PackageManagerTabs } from '@theme';
 
 If you use Codex or another coding agent that supports the Vercel `skills` CLI, you can install the `react-native-harness` skill so the agent can author Harness tests more effectively.
 
-The skill gives the agent the expected React Native Harness workflow for writing tests, using module mocks, working with `render(...)`, and using the optional `@react-native-harness/ui` package correctly.
+The installed skill is a thin router. The detailed guidance lives in the `react-native-harness` CLI itself, so it stays aligned with the version already installed in the project.
 
 The skill complements the `react-native-harness` package, it does not replace it. Your project still needs `react-native-harness` installed because the agent is ultimately writing and running real Harness tests in your app.
+
+Once installed, the agent should start with:
+
+```bash
+harness skill get core
+```
+
+To see the other bundled guides:
+
+```bash
+harness skill list
+```
 
 ## Install with the Vercel `skills` CLI
 
