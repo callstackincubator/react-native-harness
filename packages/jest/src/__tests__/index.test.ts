@@ -1,55 +1,131 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import type { Config, Test, TestRunnerOptions, TestWatcher } from 'jest-runner';
 import type { HarnessSession } from '../harness-session.js';
-import type { Config, Test, TestWatcher } from 'jest-runner';
-import { StartupStallError } from '../errors.js';
-import { executeRun } from '../execute-run.js';
+import { HarnessError } from '@react-native-harness/tools';
+import JestHarness from '../index.js';
 
-const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession => ({
-  config: {
-    detectNativeCrashes: true,
-    resetEnvironmentBetweenTestFiles: false,
-    metroPort: 8081,
-  } as HarnessSession['config'],
-  context: { platform: {} } as HarnessSession['context'],
-  ensureAppReady: vi.fn().mockResolvedValue(undefined),
-  runTestFile: vi.fn().mockResolvedValue({}),
-  restartApp: vi.fn().mockResolvedValue(undefined),
+// ---------------------------------------------------------------------------
+// Module mocks
+// ---------------------------------------------------------------------------
+
+const mockSession: HarnessSession = {
+  config: { metroPort: 8081 } as HarnessSession['config'],
+  context: {} as HarnessSession['context'],
+  ensureAppReady: vi.fn(async () => {}),
+  runTestFile: vi.fn(async () => ({ name: '', tests: [], suites: [], status: 'passed', duration: 0 })),
+  restartApp: vi.fn(async () => {}),
   resetCrashState: vi.fn(),
-  callHook: vi.fn().mockResolvedValue(undefined),
+  callHook: vi.fn(async () => {}),
   setRunState: vi.fn(),
-  dispose: vi.fn().mockResolvedValue(undefined),
-  ...overrides,
+  dispose: vi.fn(async () => {}),
+};
+
+const mockCreateHarnessSession = vi.hoisted(() => vi.fn(async () => mockSession));
+const mockExecuteRun = vi.hoisted(() => vi.fn(async () => {}));
+
+vi.mock('../harness-session.js', () => ({
+  createHarnessSession: mockCreateHarnessSession,
+}));
+
+vi.mock('../execute-run.js', () => ({
+  executeRun: mockExecuteRun,
+}));
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const makeOptions = (): TestRunnerOptions => ({ serial: true });
+const makeWatcher = (): TestWatcher => ({ isInterrupted: () => false } as TestWatcher);
+const makeTest = (): Test => ({
+  path: '/test/example.ts',
+  context: { config: {} as Config.ProjectConfig },
+} as Test);
+
+const makeGlobalConfig = (overrides: Partial<Config.GlobalConfig> = {}): Config.GlobalConfig =>
+  ({ rootDir: '/project', watch: false, watchAll: false, collectCoverage: false, ...overrides } as Config.GlobalConfig);
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  (mockSession.dispose as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  mockExecuteRun.mockResolvedValue(undefined);
+  mockCreateHarnessSession.mockResolvedValue(mockSession);
 });
 
-describe('executeRun', () => {
-  it('reports StartupStallError without a stack trace', async () => {
-    const onFailure = vi.fn();
-    const session = makeSession({
-      ensureAppReady: vi.fn().mockRejectedValue(new StartupStallError(1500, 3)),
+describe('JestHarness', () => {
+  describe('session lifecycle', () => {
+    it('creates a session on the first run', async () => {
+      const runner = new JestHarness(makeGlobalConfig());
+
+      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
+
+      expect(mockCreateHarnessSession).toHaveBeenCalledOnce();
     });
 
-    await executeRun(
-      session,
-      [
-        {
-          path: '/tmp/example.harness.ts',
-          context: { config: {} },
-        } as Test,
-      ],
-      { isInterrupted: () => false } as TestWatcher,
-      () => Promise.resolve(),
-      () => Promise.resolve(),
-      onFailure,
-      {} as Config.GlobalConfig,
-    );
+    it('reuses the session across runs in watch mode', async () => {
+      const runner = new JestHarness(makeGlobalConfig({ watch: true }));
 
-    expect(onFailure).toHaveBeenCalledWith(
-      expect.objectContaining({ path: '/tmp/example.harness.ts' }),
-      {
-        message:
-          'The app did not request its Metro bundle after 3 launch attempts within 1500ms. Last Metro status: unknown.',
-        stack: '',
-      },
-    );
+      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
+      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
+
+      expect(mockCreateHarnessSession).toHaveBeenCalledOnce();
+      expect(mockSession.dispose).not.toHaveBeenCalled();
+    });
+
+    it('disposes the session after each run in normal mode', async () => {
+      const runner = new JestHarness(makeGlobalConfig());
+
+      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
+
+      expect(mockSession.dispose).toHaveBeenCalledOnce();
+    });
+
+    it('creates a fresh session for each run in normal mode', async () => {
+      const runner = new JestHarness(makeGlobalConfig());
+
+      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
+      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
+
+      expect(mockCreateHarnessSession).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('error handling', () => {
+    it('converts HarnessError into a formatted string before throwing', async () => {
+      class TestHarnessError extends HarnessError {
+        constructor() { super('something went wrong'); this.name = 'TestHarnessError'; }
+      }
+
+      mockCreateHarnessSession.mockRejectedValue(new TestHarnessError());
+
+      const runner = new JestHarness(makeGlobalConfig());
+
+      await expect(
+        runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions()),
+      ).rejects.toBeTypeOf('string');
+    });
+
+    it('propagates non-HarnessError exceptions as-is', async () => {
+      const cause = new TypeError('unexpected');
+      mockCreateHarnessSession.mockRejectedValue(cause);
+
+      const runner = new JestHarness(makeGlobalConfig());
+
+      await expect(
+        runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions()),
+      ).rejects.toBe(cause);
+    });
+
+    it('throws when called without serial flag', async () => {
+      const runner = new JestHarness(makeGlobalConfig());
+
+      await expect(
+        runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), { serial: false }),
+      ).rejects.toThrow('Parallel test running is not supported');
+    });
   });
 });
