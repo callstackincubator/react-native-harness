@@ -692,7 +692,6 @@ const getHarnessInternal = async (
       if (nativeCoverageConfig?.pods?.length && platformInstance.collectNativeCoverage) {
         try {
           await platformInstance.stopApp();
-          await new Promise((resolve) => setTimeout(resolve, 500));
           const lcovPath = await platformInstance.collectNativeCoverage({
             pods: nativeCoverageConfig.pods,
             outputDir: projectRoot,

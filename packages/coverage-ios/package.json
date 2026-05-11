@@ -1,11 +1,17 @@
 {
   "name": "@react-native-harness/coverage-ios",
   "description": "Native iOS code coverage support for React Native Harness.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
   "files": [
     "src",
     "dist",
@@ -18,15 +24,6 @@
     "!**/__mocks__",
     "!**/.*"
   ],
-  "exports": {
-    "./package.json": "./package.json",
-    ".": {
-      "development": "./src/index.ts",
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
-    }
-  },
   "peerDependencies": {
     "react-native": "*"
   },
@@ -35,15 +32,6 @@
   },
   "devDependencies": {
     "react-native": "*"
-  },
-  "author": {
-    "name": "Margelo",
-    "email": "hello@margelo.com"
-  },
-  "homepage": "https://github.com/callstackincubator/react-native-harness",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/callstackincubator/react-native-harness.git"
   },
   "license": "MIT"
 }

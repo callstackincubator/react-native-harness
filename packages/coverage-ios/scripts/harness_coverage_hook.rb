@@ -16,8 +16,8 @@ module HarnessCoverageHook
 
   def resolve_coverage_pods
     script = File.expand_path('resolve-coverage-pods.mjs', __dir__)
-    config_json = `node #{script}`.strip
-    JSON.parse(config_json)
+    pods_json = `NODE_OPTIONS="--preserve-symlinks" node #{script}`.strip
+    JSON.parse(pods_json)
   rescue => e
     Pod::UI.warn "[HarnessCoverage] Failed to read config: #{e.message}"
     []

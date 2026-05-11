@@ -9,6 +9,7 @@ func __llvm_profile_write_file() -> Int32
 func __llvm_profile_set_filename(_ filename: UnsafePointer<CChar>)
 
 @objc(HarnessCoverageHelper) public class HarnessCoverageHelper: NSObject {
+  private static let profrawDir = "/tmp/harness-coverage"
   private static var isSetUp = false
   private static var flushThread: Thread?
 
@@ -16,7 +17,6 @@ func __llvm_profile_set_filename(_ filename: UnsafePointer<CChar>)
     guard !isSetUp else { return }
     isSetUp = true
 
-    let profrawDir = "/tmp/harness-coverage"
     try? FileManager.default.createDirectory(atPath: profrawDir, withIntermediateDirectories: true)
     let profrawPath = "\(profrawDir)/harness-\(ProcessInfo.processInfo.processIdentifier).profraw"
     __llvm_profile_set_filename(profrawPath)
