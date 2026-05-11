@@ -159,8 +159,7 @@ export const createHarnessBridge = async (
       emitEvent: (_, data) => {
         emitter.emit('event', data);
       },
-      'device.screenshot.receive': (ref, meta) =>
-        receiveScreenshot(binaryStore, ref, meta),
+      'device.screenshot.receive': (ref) => receiveScreenshot(binaryStore, ref),
       'test.matchImageSnapshot': (screenshot, testPath, opts) =>
         matchImageSnapshot(screenshot, testPath, opts, context.platform.name),
     };
