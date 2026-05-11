@@ -4,7 +4,7 @@ import type { TestResult as JestTestResult } from '@jest/test-result';
 import type { TestSuiteResult } from '@react-native-harness/bridge';
 import { NativeCrashError, StartupStallError } from '../errors.js';
 import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
-import type { HarnessSession, HarnessRunState } from '../harness-session.js';
+import type { HarnessSession } from '../harness-session.js';
 import { executeRun } from '../execute-run.js';
 
 // Mock the file-runner so we control what jestResult/harnessResult each test returns

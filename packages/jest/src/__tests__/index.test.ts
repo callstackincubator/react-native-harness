@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Config, Test, TestRunnerOptions, TestWatcher } from 'jest-runner';
+import type { TestSuiteResult } from '@react-native-harness/bridge';
 import type { HarnessSession } from '../harness-session.js';
 import { HarnessError } from '@react-native-harness/tools';
 import JestHarness from '../index.js';
@@ -12,7 +13,13 @@ const mockSession: HarnessSession = {
   config: { metroPort: 8081 } as HarnessSession['config'],
   context: {} as HarnessSession['context'],
   ensureAppReady: vi.fn(async () => {}),
-  runTestFile: vi.fn(async () => ({ name: '', tests: [], suites: [], status: 'passed', duration: 0 })),
+  runTestFile: vi.fn(async (): Promise<TestSuiteResult> => ({
+    name: '',
+    tests: [],
+    suites: [],
+    status: 'passed',
+    duration: 0,
+  })),
   restartApp: vi.fn(async () => {}),
   resetCrashState: vi.fn(),
   callHook: vi.fn(async () => {}),

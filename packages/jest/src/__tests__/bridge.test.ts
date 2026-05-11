@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HarnessBridge } from '@react-native-harness/bridge/server';
 import { createHarnessBridge } from '@react-native-harness/bridge/server';
 import { connectToHarness } from '@react-native-harness/bridge/client';
-import type { HarnessHandle } from '@react-native-harness/bridge/client';
 import type { HarnessContext } from '@react-native-harness/bridge';
 
 const makeContext = (): HarnessContext => ({
