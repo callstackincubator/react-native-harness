@@ -30,7 +30,7 @@ const mockSession: HarnessSession = {
 };
 
 const mockCreateHarnessSession = vi.hoisted(() => vi.fn(async () => mockSession));
-const mockExecuteRun = vi.hoisted(() => vi.fn(resolveUndefined));
+const mockExecuteRun = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock('../harness-session.js', () => ({
   createHarnessSession: mockCreateHarnessSession,

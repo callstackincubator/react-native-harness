@@ -184,7 +184,22 @@ const waitForAppReady = async (
     },
     waitForReady: async (signal) => {
       logWait('waiting for runtime ready');
-      await bridge.nextConnection(signal);
+      // Listen for the NEXT 'connected' event rather than using nextConnection(),
+      // because nextConnection() returns the existing connection immediately if one
+      // is already set. waitForReady is called before startAttempt, so a stale
+      // connection from a previous run would resolve the promise before startAttempt
+      // even restarts the app — leaving bridge.connection null after the restart.
+      await new Promise<void>((resolve, reject) => {
+        const onConnected = (_conn: AppConnection) => { cleanup(); resolve(); };
+        const onAbort = () => { cleanup(); reject(signal.reason ?? new DOMException('Aborted', 'AbortError')); };
+        const cleanup = () => {
+          bridge.off('connected', onConnected);
+          signal.removeEventListener('abort', onAbort);
+        };
+        if (signal.aborted) { onAbort(); return; }
+        bridge.on('connected', onConnected);
+        signal.addEventListener('abort', onAbort, { once: true });
+      });
       logWait('runtime ready received');
     },
     waitForCrash: async (signal) => {
@@ -595,7 +610,7 @@ export const createHarnessSession = async (
       await hooks.drain();
       sessionLogger.debug('ensuring app is ready for %s', testFilePath);
 
-      if (crashMonitor.isAlive() && await platformInstance.isAppRunning()) {
+      if (crashMonitor.isAlive() && bridge.connection !== null && await platformInstance.isAppRunning()) {
         sessionLogger.debug('reusing existing ready app for %s', testFilePath);
         return;
       }
