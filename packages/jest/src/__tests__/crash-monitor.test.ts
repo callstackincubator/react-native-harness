@@ -12,6 +12,9 @@ import {
 } from '../crash-monitor.js';
 import { NativeCrashError } from '../errors.js';
 
+const noop = () => undefined;
+const resolveUndefined = async () => undefined;
+
 // ---------------------------------------------------------------------------
 // Test doubles
 // ---------------------------------------------------------------------------
@@ -20,9 +23,9 @@ const createAppMonitorMock = () => {
   let registeredListener: AppMonitorListener | null = null;
 
   const monitor: AppMonitor = {
-    start: vi.fn(async () => {}),
-    stop: vi.fn(async () => {}),
-    dispose: vi.fn(async () => {}),
+    start: vi.fn(resolveUndefined),
+    stop: vi.fn(resolveUndefined),
+    dispose: vi.fn(resolveUndefined),
     addListener: vi.fn((l: AppMonitorListener) => {
       registeredListener = l;
     }),
@@ -44,10 +47,10 @@ const createPlatformRunnerMock = (
   ({
     isAppRunning: vi.fn(async () => isRunning),
     getCrashDetails: vi.fn(async () => crashDetails),
-    startApp: vi.fn(async () => {}),
-    restartApp: vi.fn(async () => {}),
-    stopApp: vi.fn(async () => {}),
-    dispose: vi.fn(async () => {}),
+    startApp: vi.fn(resolveUndefined),
+    restartApp: vi.fn(resolveUndefined),
+    stopApp: vi.fn(resolveUndefined),
+    dispose: vi.fn(resolveUndefined),
     createAppMonitor: vi.fn(),
   }) as unknown as HarnessPlatformRunner;
 
@@ -79,10 +82,10 @@ describe('createCrashMonitor', () => {
 
       emit({ type: 'app_started' });
       const watch = cm.watch('test.ts', 'execution');
-      watch.promise.catch(() => {});
+      watch.promise.catch(noop);
 
       emit({ type: 'app_exited', isConfirmed: true });
-      await watch.promise.catch(() => {});
+      await watch.promise.catch(noop);
 
       expect(cm.isAlive()).toBe(false);
     });
@@ -94,7 +97,7 @@ describe('createCrashMonitor', () => {
       const cm = createCrashMonitor({ appMonitor: monitor, platformRunner: createPlatformRunnerMock() });
 
       const watch = cm.watch('/test/example.ts', 'execution');
-      watch.promise.catch(() => {});
+      watch.promise.catch(noop);
       emit({ type: 'app_exited', isConfirmed: true });
 
       await expect(watch.promise).rejects.toBeInstanceOf(NativeCrashError);
@@ -105,7 +108,7 @@ describe('createCrashMonitor', () => {
       const cm = createCrashMonitor({ appMonitor: monitor, platformRunner: createPlatformRunnerMock() });
 
       const watch = cm.watch('/test/example.ts', 'startup');
-      watch.promise.catch(() => {});
+      watch.promise.catch(noop);
       emit({ type: 'app_exited', isConfirmed: true });
 
       const error = await watch.promise.catch((e: NativeCrashError) => e);
@@ -128,10 +131,10 @@ describe('createCrashMonitor', () => {
       const cm = createCrashMonitor({ appMonitor: monitor, platformRunner: createPlatformRunnerMock() });
 
       const watch = cm.watch('test.ts', 'execution');
-      watch.promise.catch(() => {});
+      watch.promise.catch(noop);
       emit({ type: 'app_exited', isConfirmed: true });
 
-      await watch.promise.catch(() => {});
+      await watch.promise.catch(noop);
       // Second cancel should not throw or cause issues.
       expect(() => watch.cancel()).not.toThrow();
     });
@@ -144,7 +147,7 @@ describe('createCrashMonitor', () => {
       const cm = createCrashMonitor({ appMonitor: monitor, platformRunner: runner });
 
       const watch = cm.watch('test.ts', 'execution');
-      watch.promise.catch(() => {});
+      watch.promise.catch(noop);
       emit({ type: 'app_exited', isConfirmed: false });
 
       await expect(watch.promise).rejects.toBeInstanceOf(NativeCrashError);
@@ -171,7 +174,7 @@ describe('createCrashMonitor', () => {
       const cm = createCrashMonitor({ appMonitor: monitor, platformRunner: createPlatformRunnerMock() });
 
       const watch = cm.watch('test.ts', 'execution');
-      watch.promise.catch(() => {});
+      watch.promise.catch(noop);
       emit({ type: 'possible_crash', isConfirmed: true });
 
       await expect(watch.promise).rejects.toBeInstanceOf(NativeCrashError);
@@ -189,7 +192,7 @@ describe('createCrashMonitor', () => {
       const cm = createCrashMonitor({ appMonitor: monitor, platformRunner: runner });
 
       const watch = cm.watch('test.ts', 'execution');
-      watch.promise.catch(() => {});
+      watch.promise.catch(noop);
       emit({ type: 'app_exited', isConfirmed: true, crashDetails: { pid: 1234 } });
 
       const error = await watch.promise.catch((e: NativeCrashError) => e);
@@ -225,7 +228,7 @@ describe('createCrashMonitor', () => {
       await cm.start();
 
       const watch = cm.watch('test.ts', 'execution');
-      watch.promise.catch(() => {});
+      watch.promise.catch(noop);
       emit({ type: 'app_exited', isConfirmed: true });
 
       await expect(watch.promise).rejects.toBeInstanceOf(NativeCrashError);
@@ -239,7 +242,7 @@ describe('createCrashMonitor', () => {
 
       emit({ type: 'app_started' });
       const watch = cm.watch('test.ts', 'execution');
-      watch.promise.catch(() => {});
+      watch.promise.catch(noop);
 
       cm.reset();
 
@@ -260,7 +263,7 @@ describe('createCrashMonitor', () => {
       const cm = createCrashMonitor({ appMonitor: monitor, platformRunner: createPlatformRunnerMock() });
 
       const watch = cm.watch('test.ts', 'execution');
-      watch.promise.catch(() => {});
+      watch.promise.catch(noop);
 
       await cm.dispose();
 
@@ -268,7 +271,7 @@ describe('createCrashMonitor', () => {
       await new Promise((r) => setTimeout(r, 10));
 
       // After dispose watchers are cleared, so crash didn't propagate.
-      // The promise is still pending — cancel to settle it.
+      // The promise is still pending - cancel to settle it.
       watch.cancel();
       await expect(watch.promise).rejects.toBeInstanceOf(CrashWatchCancelledError);
     });

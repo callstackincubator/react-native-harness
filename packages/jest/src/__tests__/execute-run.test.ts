@@ -7,6 +7,8 @@ import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
 import type { HarnessSession } from '../harness-session.js';
 import { executeRun } from '../execute-run.js';
 
+const resolveUndefined = async () => undefined;
+
 // Mock the file-runner so we control what jestResult/harnessResult each test returns
 // without needing a real Jest config or Metro bundler.
 const mockRunHarnessTestFile = vi.hoisted(() => vi.fn());
@@ -85,13 +87,13 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
     detectNativeCrashes: true,
   } as HarnessSession['config'],
   context: {} as HarnessSession['context'],
-  ensureAppReady: vi.fn(async () => {}),
+  ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async () => makeHarnessResult()),
-  restartApp: vi.fn(async () => {}),
+  restartApp: vi.fn(resolveUndefined),
   resetCrashState: vi.fn(),
-  callHook: vi.fn(async () => {}),
+  callHook: vi.fn(resolveUndefined),
   setRunState: vi.fn(),
-  dispose: vi.fn(async () => {}),
+  dispose: vi.fn(resolveUndefined),
   ...overrides,
 });
 
@@ -181,8 +183,9 @@ describe('executeRun', () => {
 
       await executeRun(session, [makeTest(), makeTest('/b.ts')], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeGlobalConfig());
 
-      expect((finishedPayload as any).summary.passed).toBe(6);
-      expect((finishedPayload as any).status).toBe('passed');
+      const payload = finishedPayload as { summary: { passed: number }; status: string };
+      expect(payload.summary.passed).toBe(6);
+      expect(payload.status).toBe('passed');
     });
   });
 
@@ -240,8 +243,9 @@ describe('executeRun', () => {
 
       await executeRun(session, [makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeGlobalConfig());
 
-      expect((finishedPayload as any).summary.failed).toBe(1);
-      expect((finishedPayload as any).status).toBe('failed');
+      const payload = finishedPayload as { summary: { failed: number }; status: string };
+      expect(payload.summary.failed).toBe(1);
+      expect(payload.status).toBe('failed');
     });
   });
 

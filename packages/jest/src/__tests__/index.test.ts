@@ -5,6 +5,8 @@ import type { HarnessSession } from '../harness-session.js';
 import { HarnessError } from '@react-native-harness/tools';
 import JestHarness from '../index.js';
 
+const resolveUndefined = async () => undefined;
+
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
@@ -12,7 +14,7 @@ import JestHarness from '../index.js';
 const mockSession: HarnessSession = {
   config: { metroPort: 8081 } as HarnessSession['config'],
   context: {} as HarnessSession['context'],
-  ensureAppReady: vi.fn(async () => {}),
+  ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async (): Promise<TestSuiteResult> => ({
     name: '',
     tests: [],
@@ -20,15 +22,15 @@ const mockSession: HarnessSession = {
     status: 'passed',
     duration: 0,
   })),
-  restartApp: vi.fn(async () => {}),
+  restartApp: vi.fn(resolveUndefined),
   resetCrashState: vi.fn(),
-  callHook: vi.fn(async () => {}),
+  callHook: vi.fn(resolveUndefined),
   setRunState: vi.fn(),
-  dispose: vi.fn(async () => {}),
+  dispose: vi.fn(resolveUndefined),
 };
 
 const mockCreateHarnessSession = vi.hoisted(() => vi.fn(async () => mockSession));
-const mockExecuteRun = vi.hoisted(() => vi.fn(async () => {}));
+const mockExecuteRun = vi.hoisted(() => vi.fn(resolveUndefined));
 
 vi.mock('../harness-session.js', () => ({
   createHarnessSession: mockCreateHarnessSession,

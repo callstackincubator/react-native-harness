@@ -17,11 +17,7 @@ import { runSetupFiles } from './setup-files.js';
 import { setHandle } from './store.js';
 
 export const getClient = async (): Promise<HarnessHandle> => {
-  // Declared before connectToHarness so the runTests callback can close over
-  // it. By the time the CLI calls runTests, handle is already assigned.
-  let handle!: HarnessHandle;
-
-  handle = await connectToHarness(getWSServer(), {
+  const handle = await connectToHarness(getWSServer(), {
     runTests: async (path: string, options: TestExecutionOptions) => {
       if (store.getState().status === 'running') {
         throw new Error('Already running tests');

@@ -17,7 +17,7 @@ const RunnerSchema = z.object({
   platformId: z.string(),
 });
 
-type AnyHarnessPlugin = HarnessPlugin<any, any, any>;
+type AnyHarnessPlugin = HarnessPlugin<unknown, unknown, unknown>;
 
 const PluginSchema = z.custom<AnyHarnessPlugin>(
   (value) => isHarnessPlugin(value),

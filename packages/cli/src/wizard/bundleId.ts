@@ -59,7 +59,7 @@ export const getBundleIds = async (
         try {
           new URL(value);
           return;
-        } catch (_e) {
+        } catch {
           return 'Please enter a valid URL';
         }
       },

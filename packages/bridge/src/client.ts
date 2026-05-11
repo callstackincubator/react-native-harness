@@ -84,7 +84,7 @@ export const connectToHarness = (
         {
           post: (data) => ws.send(data),
           on: (handler) => {
-            ws.addEventListener('message', (event: any) => {
+            ws.addEventListener('message', (event: MessageEvent<string | ArrayBuffer>) => {
               if (typeof event.data === 'string') handler(event.data);
             });
           },
@@ -95,7 +95,7 @@ export const connectToHarness = (
 
       resolve({
         reportReady: (device) => void rpc.reportReady(device),
-        emitEvent: (event) => void rpc.emitEvent(event.type as any, event),
+        emitEvent: (event) => void rpc.emitEvent(event.type, event),
         transferScreenshot: async (data, metadata) => {
           const transferId = generateTransferId();
           ws.send(createBinaryFrame(transferId, data));

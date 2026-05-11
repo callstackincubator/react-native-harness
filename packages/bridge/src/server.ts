@@ -106,7 +106,6 @@ const createWss = (transport: TransportOptions): Promise<WebSocketServer> => {
 const receiveScreenshot = async (
   binaryStore: BinaryStore,
   reference: BinaryDataReference,
-  metadata: { width: number; height: number },
 ): Promise<FileReference> => {
   const data = binaryStore.get(reference.transferId);
   if (!data) {
@@ -142,10 +141,6 @@ export const createHarnessBridge = async (
     bridgeLogger.debug('app connected');
     const binaryStore = new BinaryStore();
 
-    // Declared with let so serverFunctions can safely close over it:
-    // by the time reportReady is called rpc is already assigned.
-    let rpc!: BirpcReturn<BridgeClientFunctions, BridgeServerFunctions>;
-
     const serverFunctions: BridgeServerFunctions = {
       reportReady: (device) => {
         const conn: AppConnection = {
@@ -170,7 +165,7 @@ export const createHarnessBridge = async (
         matchImageSnapshot(screenshot, testPath, opts, context.platform.name),
     };
 
-    rpc = createBirpc<BridgeClientFunctions, BridgeServerFunctions>(
+    const rpc: BirpcReturn<BridgeClientFunctions, BridgeServerFunctions> = createBirpc<BridgeClientFunctions, BridgeServerFunctions>(
       serverFunctions,
       {
         post: (data) => ws.send(data),
@@ -180,8 +175,13 @@ export const createHarnessBridge = async (
             (msg: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
               if (isBinary) {
                 try {
+                  const messageBuffer = Array.isArray(msg)
+                    ? Buffer.concat(msg)
+                    : Buffer.isBuffer(msg)
+                      ? msg
+                      : Buffer.from(msg);
                   const { transferId, data } = parseBinaryFrame(
-                    new Uint8Array(msg as any),
+                    new Uint8Array(messageBuffer),
                   );
                   binaryStore.add(transferId, data);
                 } catch (err) {

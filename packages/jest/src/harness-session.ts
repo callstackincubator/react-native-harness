@@ -70,6 +70,7 @@ import {
 
 const sessionLogger = logger.child('runtime');
 const defaultResourceLockManager = createResourceLockManager();
+const ignorePromiseRejection = () => undefined;
 
 export type HarnessRunState = {
   readonly runId: string;
@@ -188,7 +189,7 @@ const waitForAppReady = async (
     },
     waitForCrash: async (signal) => {
       const watch = crashMonitor.watch(testFilePath, 'startup');
-      watch.promise.catch(() => {}); // suppress unhandled-rejection when abort wins race
+      watch.promise.catch(ignorePromiseRejection); // suppress unhandled-rejection when abort wins race
       try {
         logWait('waiting for crash or runtime ready');
         return await Promise.race([watch.promise, waitForAbort(signal)]);
@@ -650,7 +651,7 @@ export const createHarnessSession = async (
       const crashWatch = crashMonitor.watch(testPath, 'execution');
       // Attach a handler now so the rejection is always observed, whether the
       // crash wins the race or cancel() is called after the test run wins.
-      crashWatch.promise.catch(() => {});
+      crashWatch.promise.catch(ignorePromiseRejection);
       try {
         const result = await Promise.race([
           conn.runTests(testPath, { ...options, runner: platform.runner }),
