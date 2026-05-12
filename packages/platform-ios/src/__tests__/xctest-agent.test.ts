@@ -254,10 +254,13 @@ describe('xctest-agent orchestration', () => {
     );
     const cacheDirectories = fs.readdirSync(simulatorCacheRoot);
     expect(cacheDirectories).toHaveLength(1);
-    expect(cacheDirectories[0]).toMatch(/^xctest-agent-simulator-/);
+    const cacheDirectory = cacheDirectories[0];
+    expect(cacheDirectory).toBeDefined();
+    if (!cacheDirectory) throw new Error('Expected cached simulator directory');
+    expect(cacheDirectory).toMatch(/^xctest-agent-simulator-/);
     expect(
       fs.existsSync(
-        path.join(simulatorCacheRoot, cacheDirectories[0]!, 'cache.json')
+        path.join(simulatorCacheRoot, cacheDirectory, 'cache.json')
       )
     ).toBe(true);
   });
@@ -342,11 +345,14 @@ describe('xctest-agent orchestration', () => {
       path.join(tempProjectRoot, '.harness', 'logs')
     );
     expect(logDirectories).toHaveLength(1);
+    const logDirectory = logDirectories[0];
+    expect(logDirectory).toBeDefined();
+    if (!logDirectory) throw new Error('Expected xcodebuild log directory');
     const xcodebuildLogPath = path.join(
       tempProjectRoot,
       '.harness',
       'logs',
-      logDirectories[0]!,
+      logDirectory,
       'xcodebuild.log'
     );
     expect(fs.existsSync(xcodebuildLogPath)).toBe(true);

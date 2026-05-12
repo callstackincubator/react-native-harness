@@ -114,6 +114,12 @@ export interface WaitUntilOptions
 
 type Truthy<T> = T extends false | '' | 0 | null | undefined ? never : T;
 
+const isPromiseLike = <T>(value: T | PromiseLike<T>): value is PromiseLike<T> =>
+  value !== null &&
+  typeof value === 'object' &&
+  'then' in value &&
+  typeof value.then === 'function';
+
 export function waitUntil<T>(
   callback: WaitUntilCallback<T>,
   options: number | WaitUntilOptions = {}
@@ -164,12 +170,8 @@ export function waitUntil<T>(
       }
       try {
         const result = callback();
-        if (
-          result !== null &&
-          typeof result === 'object' &&
-          typeof (result as any).then === 'function'
-        ) {
-          const thenable = result as PromiseLike<T>;
+        if (isPromiseLike(result)) {
+          const thenable = result;
           promiseStatus = 'pending';
           thenable.then(
             (resolvedValue) => {

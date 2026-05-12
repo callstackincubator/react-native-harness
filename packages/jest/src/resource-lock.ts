@@ -60,7 +60,7 @@ const wait = async (ms: number): Promise<void> => {
 const createAbortError = () =>
   new DOMException('The operation was aborted', 'AbortError');
 
-export const hashResourceLockKey = (key: string): string => {
+const hashResourceLockKey = (key: string): string => {
   return crypto.createHash('sha256').update(key).digest('hex');
 };
 

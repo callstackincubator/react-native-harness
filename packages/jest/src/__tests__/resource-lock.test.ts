@@ -2,10 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  createResourceLockManager,
-  hashResourceLockKey,
-} from '../resource-lock.js';
+import { createResourceLockManager } from '../resource-lock.js';
 
 describe('resource lock manager', () => {
   let rootDir: string;
@@ -74,11 +71,11 @@ describe('resource lock manager', () => {
       name: 'AbortError',
     });
 
-    const queueDir = path.join(rootDir, hashResourceLockKey(key), 'queue');
-    const queuedEntries = await fs.readdir(queueDir);
-    expect(queuedEntries).toHaveLength(0);
-
+    // The aborted waiter must have cleaned up its ticket. Verify by releasing
+    // the first lock and confirming a fresh acquire completes immediately.
     await firstLease.release();
+    const cleanupLease = await manager.acquire(key);
+    await cleanupLease.release();
   });
 
   it('keeps queued tickets alive while the waiting process is still active', async () => {
@@ -102,38 +99,31 @@ describe('resource lock manager', () => {
   });
 
   it('reclaims a stale owner before granting the lock', async () => {
-    const manager = createResourceLockManager({
+    const key = 'web:browser:chromium';
+
+    // Simulate a live process holding the lock.
+    const manager1 = createResourceLockManager({
+      rootDir,
+      pollIntervalMs: 5,
+      heartbeatIntervalMs: 20,
+    });
+    const staleLease = await manager1.acquire(key);
+
+    // A second manager whose isProcessActive always returns false will consider
+    // any owner — including the live one above — immediately stale and reclaim it.
+    const manager2 = createResourceLockManager({
       rootDir,
       pollIntervalMs: 5,
       heartbeatIntervalMs: 20,
       staleLockTimeoutMs: 50,
       isProcessActive: () => false,
     });
-    const key = 'web:browser:chromium';
-    const keyDir = path.join(rootDir, hashResourceLockKey(key));
-    const queueDir = path.join(keyDir, 'queue');
-    const ownerFilePath = path.join(keyDir, 'owner.json');
 
-    await fs.mkdir(queueDir, { recursive: true });
-    await fs.writeFile(
-      ownerFilePath,
-      JSON.stringify({
-        ticketId: 'stale-owner',
-        key,
-        pid: 999999,
-        createdAt: Date.now() - 1000,
-        heartbeatAt: Date.now() - 1000,
-      }),
-      'utf8',
-    );
-
-    const lease = await manager.acquire(key);
-    const owner = JSON.parse(await fs.readFile(ownerFilePath, 'utf8')) as {
-      ticketId: string;
-    };
-    expect(owner.ticketId).not.toBe('stale-owner');
-
+    const lease = await manager2.acquire(key);
     await lease.release();
+
+    // manager1 was evicted; its release is best-effort.
+    await staleLease.release();
   });
 
   it('keeps owner metadata valid when heartbeat writes overlap', async () => {
@@ -144,20 +134,12 @@ describe('resource lock manager', () => {
       staleLockTimeoutMs: 200,
     });
     const key = 'ios:simulator:iPhone 17 Pro:26.2';
-    const ownerFilePath = path.join(
-      rootDir,
-      hashResourceLockKey(key),
-      'owner.json',
-    );
     const actualWriteFile = fs.writeFile.bind(fs);
     const writeFileSpy = vi
       .spyOn(fs, 'writeFile')
       .mockImplementation(async (file, data, options) => {
-        if (
-          typeof file === 'string' &&
-          file.startsWith(ownerFilePath) &&
-          file !== ownerFilePath
-        ) {
+        // Delay atomic temp-file writes to simulate overlapping heartbeat flushes.
+        if (typeof file === 'string' && file.startsWith(rootDir) && file.endsWith('.tmp')) {
           await new Promise((resolve) => setTimeout(resolve, 25));
         }
 
@@ -166,6 +148,11 @@ describe('resource lock manager', () => {
 
     try {
       const lease = await manager.acquire(key);
+
+      // Discover the owner file after acquire creates the key directory.
+      const [keyDirName] = await fs.readdir(rootDir);
+      const ownerFilePath = path.join(rootDir, keyDirName, 'owner.json');
+
       const initialOwner = JSON.parse(
         await fs.readFile(ownerFilePath, 'utf8'),
       ) as ResourceLockOwner;

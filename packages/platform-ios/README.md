@@ -68,13 +68,15 @@ Creates an iOS simulator device configuration.
 - `deviceName` - Name of the iOS simulator (e.g., 'iPhone 16 Pro Max')
 - `osVersion` - iOS version (e.g., '18.0')
 
-### `applePhysicalDevice(deviceName)`
+### `applePhysicalDevice(deviceNameOrId)`
 
 Creates a physical Apple device configuration.
 
 **Parameters:**
 
-- `deviceName` - Name of the physical device (e.g., 'iPhone (Your Name)')
+- `deviceNameOrId` - Name, CoreDevice identifier, or hardware UDID of the
+  physical device (e.g., 'iPhone (Your Name)' or
+  '6954F636-D116-52FA-9D00-8298BBB63705')
 
 ## Requirements
 
