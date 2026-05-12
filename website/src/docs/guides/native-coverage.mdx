@@ -1,0 +1,92 @@
+import { PackageManagerTabs } from '@theme';
+
+# Native Coverage
+
+React Native Harness provides experimental support for collecting native coverage during test runs.
+
+:::warning Experimental
+`@react-native-harness/coverage-ios` is an **experimental** feature. Expect rough edges and API changes while the integration matures.
+:::
+
+Today, native coverage support is available for **iOS simulators only**. Physical iOS devices are not supported yet. Android support is planned and this guide will expand as it lands.
+
+## What you get
+
+- Coverage instrumentation for supported native dependencies
+- Automatic `.profraw` collection from the app sandbox
+- `native-coverage.lcov` output after the test run finishes
+- A way to measure native code exercised by Harness tests, alongside JavaScript coverage
+
+## Installation
+
+Current package:
+
+<PackageManagerTabs command="install --save-dev @react-native-harness/coverage-ios" />
+
+After installation:
+
+1. Run your iOS pod install step.
+2. Rebuild the app.
+
+## Configuration
+
+Current iOS configuration:
+
+Add the pods you want to instrument in `rn-harness.config.mjs`:
+
+```javascript
+import { applePlatform, appleSimulator } from '@react-native-harness/platform-apple';
+
+export default {
+  runners: [
+    applePlatform({
+      name: 'ios',
+      device: appleSimulator('iPhone 16 Pro', '18.0'),
+      bundleId: 'com.example.app',
+    }),
+  ],
+  coverage: {
+    native: {
+      ios: {
+        pods: ['MyLibrary'],
+      },
+    },
+  },
+};
+```
+
+The `pods` array should contain CocoaPods target names that you want Harness to instrument for coverage.
+
+## Running tests
+
+Current iOS command:
+
+Run Harness with coverage enabled:
+
+```bash
+react-native-harness --coverage --harnessRunner ios
+```
+
+Harness will stop the app before cleanup, collect generated `.profraw` files, merge them with `llvm-profdata`, and export LCOV with `llvm-cov`.
+
+## Output
+
+When native coverage is collected successfully, Harness writes these files to the project root:
+
+- `native-coverage.profdata`
+- `native-coverage.lcov`
+
+## Requirements
+
+- macOS with Xcode installed
+- An iOS runner configured with `@react-native-harness/platform-apple`
+- A CocoaPods-based iOS app setup
+- iOS Simulator
+- Debug app build
+
+## Limitations
+
+- iOS simulator support is available today; physical iOS devices and Android are not supported yet
+- Current implementation targets pod-based native code
+- The feature is experimental and may change without much notice
+- If LCOV source filtering fails for pod paths, Harness falls back to exporting broader coverage data

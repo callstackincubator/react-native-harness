@@ -11,6 +11,11 @@
   },
   {
     "type": "file",
+    "name": "native-coverage",
+    "label": "Native Coverage"
+  },
+  {
+    "type": "file",
     "name": "ci-cd",
     "label": "CI/CD Integration"
   }
