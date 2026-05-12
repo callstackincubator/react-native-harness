@@ -633,8 +633,8 @@ function getErrorMap() {
 
 // ../../node_modules/zod/dist/esm/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path6, errorMaps, issueData } = params;
-  const fullPath = [...path6, ...issueData.path || []];
+  const { data, path: path7, errorMaps, issueData } = params;
+  const fullPath = [...path7, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -750,11 +750,11 @@ var errorUtil;
 
 // ../../node_modules/zod/dist/esm/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path6, key) {
+  constructor(parent, value, path7, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path6;
+    this._path = path7;
     this._key = key;
   }
   get path() {
@@ -4350,6 +4350,10 @@ var import_node_fs4 = __toESM(require("fs"), 1);
 var import_node_path4 = __toESM(require("path"), 1);
 var DEFAULT_ARTIFACT_ROOT = import_node_path4.default.join(process.cwd(), ".harness", "crash-reports");
 
+// ../tools/dist/harness-artifacts.js
+var import_node_fs5 = __toESM(require("fs"), 1);
+var import_node_path5 = __toESM(require("path"), 1);
+
 // ../plugins/dist/utils.js
 var isHookTree = (value) => {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -4396,6 +4400,7 @@ var RunnerSchema = external_exports.object({
   name: external_exports.string().min(1, "Runner name is required").regex(/^[a-zA-Z0-9._-]+$/, "Runner name can only contain alphanumeric characters, dots, underscores, and hyphens"),
   config: external_exports.record(external_exports.any()),
   runner: external_exports.string(),
+  cli: external_exports.string().optional(),
   platformId: external_exports.string()
 });
 var PluginSchema = external_exports.custom((value) => isHarnessPlugin(value), "Invalid Harness plugin");
@@ -4502,16 +4507,16 @@ var ConfigLoadError = class extends HarnessError {
 };
 
 // ../config/dist/reader.js
-var import_node_path5 = __toESM(require("path"), 1);
-var import_node_fs5 = __toESM(require("fs"), 1);
+var import_node_path6 = __toESM(require("path"), 1);
+var import_node_fs6 = __toESM(require("fs"), 1);
 var import_node_module2 = require("module");
 var import_meta = {};
 var extensions = [".js", ".mjs", ".cjs", ".json"];
 var importUp = async (dir, name) => {
-  const filePath = import_node_path5.default.join(dir, name);
+  const filePath = import_node_path6.default.join(dir, name);
   for (const ext of extensions) {
     const filePathWithExt = `${filePath}${ext}`;
-    if (import_node_fs5.default.existsSync(filePathWithExt)) {
+    if (import_node_fs6.default.existsSync(filePathWithExt)) {
       let rawConfig;
       try {
         if (ext === ".mjs") {
@@ -4529,8 +4534,8 @@ var importUp = async (dir, name) => {
       } catch (error) {
         if (error instanceof ZodError) {
           const validationErrors = error.errors.map((err) => {
-            const path6 = err.path.length > 0 ? ` at "${err.path.join(".")}"` : "";
-            return `${err.message}${path6}`;
+            const path7 = err.path.length > 0 ? ` at "${err.path.join(".")}"` : "";
+            return `${err.message}${path7}`;
           });
           throw new ConfigValidationError(filePathWithExt, validationErrors);
         }
@@ -4538,7 +4543,7 @@ var importUp = async (dir, name) => {
       }
     }
   }
-  const parentDir = import_node_path5.default.dirname(dir);
+  const parentDir = import_node_path6.default.dirname(dir);
   if (parentDir === dir) {
     throw new ConfigNotFoundError(dir);
   }
@@ -4553,8 +4558,8 @@ var getConfig = async (dir) => {
 };
 
 // src/shared/index.ts
-var import_node_path6 = __toESM(require("path"));
-var import_node_fs6 = __toESM(require("fs"));
+var import_node_path7 = __toESM(require("path"));
+var import_node_fs7 = __toESM(require("fs"));
 var getHostAndroidSystemImageArch = () => {
   switch (process.arch) {
     case "arm64":
@@ -4622,7 +4627,7 @@ var run = async () => {
     if (!runnerInput) {
       throw new Error("Runner input is required");
     }
-    const projectRoot = projectRootInput ? import_node_path6.default.resolve(projectRootInput) : process.cwd();
+    const projectRoot = projectRootInput ? import_node_path7.default.resolve(projectRootInput) : process.cwd();
     console.info(`Loading React Native Harness config from: ${projectRoot}`);
     const { config, projectRoot: resolvedProjectRoot } = await getConfig(
       projectRoot
@@ -4636,13 +4641,13 @@ var run = async () => {
       throw new Error("GITHUB_OUTPUT environment variable is not set");
     }
     const resolvedRunner = getResolvedRunner(runner);
-    const relativeProjectRoot = import_node_path6.default.relative(process.cwd(), resolvedProjectRoot) || ".";
+    const relativeProjectRoot = import_node_path7.default.relative(process.cwd(), resolvedProjectRoot) || ".";
     const output = `config=${JSON.stringify(
       resolvedRunner
     )}
 projectRoot=${relativeProjectRoot}
 `;
-    import_node_fs6.default.appendFileSync(githubOutput, output);
+    import_node_fs7.default.appendFileSync(githubOutput, output);
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.message);

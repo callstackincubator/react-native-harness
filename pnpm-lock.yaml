@@ -303,9 +303,6 @@ importers:
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config
-      '@react-native-harness/platform-apple':
-        specifier: workspace:*
-        version: link:../platform-ios
       '@react-native-harness/platforms':
         specifier: workspace:*
         version: link:../platforms
@@ -315,16 +312,13 @@ importers:
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
-      yargs:
-        specifier: ^17.7.2
-        version: 17.7.2
     devDependencies:
-      '@types/yargs':
-        specifier: ^17.0.32
-        version: 17.0.33
       '@react-native-harness/platform-android':
         specifier: workspace:*
         version: link:../platform-android
+      '@react-native-harness/platform-apple':
+        specifier: workspace:*
+        version: link:../platform-ios
       '@react-native-harness/platform-web':
         specifier: workspace:*
         version: link:../platform-web
@@ -448,9 +442,16 @@ importers:
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
+      yargs:
+        specifier: ^17.7.2
+        version: 17.7.2
       zod:
         specifier: ^3.25.67
         version: 3.25.67
+    devDependencies:
+      '@types/yargs':
+        specifier: ^17.0.32
+        version: 17.0.33
 
   packages/platform-vega:
     dependencies:
@@ -3182,6 +3183,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@unhead/react@2.1.2':
     resolution: {integrity: sha512-VNKa0JJZq5Jp28VuiOMfjAA7CTLHI0SdW/Hs1ZPq2PsNV/cgxGv8quFBGXWx4gfoHB52pejO929RKjIpYX5+iQ==}

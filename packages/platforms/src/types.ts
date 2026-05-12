@@ -114,10 +114,29 @@ export type HarnessPlatformInitOptions = {
   signal: AbortSignal;
 };
 
+export type HarnessCliCommandContext = {
+  cwd: string;
+  projectRoot: string;
+};
+
+export type HarnessCliCommand = {
+  name: string;
+  aliases?: string[];
+  run: (
+    args: string[],
+    context: HarnessCliCommandContext
+  ) => Promise<void>;
+};
+
+export type HarnessCliModule = {
+  commands: HarnessCliCommand[];
+};
+
 export type HarnessPlatform<TConfig = Record<string, unknown>> = {
   name: string;
   config: TConfig;
   runner: string;
+  cli?: string;
   platformId: string;
   getResourceLockKey?: () => string | Promise<string>;
 };

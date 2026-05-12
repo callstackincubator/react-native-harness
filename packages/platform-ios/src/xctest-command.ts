@@ -1,5 +1,4 @@
 import yargs from 'yargs';
-import { hideBin } from 'yargs/helpers';
 
 export type XCTestBuildDestination = 'simulator' | 'device';
 
@@ -17,7 +16,7 @@ type XCTestBuildResult = {
   xctestrunPath?: string;
 };
 
-export type PlatformAppleXCTestModule = {
+export type XCTestBuildModule = {
   buildXCTestAgent: (options: {
     destination: XCTestBuildDestination;
     projectRoot: string;
@@ -27,14 +26,6 @@ export type PlatformAppleXCTestModule = {
       teamId?: string;
     };
   }) => Promise<XCTestBuildResult>;
-};
-
-export const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
 };
 
 const createXCTestYargs = (args: string[]) =>
@@ -119,7 +110,7 @@ export const parseXCTestBuildArgs = (args: string[]): XCTestBuildArgs => {
 export const runXCTestBuildCommand = async (options: {
   args: string[];
   cwd: string;
-  platformApple: PlatformAppleXCTestModule;
+  xctest: XCTestBuildModule;
 }) => {
   const buildArgs = parseXCTestBuildArgs(options.args);
   const signing = {
@@ -141,7 +132,7 @@ export const runXCTestBuildCommand = async (options: {
     buildOptions.signing = signing;
   }
 
-  const result = await options.platformApple.buildXCTestAgent(buildOptions);
+  const result = await options.xctest.buildXCTestAgent(buildOptions);
 
   console.log('Built XCTest agent');
   console.log(`Destination: ${result.destination}`);
@@ -160,9 +151,12 @@ export const runXCTestBuildCommand = async (options: {
   console.log(`Reused: ${reusedLabel}`);
 };
 
-export const runXCTestCommand = async () => {
-  const args = hideBin(process.argv).slice(1);
-  const parser = createXCTestYargs(args);
+export const runXCTestCommand = async (options: {
+  args: string[];
+  cwd: string;
+  xctest: XCTestBuildModule;
+}) => {
+  const parser = createXCTestYargs(options.args);
   const argv = parser.parseSync();
   const commandName = String(argv._[0] ?? '');
 
@@ -170,28 +164,14 @@ export const runXCTestCommand = async () => {
     return;
   }
 
-  let platformApple: PlatformAppleXCTestModule;
-
-  try {
-    const importedPlatformApple = await import(
-      '@react-native-harness/platform-apple'
-    );
-    const unknownPlatformApple = importedPlatformApple as unknown;
-    platformApple = unknownPlatformApple as PlatformAppleXCTestModule;
-  } catch (error) {
-    console.error(getErrorMessage(error));
-    process.exit(1);
-  }
-
   try {
     await runXCTestBuildCommand({
-      args: args.slice(1),
-      cwd: process.cwd(),
-      platformApple,
+      args: options.args.slice(1),
+      cwd: options.cwd,
+      xctest: options.xctest,
     });
   } catch (error) {
-    console.error(getErrorMessage(error));
     parser.showHelp();
-    process.exit(1);
+    throw error;
   }
 };

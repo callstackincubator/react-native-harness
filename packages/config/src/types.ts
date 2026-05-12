@@ -14,6 +14,7 @@ const RunnerSchema = z.object({
     ),
   config: z.record(z.any()),
   runner: z.string(),
+  cli: z.string().optional(),
   platformId: z.string(),
 });
 

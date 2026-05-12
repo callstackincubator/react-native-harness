@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   parseXCTestBuildArgs,
   runXCTestBuildCommand,
-  type PlatformAppleXCTestModule,
+  type XCTestBuildModule,
 } from '../xctest-command.js';
 
 describe('xctest build command', () => {
@@ -28,15 +28,15 @@ describe('xctest build command', () => {
       reused: false,
       xctestrunPath: '/tmp/project/.harness/xctest-agent/device/file.xctestrun',
     }));
-    const platformApple = {
+    const xctest = {
       buildXCTestAgent,
-    } satisfies PlatformAppleXCTestModule;
+    } satisfies XCTestBuildModule;
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     await runXCTestBuildCommand({
       args: ['--destination', 'device'],
       cwd: '/tmp/project',
-      platformApple,
+      xctest,
     });
 
     expect(buildXCTestAgent).toHaveBeenCalledWith({
@@ -52,15 +52,15 @@ describe('xctest build command', () => {
       destination: 'device' as const,
       reused: true,
     }));
-    const platformApple = {
+    const xctest = {
       buildXCTestAgent,
-    } satisfies PlatformAppleXCTestModule;
+    } satisfies XCTestBuildModule;
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     await runXCTestBuildCommand({
       args: ['--destination', 'device', '--teamId', 'TESTTEAM01'],
       cwd: '/tmp/project',
-      platformApple,
+      xctest,
     });
 
     expect(buildXCTestAgent).toHaveBeenCalledWith({
