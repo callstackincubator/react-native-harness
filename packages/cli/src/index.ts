@@ -1,6 +1,7 @@
 import { run, yargsOptions } from 'jest-cli';
 import { getConfig } from '@react-native-harness/config';
 import { runInitWizard } from './wizard/index.js';
+import { getErrorMessage, runXCTestCommand } from './xctest-command.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -188,7 +189,13 @@ const patchYargsOptions = () => {
   delete yargsOptions.logHeapUsage;
 };
 
-if (process.argv[2] === 'skill' || process.argv[2] === 'skills') {
+if (process.argv[2] === 'xctest') {
+  runXCTestCommand().catch((error) => {
+    const message = getErrorMessage(error);
+    console.error(message);
+    process.exit(1);
+  });
+} else if (process.argv[2] === 'skill' || process.argv[2] === 'skills') {
   runSkillCommand();
 } else if (process.argv.includes('init')) {
   runInitWizard();

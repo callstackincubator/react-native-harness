@@ -55,7 +55,10 @@ vi.mock('../xctest-agent-transport-device.js', () => ({
   })),
 }));
 
-import { createXCTestAgentController } from '../xctest-agent.js';
+import {
+  buildXCTestAgent,
+  createXCTestAgentController,
+} from '../xctest-agent.js';
 import { createDeviceXCTestAgentTransport } from '../xctest-agent-transport-device.js';
 import { createSimulatorXCTestAgentTransport } from '../xctest-agent-transport-simulator.js';
 
@@ -244,12 +247,12 @@ describe('xctest-agent orchestration', () => {
     await controller.prepare();
 
     expect(mocks.spawn).toHaveBeenNthCalledWith(
-      4,
+      3,
       'xcodebuild',
       expect.arrayContaining([
         'build-for-testing',
         '-destination',
-        'platform=iOS Simulator,id=sim-123',
+        'generic/platform=iOS Simulator',
       ])
     );
     const cacheDirectories = fs.readdirSync(simulatorCacheRoot);
@@ -262,6 +265,96 @@ describe('xctest-agent orchestration', () => {
     ).toBe(true);
   });
 
+  it('builds standalone simulator agent artifacts with the generic simulator destination', async () => {
+    const result = await buildXCTestAgent({
+      destination: 'simulator',
+    });
+
+    expect(result.destination).toBe('simulator');
+    expect(result.reused).toBe(false);
+    expect(result.derivedDataPath).toContain('xctest-agent-simulator-');
+    expect(result.xctestrunPath).toContain('.xctestrun');
+    expect(mocks.spawn).toHaveBeenNthCalledWith(
+      3,
+      'xcodebuild',
+      expect.arrayContaining([
+        'build-for-testing',
+        '-destination',
+        'generic/platform=iOS Simulator',
+      ])
+    );
+  });
+
+  it('reuses standalone simulator agent artifacts when cache metadata matches', async () => {
+    writeSimulatorCacheDirectory({
+      buildInputsHash: getCurrentInputsHash(),
+      directoryName: 'xctest-agent-simulator-existing',
+    });
+
+    const result = await buildXCTestAgent({
+      destination: 'simulator',
+    });
+
+    expect(result.destination).toBe('simulator');
+    expect(result.reused).toBe(true);
+    expect(result.derivedDataPath).toContain('xctest-agent-simulator-existing');
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('builds standalone device agent artifacts without signing when no signing options are provided', async () => {
+    await buildXCTestAgent({
+      destination: 'device',
+    });
+
+    const buildCall = mocks.spawn.mock.calls[0];
+    const buildArgs = buildCall?.[1] ?? [];
+
+    expect(buildCall?.[0]).toBe('xcodebuild');
+    expect(buildArgs).toEqual(
+      expect.arrayContaining([
+        'build-for-testing',
+        '-destination',
+        'generic/platform=iOS',
+        'CODE_SIGNING_ALLOWED=NO',
+        'CODE_SIGNING_REQUIRED=NO',
+      ])
+    );
+    expect(buildArgs).not.toEqual(
+      expect.arrayContaining([expect.stringContaining('DEVELOPMENT_TEAM=')])
+    );
+    expect(buildArgs).not.toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('PROVISIONING_PROFILE_SPECIFIER='),
+      ])
+    );
+  });
+
+  it('builds standalone device agent artifacts with signing options when provided', async () => {
+    await buildXCTestAgent({
+      destination: 'device',
+      signing: {
+        teamId: 'TESTTEAM01',
+      },
+    });
+
+    const buildCall = mocks.spawn.mock.calls[0];
+    const buildArgs = buildCall?.[1] ?? [];
+
+    expect(buildCall?.[0]).toBe('xcodebuild');
+    expect(buildArgs).toEqual(
+      expect.arrayContaining([
+        'build-for-testing',
+        '-destination',
+        'generic/platform=iOS',
+        '-allowProvisioningUpdates',
+        'CODE_SIGN_STYLE=Automatic',
+        'DEVELOPMENT_TEAM=TESTTEAM01',
+        'CODE_SIGN_IDENTITY=Apple Development',
+      ])
+    );
+    expect(buildArgs).not.toContain('CODE_SIGNING_ALLOWED=NO');
+  });
+
   it('reuses cached build artifacts for repeated prepares on the same destination kind', async () => {
     fs.mkdirSync(path.join(deviceBuildRoot, 'device', 'Build', 'Products'), {
       recursive: true,
@@ -270,7 +363,7 @@ describe('xctest-agent orchestration', () => {
       path.join(deviceBuildRoot, 'device', 'build-manifest.json'),
       JSON.stringify({
         buildInputsHash: getCurrentInputsHash(),
-        codeSign: {
+        signing: {
           teamId: 'TESTTEAM01',
         },
         destinationKind: 'device',
@@ -316,7 +409,7 @@ describe('xctest-agent orchestration', () => {
     await controller.ensureStarted();
     await controller.ensureStarted();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(8);
+    expect(mocks.spawn).toHaveBeenCalledTimes(4);
     expect(mocks.spawn).toHaveBeenLastCalledWith(
       'xcodebuild',
       expect.arrayContaining([
@@ -489,9 +582,9 @@ describe('xctest-agent orchestration', () => {
 
     await controller.prepare();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(7);
+    expect(mocks.spawn).toHaveBeenCalledTimes(3);
     expect(mocks.spawn).toHaveBeenNthCalledWith(
-      4,
+      3,
       'xcodebuild',
       expect.arrayContaining(['build-for-testing'])
     );
@@ -512,7 +605,7 @@ describe('xctest-agent orchestration', () => {
 
     await controller.prepare();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(3);
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
   });
 
   it('fails fast when the checked-in xcode project is missing', async () => {
@@ -616,7 +709,6 @@ const writeSimulatorCacheDirectory = (options: {
       destinationKind: 'simulator',
       hostArchitecture: process.arch,
       schemaVersion: 1,
-      simulatorRuntime,
       simulatorSdkVersion,
       xcodeVersion,
       xctestrunRelativePath:
