@@ -5,10 +5,10 @@ import util from 'node:util';
 export type ClientLogEvent = Extract<ReportableEvent, { type: 'client_log' }>;
 export type ClientLogBuffer = NonNullable<JestTestResult['console']>;
 export type ClientLogEntry = ClientLogBuffer[number];
-export type ClientLogWriter = (
-  entry: ClientLogEntry,
-  event: ClientLogEvent
-) => void;
+export type ClientLogCollector = {
+  handleEvent: (event: ReportableEvent) => void;
+  flush: () => ClientLogBuffer;
+};
 
 type LogLevel = ClientLogEvent['level'];
 type JestLogLevel = ClientLogEntry['type'];
@@ -62,33 +62,24 @@ export const formatClientLogEntry = (
   };
 };
 
-/**
- * Handles a client_log event by formatting it for Jest.
- * Returns true if the event was handled, false otherwise.
- */
-export const handleClientLogEvent = (
-  event: ReportableEvent,
-  writeLogEntry: ClientLogWriter
-): boolean => {
-  if (event.type !== 'client_log') {
-    return false;
-  }
+export const createClientLogCollector = (): ClientLogCollector => {
+  let buffer: ClientLogBuffer = [];
 
-  const logEntry = formatClientLogEntry(event);
-  if (logEntry) {
-    writeLogEntry(logEntry, event);
-  }
+  return {
+    handleEvent: (event) => {
+      if (event.type !== 'client_log') {
+        return;
+      }
 
-  return true;
-};
-
-/**
- * Creates a client log event listener that can be added to the Metro reporter.
- */
-export const createClientLogListener = (
-  writeLogEntry: ClientLogWriter
-): ((event: ReportableEvent) => void) => {
-  return (event: ReportableEvent) => {
-    handleClientLogEvent(event, writeLogEntry);
+      const entry = formatClientLogEntry(event);
+      if (entry) {
+        buffer.push(entry);
+      }
+    },
+    flush: () => {
+      const flushed = buffer;
+      buffer = [];
+      return flushed;
+    },
   };
 };

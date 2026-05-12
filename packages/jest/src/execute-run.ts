@@ -142,7 +142,7 @@ export const executeRun = async (
 
         applyJestResultToSummary(summary, result.jestResult);
         const clientLogs = session.flushClientLogs();
-        if (clientLogs) {
+        if (clientLogs.length > 0) {
           result.jestResult.console = clientLogs;
         }
         updateRunState();

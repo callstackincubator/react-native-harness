@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  createClientLogCollector,
   formatClientLogMessage,
   formatClientLogEntry,
-  handleClientLogEvent,
-  createClientLogListener,
   type ClientLogEvent,
 } from '../client-log-handler.js';
 
@@ -226,162 +225,140 @@ describe('client-log-handler', () => {
     });
   });
 
-  describe('handleClientLogEvent', () => {
-    it('should handle client_log events and write a Jest log entry', () => {
+  describe('createClientLogCollector', () => {
+    it('collects client_log events and flushes them', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'log',
         data: ['Test message'],
       };
-      const writeLogEntry = vi.fn();
 
-      const result = handleClientLogEvent(event, writeLogEntry);
+      collector.handleEvent(event);
 
-      expect(result).toBe(true);
-      expect(writeLogEntry).toHaveBeenCalledTimes(1);
-      expect(writeLogEntry).toHaveBeenCalledWith(
+      expect(collector.flush()).toEqual([
         {
           message: 'Test message',
           origin: '',
           type: 'log',
         },
-        event
-      );
+      ]);
     });
 
-    it('should return false for non-client_log events', () => {
+    it('returns an empty array for non-client_log events', () => {
+      const collector = createClientLogCollector();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const event = { type: 'bundle_build_started' } as any;
-      const writeLogEntry = vi.fn();
 
-      const result = handleClientLogEvent(event, writeLogEntry);
+      collector.handleEvent(event);
 
-      expect(result).toBe(false);
-      expect(writeLogEntry).not.toHaveBeenCalled();
+      expect(collector.flush()).toEqual([]);
     });
 
-    it('should handle error level logs', () => {
+    it('collects error level logs', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'error',
         data: ['Something went wrong'],
       };
-      const writeLogEntry = vi.fn();
 
-      handleClientLogEvent(event, writeLogEntry);
+      collector.handleEvent(event);
 
-      expect(writeLogEntry).toHaveBeenCalledWith(
+      expect(collector.flush()).toEqual([
         {
           message: 'Something went wrong',
           origin: '',
           type: 'error',
         },
-        event
-      );
+      ]);
     });
 
-    it('should handle warn level logs', () => {
+    it('collects warn level logs', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'warn',
         data: ['Deprecation warning'],
       };
-      const writeLogEntry = vi.fn();
 
-      handleClientLogEvent(event, writeLogEntry);
+      collector.handleEvent(event);
 
-      expect(writeLogEntry).toHaveBeenCalledWith(
+      expect(collector.flush()).toEqual([
         {
           message: 'Deprecation warning',
           origin: '',
           type: 'warn',
         },
-        event
-      );
-    });
-  });
-
-  describe('createClientLogListener', () => {
-    it('should create a listener function', () => {
-      const writeLogEntry = vi.fn();
-      const listener = createClientLogListener(writeLogEntry);
-      expect(typeof listener).toBe('function');
+      ]);
     });
 
-    it('should handle client_log events when called', () => {
-      const writeLogEntry = vi.fn();
-      const listener = createClientLogListener(writeLogEntry);
-      const event: ClientLogEvent = {
+    it('flush clears the buffer', () => {
+      const collector = createClientLogCollector();
+
+      collector.handleEvent({
         type: 'client_log',
         level: 'info',
         data: ['Listener test'],
-      };
+      });
 
-      listener(event);
-
-      expect(writeLogEntry).toHaveBeenCalledWith(
+      expect(collector.flush()).toEqual([
         {
           message: 'Listener test',
           origin: '',
           type: 'info',
         },
-        event
-      );
+      ]);
+      expect(collector.flush()).toEqual([]);
     });
 
-    it('should ignore non-client_log events', () => {
-      const writeLogEntry = vi.fn();
-      const listener = createClientLogListener(writeLogEntry);
+    it('ignores non-client_log events', () => {
+      const collector = createClientLogCollector();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const event = { type: 'initialize_done' } as any;
 
-      listener(event);
+      collector.handleEvent(event);
 
-      expect(writeLogEntry).not.toHaveBeenCalled();
+      expect(collector.flush()).toEqual([]);
     });
-  });
 
-  describe('group events', () => {
-    it('should handle group events without logging', () => {
+    it('ignores group events', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'group',
         data: ['Group label'],
       };
 
-      const writeLogEntry = vi.fn();
-      const result = handleClientLogEvent(event, writeLogEntry);
+      collector.handleEvent(event);
 
-      expect(result).toBe(true);
-      expect(writeLogEntry).not.toHaveBeenCalled();
+      expect(collector.flush()).toEqual([]);
     });
 
-    it('should handle groupCollapsed events without logging', () => {
+    it('ignores groupCollapsed events', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'groupCollapsed',
         data: ['Collapsed'],
       };
 
-      const writeLogEntry = vi.fn();
-      const result = handleClientLogEvent(event, writeLogEntry);
+      collector.handleEvent(event);
 
-      expect(result).toBe(true);
-      expect(writeLogEntry).not.toHaveBeenCalled();
+      expect(collector.flush()).toEqual([]);
     });
 
-    it('should handle groupEnd events without logging', () => {
+    it('ignores groupEnd events', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'groupEnd',
         data: [],
       };
 
-      const writeLogEntry = vi.fn();
-      const result = handleClientLogEvent(event, writeLogEntry);
+      collector.handleEvent(event);
 
-      expect(result).toBe(true);
-      expect(writeLogEntry).not.toHaveBeenCalled();
+      expect(collector.flush()).toEqual([]);
     });
   });
 });

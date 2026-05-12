@@ -50,9 +50,8 @@ import { NoRunnerSpecifiedError, RunnerNotFoundError } from './errors.js';
 import { createCrashMonitor, type CrashMonitor } from './crash-monitor.js';
 import { createHookQueue, type HookQueue } from './hook-queue.js';
 import {
-  createClientLogListener,
+  createClientLogCollector,
   type ClientLogBuffer,
-  type ClientLogEntry,
 } from './client-log-handler.js';
 import { createActionHooksPlugin } from './action-hooks.js';
 import {
@@ -96,7 +95,7 @@ export type HarnessSession = {
   ensureAppReady: (testFilePath: string) => Promise<void>;
   restartApp: (testFilePath?: string) => Promise<void>;
   resetCrashState: () => void;
-  flushClientLogs: () => ClientLogBuffer | undefined;
+  flushClientLogs: () => ClientLogBuffer;
   callHook: HarnessPluginManager<HarnessConfig, HarnessPlatform>['callHook'];
   setRunState: (state: HarnessRunState | null) => void;
   dispose: (reason?: 'normal' | 'abort' | 'error') => Promise<void>;
@@ -410,7 +409,7 @@ export const createHarnessSession = async (
     const hooks = createHookQueue();
     let currentRun: HarnessRunState | null = null;
     const getCurrentRunId = () => currentRun?.runId;
-    let clientLogBuffer: ClientLogBuffer = [];
+    const clientLogCollector = createClientLogCollector();
 
     const context: HarnessContext = { platform };
 
@@ -494,22 +493,9 @@ export const createHarnessSession = async (
       }
     };
 
-    const writeClientLogEntry = (entry: ClientLogEntry) => {
-      clientLogBuffer.push(entry);
-    };
+    const flushClientLogs = (): ClientLogBuffer => clientLogCollector.flush();
 
-    const flushClientLogs = () => {
-      const buffer = clientLogBuffer;
-      clientLogBuffer = [];
-
-      if (buffer.length === 0) {
-        return undefined;
-      }
-
-      return buffer;
-    };
-
-    const clientLogListener = createClientLogListener(writeClientLogEntry);
+    const clientLogListener = clientLogCollector.handleEvent;
 
     const onConnected = (conn: AppConnection) => {
       const runId = getCurrentRunId();

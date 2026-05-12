@@ -91,7 +91,7 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
   runTestFile: vi.fn(async () => makeHarnessResult()),
   restartApp: vi.fn(resolveUndefined),
   resetCrashState: vi.fn(),
-  flushClientLogs: vi.fn(),
+  flushClientLogs: vi.fn(() => []),
   callHook: vi.fn(resolveUndefined),
   setRunState: vi.fn(),
   dispose: vi.fn(resolveUndefined),
@@ -193,7 +193,7 @@ describe('executeRun', () => {
       const clientLogs = [{ message: 'Loaded screen', origin: '', type: 'warn' }] satisfies NonNullable<JestTestResult['console']>;
       const session = makeSession({
         flushClientLogs: vi.fn()
-          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce([])
           .mockReturnValueOnce(clientLogs),
       });
       const onResult = vi.fn();
