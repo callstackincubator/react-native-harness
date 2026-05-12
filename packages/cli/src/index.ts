@@ -1,6 +1,7 @@
 import { run, yargsOptions } from 'jest-cli';
 import { getConfig } from '@react-native-harness/config';
 import { runInitWizard } from './wizard/index.js';
+import { runPlatformCommand } from './platform-commands.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -79,6 +80,14 @@ Commands:
 Examples:
   harness skill list
   harness skill get core`);
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
 };
 
 const runSkillCommand = () => {
@@ -188,11 +197,26 @@ const patchYargsOptions = () => {
   delete yargsOptions.logHeapUsage;
 };
 
-if (process.argv[2] === 'skill' || process.argv[2] === 'skills') {
-  runSkillCommand();
-} else if (process.argv.includes('init')) {
-  runInitWizard();
-} else {
+const main = async () => {
+  if (process.argv[2] === 'skill' || process.argv[2] === 'skills') {
+    runSkillCommand();
+    return;
+  }
+
+  if (process.argv.includes('init')) {
+    runInitWizard();
+    return;
+  }
+
+  if (
+    await runPlatformCommand({
+      argv: process.argv.slice(2),
+      cwd: process.cwd(),
+    })
+  ) {
+    return;
+  }
+
   patchYargsOptions();
 
   const hasConfigArg =
@@ -213,5 +237,11 @@ if (process.argv[2] === 'skill' || process.argv[2] === 'skills') {
     }
   }
 
-  checkForOldConfig().then(() => run());
-}
+  await checkForOldConfig();
+  run();
+};
+
+main().catch((error) => {
+  console.error(getErrorMessage(error));
+  process.exit(1);
+});

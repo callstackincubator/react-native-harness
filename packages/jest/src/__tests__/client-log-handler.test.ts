@@ -1,18 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  createClientLogCollector,
   formatClientLogMessage,
-  formatClientLogLine,
-  handleClientLogEvent,
-  createClientLogListener,
+  formatClientLogEntry,
   type ClientLogEvent,
 } from '../client-log-handler.js';
-
-// Mock the log function
-vi.mock('../logs.js', () => ({
-  log: vi.fn(),
-}));
-
-import { log } from '../logs.js';
 
 describe('client-log-handler', () => {
   beforeEach(() => {
@@ -98,7 +90,11 @@ describe('client-log-handler', () => {
       });
 
       it('should handle multiple substitutions', () => {
-        const result = formatClientLogMessage(['Hello %s, you have %d messages', 'Alice', 5]);
+        const result = formatClientLogMessage([
+          'Hello %s, you have %d messages',
+          'Alice',
+          5,
+        ]);
         expect(result).toBe('Hello Alice, you have 5 messages');
       });
 
@@ -120,22 +116,30 @@ describe('client-log-handler', () => {
       });
 
       it('should append extra arguments after substitution', () => {
-        const result = formatClientLogMessage(['Hello %s', 'world', 'extra', 'args']);
+        const result = formatClientLogMessage([
+          'Hello %s',
+          'world',
+          'extra',
+          'args',
+        ]);
         expect(result).toBe('Hello world extra args');
       });
     });
   });
 
-  describe('formatClientLogLine', () => {
+  describe('formatClientLogEntry', () => {
     it('should format log level event', () => {
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'log',
         data: ['Test message'],
       };
-      const result = formatClientLogLine(event);
-      // The result will contain ANSI codes for styling, so we check it contains the message
-      expect(result).toContain('Test message');
+      const result = formatClientLogEntry(event);
+      expect(result).toEqual({
+        message: 'Test message',
+        origin: '',
+        type: 'log',
+      });
     });
 
     it('should format error level event', () => {
@@ -144,8 +148,12 @@ describe('client-log-handler', () => {
         level: 'error',
         data: ['Error occurred'],
       };
-      const result = formatClientLogLine(event);
-      expect(result).toContain('Error occurred');
+      const result = formatClientLogEntry(event);
+      expect(result).toEqual({
+        message: 'Error occurred',
+        origin: '',
+        type: 'error',
+      });
     });
 
     it('should format warn level event', () => {
@@ -154,8 +162,12 @@ describe('client-log-handler', () => {
         level: 'warn',
         data: ['Warning message'],
       };
-      const result = formatClientLogLine(event);
-      expect(result).toContain('Warning message');
+      const result = formatClientLogEntry(event);
+      expect(result).toEqual({
+        message: 'Warning message',
+        origin: '',
+        type: 'warn',
+      });
     });
 
     it('should format info level event', () => {
@@ -164,8 +176,12 @@ describe('client-log-handler', () => {
         level: 'info',
         data: ['Info message'],
       };
-      const result = formatClientLogLine(event);
-      expect(result).toContain('Info message');
+      const result = formatClientLogEntry(event);
+      expect(result).toEqual({
+        message: 'Info message',
+        origin: '',
+        type: 'info',
+      });
     });
 
     it('should format debug level event', () => {
@@ -174,8 +190,12 @@ describe('client-log-handler', () => {
         level: 'debug',
         data: ['Debug message'],
       };
-      const result = formatClientLogLine(event);
-      expect(result).toContain('Debug message');
+      const result = formatClientLogEntry(event);
+      expect(result).toEqual({
+        message: 'Debug message',
+        origin: '',
+        type: 'debug',
+      });
     });
 
     it('should format trace level event', () => {
@@ -184,8 +204,12 @@ describe('client-log-handler', () => {
         level: 'trace',
         data: ['Trace message'],
       };
-      const result = formatClientLogLine(event);
-      expect(result).toContain('Trace message');
+      const result = formatClientLogEntry(event);
+      expect(result).toEqual({
+        message: 'Trace message',
+        origin: '',
+        type: 'log',
+      });
     });
 
     it('should handle multiple data items', () => {
@@ -194,135 +218,147 @@ describe('client-log-handler', () => {
         level: 'log',
         data: ['User:', { id: 1, name: 'Test' }],
       };
-      const result = formatClientLogLine(event);
-      expect(result).toContain('User:');
-      expect(result).toContain('id');
-      expect(result).toContain('Test');
+      const result = formatClientLogEntry(event);
+      expect(result?.message).toContain('User:');
+      expect(result?.message).toContain('id');
+      expect(result?.message).toContain('Test');
     });
   });
 
-  describe('handleClientLogEvent', () => {
-    it('should handle client_log events and call log', () => {
+  describe('createClientLogCollector', () => {
+    it('collects client_log events and flushes them', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'log',
         data: ['Test message'],
       };
 
-      const result = handleClientLogEvent(event);
+      collector.handleEvent(event);
 
-      expect(result).toBe(true);
-      expect(log).toHaveBeenCalledTimes(1);
-      expect(log).toHaveBeenCalledWith(expect.stringContaining('Test message'));
+      expect(collector.flush()).toEqual([
+        {
+          message: 'Test message',
+          origin: '',
+          type: 'log',
+        },
+      ]);
     });
 
-    it('should return false for non-client_log events', () => {
+    it('returns an empty array for non-client_log events', () => {
+      const collector = createClientLogCollector();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const event = { type: 'bundle_build_started' } as any;
 
-      const result = handleClientLogEvent(event);
+      collector.handleEvent(event);
 
-      expect(result).toBe(false);
-      expect(log).not.toHaveBeenCalled();
+      expect(collector.flush()).toEqual([]);
     });
 
-    it('should handle error level logs', () => {
+    it('collects error level logs', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'error',
         data: ['Something went wrong'],
       };
 
-      handleClientLogEvent(event);
+      collector.handleEvent(event);
 
-      expect(log).toHaveBeenCalledWith(
-        expect.stringContaining('Something went wrong')
-      );
+      expect(collector.flush()).toEqual([
+        {
+          message: 'Something went wrong',
+          origin: '',
+          type: 'error',
+        },
+      ]);
     });
 
-    it('should handle warn level logs', () => {
+    it('collects warn level logs', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'warn',
         data: ['Deprecation warning'],
       };
 
-      handleClientLogEvent(event);
+      collector.handleEvent(event);
 
-      expect(log).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation warning')
-      );
-    });
-  });
-
-  describe('createClientLogListener', () => {
-    it('should create a listener function', () => {
-      const listener = createClientLogListener();
-      expect(typeof listener).toBe('function');
+      expect(collector.flush()).toEqual([
+        {
+          message: 'Deprecation warning',
+          origin: '',
+          type: 'warn',
+        },
+      ]);
     });
 
-    it('should handle client_log events when called', () => {
-      const listener = createClientLogListener();
-      const event: ClientLogEvent = {
+    it('flush clears the buffer', () => {
+      const collector = createClientLogCollector();
+
+      collector.handleEvent({
         type: 'client_log',
         level: 'info',
         data: ['Listener test'],
-      };
+      });
 
-      listener(event);
-
-      expect(log).toHaveBeenCalledWith(expect.stringContaining('Listener test'));
+      expect(collector.flush()).toEqual([
+        {
+          message: 'Listener test',
+          origin: '',
+          type: 'info',
+        },
+      ]);
+      expect(collector.flush()).toEqual([]);
     });
 
-    it('should ignore non-client_log events', () => {
-      const listener = createClientLogListener();
+    it('ignores non-client_log events', () => {
+      const collector = createClientLogCollector();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const event = { type: 'initialize_done' } as any;
 
-      listener(event);
+      collector.handleEvent(event);
 
-      expect(log).not.toHaveBeenCalled();
+      expect(collector.flush()).toEqual([]);
     });
-  });
 
-  describe('group events', () => {
-    it('should handle group events without logging', () => {
+    it('ignores group events', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'group',
         data: ['Group label'],
       };
 
-      const result = handleClientLogEvent(event);
+      collector.handleEvent(event);
 
-      expect(result).toBe(true);
-      expect(log).not.toHaveBeenCalled();
+      expect(collector.flush()).toEqual([]);
     });
 
-    it('should handle groupCollapsed events without logging', () => {
+    it('ignores groupCollapsed events', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'groupCollapsed',
         data: ['Collapsed'],
       };
 
-      const result = handleClientLogEvent(event);
+      collector.handleEvent(event);
 
-      expect(result).toBe(true);
-      expect(log).not.toHaveBeenCalled();
+      expect(collector.flush()).toEqual([]);
     });
 
-    it('should handle groupEnd events without logging', () => {
+    it('ignores groupEnd events', () => {
+      const collector = createClientLogCollector();
       const event: ClientLogEvent = {
         type: 'client_log',
         level: 'groupEnd',
         data: [],
       };
 
-      const result = handleClientLogEvent(event);
+      collector.handleEvent(event);
 
-      expect(result).toBe(true);
-      expect(log).not.toHaveBeenCalled();
+      expect(collector.flush()).toEqual([]);
     });
   });
 });

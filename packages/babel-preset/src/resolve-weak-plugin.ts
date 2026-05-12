@@ -6,6 +6,11 @@ const FUNCTIONS_REQUIRING_RESOLVE_WEAK = [
   'unmock',
   'requireActual',
 ] as const;
+type ResolveWeakFunctionName = (typeof FUNCTIONS_REQUIRING_RESOLVE_WEAK)[number];
+const isResolveWeakFunctionName = (
+  value: string
+): value is ResolveWeakFunctionName =>
+  FUNCTIONS_REQUIRING_RESOLVE_WEAK.includes(value as ResolveWeakFunctionName);
 
 const resolveWeakPlugin = ({
   types: t,
@@ -41,7 +46,7 @@ const resolveWeakPlugin = ({
           // Only transform if the function was imported from react-native-harness
           if (
             importedNames.has(functionName) &&
-            FUNCTIONS_REQUIRING_RESOLVE_WEAK.includes(functionName as any)
+            isResolveWeakFunctionName(functionName)
           ) {
             const firstArg = node.arguments[0];
 

@@ -1,9 +1,6 @@
-import { getClientInstance } from '../../client/store.js';
+import { getHandle } from '../../client/store.js';
 import type { MatcherState } from '@vitest/expect';
-import {
-  type ImageSnapshotOptions,
-  generateTransferId,
-} from '@react-native-harness/bridge';
+import type { ImageSnapshotOptions } from '@react-native-harness/bridge';
 import { getHarnessContext } from '../../runner/index.js';
 
 type ScreenshotResult = {
@@ -17,30 +14,19 @@ export async function toMatchImageSnapshot(
   received: ScreenshotResult,
   options: ImageSnapshotOptions
 ): Promise<{ pass: boolean; message: () => string }> {
-  const client = getClientInstance();
+  const handle = getHandle();
   const context = getHarnessContext();
 
-  const transferId = generateTransferId();
-  client.sendBinary(transferId, received.data);
+  const screenshotFile = await handle.transferScreenshot(received.data, {
+    width: received.width,
+    height: received.height,
+  });
 
-  const screenshotFile = await client.rpc['device.screenshot.receive'](
-    {
-      type: 'binary',
-      transferId,
-      size: received.data.length,
-      mimeType: 'image/png',
-    },
-    {
-      width: received.width,
-      height: received.height,
-    }
-  );
-
-  const result = await client.rpc['test.matchImageSnapshot'](
+  const result = await handle.matchImageSnapshot(
     screenshotFile,
     context.testFilePath,
     options,
-    context.runner
+    context.runner,
   );
 
   return {

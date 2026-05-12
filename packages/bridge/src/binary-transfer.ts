@@ -32,7 +32,7 @@ export function parseBinaryFrame(frame: Uint8Array): {
 
 export class BinaryStore {
   private store = new Map<number, Uint8Array>();
-  private timeouts = new Map<number, any>();
+  private timeouts = new Map<number, ReturnType<typeof setTimeout>>();
   // 5 minutes timeout for binary data
   private readonly TIMEOUT_MS = 5 * 60 * 1000;
 
