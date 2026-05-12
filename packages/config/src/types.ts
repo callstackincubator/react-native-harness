@@ -111,8 +111,8 @@ export const ConfigSchema = z
       .optional()
       .default(false)
       .describe(
-        'Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app to the terminal. ' +
-          'When enabled, all console output from your app will be displayed in the test runner terminal with styled level indicators (log, warn, error).'
+        'Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app through the Jest test runner. ' +
+          'When enabled, app console output is attached to the active Jest test result and displayed using Jest console formatting.'
       ),
 
     // Deprecated property - used for migration detection

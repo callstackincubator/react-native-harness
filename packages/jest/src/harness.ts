@@ -45,7 +45,11 @@ import {
   createCrashSupervisor,
   type CrashSupervisor,
 } from './crash-supervisor.js';
-import { createClientLogListener } from './client-log-handler.js';
+import {
+  createClientLogListener,
+  type ClientLogBuffer,
+  type ClientLogEntry,
+} from './client-log-handler.js';
 import path from 'node:path';
 import {
   logMetroCacheReused,
@@ -87,6 +91,8 @@ export type Harness = {
   callHook: HarnessPluginManager<HarnessConfig, HarnessPlatform>['callHook'];
   setRunState: (runState: HarnessRunState | null) => void;
   getRunState: () => HarnessRunState | null;
+  clearClientLogs: (testFilePath: string) => void;
+  takeClientLogs: (testFilePath: string) => ClientLogBuffer | undefined;
 };
 
 export const maybeLogMetroCacheReuse = (
@@ -323,12 +329,57 @@ const getHarnessInternal = async (
     const pendingHookPromises = new Set<Promise<void>>();
     let pendingHookError: unknown;
     const getCurrentRunId = () => currentRun?.runId;
-    const toRelativeTestFilePath = (testFilePath?: string) =>
-      testFilePath == null
-        ? undefined
-        : path.relative(projectRoot, testFilePath);
+    let clientLogBuffer: ClientLogBuffer | null = null;
+    let clientLogBufferTestFilePath: string | undefined;
+    const toRelativeTestFilePath = (testFilePath?: string) => {
+      if (testFilePath == null) {
+        return undefined;
+      }
+
+      if (!path.isAbsolute(testFilePath)) {
+        return testFilePath;
+      }
+
+      return path.relative(projectRoot, testFilePath);
+    };
     const setActiveTestFilePath = (testFilePath?: string) => {
       activeTestFilePath = toRelativeTestFilePath(testFilePath);
+    };
+    const writeClientLogEntry = (entry: ClientLogEntry) => {
+      if (!clientLogBuffer) {
+        return;
+      }
+
+      clientLogBuffer.push(entry);
+    };
+    const clearClientLogs = (testFilePath: string) => {
+      const relativeTestFilePath = toRelativeTestFilePath(testFilePath);
+      if (!relativeTestFilePath) {
+        return;
+      }
+
+      clientLogBufferTestFilePath = relativeTestFilePath;
+      clientLogBuffer = [];
+    };
+    const takeClientLogs = (testFilePath: string) => {
+      const relativeTestFilePath = toRelativeTestFilePath(testFilePath);
+      if (!relativeTestFilePath) {
+        return undefined;
+      }
+
+      if (relativeTestFilePath !== clientLogBufferTestFilePath) {
+        return undefined;
+      }
+
+      const buffer = clientLogBuffer;
+      clientLogBufferTestFilePath = undefined;
+      clientLogBuffer = null;
+
+      if (!buffer || buffer.length === 0) {
+        return undefined;
+      }
+
+      return buffer;
     };
     const flushPendingHooks = async () => {
       if (pendingHookPromises.size > 0) {
@@ -443,7 +494,7 @@ const getHarnessInternal = async (
       platform.config as { appLaunchOptions?: AppLaunchOptions }
     ).appLaunchOptions;
 
-    const clientLogListener = createClientLogListener();
+    const clientLogListener = createClientLogListener(writeClientLogEntry);
     const bridgeEventListener = (event: BridgeEvents) => {
       const runId = getCurrentRunId();
       if (!runId) {
@@ -844,6 +895,8 @@ const getHarnessInternal = async (
         currentRun = runState;
       },
       getRunState: () => currentRun,
+      clearClientLogs,
+      takeClientLogs,
     };
   } catch (error) {
     await resourceLease.release();

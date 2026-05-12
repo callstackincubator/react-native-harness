@@ -395,6 +395,66 @@ describe('getHarness', () => {
     await harness.dispose();
   });
 
+  it('buffers forwarded client logs for the active Jest test result', async () => {
+    const { serverBridge } = createBridgeServer();
+    const appMonitor = createAppMonitor();
+    const platformInstance = createPlatformRunner({
+      createAppMonitor: () => appMonitor.appMonitor,
+    });
+    const metroInstance = createMetroInstance();
+
+    mocks.getBridgeServer.mockResolvedValue(serverBridge);
+    mocks.getMetroInstance.mockResolvedValue(metroInstance);
+
+    (
+      globalThis as typeof globalThis & {
+        __HARNESS_PLATFORM_RUNNER__?: (...args: unknown[]) => Promise<unknown>;
+      }
+    ).__HARNESS_PLATFORM_RUNNER__ = vi.fn(async () => platformInstance);
+
+    const runnerSource =
+      'export default (...args) => globalThis.__HARNESS_PLATFORM_RUNNER__(...args);';
+    const encodedRunnerSource = encodeURIComponent(runnerSource);
+    const runner = `data:text/javascript,${encodedRunnerSource}`;
+    const platform: HarnessPlatform = {
+      config: {},
+      getResourceLockKey: () => 'ios:test-client-log-buffer',
+      name: 'ios',
+      platformId: 'ios',
+      runner,
+    };
+    const harnessConfig = createHarnessConfig({
+      forwardClientLogs: true,
+    });
+
+    const harness = await getHarness(
+      harnessConfig,
+      platform,
+      '/tmp/project',
+    );
+
+    harness.clearClientLogs('/tmp/project/src/example.harness.ts');
+    metroInstance.events.emit({
+      type: 'client_log',
+      level: 'warn',
+      data: ['Loaded %s', 'screen'],
+    });
+
+    const clientLogs = harness.takeClientLogs(
+      '/tmp/project/src/example.harness.ts',
+    );
+
+    expect(clientLogs).toEqual([
+      {
+        message: 'Loaded screen',
+        origin: '',
+        type: 'warn',
+      },
+    ]);
+
+    await harness.dispose();
+  });
+
   it('resolves and exposes a fallback Metro port before platform init', async () => {
     const { serverBridge } = createBridgeServer();
     const appMonitor = createAppMonitor();

@@ -206,6 +206,8 @@ export default class JestHarness implements CallbackTestRunnerInterface {
                     throw new CancelRun();
                   }
 
+                  harness.clearClientLogs(test.path);
+
                   if (
                     harnessConfig.resetEnvironmentBetweenTestFiles &&
                     !isFirstTest
@@ -258,6 +260,10 @@ export default class JestHarness implements CallbackTestRunnerInterface {
                   });
 
                   applyJestResultToSummary(summary, result.jestResult);
+                  const clientLogs = harness.takeClientLogs(test.path);
+                  if (clientLogs) {
+                    result.jestResult.console = clientLogs;
+                  }
                   didApplySummary = true;
                   updateRunState();
                   await emitTestFileFinished({
