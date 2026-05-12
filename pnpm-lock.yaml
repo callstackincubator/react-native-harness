@@ -303,6 +303,9 @@ importers:
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config
+      '@react-native-harness/platform-apple':
+        specifier: workspace:*
+        version: link:../platform-ios
       '@react-native-harness/platforms':
         specifier: workspace:*
         version: link:../platforms
@@ -312,13 +315,16 @@ importers:
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
+      yargs:
+        specifier: ^17.7.2
+        version: 17.7.2
     devDependencies:
+      '@types/yargs':
+        specifier: ^17.0.32
+        version: 17.0.33
       '@react-native-harness/platform-android':
         specifier: workspace:*
         version: link:../platform-android
-      '@react-native-harness/platform-apple':
-        specifier: workspace:*
-        version: link:../platform-ios
       '@react-native-harness/platform-web':
         specifier: workspace:*
         version: link:../platform-web

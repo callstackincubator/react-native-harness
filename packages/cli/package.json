@@ -23,14 +23,16 @@
   "dependencies": {
     "@react-native-harness/bridge": "workspace:*",
     "@react-native-harness/config": "workspace:*",
+    "@react-native-harness/platform-apple": "workspace:*",
     "@react-native-harness/platforms": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
-    "tslib": "^2.3.0"
+    "tslib": "^2.3.0",
+    "yargs": "^17.7.2"
   },
   "devDependencies": {
+    "@types/yargs": "^17.0.32",
     "jest-cli": "^30.2.0",
     "@react-native-harness/platform-android": "workspace:*",
-    "@react-native-harness/platform-apple": "workspace:*",
     "@react-native-harness/platform-web": "workspace:*"
   },
   "peerDependencies": {
