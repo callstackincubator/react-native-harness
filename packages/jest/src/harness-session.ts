@@ -71,7 +71,6 @@ import {
   logTestEnvironmentReady,
   logTestRunHeader,
 } from './logs.js';
-import path from 'node:path';
 
 const sessionLogger = logger.child('runtime');
 const defaultResourceLockManager = createResourceLockManager();
@@ -97,8 +96,7 @@ export type HarnessSession = {
   ensureAppReady: (testFilePath: string) => Promise<void>;
   restartApp: (testFilePath?: string) => Promise<void>;
   resetCrashState: () => void;
-  clearClientLogs: (testFilePath: string) => void;
-  takeClientLogs: (testFilePath: string) => ClientLogBuffer | undefined;
+  flushClientLogs: () => ClientLogBuffer | undefined;
   callHook: HarnessPluginManager<HarnessConfig, HarnessPlatform>['callHook'];
   setRunState: (state: HarnessRunState | null) => void;
   dispose: (reason?: 'normal' | 'abort' | 'error') => Promise<void>;
@@ -412,8 +410,7 @@ export const createHarnessSession = async (
     const hooks = createHookQueue();
     let currentRun: HarnessRunState | null = null;
     const getCurrentRunId = () => currentRun?.runId;
-    let clientLogBuffer: ClientLogBuffer | null = null;
-    let clientLogBufferTestFilePath: string | undefined;
+    let clientLogBuffer: ClientLogBuffer = [];
 
     const context: HarnessContext = { platform };
 
@@ -497,47 +494,15 @@ export const createHarnessSession = async (
       }
     };
 
-    const toRelativeTestFilePath = (testFilePath?: string) => {
-      if (testFilePath == null) {
-        return undefined;
-      }
-
-      if (!path.isAbsolute(testFilePath)) {
-        return testFilePath;
-      }
-
-      return path.relative(projectRoot, testFilePath);
-    };
-
     const writeClientLogEntry = (entry: ClientLogEntry) => {
-      if (!clientLogBuffer) {
-        return;
-      }
-
       clientLogBuffer.push(entry);
     };
 
-    const clearClientLogs = (testFilePath: string) => {
-      const relativeTestFilePath = toRelativeTestFilePath(testFilePath);
-      if (!relativeTestFilePath) {
-        return;
-      }
-
-      clientLogBufferTestFilePath = relativeTestFilePath;
-      clientLogBuffer = [];
-    };
-
-    const takeClientLogs = (testFilePath: string) => {
-      const relativeTestFilePath = toRelativeTestFilePath(testFilePath);
-      if (!relativeTestFilePath || relativeTestFilePath !== clientLogBufferTestFilePath) {
-        return undefined;
-      }
-
+    const flushClientLogs = () => {
       const buffer = clientLogBuffer;
-      clientLogBufferTestFilePath = undefined;
-      clientLogBuffer = null;
+      clientLogBuffer = [];
 
-      if (!buffer || buffer.length === 0) {
+      if (buffer.length === 0) {
         return undefined;
       }
 
@@ -742,8 +707,7 @@ export const createHarnessSession = async (
       ensureAppReady,
       restartApp,
       resetCrashState: () => crashMonitor.reset(),
-      clearClientLogs,
-      takeClientLogs,
+      flushClientLogs,
       callHook: async (name, payload) => {
         await hooks.drain();
         await pluginManager.callHook(name, payload);

@@ -127,7 +127,7 @@ export const executeRun = async (
         }
         isFirstTest = false;
 
-        session.clearClientLogs(test.path);
+        session.flushClientLogs();
         await onStart(test);
         await session.ensureAppReady(test.path);
 
@@ -141,7 +141,7 @@ export const executeRun = async (
         });
 
         applyJestResultToSummary(summary, result.jestResult);
-        const clientLogs = session.takeClientLogs(test.path);
+        const clientLogs = session.flushClientLogs();
         if (clientLogs) {
           result.jestResult.console = clientLogs;
         }

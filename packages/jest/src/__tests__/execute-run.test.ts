@@ -91,8 +91,7 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
   runTestFile: vi.fn(async () => makeHarnessResult()),
   restartApp: vi.fn(resolveUndefined),
   resetCrashState: vi.fn(),
-  clearClientLogs: vi.fn(),
-  takeClientLogs: vi.fn(),
+  flushClientLogs: vi.fn(),
   callHook: vi.fn(resolveUndefined),
   setRunState: vi.fn(),
   dispose: vi.fn(resolveUndefined),
@@ -193,7 +192,9 @@ describe('executeRun', () => {
     it('attaches buffered client logs to the Jest result', async () => {
       const clientLogs = [{ message: 'Loaded screen', origin: '', type: 'warn' }] satisfies NonNullable<JestTestResult['console']>;
       const session = makeSession({
-        takeClientLogs: vi.fn(() => clientLogs),
+        flushClientLogs: vi.fn()
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce(clientLogs),
       });
       const onResult = vi.fn();
 
@@ -207,8 +208,7 @@ describe('executeRun', () => {
         makeGlobalConfig(),
       );
 
-      expect(session.clearClientLogs).toHaveBeenCalledWith('/test/example.ts');
-      expect(session.takeClientLogs).toHaveBeenCalledWith('/test/example.ts');
+      expect(session.flushClientLogs).toHaveBeenCalledTimes(2);
       expect(onResult).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ console: clientLogs }),
