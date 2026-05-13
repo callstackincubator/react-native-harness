@@ -11,6 +11,7 @@ import {
   getStartAppArgs,
   hasAvd,
   installApp,
+  startLogcat,
   startEmulator,
   uninstallApp,
   waitForBoot,
@@ -120,6 +121,34 @@ describe('getStartAppArgs', () => {
       'date',
       "+'%m-%d %H:%M:%S.000'",
     ]);
+  });
+
+  it('starts logcat using the resolved adb binary path', async () => {
+    const subprocess = {} as Awaited<ReturnType<typeof tools.spawn>>;
+    const spawnSpy = vi.spyOn(tools, 'spawn').mockReturnValue(subprocess);
+
+    expect(
+      startLogcat('emulator-5554', [
+        'logcat',
+        '-v',
+        'threadtime',
+        '-b',
+        'crash',
+      ])
+    ).toBe(subprocess);
+
+    expect(spawnSpy).toHaveBeenCalledWith(expect.stringMatching(/adb$/), [
+      '-s',
+      'emulator-5554',
+      'logcat',
+      '-v',
+      'threadtime',
+      '-b',
+      'crash',
+    ], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
   });
 
   it('checks whether an AVD exists', async () => {

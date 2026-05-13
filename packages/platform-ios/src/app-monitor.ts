@@ -10,7 +10,6 @@ import {
   escapeRegExp,
   getEmitter,
   logger,
-  spawn,
   type Subprocess,
 } from '@react-native-harness/tools';
 import * as devicectl from './xcrun/devicectl.js';
@@ -441,26 +440,7 @@ export const createIosSimulatorAppMonitor = ({
       .map((name) => `process == "${name}"`)
       .join(' OR ');
 
-    logProcess = spawn(
-      'xcrun',
-      [
-        'simctl',
-        'spawn',
-        udid,
-        'log',
-        'stream',
-        '--style',
-        'compact',
-        '--level',
-        'info',
-        '--predicate',
-        predicate,
-      ],
-      {
-        stdout: 'pipe',
-        stderr: 'pipe',
-      }
-    );
+    logProcess = simctl.streamLogs(udid, predicate);
 
     const currentProcess = logProcess;
 

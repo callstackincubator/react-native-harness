@@ -7,6 +7,7 @@ import {
   spawn,
   spawnAndForget,
   SubprocessError,
+  type Subprocess,
 } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { homedir } from 'node:os';
@@ -328,6 +329,31 @@ export const diagnose = async (
     },
   );
 };
+
+export const streamLogs = (
+  udid: string,
+  predicate: string,
+): Subprocess =>
+  spawn(
+    'xcrun',
+    [
+      'simctl',
+      'spawn',
+      udid,
+      'log',
+      'stream',
+      '--style',
+      'compact',
+      '--level',
+      'info',
+      '--predicate',
+      predicate,
+    ],
+    {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  );
 
 export const shutdownSimulator = async (udid: string): Promise<void> => {
   await spawnAndForget('xcrun', ['simctl', 'shutdown', udid]);

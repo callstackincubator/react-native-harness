@@ -10,7 +10,6 @@ import {
 import * as simctl from '../xcrun/simctl.js';
 import * as devicectl from '../xcrun/devicectl.js';
 import * as diagnostics from '../crash-diagnostics.js';
-import * as tools from '@react-native-harness/tools';
 import { createCrashArtifactWriter } from '@react-native-harness/tools';
 import type { Subprocess } from '@react-native-harness/tools';
 
@@ -95,8 +94,8 @@ describe('createIosSimulatorAppMonitor', () => {
   });
 
   it('starts simctl log stream', async () => {
-    const spawnSpy = vi
-      .spyOn(tools, 'spawn')
+    const streamLogsSpy = vi
+      .spyOn(simctl, 'streamLogs')
       .mockReturnValue(createStreamingSubprocess([]));
 
     vi.spyOn(simctl, 'getAppInfo').mockResolvedValue({
@@ -116,30 +115,14 @@ describe('createIosSimulatorAppMonitor', () => {
     await monitor.start();
     await monitor.stop();
 
-    expect(spawnSpy).toHaveBeenCalledWith(
-      'xcrun',
-      [
-        'simctl',
-        'spawn',
-        'sim-udid',
-        'log',
-        'stream',
-        '--style',
-        'compact',
-        '--level',
-        'info',
-        '--predicate',
-        'process == "HarnessPlayground" OR process == "com.harnessplayground"',
-      ],
-      {
-        stdout: 'pipe',
-        stderr: 'pipe',
-      }
+    expect(streamLogsSpy).toHaveBeenCalledWith(
+      'sim-udid',
+      'process == "HarnessPlayground" OR process == "com.harnessplayground"'
     );
   });
 
   it('returns best-effort simulator crash details from recent log blocks', async () => {
-    vi.spyOn(tools, 'spawn').mockReturnValue(
+    vi.spyOn(simctl, 'streamLogs').mockReturnValue(
       createStreamingSubprocess([
         {
           line: '2026-03-12 11:35:08.000 HarnessPlayground[1234:abcd] Terminating app due to uncaught exception: NSInternalInconsistencyException',
@@ -193,7 +176,7 @@ describe('createIosSimulatorAppMonitor', () => {
   });
 
   it('prefers a matched simulator crash report when one is found', async () => {
-    vi.spyOn(tools, 'spawn').mockReturnValue(
+    vi.spyOn(simctl, 'streamLogs').mockReturnValue(
       createStreamingSubprocess([
         {
           line: '2026-03-12 11:35:08.000 HarnessPlayground[1234:abcd] Terminating app due to uncaught exception: NSInternalInconsistencyException',

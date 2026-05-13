@@ -1,5 +1,10 @@
 import { type AndroidAppLaunchOptions } from '@react-native-harness/platforms';
-import { logger, spawn, SubprocessError } from '@react-native-harness/tools';
+import {
+  logger,
+  spawn,
+  SubprocessError,
+  type Subprocess,
+} from '@react-native-harness/tools';
 import { spawn as nodeSpawn } from 'node:child_process';
 import type { ChildProcessByStdio } from 'node:child_process';
 import { access, rm } from 'node:fs/promises';
@@ -764,6 +769,15 @@ export const getLogcatTimestamp = async (adbId: string): Promise<string> => {
 
   return stdout.trim().replace(/^'+|'+$/g, '');
 };
+
+export const startLogcat = (
+  adbId: string,
+  args: readonly string[],
+): Subprocess =>
+  spawn(getAdbBinaryPath(), ['-s', adbId, ...args], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
 
 export const getAvds = async (): Promise<string[]> => {
   try {
