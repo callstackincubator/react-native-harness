@@ -4427,7 +4427,7 @@ var ConfigSchema = external_exports.object({
   coverage: external_exports.object({
     root: external_exports.string().optional().describe(`Root directory for coverage instrumentation in monorepo setups. Specifies the directory from which coverage data should be collected. Use ".." for create-react-native-library projects where tests run from example/ but source files are in parent directory. Passed to babel-plugin-istanbul's cwd option.`)
   }).optional(),
-  forwardClientLogs: external_exports.boolean().optional().default(false).describe("Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app to the terminal. When enabled, all console output from your app will be displayed in the test runner terminal with styled level indicators (log, warn, error)."),
+  forwardClientLogs: external_exports.boolean().optional().default(false).describe("Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app during the active test run. When enabled, app console output is attached to the active test result's console output."),
   // Deprecated property - used for migration detection
   include: external_exports.array(external_exports.string()).optional()
 }).refine((config) => {
