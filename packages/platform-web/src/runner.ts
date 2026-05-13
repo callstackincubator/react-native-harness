@@ -86,6 +86,7 @@ const getWebRunner = async (
       headless: parsedConfig.browser.headless,
       channel: parsedConfig.browser.channel,
       executablePath: parsedConfig.browser.executablePath,
+      ignoreDefaultArgs: parsedConfig.browser.ignoreDefaultArgs,
     });
 
     const context = await browser.newContext();
