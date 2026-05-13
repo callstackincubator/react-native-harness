@@ -127,6 +127,8 @@ A test runner defines how tests are executed on a specific platform. React Nativ
 Runner-specific launch options belong inside each runner config via `appLaunchOptions`.
 They are passed whenever Harness launches or relaunches the app for that runner.
 
+For `@react-native-harness/platform-web`, browser launch options such as `ignoreDefaultArgs` belong on the browser config passed to `chromium`, `chrome`, `firefox`, or `webkit`.
+
 For detailed installation and configuration instructions, please refer to the platform-specific guides:
 
 - [**Android**](/docs/platforms/android)
