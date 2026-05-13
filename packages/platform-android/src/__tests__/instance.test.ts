@@ -27,9 +27,13 @@ const init = {
 };
 
 describe('Android platform instance', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    vi.spyOn(
+      await import('../environment.js'),
+      'ensureAndroidEmulatorAvailable',
+    ).mockResolvedValue('/tmp/android-sdk');
   });
 
   it('reuses a running emulator and does not shut it down on dispose', async () => {

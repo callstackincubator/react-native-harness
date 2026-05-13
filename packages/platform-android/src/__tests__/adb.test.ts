@@ -1,4 +1,7 @@
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SubprocessError } from '@react-native-harness/tools';
@@ -24,6 +27,8 @@ import * as avdConfig from '../avd-config.js';
 const createAbortError = () =>
   new DOMException('The operation was aborted', 'AbortError');
 
+let sdkRoot: string;
+
 const createMockChildProcess = () => {
   const process = new EventEmitter() as EventEmitter & {
     stdout: PassThrough;
@@ -40,6 +45,16 @@ const createMockChildProcess = () => {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+  sdkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'android-sdk-'));
+  fs.mkdirSync(path.join(sdkRoot, 'emulator'), { recursive: true });
+  fs.writeFileSync(path.join(sdkRoot, 'emulator', 'emulator'), '');
+  fs.mkdirSync(path.join(sdkRoot, 'platform-tools'), { recursive: true });
+  fs.writeFileSync(path.join(sdkRoot, 'platform-tools', 'adb'), '');
+  vi.stubEnv('ANDROID_HOME', sdkRoot);
+  vi.spyOn(environment, 'ensureAndroidEmulatorAvailable').mockResolvedValue(
+    sdkRoot,
+  );
 });
 
 describe('getStartAppArgs', () => {
@@ -152,7 +167,7 @@ describe('getStartAppArgs', () => {
   });
 
   it('checks whether an AVD exists', async () => {
-    vi.spyOn(tools, 'spawn').mockResolvedValueOnce({
+    vi.spyOn(tools, 'spawn').mockResolvedValue({
       stdout: 'Pixel_6_API_33\nPixel_8_API_35\n',
     } as Awaited<ReturnType<typeof tools.spawn>>);
 
@@ -561,17 +576,29 @@ describe('getStartAppArgs', () => {
 
   it('aborts while waiting for boot completion', async () => {
     vi.useFakeTimers();
-    const spawnSpy = vi.spyOn(tools, 'spawn');
-    spawnSpy
-      .mockResolvedValueOnce({
-        stdout: 'List of devices attached\nemulator-5554\tdevice\n',
-      } as Awaited<ReturnType<typeof tools.spawn>>)
-      .mockResolvedValueOnce({
-        stdout: 'Pixel_8_API_35\n',
-      } as Awaited<ReturnType<typeof tools.spawn>>)
-      .mockResolvedValueOnce({
-        stdout: '0\n',
-      } as Awaited<ReturnType<typeof tools.spawn>>);
+    vi.spyOn(tools, 'spawn').mockImplementation(
+      (async (_file: string, args?: readonly string[]) => {
+        if (args?.[0] === 'devices') {
+          return {
+            stdout: 'List of devices attached\nemulator-5554\tdevice\n',
+          } as Awaited<ReturnType<typeof tools.spawn>>;
+        }
+
+        if (args?.includes('emu') && args?.includes('avd') && args?.includes('name')) {
+          return {
+            stdout: 'Pixel_8_API_35\n',
+          } as Awaited<ReturnType<typeof tools.spawn>>;
+        }
+
+        if (args?.includes('getprop')) {
+          return {
+            stdout: '0\n',
+          } as Awaited<ReturnType<typeof tools.spawn>>;
+        }
+
+        throw new Error(`Unexpected adb call: ${args?.join(' ')}`);
+      }) as typeof tools.spawn,
+    );
     const controller = new AbortController();
     const waitPromise = waitForBoot('Pixel_8_API_35', controller.signal);
 
