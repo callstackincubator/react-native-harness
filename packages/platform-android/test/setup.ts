@@ -23,7 +23,9 @@ const createMockSubprocess = () => ({
   nodeChildProcess: Promise.resolve({
     kill: vi.fn(),
   }),
-  [Symbol.asyncIterator]: async function* () {},
+  [Symbol.asyncIterator]: async function* () {
+    yield* [];
+  },
 });
 
 vi.mock('../src/adb.js', async (importOriginal) => {
