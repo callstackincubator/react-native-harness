@@ -5,6 +5,9 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SubprocessError } from '@react-native-harness/tools';
+
+vi.unmock('../adb.js');
+
 import {
   createAvd,
   deleteAvd,
