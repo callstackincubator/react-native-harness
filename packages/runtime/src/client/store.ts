@@ -1,16 +1,16 @@
-import type { BridgeClient } from '@react-native-harness/bridge/client';
+import type { HarnessHandle } from '@react-native-harness/bridge/client';
 
-let clientInstance: BridgeClient | null = null;
+let handle: HarnessHandle | null = null;
 
-export const setClient = (client: BridgeClient): void => {
-  clientInstance = client;
+export const setHandle = (h: HarnessHandle): void => {
+  handle = h;
 };
 
-export const getClientInstance = (): BridgeClient => {
-  if (!clientInstance) {
+export const getHandle = (): HarnessHandle => {
+  if (!handle) {
     throw new Error(
-      'Bridge client not initialized. This should not happen in normal operation.'
+      'Harness not connected. This should not happen in normal operation.'
     );
   }
-  return clientInstance;
+  return handle;
 };

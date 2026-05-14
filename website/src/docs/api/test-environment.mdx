@@ -114,7 +114,7 @@ This is most useful in CI, where cold boots and slower launch times can make the
 
 ## Forwarding Client Logs
 
-To aid in debugging, you can forward all `console` output from the device to your terminal.
+To aid in debugging, you can forward all `console` output from the device to the active test result.
 
 ```javascript title="rn-harness.config.mjs"
 export default {
@@ -123,8 +123,4 @@ export default {
 };
 ```
 
-When enabled, logs from the device appear in your terminal with indicators:
-
-- `LOG` - `console.log`
-- `WARN` - `console.warn`
-- `ERROR` - `console.error`
+When enabled, logs from the device are attached to the active test result's `console` output.

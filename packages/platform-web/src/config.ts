@@ -8,6 +8,7 @@ export const WebBrowserConfigSchema = z.object({
   headless: z.boolean().default(true),
   channel: z.string().optional(),
   executablePath: z.string().optional(),
+  ignoreDefaultArgs: z.union([z.boolean(), z.array(z.string())]).optional(),
 });
 
 export const WebPlatformConfigSchema = z.object({

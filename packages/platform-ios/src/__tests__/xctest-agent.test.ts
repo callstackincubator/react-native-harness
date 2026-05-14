@@ -55,7 +55,10 @@ vi.mock('../xctest-agent-transport-device.js', () => ({
   })),
 }));
 
-import { createXCTestAgentController } from '../xctest-agent.js';
+import {
+  buildXCTestAgent,
+  createXCTestAgentController,
+} from '../xctest-agent.js';
 import { createDeviceXCTestAgentTransport } from '../xctest-agent-transport-device.js';
 import { createSimulatorXCTestAgentTransport } from '../xctest-agent-transport-simulator.js';
 
@@ -72,6 +75,9 @@ const originalCwd = process.cwd();
 const simulatorRuntime = 'com.apple.CoreSimulator.SimRuntime.iOS-26-0';
 const simulatorSdkVersion = '26.0';
 const xcodeVersion = 'Xcode 26.0\nBuild version 17A123';
+const originalExternalXCTestRunFile = process.env.HARNESS_IOS_XCTESTRUN_FILE;
+const originalExternalDerivedDataPath =
+  process.env.HARNESS_IOS_XCTEST_DERIVED_DATA_PATH;
 
 const createLongRunningSubprocess = (options?: {
   ignoreSignal?: NodeJS.Signals;
@@ -227,6 +233,14 @@ describe('xctest-agent orchestration', () => {
   });
 
   afterEach(() => {
+    restoreEnvVar(
+      'HARNESS_IOS_XCTESTRUN_FILE',
+      originalExternalXCTestRunFile
+    );
+    restoreEnvVar(
+      'HARNESS_IOS_XCTEST_DERIVED_DATA_PATH',
+      originalExternalDerivedDataPath
+    );
     rmBuildRoot();
     process.chdir(originalCwd);
     fs.rmSync(tempProjectRoot, { recursive: true, force: true });
@@ -244,22 +258,115 @@ describe('xctest-agent orchestration', () => {
     await controller.prepare();
 
     expect(mocks.spawn).toHaveBeenNthCalledWith(
-      4,
+      3,
       'xcodebuild',
       expect.arrayContaining([
         'build-for-testing',
         '-destination',
-        'platform=iOS Simulator,id=sim-123',
+        'generic/platform=iOS Simulator',
       ])
     );
     const cacheDirectories = fs.readdirSync(simulatorCacheRoot);
     expect(cacheDirectories).toHaveLength(1);
-    expect(cacheDirectories[0]).toMatch(/^xctest-agent-simulator-/);
+    const cacheDirectory = cacheDirectories[0];
+    expect(cacheDirectory).toBeDefined();
+    if (!cacheDirectory) throw new Error('Expected cached simulator directory');
+    expect(cacheDirectory).toMatch(/^xctest-agent-simulator-/);
     expect(
       fs.existsSync(
-        path.join(simulatorCacheRoot, cacheDirectories[0]!, 'cache.json')
+        path.join(simulatorCacheRoot, cacheDirectory, 'cache.json')
       )
     ).toBe(true);
+  });
+
+  it('builds standalone simulator agent artifacts with the generic simulator destination', async () => {
+    const result = await buildXCTestAgent({
+      destination: 'simulator',
+    });
+
+    expect(result.destination).toBe('simulator');
+    expect(result.reused).toBe(false);
+    expect(result.derivedDataPath).toContain('xctest-agent-simulator-');
+    expect(result.xctestrunPath).toContain('.xctestrun');
+    expect(mocks.spawn).toHaveBeenNthCalledWith(
+      3,
+      'xcodebuild',
+      expect.arrayContaining([
+        'build-for-testing',
+        '-destination',
+        'generic/platform=iOS Simulator',
+      ])
+    );
+  });
+
+  it('reuses standalone simulator agent artifacts when cache metadata matches', async () => {
+    writeSimulatorCacheDirectory({
+      buildInputsHash: getCurrentInputsHash(),
+      directoryName: 'xctest-agent-simulator-existing',
+    });
+
+    const result = await buildXCTestAgent({
+      destination: 'simulator',
+    });
+
+    expect(result.destination).toBe('simulator');
+    expect(result.reused).toBe(true);
+    expect(result.derivedDataPath).toContain('xctest-agent-simulator-existing');
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('builds standalone device agent artifacts without signing when no signing options are provided', async () => {
+    await buildXCTestAgent({
+      destination: 'device',
+    });
+
+    const buildCall = mocks.spawn.mock.calls[0];
+    const buildArgs = buildCall?.[1] ?? [];
+
+    expect(buildCall?.[0]).toBe('xcodebuild');
+    expect(buildArgs).toEqual(
+      expect.arrayContaining([
+        'build-for-testing',
+        '-destination',
+        'generic/platform=iOS',
+        'CODE_SIGNING_ALLOWED=NO',
+        'CODE_SIGNING_REQUIRED=NO',
+      ])
+    );
+    expect(buildArgs).not.toEqual(
+      expect.arrayContaining([expect.stringContaining('DEVELOPMENT_TEAM=')])
+    );
+    expect(buildArgs).not.toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('PROVISIONING_PROFILE_SPECIFIER='),
+      ])
+    );
+  });
+
+  it('builds standalone device agent artifacts with signing options when provided', async () => {
+    await buildXCTestAgent({
+      destination: 'device',
+      signing: {
+        teamId: 'TESTTEAM01',
+      },
+    });
+
+    const buildCall = mocks.spawn.mock.calls[0];
+    const buildArgs = buildCall?.[1] ?? [];
+
+    expect(buildCall?.[0]).toBe('xcodebuild');
+    expect(buildArgs).toEqual(
+      expect.arrayContaining([
+        'build-for-testing',
+        '-destination',
+        'generic/platform=iOS',
+        '-allowProvisioningUpdates',
+        'CODE_SIGN_STYLE=Automatic',
+        'DEVELOPMENT_TEAM=TESTTEAM01',
+        'CODE_SIGN_IDENTITY=Apple Development',
+      ])
+    );
+    expect(buildArgs).not.toContain('CODE_SIGNING_ALLOWED=NO');
   });
 
   it('reuses cached build artifacts for repeated prepares on the same destination kind', async () => {
@@ -270,7 +377,7 @@ describe('xctest-agent orchestration', () => {
       path.join(deviceBuildRoot, 'device', 'build-manifest.json'),
       JSON.stringify({
         buildInputsHash: getCurrentInputsHash(),
-        codeSign: {
+        signing: {
           teamId: 'TESTTEAM01',
         },
         destinationKind: 'device',
@@ -316,7 +423,7 @@ describe('xctest-agent orchestration', () => {
     await controller.ensureStarted();
     await controller.ensureStarted();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(8);
+    expect(mocks.spawn).toHaveBeenCalledTimes(4);
     expect(mocks.spawn).toHaveBeenLastCalledWith(
       'xcodebuild',
       expect.arrayContaining([
@@ -342,11 +449,14 @@ describe('xctest-agent orchestration', () => {
       path.join(tempProjectRoot, '.harness', 'logs')
     );
     expect(logDirectories).toHaveLength(1);
+    const logDirectory = logDirectories[0];
+    expect(logDirectory).toBeDefined();
+    if (!logDirectory) throw new Error('Expected xcodebuild log directory');
     const xcodebuildLogPath = path.join(
       tempProjectRoot,
       '.harness',
       'logs',
-      logDirectories[0]!,
+      logDirectory,
       'xcodebuild.log'
     );
     expect(fs.existsSync(xcodebuildLogPath)).toBe(true);
@@ -489,9 +599,9 @@ describe('xctest-agent orchestration', () => {
 
     await controller.prepare();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(7);
+    expect(mocks.spawn).toHaveBeenCalledTimes(3);
     expect(mocks.spawn).toHaveBeenNthCalledWith(
-      4,
+      3,
       'xcodebuild',
       expect.arrayContaining(['build-for-testing'])
     );
@@ -512,7 +622,45 @@ describe('xctest-agent orchestration', () => {
 
     await controller.prepare();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(3);
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips building when an external xctestrun file is provided', async () => {
+    const externalDerivedDataPath = path.join(tempProjectRoot, 'external-derived');
+    const externalXCTestRunFilePath = path.join(
+      tempProjectRoot,
+      'external.xctestrun'
+    );
+
+    fs.mkdirSync(externalDerivedDataPath, { recursive: true });
+    fs.writeFileSync(externalXCTestRunFilePath, 'external xctestrun');
+    process.env.HARNESS_IOS_XCTESTRUN_FILE = externalXCTestRunFilePath;
+    process.env.HARNESS_IOS_XCTEST_DERIVED_DATA_PATH = externalDerivedDataPath;
+
+    const controller = createXCTestAgentController({
+      port: 49152,
+      target: {
+        kind: 'simulator',
+        id: 'sim-123',
+      },
+    });
+
+    await controller.prepare();
+    await controller.ensureStarted();
+
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(mocks.spawn).toHaveBeenNthCalledWith(
+      1,
+      'xcodebuild',
+      expect.arrayContaining([
+        'test-without-building',
+        '-xctestrun',
+        externalXCTestRunFilePath,
+        '-derivedDataPath',
+        externalDerivedDataPath,
+      ]),
+      expect.any(Object)
+    );
   });
 
   it('fails fast when the checked-in xcode project is missing', async () => {
@@ -567,6 +715,15 @@ const rmBuildRoot = () => {
   });
 };
 
+const restoreEnvVar = (name: string, value: string | undefined) => {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+
+  process.env[name] = value;
+};
+
 const getCurrentInputsHash = (): string => {
   const hash = createHash('sha256');
 
@@ -616,7 +773,6 @@ const writeSimulatorCacheDirectory = (options: {
       destinationKind: 'simulator',
       hostArchitecture: process.arch,
       schemaVersion: 1,
-      simulatorRuntime,
       simulatorSdkVersion,
       xcodeVersion,
       xctestrunRelativePath:

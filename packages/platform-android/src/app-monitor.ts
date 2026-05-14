@@ -10,7 +10,6 @@ import {
   escapeRegExp,
   getEmitter,
   logger,
-  spawn,
   SubprocessError,
   type Subprocess,
 } from '@react-native-harness/tools';
@@ -445,13 +444,9 @@ export const createAndroidAppMonitor = ({
   const startLogcat = async () => {
     const logcatTimestamp = await adb.getLogcatTimestamp(adbId);
 
-    logcatProcess = spawn(
-      'adb',
-      ['-s', adbId, ...getLogcatArgs(appUid, logcatTimestamp)],
-      {
-        stdout: 'pipe',
-        stderr: 'pipe',
-      }
+    logcatProcess = adb.startLogcat(
+      adbId,
+      getLogcatArgs(appUid, logcatTimestamp)
     );
 
     const currentProcess = logcatProcess;

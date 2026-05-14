@@ -67,8 +67,9 @@ const createPollingAppMonitor = ({
 
 const getWebRunner = async (
   config: WebPlatformConfig,
-  _init?: HarnessPlatformInitOptions
+  init?: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
+  void init;
   const parsedConfig = WebPlatformConfigSchema.parse(config);
 
   let browser: Browser | null = null;
@@ -85,6 +86,7 @@ const getWebRunner = async (
       headless: parsedConfig.browser.headless,
       channel: parsedConfig.browser.channel,
       executablePath: parsedConfig.browser.executablePath,
+      ignoreDefaultArgs: parsedConfig.browser.ignoreDefaultArgs,
     });
 
     const context = await browser.newContext();
@@ -107,8 +109,10 @@ const getWebRunner = async (
         if (bounds?.nativeId) {
           try {
             const elementHandle = await page.evaluateHandle((id) => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              return (window as any).__RN_HARNESS_VIEW_REGISTRY__?.get(id);
+              const harnessWindow = window as Window & {
+                __RN_HARNESS_VIEW_REGISTRY__?: Map<string, Element>;
+              };
+              return harnessWindow.__RN_HARNESS_VIEW_REGISTRY__?.get(id);
             }, bounds.nativeId);
 
             const element = elementHandle.asElement();
@@ -208,12 +212,14 @@ const getWebRunner = async (
     isAppRunning: async () => {
       return browser !== null && page !== null && !page.isClosed();
     },
-    createAppMonitor: (_options?: CreateAppMonitorOptions) =>
-      createPollingAppMonitor({
+    createAppMonitor: (options?: CreateAppMonitorOptions) => {
+      void options;
+      return createPollingAppMonitor({
         interval: 250,
         isAppRunning: async () =>
           browser !== null && page !== null && !page.isClosed(),
-      }),
+      });
+    },
   };
 };
 

@@ -69,8 +69,9 @@ const createPollingAppMonitor = ({
 
 const getVegaRunner = async (
   config: VegaPlatformConfig,
-  _init?: HarnessPlatformInitOptions
+  init?: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
+  void init;
   const parsedConfig = VegaPlatformConfigSchema.parse(config);
   const deviceId = parsedConfig.device.deviceId;
   const bundleId = parsedConfig.bundleId;
@@ -103,12 +104,13 @@ const getVegaRunner = async (
     isAppRunning: async () => {
       return await kepler.isAppRunning(deviceId, bundleId);
     },
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    createAppMonitor: (_options?: CreateAppMonitorOptions) =>
-      createPollingAppMonitor({
+    createAppMonitor: (options?: CreateAppMonitorOptions) => {
+      void options;
+      return createPollingAppMonitor({
         interval: 250,
         isAppRunning: () => kepler.isAppRunning(deviceId, bundleId),
-      }),
+      });
+    },
   };
 };
 

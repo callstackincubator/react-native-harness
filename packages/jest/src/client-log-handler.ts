@@ -1,50 +1,33 @@
 import type { ReportableEvent } from '@react-native-harness/bundler-metro';
-import chalk from 'chalk';
+import type { TestResult as JestTestResult } from '@jest/test-result';
 import util from 'node:util';
-import { log } from './logs.js';
 
 export type ClientLogEvent = Extract<ReportableEvent, { type: 'client_log' }>;
-
-type LogLevel = ClientLogEvent['level'];
-
-/**
- * Gets the display level for a log level.
- * Note: Metro treats 'trace' as 'log' because Hermes doesn't include stack traces.
- */
-const getDisplayLevel = (level: LogLevel): string => {
-  // Metro converts trace to log for display (Hermes doesn't provide stack traces)
-  if (level === 'trace') {
-    return 'LOG';
-  }
-  return level.toUpperCase();
+export type ClientLogBuffer = NonNullable<JestTestResult['console']>;
+export type ClientLogEntry = ClientLogBuffer[number];
+export type ClientLogCollector = {
+  handleEvent: (event: ReportableEvent) => void;
+  flush: () => ClientLogBuffer;
 };
 
+type LogLevel = ClientLogEvent['level'];
+type JestLogLevel = ClientLogEntry['type'];
+
 /**
- * Creates a styled tag for a log level with colored box appearance.
+ * Gets the Jest console level for a client log level.
+ * Note: Metro treats 'trace' as 'log' because Hermes doesn't include stack traces.
  */
-const createLevelTag = (level: LogLevel): string => {
-  const displayLevel = getDisplayLevel(level);
-  const label = ` ${displayLevel} `;
-
-  if (!chalk.supportsColor) {
-    return `[${displayLevel}]`;
-  }
-
+const getJestLogLevel = (level: LogLevel): JestLogLevel | null => {
   switch (level) {
-    case 'error':
-      return chalk.reset.inverse.bold.red(label);
-    case 'warn':
-      return chalk.reset.inverse.bold.yellow(label);
-    case 'info':
-      return chalk.reset.inverse.bold.cyan(label);
-    case 'debug':
-      return chalk.reset.inverse.bold.blue(label);
+    case 'group':
+    case 'groupCollapsed':
+    case 'groupEnd':
+      return null;
     case 'trace':
-      // Trace displays as LOG but with a distinct color
-      return chalk.reset.inverse.bold.magenta(label);
+      return 'log';
     case 'log':
     default:
-      return chalk.reset.inverse.bold.white(label);
+      return level;
   }
 };
 
@@ -56,46 +39,47 @@ export const formatClientLogMessage = (data: unknown[]): string => {
   if (data.length === 0) {
     return '';
   }
+
   return util.format(...data);
 };
 
 /**
- * Formats a client log event into a log line with styled level prefix.
+ * Formats a client log event into Jest's buffered console entry format.
  */
-export const formatClientLogLine = (event: ClientLogEvent): string => {
-  const tag = createLevelTag(event.level);
+export const formatClientLogEntry = (
+  event: ClientLogEvent
+): ClientLogEntry | null => {
+  const logLevel = getJestLogLevel(event.level);
+  if (!logLevel) {
+    return null;
+  }
+
   const message = formatClientLogMessage(event.data);
-  return `${tag} ${message}`;
+  return {
+    message,
+    origin: '',
+    type: logLevel,
+  };
 };
 
-/**
- * Handles a client_log event by formatting and logging it.
- * Returns true if the event was handled, false otherwise.
- */
-export const handleClientLogEvent = (event: ReportableEvent): boolean => {
-  if (event.type !== 'client_log') {
-    return false;
-  }
+export const createClientLogCollector = (): ClientLogCollector => {
+  let buffer: ClientLogBuffer = [];
 
-  // Skip group events - they don't produce output
-  if (
-    event.level === 'group' ||
-    event.level === 'groupCollapsed' ||
-    event.level === 'groupEnd'
-  ) {
-    return true;
-  }
+  return {
+    handleEvent: (event) => {
+      if (event.type !== 'client_log') {
+        return;
+      }
 
-  const logLine = formatClientLogLine(event);
-  log(logLine);
-  return true;
-};
-
-/**
- * Creates a client log event listener that can be added to the Metro reporter.
- */
-export const createClientLogListener = (): ((event: ReportableEvent) => void) => {
-  return (event: ReportableEvent) => {
-    handleClientLogEvent(event);
+      const entry = formatClientLogEntry(event);
+      if (entry) {
+        buffer.push(entry);
+      }
+    },
+    flush: () => {
+      const flushed = buffer;
+      buffer = [];
+      return flushed;
+    },
   };
 };

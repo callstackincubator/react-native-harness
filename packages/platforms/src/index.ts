@@ -1,4 +1,7 @@
 export type {
+  HarnessCliCommand,
+  HarnessCliCommandContext,
+  HarnessCliModule,
   AndroidAppLaunchOptions,
   AppleAppLaunchOptions,
   AppCrashDetails,

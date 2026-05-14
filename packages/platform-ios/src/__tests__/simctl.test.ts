@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import * as tools from '@react-native-harness/tools';
-import { diagnose, waitForBoot } from '../xcrun/simctl.js';
+import { diagnose, streamLogs, waitForBoot } from '../xcrun/simctl.js';
 
 describe('simctl startup', () => {
   beforeEach(() => {
@@ -42,6 +42,39 @@ describe('simctl startup', () => {
       {
         stdin: { string: '\n' },
       },
+    );
+  });
+
+  it('starts simulator log streaming with the provided predicate', () => {
+    const subprocess = {} as ReturnType<typeof tools.spawn>;
+    const spawnSpy = vi.spyOn(tools, 'spawn').mockReturnValue(subprocess);
+
+    expect(
+      streamLogs(
+        'sim-udid',
+        'process == "HarnessPlayground" OR process == "com.harnessplayground"'
+      )
+    ).toBe(subprocess);
+
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'xcrun',
+      [
+        'simctl',
+        'spawn',
+        'sim-udid',
+        'log',
+        'stream',
+        '--style',
+        'compact',
+        '--level',
+        'info',
+        '--predicate',
+        'process == "HarnessPlayground" OR process == "com.harnessplayground"',
+      ],
+      {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      }
     );
   });
 });

@@ -25,10 +25,10 @@ setTimeout(() => {
   void (async () => {
     try {
       await disableHMRWhenReady(() => HMRClient.disable(), 50);
-      const client = await getClient();
+      const handle = await getClient();
 
       const deviceDescriptor = getDeviceDescriptor();
-      await client.rpc.reportReady(deviceDescriptor);
+      handle.reportReady(deviceDescriptor);
     } catch (error) {
       console.error('Failed to initialize React Native Harness', error);
     }

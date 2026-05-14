@@ -331,17 +331,32 @@ export const stopApp = async (
   ]);
 };
 
-export const getDevice = async (
-  name: string
-): Promise<AppleDeviceInfo | null> => {
-  const devices = await listDevices();
+export const isMatchingDevice = (
+  device: AppleDeviceInfo,
+  identifier: string
+): boolean => {
   return (
-    devices.find((device) => device.deviceProperties.name === name) ?? null
+    device.deviceProperties.name === identifier ||
+    device.identifier === identifier ||
+    device.hardwareProperties.udid === identifier
   );
 };
 
-export const getDeviceId = async (name: string): Promise<string | null> => {
-  const device = await getDevice(name);
+export const getDevice = async (
+  identifier: string
+): Promise<AppleDeviceInfo | null> => {
+  const devices = await listDevices();
+  const matchingDevice = devices.find((device) => {
+    return isMatchingDevice(device, identifier);
+  });
+
+  return matchingDevice ?? null;
+};
+
+export const getDeviceId = async (
+  identifier: string
+): Promise<string | null> => {
+  const device = await getDevice(identifier);
   return device?.identifier ?? null;
 };
 

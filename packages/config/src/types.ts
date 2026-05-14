@@ -14,10 +14,11 @@ const RunnerSchema = z.object({
     ),
   config: z.record(z.any()),
   runner: z.string(),
+  cli: z.string().optional(),
   platformId: z.string(),
 });
 
-type AnyHarnessPlugin = HarnessPlugin<any, any, any>;
+type AnyHarnessPlugin = HarnessPlugin<object, unknown>;
 
 const PluginSchema = z.custom<AnyHarnessPlugin>(
   (value) => isHarnessPlugin(value),
@@ -128,8 +129,8 @@ export const ConfigSchema = z
       .optional()
       .default(false)
       .describe(
-        'Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app to the terminal. ' +
-          'When enabled, all console output from your app will be displayed in the test runner terminal with styled level indicators (log, warn, error).'
+        'Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app during the active test run. ' +
+          "When enabled, app console output is attached to the active test result's console output."
       ),
 
     // Deprecated property - used for migration detection

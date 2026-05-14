@@ -19,6 +19,24 @@ The wizard will help you:
 - Configure Android, iOS, or Web runners.
 - Generate configuration files (`rn-harness.config.mjs` and `jest.harness.config.mjs`).
 
+### `xctest build`
+
+Builds the bundled iOS XCTest agent without reading `rn-harness.config.*`, starting Metro, launching an app, or running tests.
+
+```bash
+npx react-native-harness xctest build --destination simulator
+npx react-native-harness xctest build --destination device
+npx react-native-harness xctest build --destination device --teamId BAJL5U28HC
+```
+
+`--destination simulator` builds simulator artifacts with the iOS Simulator SDK. `--destination device` builds device artifacts with the iOS SDK. Device signing is controlled only by the signing flags you pass:
+
+- `--teamId <id>`
+- `--signingIdentity <name>`
+- `--provisioningProfile <name>`
+
+Unsigned device builds are allowed intentionally for workflows that upload the `iphoneos` artifacts and re-sign them elsewhere. The command prints the DerivedData path, generated `.xctestrun` path, destination, and whether cached artifacts were reused.
+
 ### `(default)`
 
 Runs tests using the Harness test runner.

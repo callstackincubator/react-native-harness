@@ -30,6 +30,7 @@ export const applePlatform = (
   name: config.name,
   config,
   runner: import.meta.resolve('./runner.js'),
+  cli: import.meta.resolve('./cli.js'),
   platformId: 'ios',
   getResourceLockKey: () =>
     config.device.type === 'simulator'

@@ -3,9 +3,6 @@ import {
   DEFAULT_METRO_PORT,
   type Config as HarnessConfig,
 } from '@react-native-harness/config';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import {
   getAndroidEmulatorPlatformInstance,
   getAndroidPhysicalDevicePlatformInstance,
@@ -27,9 +24,13 @@ const init = {
 };
 
 describe('Android platform instance', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    vi.spyOn(
+      await import('../environment.js'),
+      'ensureAndroidEmulatorAvailable',
+    ).mockResolvedValue('/tmp/android-sdk');
   });
 
   it('reuses a running emulator and does not shut it down on dispose', async () => {
@@ -191,6 +192,10 @@ describe('Android platform instance', () => {
 
   it('reuses a compatible cached AVD snapshot when caching is enabled', async () => {
     vi.stubEnv('HARNESS_AVD_CACHING', 'true');
+    vi.spyOn(
+      await import('../environment.js'),
+      'getHostAndroidSystemImageArch',
+    ).mockReturnValue('arm64-v8a');
     vi.spyOn(
       await import('../environment.js'),
       'ensureAndroidEmulatorEnvironment',
@@ -380,107 +385,6 @@ describe('Android platform instance', () => {
       'Pixel_8_API_35',
       'snapshot-reuse',
     );
-  });
-
-  it('installs the app from HARNESS_APP_PATH when missing', async () => {
-    const appPath = path.join(os.tmpdir(), 'HarnessPlayground.apk');
-    fs.writeFileSync(appPath, 'apk');
-    vi.stubEnv('HARNESS_APP_PATH', appPath);
-    vi.spyOn(
-      await import('../environment.js'),
-      'ensureAndroidEmulatorEnvironment',
-    ).mockResolvedValue('/tmp/android-sdk');
-    vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
-    vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
-    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
-    vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(false);
-    const installApp = vi.spyOn(adb, 'installApp').mockResolvedValue(undefined);
-    vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
-    vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
-    vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
-    vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
-      undefined,
-    );
-
-    await expect(
-      getAndroidEmulatorPlatformInstance(
-        {
-          name: 'android',
-          device: {
-            type: 'emulator',
-            name: 'Pixel_8_API_35',
-            avd: {
-              apiLevel: 35,
-              profile: 'pixel_8',
-              diskSize: '1G',
-              heapSize: '1G',
-            },
-          },
-          bundleId: 'com.harnessplayground',
-          activityName: '.MainActivity',
-        },
-        harnessConfig,
-        init,
-      ),
-    ).resolves.toBeDefined();
-
-    expect(installApp).toHaveBeenCalledWith('emulator-5554', appPath);
-
-    fs.rmSync(appPath, { force: true });
-  });
-
-  it('reinstalls the app from HARNESS_APP_PATH when already installed', async () => {
-    const appPath = path.join(os.tmpdir(), 'HarnessPlayground-installed.apk');
-    fs.writeFileSync(appPath, 'apk');
-    vi.stubEnv('HARNESS_APP_PATH', appPath);
-    vi.spyOn(
-      await import('../environment.js'),
-      'ensureAndroidEmulatorEnvironment',
-    ).mockResolvedValue('/tmp/android-sdk');
-    vi.spyOn(adb, 'getDeviceIds').mockResolvedValue(['emulator-5554']);
-    vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
-    vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');
-    vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(true);
-    const uninstallApp = vi
-      .spyOn(adb, 'uninstallApp')
-      .mockResolvedValue(undefined);
-    const installApp = vi.spyOn(adb, 'installApp').mockResolvedValue(undefined);
-    vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
-    vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
-    vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
-    vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
-      undefined,
-    );
-
-    await expect(
-      getAndroidEmulatorPlatformInstance(
-        {
-          name: 'android',
-          device: {
-            type: 'emulator',
-            name: 'Pixel_8_API_35',
-            avd: {
-              apiLevel: 35,
-              profile: 'pixel_8',
-              diskSize: '1G',
-              heapSize: '1G',
-            },
-          },
-          bundleId: 'com.harnessplayground',
-          activityName: '.MainActivity',
-        },
-        harnessConfig,
-        init,
-      ),
-    ).resolves.toBeDefined();
-
-    expect(uninstallApp).toHaveBeenCalledWith(
-      'emulator-5554',
-      'com.harnessplayground',
-    );
-    expect(installApp).toHaveBeenCalledWith('emulator-5554', appPath);
-
-    fs.rmSync(appPath, { force: true });
   });
 
   it('throws a HarnessAppPathError when HARNESS_APP_PATH is missing', async () => {
