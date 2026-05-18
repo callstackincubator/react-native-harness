@@ -1,7 +1,7 @@
 {
   "name": "@react-native-harness/coverage-ios",
   "description": "Native iOS code coverage support for React Native Harness.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "exports": {
     "./package.json": "./package.json",

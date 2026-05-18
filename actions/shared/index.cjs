@@ -4425,7 +4425,12 @@ var ConfigSchema = external_exports.object({
   crashDetectionInterval: external_exports.number().min(100, "Crash detection interval must be at least 100ms").default(500),
   disableViewFlattening: external_exports.boolean().optional().default(false).describe("Disable view flattening in React Native. This will set collapsable={true} for all View components to ensure they are not flattened by the native layout engine."),
   coverage: external_exports.object({
-    root: external_exports.string().optional().describe(`Root directory for coverage instrumentation in monorepo setups. Specifies the directory from which coverage data should be collected. Use ".." for create-react-native-library projects where tests run from example/ but source files are in parent directory. Passed to babel-plugin-istanbul's cwd option.`)
+    root: external_exports.string().optional().describe(`Root directory for coverage instrumentation in monorepo setups. Specifies the directory from which coverage data should be collected. Use ".." for create-react-native-library projects where tests run from example/ but source files are in parent directory. Passed to babel-plugin-istanbul's cwd option.`),
+    native: external_exports.object({
+      ios: external_exports.object({
+        pods: external_exports.array(external_exports.string()).min(1, "At least one pod name is required").describe("Pod names to instrument for native code coverage. Coverage flags are injected at pod install time via a CocoaPods hook. After tests, profraw data is collected and converted to lcov format.")
+      }).optional()
+    }).optional().describe("Native code coverage configuration.")
   }).optional(),
   forwardClientLogs: external_exports.boolean().optional().default(false).describe("Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app during the active test run. When enabled, app console output is attached to the active test result's console output."),
   // Deprecated property - used for migration detection

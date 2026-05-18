@@ -1,7 +1,7 @@
 {
   "name": "@react-native-harness/runtime",
   "description": "The core test runtime that executes on React Native devices, providing Jest-compatible APIs (describe, it, expect) and managing test collection, execution, and result reporting in native environments.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
