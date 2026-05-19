@@ -205,4 +205,122 @@ describe('runner task context', () => {
       runner.dispose();
     }
   });
+
+  it('runs onTestFinished after afterEach for passing tests', async () => {
+    const calls: string[] = [];
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+
+    try {
+      const collection = await collector.collect(() => {
+        harnessDescribe('Finished Suite', () => {
+          afterEach(() => {
+            calls.push('afterEach');
+          });
+
+          harnessIt('runs finished callbacks', ({ onTestFinished }) => {
+            onTestFinished(() => {
+              calls.push('onTestFinished:first');
+            });
+            onTestFinished(() => {
+              calls.push('onTestFinished:second');
+            });
+
+            calls.push('test');
+          });
+        });
+      }, 'runtime/on-test-finished-pass.test.ts');
+
+      const result = await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/on-test-finished-pass.test.ts',
+        runner: 'ios',
+      });
+
+      expect(result.suites[0].tests[0]).toMatchObject({ status: 'passed' });
+      expect(calls).toEqual([
+        'test',
+        'afterEach',
+        'onTestFinished:second',
+        'onTestFinished:first',
+      ]);
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
+
+  it('runs onTestFinished for dynamically skipped tests', async () => {
+    const calls: string[] = [];
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+
+    try {
+      const collection = await collector.collect(() => {
+        harnessDescribe('Finished Skip Suite', () => {
+          afterEach(() => {
+            calls.push('afterEach');
+          });
+
+          harnessIt('runs finished callback after skip', ({ onTestFinished, skip }) => {
+            onTestFinished(() => {
+              calls.push('onTestFinished');
+            });
+
+            calls.push('before-skip');
+            skip();
+          });
+        });
+      }, 'runtime/on-test-finished-skip.test.ts');
+
+      const result = await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/on-test-finished-skip.test.ts',
+        runner: 'android',
+      });
+
+      expect(result.suites[0].tests[0]).toMatchObject({ status: 'skipped' });
+      expect(calls).toEqual(['before-skip', 'afterEach', 'onTestFinished']);
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
+
+  it('runs onTestFinished for failed tests', async () => {
+    const calls: string[] = [];
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+
+    try {
+      const collection = await collector.collect(() => {
+        harnessDescribe('Finished Failure Suite', () => {
+          afterEach(() => {
+            calls.push('afterEach');
+          });
+
+          harnessIt('runs finished callback after failure', ({ onTestFinished }) => {
+            onTestFinished(() => {
+              calls.push('onTestFinished');
+            });
+
+            calls.push('test');
+            throw new Error('expected failure');
+          });
+        });
+      }, 'runtime/on-test-finished-failure.test.ts');
+
+      const result = await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/on-test-finished-failure.test.ts',
+        runner: 'ios',
+      });
+
+      expect(result.suites[0].tests[0]).toMatchObject({ status: 'failed' });
+      expect(calls).toEqual(['test', 'afterEach', 'onTestFinished']);
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
 });

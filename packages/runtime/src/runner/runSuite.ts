@@ -13,7 +13,12 @@ import { flushExpectTestState } from '../expect/errors.js';
 import { runHooks } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
 import { ActiveTestContext, TestRunnerContext } from './types.js';
-import { createTestContext, isSkipTestError } from './test-context.js';
+import {
+  createTestContext,
+  createTestLifecycleState,
+  isSkipTestError,
+  runOnTestFinished,
+} from './test-context.js';
 
 declare global {
   var HARNESS_TEST_PATH: string;
@@ -41,7 +46,11 @@ const runTest = async (
       name: suite.name,
     },
   };
-  const activeTestContext: ActiveTestContext = createTestContext(task);
+  const lifecycleState = createTestLifecycleState();
+  const activeTestContext: ActiveTestContext = createTestContext(
+    task,
+    lifecycleState,
+  );
 
   // Emit test-started event
   context.events.emit({
@@ -119,6 +128,8 @@ const runTest = async (
       if (didSkip) {
         const duration = Date.now() - startTime;
 
+        await runOnTestFinished(lifecycleState);
+
         const result = {
           name: test.name,
           status: 'skipped' as const,
@@ -138,6 +149,7 @@ const runTest = async (
       }
 
       await flushExpectTestState(expectTestState);
+      await runOnTestFinished(lifecycleState);
     } finally {
       setCurrentExpectTestState(undefined);
     }
@@ -162,6 +174,8 @@ const runTest = async (
 
     return result;
   } catch (error) {
+    await runOnTestFinished(lifecycleState);
+
     const testError = await getTestExecutionError(
       error,
       context.testFilePath,

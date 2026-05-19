@@ -12,6 +12,7 @@ export type HarnessTaskContext = {
 
 export type HarnessTestContext = {
   task: HarnessTaskContext;
+  onTestFinished: (fn: () => void | Promise<void>) => void;
   skip: {
     (note?: string): never;
     (condition: boolean, note?: string): void;
