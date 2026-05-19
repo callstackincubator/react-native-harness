@@ -558,19 +558,34 @@ export const createHarnessSession = async (
       bridge.off('disconnected', onDisconnected);
       bridge.off('event', bridgeEventListener);
 
-      const nativeCoverageConfig = runtimeConfig.coverage?.native?.ios;
-      if (nativeCoverageConfig?.pods?.length && platformInstance.collectNativeCoverage) {
-        try {
-          await platformInstance.stopApp();
-          const lcovPath = await platformInstance.collectNativeCoverage({
-            pods: nativeCoverageConfig.pods,
-            outputDir: projectRoot,
-          });
-          if (lcovPath) {
-            logNativeCoverageCollected(lcovPath);
+      if (platformInstance.collectNativeCoverage) {
+        const isAndroid = platform.platformId === 'android';
+        const iosPods = runtimeConfig.coverage?.native?.ios?.pods;
+        const androidModules = runtimeConfig.coverage?.native?.android?.modules;
+
+        const coverageOptions = isAndroid
+          ? androidModules?.length
+            ? { modules: androidModules, outputDir: projectRoot }
+            : null
+          : iosPods?.length
+            ? { pods: iosPods, outputDir: projectRoot }
+            : null;
+
+        if (coverageOptions) {
+          try {
+            await platformInstance.stopApp();
+            if (isAndroid) {
+              // JaCoCo flush timer runs every 1s; wait for final write
+              await new Promise((r) => setTimeout(r, 2000));
+            }
+            const lcovPath =
+              await platformInstance.collectNativeCoverage(coverageOptions);
+            if (lcovPath) {
+              logNativeCoverageCollected(lcovPath);
+            }
+          } catch (error) {
+            sessionLogger.warn('failed to collect native coverage: %s', error);
           }
-        } catch (error) {
-          sessionLogger.warn('failed to collect native coverage: %s', error);
         }
       }
 

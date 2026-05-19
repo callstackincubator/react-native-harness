@@ -108,6 +108,7 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `coverage`                         | Coverage configuration object.                                                                                                                            |
 | `coverage.root`                    | Root directory for coverage instrumentation (default: `process.cwd()`).                                                                                   |
 | `coverage.native.ios.pods`         | Experimental list of CocoaPods target names to instrument for iOS native coverage.                                                                       |
+| `coverage.native.android.modules` | Experimental list of Gradle module paths to instrument for Android native coverage (e.g. `[":mylib"]`).                                                  |
 | `forwardClientLogs`                | Forward console logs from the app to the terminal (default: `false`).                                                                                     |
 | `unstable__enableMetroCache`       | Enable Metro transformation cache under `.harness/metro-cache` and log when reusing it (default: `false`).                                                |
 

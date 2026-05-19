@@ -203,7 +203,7 @@ export const getAppleSimulatorPlatformInstance = async (
       return await collectNativeCoverage({
         udid,
         bundleId: config.bundleId,
-        pods: options.pods,
+        pods: options.pods ?? [],
         outputDir: options.outputDir,
       });
     },

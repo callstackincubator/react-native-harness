@@ -99,8 +99,9 @@ export type AppLaunchOptions =
   | VegaAppLaunchOptions;
 
 export type CollectNativeCoverageOptions = {
-  pods: string[];
   outputDir: string;
+  pods?: string[];
+  modules?: string[];
 };
 
 export type HarnessPlatformRunner = {

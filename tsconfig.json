@@ -62,6 +62,9 @@
     },
     {
       "path": "./packages/coverage-ios"
+    },
+    {
+      "path": "./packages/coverage-android"
     }
   ]
 }
