@@ -49,17 +49,27 @@ logger.lifecycle("[HarnessCoverage] Will instrument modules: ${targetModules.joi
 def scriptDir = buildscript.sourceFile?.parentFile
 def packageDir = scriptDir?.parentFile
 
-gradle.projectsEvaluated {
-    def jacocoVersion = '0.8.12'
+def jacocoVersion = '0.8.12'
 
-    rootProject.allprojects { project ->
-        if (!targetModules.contains(project.path)) return
+// Use allprojects + afterEvaluate so that source sets, dependencies, and
+// BuildConfig fields are registered BEFORE the compile tasks finalize their
+// inputs. gradle.projectsEvaluated is too late for source-set changes.
+gradle.allprojects { project ->
+    if (!targetModules.contains(project.path)) return
 
+    project.afterEvaluate {
         logger.lifecycle("[HarnessCoverage] Configuring ${project.path}")
+
+        def androidExt = project.extensions.findByName('android')
+        if (!androidExt) {
+            logger.warn("[HarnessCoverage] ${project.path} has no android extension, skipping")
+            return
+        }
 
         // --- Dependencies ---
         project.configurations.maybeCreate('jacocoAnt')
-        project.configurations.maybeCreate('jacocoCli')
+        def jacocoCliConf = project.configurations.maybeCreate('jacocoCli')
+        jacocoCliConf.transitive = false
 
         project.dependencies {
             implementation "org.jacoco:org.jacoco.agent:${jacocoVersion}:runtime"
@@ -68,15 +78,13 @@ gradle.projectsEvaluated {
         }
 
         // --- BuildConfig field ---
-        def androidExt = project.extensions.findByName('android')
-        if (androidExt) {
-            androidExt.defaultConfig {
-                buildConfigField "boolean", "COVERAGE_ENABLED", "true"
-            }
+        def namespace = androidExt.namespace
+        androidExt.defaultConfig {
+            buildConfigField "boolean", "COVERAGE_ENABLED", "true"
         }
 
         // --- Inject coverage runtime sources ---
-        if (androidExt && packageDir) {
+        if (packageDir) {
             def coverageSrcDir = new File(packageDir, 'android/src/main/kotlin')
             def coverageResources = new File(packageDir, 'android/src/main/resources')
 
@@ -88,86 +96,78 @@ gradle.projectsEvaluated {
             }
 
             // Generate a debug-overlay manifest that merges the ContentProvider
-            // into the app's manifest (avoids replacing the main manifest)
             def generatedManifestDir = project.file("${project.buildDir}/generated/harness-coverage")
             generatedManifestDir.mkdirs()
             def generatedManifest = new File(generatedManifestDir, 'AndroidManifest.xml')
-            generatedManifest.text = '''\
+            generatedManifest.text = """\
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <provider
             android:name="com.harness.coverage.CoverageInitProvider"
-            android:authorities="${applicationId}.harness_coverage"
+            android:authorities="\${applicationId}.harness_coverage"
             android:exported="false"
             android:initOrder="999" />
     </application>
 </manifest>
-'''
+"""
             androidExt.sourceSets.debug.manifest.srcFile generatedManifest
         }
 
         // --- Offline instrumentation + stash build artifacts ---
-        project.afterEvaluate {
-            def coverageDir = project.file("${project.buildDir}/harness-coverage")
+        def coverageDir = project.file("${project.buildDir}/harness-coverage")
 
-            // Reusable closure that saves originals, instruments, and stashes jacococli
-            def instrumentClasses = { File classesDir, String label ->
-                if (!classesDir.exists()) return
+        def instrumentClasses = { File classesDir, String label ->
+            if (!classesDir.exists()) return
 
-                coverageDir.mkdirs()
+            coverageDir.mkdirs()
 
-                // Save original classes for report generation
-                def origDir = new File(coverageDir, "original-classes-${label}")
-                if (origDir.exists()) origDir.deleteDir()
-                ant.copy(todir: origDir) {
-                    fileset(dir: classesDir)
-                }
-
-                // Stash jacococli.jar for use at report time
-                def destJar = new File(coverageDir, 'jacococli.jar')
-                if (!destJar.exists()) {
-                    def cliJar = project.configurations.jacocoCli.singleFile
-                    ant.copy(file: cliJar, tofile: destJar)
-                    logger.lifecycle("[HarnessCoverage] Stashed ${destJar}")
-                }
-
-                // Instrument to temp dir, then replace
-                def instrumentedDir = project.file("${project.buildDir}/tmp/jacoco-instrumented-${label}")
-                if (instrumentedDir.exists()) instrumentedDir.deleteDir()
-                instrumentedDir.mkdirs()
-
-                ant.taskdef(
-                    name: 'instrument',
-                    classname: 'org.jacoco.ant.InstrumentTask',
-                    classpath: project.configurations.jacocoAnt.asPath
-                )
-                ant.instrument(destdir: instrumentedDir) {
-                    fileset(dir: classesDir, includes: '**/*.class')
-                }
-
-                ant.copy(todir: classesDir, overwrite: true) {
-                    fileset(dir: instrumentedDir)
-                }
-
-                logger.lifecycle("[HarnessCoverage] Instrumented ${label} classes in ${classesDir}")
+            // Save original classes for report generation
+            def origDir = new File(coverageDir, "original-classes-${label}")
+            if (origDir.exists()) origDir.deleteDir()
+            ant.copy(todir: origDir) {
+                fileset(dir: classesDir)
             }
 
-            // Kotlin classes
-            def kotlinTask = project.tasks.findByName('compileDebugKotlin')
-            if (kotlinTask) {
+            // Stash jacococli.jar for use at report time
+            def destJar = new File(coverageDir, 'jacococli.jar')
+            if (!destJar.exists()) {
+                def cliJar = project.configurations.jacocoCli.singleFile
+                ant.copy(file: cliJar, tofile: destJar)
+                logger.lifecycle("[HarnessCoverage] Stashed ${destJar}")
+            }
+
+            // Instrument to temp dir, then replace originals
+            def instrumentedDir = project.file("${project.buildDir}/tmp/jacoco-instrumented-${label}")
+            if (instrumentedDir.exists()) instrumentedDir.deleteDir()
+            instrumentedDir.mkdirs()
+
+            ant.taskdef(
+                name: 'instrument',
+                classname: 'org.jacoco.ant.InstrumentTask',
+                classpath: project.configurations.jacocoAnt.asPath
+            )
+            ant.instrument(destdir: instrumentedDir) {
+                fileset(dir: classesDir, includes: '**/*.class')
+            }
+
+            ant.copy(todir: classesDir, overwrite: true) {
+                fileset(dir: instrumentedDir)
+            }
+
+            logger.lifecycle("[HarnessCoverage] Instrumented ${label} classes in ${classesDir}")
+        }
+
+        // Hook into compile tasks. Use configureEach with name matching so it
+        // works with lazily-registered tasks (AGP + RN Gradle plugin register
+        // compile tasks after project evaluation, during task graph resolution).
+        project.tasks.configureEach { task ->
+            if (task.name == 'compileDebugKotlin') {
                 def kotlinClasses = project.file("${project.buildDir}/tmp/kotlin-classes/debug")
-                kotlinTask.doLast { instrumentClasses(kotlinClasses, 'kotlin') }
+                task.doLast { instrumentClasses(kotlinClasses, 'kotlin') }
             }
-
-            // Java classes
-            def javaTask = project.tasks.findByName('compileDebugJavaWithJavac')
-            if (javaTask) {
+            if (task.name == 'compileDebugJavaWithJavac') {
                 def javaClasses = project.file("${project.buildDir}/intermediates/javac/debug/classes")
-                javaTask.doLast { instrumentClasses(javaClasses, 'java') }
-            }
-
-            if (!kotlinTask && !javaTask) {
-                logger.warn("[HarnessCoverage] No compile tasks found in ${project.path}, skipping instrumentation")
+                task.doLast { instrumentClasses(javaClasses, 'java') }
             }
         }
     }

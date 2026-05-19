@@ -14,8 +14,6 @@ object CoverageHelper {
     private var cachedAgent: Any? = null
 
     fun setup(context: Context) {
-        if (!BuildConfig.COVERAGE_ENABLED) return
-
         val agent = try {
             Class.forName("org.jacoco.agent.rt.RT")
                 .getMethod("getAgent")
