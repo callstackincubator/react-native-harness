@@ -2,6 +2,7 @@ import type {
   TestCase,
   TestSuite,
   CollectionResult,
+  SuiteHookFn,
 } from '@react-native-harness/bridge';
 import type { TestFn } from './types.js';
 import { TestError } from './errors.js';
@@ -24,8 +25,8 @@ type RawTestSuite = {
   tests: RawTestCase[];
   suites: RawTestSuite[];
   hooks: {
-    beforeAll: TestFn[];
-    afterAll: TestFn[];
+    beforeAll: SuiteHookFn[];
+    afterAll: SuiteHookFn[];
     beforeEach: TestFn[];
     afterEach: TestFn[];
   };
@@ -316,7 +317,7 @@ export const test = Object.assign(
 
 export const it = test;
 
-export function beforeAll(fn: TestFn) {
+export function beforeAll(fn: SuiteHookFn) {
   validateTestFunction(fn, 'beforeAll');
 
   const currentSuite = getCurrentSuite();
@@ -326,7 +327,7 @@ export function beforeAll(fn: TestFn) {
   currentSuite.hooks.beforeAll.push(fn);
 }
 
-export function afterAll(fn: TestFn) {
+export function afterAll(fn: SuiteHookFn) {
   validateTestFunction(fn, 'afterAll');
 
   const currentSuite = getCurrentSuite();

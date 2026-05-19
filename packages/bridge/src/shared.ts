@@ -81,7 +81,13 @@ export type {
   TestSuite,
   TestCase,
   CollectionResult,
+  TestFn,
+  SuiteHookFn,
 } from './shared/test-collector.js';
+export type {
+  HarnessTaskContext,
+  HarnessTestContext,
+} from './shared/test-context.js';
 export type {
   TestRunnerEvents,
   TestRunnerFileStartedEvent,

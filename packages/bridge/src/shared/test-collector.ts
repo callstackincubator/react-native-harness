@@ -1,6 +1,10 @@
+import type { HarnessTestContext } from './test-context.js';
+
 export type TestStatus = 'active' | 'skipped' | 'todo';
 
-export type TestFn = () => void | Promise<void>;
+export type TestFn = (context?: HarnessTestContext) => void | Promise<void>;
+
+export type SuiteHookFn = () => void | Promise<void>;
 
 export type TestCase = {
   name: string;
@@ -13,8 +17,8 @@ export type TestSuite = {
   tests: TestCase[];
   suites: TestSuite[];
   parent?: TestSuite;
-  beforeAll: TestFn[];
-  afterAll: TestFn[];
+  beforeAll: SuiteHookFn[];
+  afterAll: SuiteHookFn[];
   beforeEach: TestFn[];
   afterEach: TestFn[];
   status?: TestStatus;

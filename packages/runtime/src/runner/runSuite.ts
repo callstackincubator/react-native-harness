@@ -1,4 +1,5 @@
 import type {
+  HarnessTaskContext,
   TestCase,
   TestResult,
   TestSuite,
@@ -11,7 +12,7 @@ import {
 import { flushExpectTestState } from '../expect/errors.js';
 import { runHooks } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
-import { TestRunnerContext } from './types.js';
+import { ActiveTestContext, TestRunnerContext } from './types.js';
 
 declare global {
   var HARNESS_TEST_PATH: string;
@@ -23,6 +24,23 @@ const runTest = async (
   context: TestRunnerContext,
 ): Promise<TestResult> => {
   const startTime = Date.now();
+  const task: HarnessTaskContext = {
+    name: test.name,
+    type: 'test',
+    mode:
+      test.status === 'active'
+        ? 'run'
+        : test.status === 'skipped'
+          ? 'skip'
+          : 'todo',
+    file: {
+      name: context.testFilePath,
+    },
+    suite: {
+      name: suite.name,
+    },
+  };
+  const activeTestContext: ActiveTestContext = { task };
 
   // Emit test-started event
   context.events.emit({
@@ -79,13 +97,13 @@ const runTest = async (
 
     try {
       // Run all beforeEach hooks from the current suite and its parents
-      await runHooks(suite, 'beforeEach');
+      await runHooks(suite, 'beforeEach', activeTestContext);
 
       // Run the actual test
-      await test.fn();
+      await test.fn(activeTestContext);
 
       // Run all afterEach hooks from the current suite and its parents
-      await runHooks(suite, 'afterEach');
+      await runHooks(suite, 'afterEach', activeTestContext);
 
       await flushExpectTestState(expectTestState);
     } finally {

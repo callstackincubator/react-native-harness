@@ -1,5 +1,5 @@
 import { TestError } from './errors.js';
-import { TestFn } from './types.js';
+import { TestFn, SuiteHookFn } from './types.js';
 
 export const validateTestName = (name: string, functionName: string): void => {
   if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -10,7 +10,7 @@ export const validateTestName = (name: string, functionName: string): void => {
 };
 
 export const validateTestFunction = (
-  fn: TestFn,
+  fn: TestFn | SuiteHookFn,
   functionName: string
 ): void => {
   if (typeof fn !== 'function') {

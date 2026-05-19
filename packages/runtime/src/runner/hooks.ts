@@ -1,12 +1,13 @@
-import type { TestSuite } from '@react-native-harness/bridge';
+import type { SuiteHookFn, TestFn, TestSuite } from '@react-native-harness/bridge';
+import type { ActiveTestContext } from './types.js';
 
 export type HookType = 'beforeEach' | 'afterEach' | 'beforeAll' | 'afterAll';
 
 const collectInheritedHooks = (
   suite: TestSuite,
   hookType: HookType
-): (() => void | Promise<void>)[] => {
-  const hooks: (() => void | Promise<void>)[] = [];
+): Array<TestFn | SuiteHookFn> => {
+  const hooks: Array<TestFn | SuiteHookFn> = [];
   const suiteChain: TestSuite[] = [];
 
   // Collect all suites from current to root
@@ -41,11 +42,12 @@ const collectInheritedHooks = (
 
 export const runHooks = async (
   suite: TestSuite,
-  hookType: HookType
+  hookType: HookType,
+  context?: ActiveTestContext,
 ): Promise<void> => {
   const hooks = collectInheritedHooks(suite, hookType);
 
   for (const hook of hooks) {
-    await hook();
+    await hook(context);
   }
 };

@@ -1,5 +1,6 @@
 import { EventEmitter } from '../utils/emitter.js';
 import type {
+  HarnessTestContext,
   TestRunnerEvents,
   TestSuite,
   TestSuiteResult,
@@ -11,6 +12,8 @@ export type TestRunnerContext = {
   events: TestRunnerEventsEmitter;
   testFilePath: string;
 };
+
+export type ActiveTestContext = HarnessTestContext;
 
 export type RunTestsOptions = {
   testSuite: TestSuite;
