@@ -412,7 +412,11 @@ export const createHarnessSession = async (
     const getCurrentRunId = () => currentRun?.runId;
     const clientLogCollector = createClientLogCollector();
 
-    const context: HarnessContext = { platform };
+    let platformInstance!: HarnessPlatformRunner;
+    const context: HarnessContext = {
+      platform,
+      getDeviceState: () => platformInstance?.deviceState,
+    };
 
     const bridge = await createHarnessBridge({
       noServer: true,
@@ -422,7 +426,6 @@ export const createHarnessSession = async (
     sessionLogger.debug('bridge initialized on Metro websocket path %s', HARNESS_BRIDGE_PATH);
 
     let metroInstance: MetroInstance;
-    let platformInstance: HarnessPlatformRunner;
 
     try {
       [metroInstance, platformInstance] = await Promise.all([

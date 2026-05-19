@@ -4,7 +4,11 @@ import type {
 } from './shared/test-runner.js';
 import type { TestCollectorEvents } from './shared/test-collector.js';
 import type { BundlerEvents } from './shared/bundler.js';
-import type { HarnessPlatform } from '@react-native-harness/platforms';
+import type {
+  DevicePermissionCommand,
+  DeviceStateController,
+  HarnessPlatform,
+} from '@react-native-harness/platforms';
 
 export const HARNESS_BRIDGE_PATH = '/__harness';
 
@@ -150,6 +154,10 @@ export type ScreenshotData = BinaryDataReference;
 export type BridgeServerFunctions = {
   reportReady: (device: DeviceDescriptor) => void;
   emitEvent: (event: BridgeEvents['type'], data: BridgeEvents) => void;
+  'device.permissions.apply': (
+    command: DevicePermissionCommand,
+  ) => Promise<{ mutationId?: string; warning?: string }>;
+  'device.permissions.revert': (mutationId: string) => Promise<void>;
   'device.screenshot.receive': (
     reference: BinaryDataReference,
     metadata: { width: number; height: number }
@@ -163,5 +171,6 @@ export type BridgeServerFunctions = {
 };
 
 export type HarnessContext = {
+  getDeviceState: () => DeviceStateController | undefined;
   platform: HarnessPlatform;
 };
