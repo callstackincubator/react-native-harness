@@ -2,6 +2,7 @@ import type { HarnessTaskContext } from '@react-native-harness/bridge';
 import type { ActiveTestContext } from './types.js';
 
 export type TestLifecycleState = {
+  onTestFailed: Array<() => void | Promise<void>>;
   onTestFinished: Array<() => void | Promise<void>>;
 };
 
@@ -41,10 +42,25 @@ const createOnTestFinished = (state: TestLifecycleState) => {
   };
 };
 
+const createOnTestFailed = (state: TestLifecycleState) => {
+  return (fn: () => void | Promise<void>): void => {
+    state.onTestFailed.push(fn);
+  };
+};
+
 export const createTestLifecycleState = (): TestLifecycleState => {
   return {
+    onTestFailed: [],
     onTestFinished: [],
   };
+};
+
+export const runOnTestFailed = async (
+  state: TestLifecycleState,
+): Promise<void> => {
+  for (let i = state.onTestFailed.length - 1; i >= 0; i--) {
+    await state.onTestFailed[i]();
+  }
 };
 
 export const runOnTestFinished = async (
@@ -61,6 +77,7 @@ export const createTestContext = (
 ): ActiveTestContext => {
   return {
     task,
+    onTestFailed: createOnTestFailed(state),
     onTestFinished: createOnTestFinished(state),
     skip: createSkip(),
   };

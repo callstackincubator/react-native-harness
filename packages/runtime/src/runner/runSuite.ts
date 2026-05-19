@@ -17,6 +17,7 @@ import {
   createTestContext,
   createTestLifecycleState,
   isSkipTestError,
+  runOnTestFailed,
   runOnTestFinished,
 } from './test-context.js';
 
@@ -174,6 +175,7 @@ const runTest = async (
 
     return result;
   } catch (error) {
+    await runOnTestFailed(lifecycleState);
     await runOnTestFinished(lifecycleState);
 
     const testError = await getTestExecutionError(
