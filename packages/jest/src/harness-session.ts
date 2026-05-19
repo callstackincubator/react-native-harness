@@ -226,6 +226,12 @@ const waitForAppReady = async (
   });
 };
 
+const resetOutstandingDevicePermissions = async (
+  platformInstance: HarnessPlatformRunner,
+): Promise<void> => {
+  await platformInstance.deviceState?.permissions.resetOutstanding();
+};
+
 const getDefaultResourceLockKey = (platform: HarnessPlatform): string =>
   `${platform.platformId}:${platform.name}`;
 
@@ -530,6 +536,7 @@ export const createHarnessSession = async (
     const disposeOnce = async (reason: 'normal' | 'abort' | 'error') => {
       sessionLogger.debug('disposing session (reason=%s)', reason);
       let hookError: unknown;
+      let permissionResetError: unknown;
 
       try {
         await hooks.drain();
@@ -579,6 +586,12 @@ export const createHarnessSession = async (
 
       let cleanupError: unknown;
       try {
+        await resetOutstandingDevicePermissions(platformInstance);
+      } catch (error) {
+        permissionResetError = error;
+      }
+
+      try {
         await Promise.all([
           crashMonitor.dispose(),
           bridge.dispose(),
@@ -596,6 +609,7 @@ export const createHarnessSession = async (
       sessionLogger.debug('session resources disposed');
 
       if (hookError) throw hookError;
+      if (permissionResetError) throw permissionResetError;
       if (cleanupError) throw cleanupError;
     };
 
@@ -657,6 +671,8 @@ export const createHarnessSession = async (
         testFilePath ?? 'n/a',
         testFilePath ? 'stop-and-ensure-ready' : 'direct-restart',
       );
+
+      await resetOutstandingDevicePermissions(platformInstance);
 
       if (testFilePath) {
         await platformInstance.stopApp();
