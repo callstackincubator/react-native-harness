@@ -129,4 +129,80 @@ describe('runner task context', () => {
       runner.dispose();
     }
   });
+
+  it('marks dynamically skipped tests as skipped and still runs afterEach', async () => {
+    const calls: string[] = [];
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+
+    try {
+      const collection = await collector.collect(() => {
+        harnessDescribe('Skip Suite', () => {
+          afterEach(() => {
+            calls.push('afterEach');
+          });
+
+          harnessIt('skips from context', ({ skip }) => {
+            calls.push('before-skip');
+            skip('skip this test');
+            calls.push('after-skip');
+          });
+
+          harnessIt('still runs sibling test', () => {
+            calls.push('sibling');
+          });
+        });
+      }, 'runtime/skip.test.ts');
+
+      const result = await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/skip.test.ts',
+        runner: 'ios',
+      });
+
+      expect(result.suites[0].tests).toMatchObject([
+        { name: 'skips from context', status: 'skipped' },
+        { name: 'still runs sibling test', status: 'passed' },
+      ]);
+      expect(calls).toEqual([
+        'before-skip',
+        'afterEach',
+        'sibling',
+        'afterEach',
+      ]);
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
+
+  it('supports conditional skipping without changing false conditions', async () => {
+    const calls: string[] = [];
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+
+    try {
+      const collection = await collector.collect(() => {
+        harnessDescribe('Conditional Skip Suite', () => {
+          harnessIt('continues when condition is false', ({ skip }) => {
+            calls.push('before');
+            skip(false, 'do not skip');
+            calls.push('after');
+          });
+        });
+      }, 'runtime/conditional-skip.test.ts');
+
+      const result = await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/conditional-skip.test.ts',
+        runner: 'android',
+      });
+
+      expect(result.suites[0].tests[0]).toMatchObject({ status: 'passed' });
+      expect(calls).toEqual(['before', 'after']);
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
 });

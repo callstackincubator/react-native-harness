@@ -13,6 +13,7 @@ import { flushExpectTestState } from '../expect/errors.js';
 import { runHooks } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
 import { ActiveTestContext, TestRunnerContext } from './types.js';
+import { createTestContext, isSkipTestError } from './test-context.js';
 
 declare global {
   var HARNESS_TEST_PATH: string;
@@ -40,7 +41,7 @@ const runTest = async (
       name: suite.name,
     },
   };
-  const activeTestContext: ActiveTestContext = { task };
+  const activeTestContext: ActiveTestContext = createTestContext(task);
 
   // Emit test-started event
   context.events.emit({
@@ -96,14 +97,45 @@ const runTest = async (
     setCurrentExpectTestState(expectTestState);
 
     try {
-      // Run all beforeEach hooks from the current suite and its parents
-      await runHooks(suite, 'beforeEach', activeTestContext);
+      let didSkip = false;
 
-      // Run the actual test
-      await test.fn(activeTestContext);
+      try {
+        // Run all beforeEach hooks from the current suite and its parents
+        await runHooks(suite, 'beforeEach', activeTestContext);
 
-      // Run all afterEach hooks from the current suite and its parents
-      await runHooks(suite, 'afterEach', activeTestContext);
+        // Run the actual test
+        await test.fn(activeTestContext);
+      } catch (error) {
+        if (!isSkipTestError(error)) {
+          throw error;
+        }
+
+        didSkip = true;
+      } finally {
+        // Run all afterEach hooks from the current suite and its parents
+        await runHooks(suite, 'afterEach', activeTestContext);
+      }
+
+      if (didSkip) {
+        const duration = Date.now() - startTime;
+
+        const result = {
+          name: test.name,
+          status: 'skipped' as const,
+          duration,
+        };
+
+        context.events.emit({
+          type: 'test-finished',
+          file: context.testFilePath,
+          suite: suite.name,
+          name: test.name,
+          duration,
+          status: 'skipped',
+        });
+
+        return result;
+      }
 
       await flushExpectTestState(expectTestState);
     } finally {

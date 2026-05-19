@@ -12,4 +12,8 @@ export type HarnessTaskContext = {
 
 export type HarnessTestContext = {
   task: HarnessTaskContext;
+  skip: {
+    (note?: string): never;
+    (condition: boolean, note?: string): void;
+  };
 };
