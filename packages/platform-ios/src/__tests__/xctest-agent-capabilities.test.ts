@@ -1,27 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { createPermissionPromptAutoAcceptCapability } from '../xctest-agent-capabilities.js';
+import { createPermissionPromptCapability } from '../xctest-agent-capabilities.js';
 
 describe('xctest agent capabilities', () => {
-  it('enables best-effort permission prompt auto-accept through launch environment', () => {
-    const capability = createPermissionPromptAutoAcceptCapability();
+  it('sets permission prompt policy through launch environment', () => {
+    const capability = createPermissionPromptCapability('deny-all');
 
     expect(capability.getLaunchEnvironment?.()).toEqual({
-      HARNESS_XCTEST_AGENT_AUTO_ACCEPT_PERMISSIONS: '1',
+      HARNESS_XCTEST_AGENT_PERMISSION_PROMPT_POLICY: 'deny-all',
     });
   });
 
-  it('enables permission auto-accept in the runtime configuration', () => {
-    const capability = createPermissionPromptAutoAcceptCapability();
+  it('writes permission prompt policy into the runtime configuration', () => {
+    const capability = createPermissionPromptCapability('grant-all');
 
     expect(
       capability.updateConfiguration?.({
         permissions: {
-          autoAcceptPermissions: false,
+          permissionPromptPolicy: 'disabled',
         },
       }),
     ).toEqual({
       permissions: {
-        autoAcceptPermissions: true,
+        permissionPromptPolicy: 'grant-all',
       },
     });
   });

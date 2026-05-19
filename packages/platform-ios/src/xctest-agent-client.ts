@@ -4,7 +4,7 @@ import type {
 } from './xctest-agent-transport.js';
 
 export type XCTestAgentPermissionsConfiguration = {
-  autoAcceptPermissions: boolean;
+  permissionPromptPolicy: 'grant-all' | 'deny-all' | 'disabled';
 };
 
 type XCTestAgentHealthResponse = {

@@ -1,20 +1,20 @@
 import type { XCTestAgentCapability } from './xctest-agent.js';
 
-const ENABLE_PERMISSION_PROMPT_AUTO_ACCEPT =
-  'HARNESS_XCTEST_AGENT_AUTO_ACCEPT_PERMISSIONS';
+const PERMISSION_PROMPT_POLICY = 'HARNESS_XCTEST_AGENT_PERMISSION_PROMPT_POLICY';
 
-export const createPermissionPromptAutoAcceptCapability =
-  (): XCTestAgentCapability => {
-    return {
-      getLaunchEnvironment: () => ({
-        [ENABLE_PERMISSION_PROMPT_AUTO_ACCEPT]: '1',
-      }),
-      updateConfiguration: (configuration) => ({
-        ...configuration,
-        permissions: {
-          ...configuration.permissions,
-          autoAcceptPermissions: true,
-        },
-      }),
-    };
+export const createPermissionPromptCapability = (
+  permissionPromptPolicy: 'grant-all' | 'deny-all' | 'disabled',
+): XCTestAgentCapability => {
+  return {
+    getLaunchEnvironment: () => ({
+      [PERMISSION_PROMPT_POLICY]: permissionPromptPolicy,
+    }),
+    updateConfiguration: (configuration) => ({
+      ...configuration,
+      permissions: {
+        ...configuration.permissions,
+        permissionPromptPolicy,
+      },
+    }),
   };
+};

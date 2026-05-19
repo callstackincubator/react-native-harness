@@ -359,6 +359,22 @@ export const shutdownSimulator = async (udid: string): Promise<void> => {
   await spawnAndForget('xcrun', ['simctl', 'shutdown', udid]);
 };
 
+export const setPrivacyPermission = async (options: {
+  udid: string;
+  bundleId: string;
+  service: string;
+  decision: 'grant' | 'deny' | 'reset';
+}): Promise<void> => {
+  await spawn('xcrun', [
+    'simctl',
+    'privacy',
+    options.udid,
+    options.decision === 'deny' ? 'revoke' : options.decision,
+    options.service,
+    options.bundleId,
+  ]);
+};
+
 export const installApp = async (
   udid: string,
   appPath: string,

@@ -35,11 +35,16 @@ export type DeviceStateMutation = {
   revert: () => Promise<void>;
 };
 
+export type DeviceStateApplyResult = {
+  mutation: DeviceStateMutation | null;
+  warning?: string;
+};
+
 export type DeviceStateController = {
   permissions: {
     apply: (
       command: DevicePermissionCommand,
-    ) => Promise<DeviceStateMutation | null>;
+    ) => Promise<DeviceStateApplyResult>;
     revert: (mutationId: string) => Promise<void>;
     resetOutstanding: () => Promise<void>;
   };

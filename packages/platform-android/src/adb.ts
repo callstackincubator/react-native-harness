@@ -384,7 +384,7 @@ export const getDeviceInfo = async (
   return { manufacturer, model };
 };
 
-const getRequestedPermissions = async (
+export const getRequestedPermissions = async (
   adbId: string,
   bundleId: string,
 ): Promise<string[]> => {
@@ -432,7 +432,9 @@ const getRequestedPermissions = async (
   return [...requestedPermissions];
 };
 
-const getDangerousPermissions = async (adbId: string): Promise<Set<string>> => {
+export const getDangerousPermissions = async (
+  adbId: string,
+): Promise<Set<string>> => {
   const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
     adbId,
@@ -455,6 +457,88 @@ const getDangerousPermissions = async (adbId: string): Promise<Set<string>> => {
   }
 
   return dangerousPermissions;
+};
+
+export const getDeclaredDangerousPermissions = async (
+  adbId: string,
+  bundleId: string,
+): Promise<string[]> => {
+  const [requestedPermissions, dangerousPermissions] = await Promise.all([
+    getRequestedPermissions(adbId, bundleId),
+    getDangerousPermissions(adbId),
+  ]);
+
+  return requestedPermissions.filter((permission) =>
+    dangerousPermissions.has(permission),
+  );
+};
+
+export const isPermissionGranted = async (
+  adbId: string,
+  bundleId: string,
+  permission: string,
+): Promise<boolean> => {
+  const { stdout } = await spawn(getAdbBinaryPath(), [
+    '-s',
+    adbId,
+    'shell',
+    'pm',
+    'check-permission',
+    bundleId,
+    permission,
+  ]);
+  const normalized = stdout.trim().toLowerCase();
+
+  return normalized.includes('granted=true') || normalized === 'granted';
+};
+
+export const setPermissions = async (
+  adbId: string,
+  bundleId: string,
+  permissions: readonly string[],
+  decision: 'grant' | 'deny' | 'reset',
+  options?: { bestEffort?: boolean },
+): Promise<void> => {
+  const failures: unknown[] = [];
+
+  for (const permission of permissions) {
+    const args = [
+      '-s',
+      adbId,
+      'shell',
+      'pm',
+      decision === 'grant' ? 'grant' : 'revoke',
+      bundleId,
+      permission,
+    ];
+
+    try {
+      await spawn(getAdbBinaryPath(), args);
+    } catch (error) {
+      if (!options?.bestEffort) {
+        throw error;
+      }
+
+      failures.push(error);
+      androidAdbLogger.debug('setPermissions:best-effort-failure %o', {
+        adbId,
+        bundleId,
+        permission,
+        decision,
+        error,
+      });
+    }
+  }
+
+  if (failures.length > 0) {
+    androidAdbLogger.debug('setPermissions:completed-with-failures %o', {
+      adbId,
+      bundleId,
+      permissions,
+      decision,
+      failureCount: failures.length,
+    });
+  }
 };
 
 export const isBootCompleted = async (adbId: string): Promise<boolean> => {
@@ -844,18 +928,11 @@ export const grantPermissions = async (
     throw new AdbAppNotInstalledError(bundleId, adbId);
   }
 
-  const [requestedPermissions, dangerousPermissions] = await Promise.all([
-    getRequestedPermissions(adbId, bundleId),
-    getDangerousPermissions(adbId),
-  ]);
-  const permissions = requestedPermissions.filter((permission) =>
-    dangerousPermissions.has(permission),
-  );
+  const permissions = await getDeclaredDangerousPermissions(adbId, bundleId);
 
   androidAdbLogger.debug('grantPermissions:resolved %o', {
     adbId,
     bundleId,
-    requestedPermissions,
     permissions,
   });
 
@@ -867,26 +944,14 @@ export const grantPermissions = async (
     return;
   }
 
-  const grantCommands = permissions.map((permission) => [
-    '-s',
-    adbId,
-    'shell',
-    'pm',
-    'grant',
-    bundleId,
-    permission,
-  ]);
-
   try {
-    androidAdbLogger.debug('grantPermissions:commands %o', {
+    androidAdbLogger.debug('grantPermissions:permissions %o', {
       adbId,
       bundleId,
-      grantCommands,
+      permissions,
     });
 
-    await Promise.all(
-      grantCommands.map((args) => spawn(getAdbBinaryPath(), args as string[])),
-    );
+    await setPermissions(adbId, bundleId, permissions, 'grant');
 
     androidAdbLogger.debug('grantPermissions:success %o', {
       adbId,

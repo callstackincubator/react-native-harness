@@ -1,15 +1,15 @@
 import XCTest
 
 private enum PermissionPromptEnvironment {
-  static let autoAcceptPermissions = "HARNESS_XCTEST_AGENT_AUTO_ACCEPT_PERMISSIONS"
+  static let permissionPromptPolicy = "HARNESS_XCTEST_AGENT_PERMISSION_PROMPT_POLICY"
 }
 
 struct PermissionPromptConfiguration: Codable {
-  var autoAcceptPermissions: Bool
+  var permissionPromptPolicy: String
 
   static func fromEnvironment() -> PermissionPromptConfiguration {
     return PermissionPromptConfiguration(
-      autoAcceptPermissions: ProcessInfo.processInfo.environment[PermissionPromptEnvironment.autoAcceptPermissions] == "1"
+      permissionPromptPolicy: ProcessInfo.processInfo.environment[PermissionPromptEnvironment.permissionPromptPolicy] ?? "disabled"
     )
   }
 }
@@ -29,6 +29,16 @@ final class PermissionPromptWatchdog: AgentCapability {
       "Pair",
       "Allow Full Access"
     ]
+    static let knownNegativeButtonLabels = [
+      "Don’t Allow",
+      "Don't Allow",
+      "Not Now",
+      "Cancel",
+      "Deny",
+      "No",
+      "Keep Only While Using",
+      "Allow Once"
+    ]
   }
 
   private let springboard: XCUIApplication
@@ -44,17 +54,24 @@ final class PermissionPromptWatchdog: AgentCapability {
   }
 
   func setUp() throws {
-    if state.permissions.autoAcceptPermissions {
+    if state.permissions.permissionPromptPolicy != "disabled" {
       log("permission prompt watchdog enabled")
     }
   }
 
   func tick() throws {
-    guard state.permissions.autoAcceptPermissions else {
+    let labels: [String]
+
+    switch state.permissions.permissionPromptPolicy {
+    case "grant-all":
+      labels = Constants.knownPositiveButtonLabels
+    case "deny-all":
+      labels = Constants.knownNegativeButtonLabels
+    default:
       return
     }
 
-    for label in Constants.knownPositiveButtonLabels {
+    for label in labels {
       let button = springboard.buttons[label].firstMatch
 
       if button.exists && button.isHittable {

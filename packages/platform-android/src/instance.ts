@@ -34,6 +34,7 @@ import {
 import { isInteractive } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import type { AppMonitor } from '@react-native-harness/platforms';
+import { createAndroidDeviceState } from './device-state.js';
 
 const androidInstanceLogger = logger.child('android-instance');
 
@@ -276,12 +277,20 @@ export const getAndroidEmulatorPlatformInstance = async (
   }
 
   const appUid = await configureAndroidRuntime(adbId, config, harnessConfig);
+  const deviceState = createAndroidDeviceState({
+    adbId,
+    bundleId: config.bundleId,
+  });
 
   if (permissionsEnabled) {
-    await adb.grantPermissions(adbId, config.bundleId);
+    await deviceState.permissions.apply({
+      kind: 'permission-all',
+      decision: 'grant',
+    });
   }
 
   return {
+    deviceState,
     startApp: async (options) => {
       await adb.startApp(
         adbId,
@@ -356,12 +365,20 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
   }
 
   const appUid = await configureAndroidRuntime(adbId, config, harnessConfig);
+  const deviceState = createAndroidDeviceState({
+    adbId,
+    bundleId: config.bundleId,
+  });
 
   if (permissionsEnabled) {
-    await adb.grantPermissions(adbId, config.bundleId);
+    await deviceState.permissions.apply({
+      kind: 'permission-all',
+      decision: 'grant',
+    });
   }
 
   return {
+    deviceState,
     startApp: async (options) => {
       await adb.startApp(
         adbId,

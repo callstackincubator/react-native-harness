@@ -160,8 +160,10 @@ describe('bridge: createHarnessBridge + connectToHarness', () => {
   describe('device permissions RPCs', () => {
     it('applies permission mutations through the host-side controller', async () => {
       const apply = vi.fn(async () => ({
-        id: 'mutation-1',
-        revert: vi.fn(async () => undefined),
+        mutation: {
+          id: 'mutation-1',
+          revert: vi.fn(async () => undefined),
+        },
       }));
       const revert = vi.fn(async () => undefined);
 

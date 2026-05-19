@@ -167,8 +167,8 @@ export const createHarnessBridge = async (
           );
         }
 
-        const mutation = await deviceState.permissions.apply(command);
-        return { mutationId: mutation?.id };
+        const result = await deviceState.permissions.apply(command);
+        return { mutationId: result.mutation?.id, warning: result.warning };
       },
       'device.permissions.revert': async (mutationId) => {
         const deviceState = context.getDeviceState();

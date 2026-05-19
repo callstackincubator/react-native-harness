@@ -578,12 +578,16 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
+    vi.spyOn(adb, 'getDeclaredDangerousPermissions').mockResolvedValue([
+      'android.permission.CAMERA',
+    ]);
+    vi.spyOn(adb, 'isPermissionGranted').mockResolvedValue(false);
+    const setPermissions = vi
+      .spyOn(adb, 'setPermissions')
+      .mockResolvedValue(undefined);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
       undefined,
     );
-    const grantPermissions = vi
-      .spyOn(adb, 'grantPermissions')
-      .mockResolvedValue(undefined);
 
     const harnessConfigWithPermissions = {
       ...harnessConfig,
@@ -610,9 +614,12 @@ describe('Android platform instance', () => {
       init,
     );
 
-    expect(grantPermissions).toHaveBeenCalledWith(
+    expect(setPermissions).toHaveBeenCalledWith(
       'emulator-5554',
       'com.harnessplayground',
+      ['android.permission.CAMERA'],
+      'grant',
+      { bestEffort: true },
     );
   });
 
@@ -628,12 +635,16 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
+    vi.spyOn(adb, 'getDeclaredDangerousPermissions').mockResolvedValue([
+      'android.permission.CAMERA',
+    ]);
+    vi.spyOn(adb, 'isPermissionGranted').mockResolvedValue(false);
+    const setPermissions = vi
+      .spyOn(adb, 'setPermissions')
+      .mockResolvedValue(undefined);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
       undefined,
     );
-    const grantPermissions = vi
-      .spyOn(adb, 'grantPermissions')
-      .mockResolvedValue(undefined);
 
     await getAndroidEmulatorPlatformInstance(
       {
@@ -655,7 +666,7 @@ describe('Android platform instance', () => {
       init,
     );
 
-    expect(grantPermissions).not.toHaveBeenCalled();
+    expect(setPermissions).not.toHaveBeenCalled();
   });
 
   it('grants permissions when permissions are enabled for physical device', async () => {
@@ -668,12 +679,16 @@ describe('Android platform instance', () => {
     vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
     vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
     vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
+    vi.spyOn(adb, 'getDeclaredDangerousPermissions').mockResolvedValue([
+      'android.permission.CAMERA',
+    ]);
+    vi.spyOn(adb, 'isPermissionGranted').mockResolvedValue(false);
+    const setPermissions = vi
+      .spyOn(adb, 'setPermissions')
+      .mockResolvedValue(undefined);
     vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(
       undefined,
     );
-    const grantPermissions = vi
-      .spyOn(adb, 'grantPermissions')
-      .mockResolvedValue(undefined);
 
     const harnessConfigWithPermissions = {
       ...harnessConfig,
@@ -694,9 +709,12 @@ describe('Android platform instance', () => {
       harnessConfigWithPermissions,
     );
 
-    expect(grantPermissions).toHaveBeenCalledWith(
+    expect(setPermissions).toHaveBeenCalledWith(
       '012345',
       'com.harnessplayground',
+      ['android.permission.CAMERA'],
+      'grant',
+      { bestEffort: true },
     );
   });
 });

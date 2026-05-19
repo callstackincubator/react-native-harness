@@ -9,7 +9,7 @@ describe('xctest-agent client', () => {
       .mockResolvedValueOnce({
         body: JSON.stringify({
           permissions: {
-            autoAcceptPermissions: false,
+            permissionPromptPolicy: 'disabled',
           },
           status: 'ok',
         }),
@@ -19,7 +19,7 @@ describe('xctest-agent client', () => {
       .mockResolvedValueOnce({
         body: JSON.stringify({
           permissions: {
-            autoAcceptPermissions: true,
+            permissionPromptPolicy: 'grant-all',
           },
         }),
         headers: {},
@@ -28,7 +28,7 @@ describe('xctest-agent client', () => {
       .mockResolvedValueOnce({
         body: JSON.stringify({
           permissions: {
-            autoAcceptPermissions: true,
+            permissionPromptPolicy: 'grant-all',
           },
         }),
         headers: {},
@@ -42,19 +42,19 @@ describe('xctest-agent client', () => {
 
     await expect(client.health()).resolves.toEqual({
       permissions: {
-        autoAcceptPermissions: false,
+        permissionPromptPolicy: 'disabled',
       },
       status: 'ok',
     });
     await expect(
       client.configurePermissions({
-        autoAcceptPermissions: true,
+        permissionPromptPolicy: 'grant-all',
       }),
     ).resolves.toEqual({
-      autoAcceptPermissions: true,
+      permissionPromptPolicy: 'grant-all',
     });
     await expect(client.getPermissionsConfig()).resolves.toEqual({
-      autoAcceptPermissions: true,
+      permissionPromptPolicy: 'grant-all',
     });
 
     expect(request).toHaveBeenNthCalledWith(1, {
@@ -66,7 +66,7 @@ describe('xctest-agent client', () => {
       method: 'POST',
       path: '/permissions/configure',
       body: JSON.stringify({
-        autoAcceptPermissions: true,
+        permissionPromptPolicy: 'grant-all',
       }),
     });
     expect(request).toHaveBeenNthCalledWith(3, {

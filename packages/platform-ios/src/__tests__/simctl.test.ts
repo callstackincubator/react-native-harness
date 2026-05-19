@@ -1,6 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import * as tools from '@react-native-harness/tools';
-import { diagnose, streamLogs, waitForBoot } from '../xcrun/simctl.js';
+import {
+  diagnose,
+  setPrivacyPermission,
+  streamLogs,
+  waitForBoot,
+} from '../xcrun/simctl.js';
 
 describe('simctl startup', () => {
   beforeEach(() => {
@@ -76,5 +81,27 @@ describe('simctl startup', () => {
         stderr: 'pipe',
       }
     );
+  });
+
+  it('maps deny decisions to simctl revoke for privacy permissions', async () => {
+    const spawnSpy = vi
+      .spyOn(tools, 'spawn')
+      .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>);
+
+    await setPrivacyPermission({
+      bundleId: 'com.harnessplayground',
+      decision: 'deny',
+      service: 'camera',
+      udid: 'sim-udid',
+    });
+
+    expect(spawnSpy).toHaveBeenCalledWith('xcrun', [
+      'simctl',
+      'privacy',
+      'sim-udid',
+      'revoke',
+      'camera',
+      'com.harnessplayground',
+    ]);
   });
 });
