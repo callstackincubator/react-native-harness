@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider
+            android:name="com.harness.coverage.CoverageInitProvider"
+            android:authorities="${applicationId}.harness_coverage"
+            android:exported="false"
+            android:initOrder="999" />
+    </application>
+</manifest>

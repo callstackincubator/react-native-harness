@@ -1,0 +1,174 @@
+/**
+ * React Native Harness — Android coverage init script.
+ *
+ * Applies JaCoCo offline instrumentation to specified Gradle modules so that
+ * coverage data can be collected from a running app (not just androidTest).
+ *
+ * Usage:
+ *   ./gradlew assembleDebug \
+ *     --init-script node_modules/@react-native-harness/coverage-android/scripts/harness-coverage-init.gradle \
+ *     -PHarnessCoverageModules=:android
+ *
+ * The modules to instrument are read from the Gradle property
+ * `HarnessCoverageModules` (colon-prefixed, comma-separated, e.g. ":mylib,:other")
+ * or the environment variable `HARNESS_COVERAGE_MODULES`.
+ *
+ * For each target module this script:
+ *   1. Adds the JaCoCo agent runtime dependency (provides RT.getAgent())
+ *   2. Saves original (uninstrumented) class files for report generation
+ *   3. Offline-instruments the compiled class files with JaCoCo probes
+ *   4. Copies jacococli.jar to the build output for later report generation
+ *   5. Injects the Harness coverage runtime (CoverageHelper + CoverageInitProvider)
+ *   6. Adds a COVERAGE_ENABLED BuildConfig field
+ *
+ * After the build, the following artifacts are available in each module's
+ * build/harness-coverage/ directory:
+ *   - original-classes/  — uninstrumented class files needed for the report
+ *   - jacococli.jar      — JaCoCo CLI for merging .ec files and generating reports
+ */
+
+def resolveCoverageModules() {
+    def prop = gradle.startParameter.projectProperties['HarnessCoverageModules']
+    if (prop) return prop.split(',').collect { it.trim() }
+
+    def env = System.getenv('HARNESS_COVERAGE_MODULES')
+    if (env) return env.split(',').collect { it.trim() }
+
+    return []
+}
+
+def targetModules = resolveCoverageModules()
+if (targetModules.isEmpty()) {
+    logger.warn('[HarnessCoverage] No modules specified — set -PHarnessCoverageModules=:mylib or HARNESS_COVERAGE_MODULES env var')
+    return
+}
+
+logger.lifecycle("[HarnessCoverage] Will instrument modules: ${targetModules.join(', ')}")
+
+// Locate the coverage-android package directory (parent of scripts/)
+def scriptDir = buildscript.sourceFile?.parentFile
+def packageDir = scriptDir?.parentFile
+
+gradle.projectsEvaluated {
+    def jacocoVersion = '0.8.12'
+
+    rootProject.allprojects { project ->
+        if (!targetModules.contains(project.path)) return
+
+        logger.lifecycle("[HarnessCoverage] Configuring ${project.path}")
+
+        // --- Dependencies ---
+        project.configurations.maybeCreate('jacocoAnt')
+        project.configurations.maybeCreate('jacocoCli')
+
+        project.dependencies {
+            implementation "org.jacoco:org.jacoco.agent:${jacocoVersion}:runtime"
+            jacocoAnt "org.jacoco:org.jacoco.ant:${jacocoVersion}"
+            jacocoCli "org.jacoco:org.jacoco.cli:${jacocoVersion}:nodeps"
+        }
+
+        // --- BuildConfig field ---
+        def androidExt = project.extensions.findByName('android')
+        if (androidExt) {
+            androidExt.defaultConfig {
+                buildConfigField "boolean", "COVERAGE_ENABLED", "true"
+            }
+        }
+
+        // --- Inject coverage runtime sources ---
+        if (androidExt && packageDir) {
+            def coverageSrcDir = new File(packageDir, 'android/src/main/kotlin')
+            def coverageResources = new File(packageDir, 'android/src/main/resources')
+
+            androidExt.sourceSets {
+                debug {
+                    kotlin.srcDirs += coverageSrcDir
+                    resources.srcDirs += coverageResources
+                }
+            }
+
+            // Generate a debug-overlay manifest that merges the ContentProvider
+            // into the app's manifest (avoids replacing the main manifest)
+            def generatedManifestDir = project.file("${project.buildDir}/generated/harness-coverage")
+            generatedManifestDir.mkdirs()
+            def generatedManifest = new File(generatedManifestDir, 'AndroidManifest.xml')
+            generatedManifest.text = '''\
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider
+            android:name="com.harness.coverage.CoverageInitProvider"
+            android:authorities="${applicationId}.harness_coverage"
+            android:exported="false"
+            android:initOrder="999" />
+    </application>
+</manifest>
+'''
+            androidExt.sourceSets.debug.manifest.srcFile generatedManifest
+        }
+
+        // --- Offline instrumentation + stash build artifacts ---
+        project.afterEvaluate {
+            def coverageDir = project.file("${project.buildDir}/harness-coverage")
+
+            // Reusable closure that saves originals, instruments, and stashes jacococli
+            def instrumentClasses = { File classesDir, String label ->
+                if (!classesDir.exists()) return
+
+                coverageDir.mkdirs()
+
+                // Save original classes for report generation
+                def origDir = new File(coverageDir, "original-classes-${label}")
+                if (origDir.exists()) origDir.deleteDir()
+                ant.copy(todir: origDir) {
+                    fileset(dir: classesDir)
+                }
+
+                // Stash jacococli.jar for use at report time
+                def destJar = new File(coverageDir, 'jacococli.jar')
+                if (!destJar.exists()) {
+                    def cliJar = project.configurations.jacocoCli.singleFile
+                    ant.copy(file: cliJar, tofile: destJar)
+                    logger.lifecycle("[HarnessCoverage] Stashed ${destJar}")
+                }
+
+                // Instrument to temp dir, then replace
+                def instrumentedDir = project.file("${project.buildDir}/tmp/jacoco-instrumented-${label}")
+                if (instrumentedDir.exists()) instrumentedDir.deleteDir()
+                instrumentedDir.mkdirs()
+
+                ant.taskdef(
+                    name: 'instrument',
+                    classname: 'org.jacoco.ant.InstrumentTask',
+                    classpath: project.configurations.jacocoAnt.asPath
+                )
+                ant.instrument(destdir: instrumentedDir) {
+                    fileset(dir: classesDir, includes: '**/*.class')
+                }
+
+                ant.copy(todir: classesDir, overwrite: true) {
+                    fileset(dir: instrumentedDir)
+                }
+
+                logger.lifecycle("[HarnessCoverage] Instrumented ${label} classes in ${classesDir}")
+            }
+
+            // Kotlin classes
+            def kotlinTask = project.tasks.findByName('compileDebugKotlin')
+            if (kotlinTask) {
+                def kotlinClasses = project.file("${project.buildDir}/tmp/kotlin-classes/debug")
+                kotlinTask.doLast { instrumentClasses(kotlinClasses, 'kotlin') }
+            }
+
+            // Java classes
+            def javaTask = project.tasks.findByName('compileDebugJavaWithJavac')
+            if (javaTask) {
+                def javaClasses = project.file("${project.buildDir}/intermediates/javac/debug/classes")
+                javaTask.doLast { instrumentClasses(javaClasses, 'java') }
+            }
+
+            if (!kotlinTask && !javaTask) {
+                logger.warn("[HarnessCoverage] No compile tasks found in ${project.path}, skipping instrumentation")
+            }
+        }
+    }
+}

@@ -1,5 +1,6 @@
 import {
   AppNotInstalledError,
+  type CollectNativeCoverageOptions,
   CreateAppMonitorOptions,
   DeviceNotFoundError,
   type HarnessPlatformInitOptions,
@@ -329,6 +330,17 @@ export const getAndroidEmulatorPlatformInstance = async (
         crashArtifactWriter: options?.crashArtifactWriter,
       });
     },
+    collectNativeCoverage: async (options: CollectNativeCoverageOptions) => {
+      const { collectAndroidNativeCoverage } = await import(
+        './coverage-collector.js'
+      );
+      return collectAndroidNativeCoverage({
+        adbId,
+        bundleId: config.bundleId,
+        modules: options.modules ?? [],
+        outputDir: options.outputDir,
+      });
+    },
   };
 };
 
@@ -402,6 +414,17 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
         bundleId: config.bundleId,
         appUid,
         crashArtifactWriter: options?.crashArtifactWriter,
+      });
+    },
+    collectNativeCoverage: async (options: CollectNativeCoverageOptions) => {
+      const { collectAndroidNativeCoverage } = await import(
+        './coverage-collector.js'
+      );
+      return collectAndroidNativeCoverage({
+        adbId,
+        bundleId: config.bundleId,
+        modules: options.modules ?? [],
+        outputDir: options.outputDir,
       });
     },
   };

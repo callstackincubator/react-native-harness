@@ -1,0 +1,37 @@
+{
+  "name": "@react-native-harness/coverage-android",
+  "description": "Native Android code coverage support for React Native Harness.",
+  "version": "1.1.0",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "dist",
+    "android",
+    "scripts",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__",
+    "!**/.*"
+  ],
+  "peerDependencies": {
+    "react-native": "*"
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "react-native": "*"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/callstackincubator/react-native-harness",
+  "author": "React Native Harness contributors"
+}

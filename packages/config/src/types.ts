@@ -118,6 +118,18 @@ export const ConfigSchema = z
                   ),
               })
               .optional(),
+            android: z
+              .object({
+                modules: z
+                  .array(z.string())
+                  .min(1, 'At least one Gradle module path is required')
+                  .describe(
+                    'Gradle module paths to instrument for native code coverage, ' +
+                    'e.g. [":android"]. The app must be built with the harness coverage ' +
+                    'init script to enable JaCoCo offline instrumentation.'
+                  ),
+              })
+              .optional(),
           })
           .optional()
           .describe('Native code coverage configuration.'),
