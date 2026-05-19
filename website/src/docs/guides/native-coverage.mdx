@@ -5,21 +5,21 @@ import { PackageManagerTabs } from '@theme';
 React Native Harness provides experimental support for collecting native coverage during test runs.
 
 :::warning Experimental
-`@react-native-harness/coverage-ios` is an **experimental** feature. Expect rough edges and API changes while the integration matures.
+Native coverage packages are **experimental**. Expect rough edges and API changes while the integration matures.
 :::
 
-Today, native coverage support is available for **iOS simulators only**. Physical iOS devices are not supported yet. Android support is planned and this guide will expand as it lands.
+Native coverage support is available for **iOS simulators** and **Android emulators/devices**.
 
 ## What you get
 
 - Coverage instrumentation for supported native dependencies
-- Automatic `.profraw` collection from the app sandbox
+- Automatic coverage data collection from the app
 - `native-coverage.lcov` output after the test run finishes
 - A way to measure native code exercised by Harness tests, alongside JavaScript coverage
 
-## Installation
+## iOS
 
-Current package:
+### Installation
 
 <PackageManagerTabs command="install --save-dev @react-native-harness/coverage-ios" />
 
@@ -28,9 +28,7 @@ After installation:
 1. Run your iOS pod install step.
 2. Rebuild the app.
 
-## Configuration
-
-Current iOS configuration:
+### Configuration
 
 Add the pods you want to instrument in `rn-harness.config.mjs`:
 
@@ -57,11 +55,7 @@ export default {
 
 The `pods` array should contain CocoaPods target names that you want Harness to instrument for coverage.
 
-## Running tests
-
-Current iOS command:
-
-Run Harness with coverage enabled:
+### Running tests
 
 ```bash
 react-native-harness --coverage --harnessRunner ios
@@ -69,14 +63,14 @@ react-native-harness --coverage --harnessRunner ios
 
 Harness will stop the app before cleanup, collect generated `.profraw` files, merge them with `llvm-profdata`, and export LCOV with `llvm-cov`.
 
-## Output
+### Output
 
 When native coverage is collected successfully, Harness writes these files to the project root:
 
 - `native-coverage.profdata`
 - `native-coverage.lcov`
 
-## Requirements
+### Requirements
 
 - macOS with Xcode installed
 - An iOS runner configured with `@react-native-harness/platform-apple`
@@ -84,9 +78,82 @@ When native coverage is collected successfully, Harness writes these files to th
 - iOS Simulator
 - Debug app build
 
-## Limitations
+### Limitations
 
-- iOS simulator support is available today; physical iOS devices and Android are not supported yet
+- iOS simulator only; physical iOS devices are not supported yet
 - Current implementation targets pod-based native code
-- The feature is experimental and may change without much notice
 - If LCOV source filtering fails for pod paths, Harness falls back to exporting broader coverage data
+
+## Android
+
+### Installation
+
+<PackageManagerTabs command="install --save-dev @react-native-harness/coverage-android" />
+
+After installation, rebuild the app with the coverage init script (see below).
+
+### Build with coverage
+
+The app must be built with JaCoCo offline instrumentation using the provided Gradle init script:
+
+```bash
+cd android
+./gradlew assembleDebug \
+  --init-script ../node_modules/@react-native-harness/coverage-android/scripts/harness-coverage-init.gradle \
+  -PHarnessCoverageModules=:mylib
+cd ..
+```
+
+Replace `:mylib` with your library's Gradle module path. Multiple modules can be specified with commas: `-PHarnessCoverageModules=:moduleA,:moduleB`.
+
+### Configuration
+
+Add the modules you want to instrument in `rn-harness.config.mjs`:
+
+```javascript
+import { androidPlatform, androidEmulator } from '@react-native-harness/platform-android';
+
+export default {
+  runners: [
+    androidPlatform({
+      name: 'android',
+      device: androidEmulator('Pixel_8_API_35'),
+      bundleId: 'com.example.app',
+    }),
+  ],
+  coverage: {
+    native: {
+      android: {
+        modules: [':mylib'],
+      },
+    },
+  },
+};
+```
+
+The `modules` array must match the module paths passed to the init script during the build.
+
+### Running tests
+
+```bash
+react-native-harness --coverage --harnessRunner android
+```
+
+Harness will stop the app, pull `.ec` execution data files from the device, merge them with JaCoCo CLI, and convert the report to LCOV.
+
+### Output
+
+When native coverage is collected successfully, Harness writes `native-coverage.lcov` to the project root.
+
+### Requirements
+
+- Android SDK with an emulator or physical device
+- Java 11+
+- An Android runner configured with `@react-native-harness/platform-android`
+- Debug app build using the coverage init script
+- `@react-native-harness/coverage-android` installed
+
+### Limitations
+
+- Requires building with the Gradle init script (`--init-script`)
+- Build and test environments must share access to the build output (original class files + `jacococli.jar` in `<module>/build/harness-coverage/`)
