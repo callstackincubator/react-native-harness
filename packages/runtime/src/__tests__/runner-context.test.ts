@@ -1,10 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('../symbolicate.js', () => ({
-  getCodeFrame: vi.fn(async () => null),
-}));
-
 import {
+  type HarnessTestContext,
   afterEach,
   beforeEach,
   describe as harnessDescribe,
@@ -12,6 +7,26 @@ import {
   it as harnessIt,
 } from '../collector/index.js';
 import { getTestRunner } from '../runner/index.js';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../symbolicate.js', async () => {
+  const actual = await vi.importActual<typeof import('../symbolicate.js')>(
+    '../symbolicate.js',
+  );
+
+  return {
+    ...actual,
+    getCodeFrame: vi.fn(async () => null),
+  };
+});
+
+const getTask = (context?: HarnessTestContext) => {
+  if (!context) {
+    throw new Error('Expected test context to be defined');
+  }
+
+  return context.task;
+};
 
 describe('runner task context', () => {
   it('passes minimal task metadata to tests and per-test hooks', async () => {
@@ -32,15 +47,15 @@ describe('runner task context', () => {
       const collection = await collector.collect(() => {
         harnessDescribe('Task Context Suite', () => {
           beforeEach((context) => {
-            observedTasks.push({ source: 'beforeEach', task: context!.task });
+            observedTasks.push({ source: 'beforeEach', task: getTask(context) });
           });
 
           afterEach((context) => {
-            observedTasks.push({ source: 'afterEach', task: context!.task });
+            observedTasks.push({ source: 'afterEach', task: getTask(context) });
           });
 
           harnessIt('exposes task metadata', (context) => {
-            observedTasks.push({ source: 'test', task: context!.task });
+            observedTasks.push({ source: 'test', task: getTask(context) });
           });
         });
       }, 'runtime/context.test.ts');
