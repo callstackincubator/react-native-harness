@@ -55,6 +55,30 @@ const config = {
 export default config;
 ```
 
+## Device Permissions Fixture
+
+Harness now exposes a deterministic `device.permissions` API for test setup:
+
+```ts
+import { device } from 'react-native-harness';
+
+await device.permissions.grant('microphone');
+await device.permissions.revoke('microphone');
+await device.permissions.reset('microphone');
+
+await device.permissions.grantAll();
+await device.permissions.denyAll();
+await device.permissions.resetAll();
+```
+
+Platform behavior:
+
+- Android emulator and physical device: named permissions and bulk operations use host-side ADB commands.
+- iOS simulator: named permissions and bulk operations use `xcrun simctl privacy` for supported simulator services.
+- iOS physical device: named permission calls warn and no-op; bulk calls configure XCTest Agent prompt handling for future permission prompts.
+
+Existing `permissions: true` config continues to work and now maps to `grantAll()` semantics through the same host-side permission controller.
+
 ## Documentation
 
 The documentation is available at [react-native-harness.dev](https://react-native-harness.dev). You can also use the following links to jump to specific topics:

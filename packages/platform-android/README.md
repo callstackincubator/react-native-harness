@@ -52,6 +52,19 @@ const config = {
 export default config;
 ```
 
+## Permissions
+
+Android runners support the shared `device.permissions` fixture API.
+
+```ts
+import { device } from 'react-native-harness';
+
+await device.permissions.grant('camera');
+await device.permissions.denyAll();
+```
+
+Harness resolves bulk operations from the app's declared dangerous permissions and applies them through ADB. Existing config-driven `permissions: true` support is routed through the same controller as `grantAll()`.
+
 ## API
 
 ### `androidPlatform(config)`
