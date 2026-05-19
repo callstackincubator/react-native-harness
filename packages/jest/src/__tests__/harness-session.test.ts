@@ -138,7 +138,7 @@ const makeCrashMonitor = () => ({
 
 const makeDeviceState = () => ({
   permissions: {
-    apply: vi.fn(),
+    apply: vi.fn(async () => ({ mutation: null })),
     revert: vi.fn(),
     resetOutstanding: vi.fn(async () => undefined),
   },
@@ -242,7 +242,61 @@ describe('createHarnessSession permission cleanup', () => {
     await session.restartApp('/test/example.ts');
 
     expect(deviceState.permissions.resetOutstanding).toHaveBeenCalledTimes(1);
+    expect(deviceState.permissions.apply).not.toHaveBeenCalled();
     expect(callOrder).toEqual(['resetOutstanding', 'stopApp']);
+
+    await session.dispose();
+  });
+
+  it('reapplies configured permissions after cleanup before restart between test files', async () => {
+    const deviceState = makeDeviceState();
+    const platformRunner = makePlatformRunner({
+      deviceState,
+      isAppRunning: vi.fn(async () => true),
+    });
+    bridge.connection = {};
+    crashMonitor.isAlive.mockReturnValue(true);
+    globalThis.__HARNESS_TEST_PLATFORM_RUNNER__ = platformRunner;
+
+    const permissionsEnabledConfig = {
+      ...harnessConfig,
+      permissions: true,
+    } as const;
+    getConfigMock.mockResolvedValue({ config: permissionsEnabledConfig });
+    resolveHarnessMetroPortMock.mockResolvedValue({
+      config: permissionsEnabledConfig,
+      initialMetroPort: 8081,
+      didFallback: false,
+      metroPortLease: { release: vi.fn(async () => undefined) },
+    });
+
+    const session = await createHarnessSession(globalConfig, { lockManager });
+    const callOrder: string[] = [];
+
+    deviceState.permissions.apply.mockClear();
+    deviceState.permissions.resetOutstanding.mockImplementation(async () => {
+      callOrder.push('resetOutstanding');
+    });
+    deviceState.permissions.apply.mockImplementation(async () => {
+      callOrder.push('applyConfiguredPermissions');
+      return { mutation: null };
+    });
+    platformRunner.stopApp = vi.fn(async () => {
+      callOrder.push('stopApp');
+    });
+
+    await session.restartApp('/test/example.ts');
+
+    expect(deviceState.permissions.resetOutstanding).toHaveBeenCalledTimes(1);
+    expect(deviceState.permissions.apply).toHaveBeenCalledWith({
+      kind: 'permission-all',
+      decision: 'grant',
+    });
+    expect(callOrder).toEqual([
+      'resetOutstanding',
+      'applyConfiguredPermissions',
+      'stopApp',
+    ]);
 
     await session.dispose();
   });

@@ -232,6 +232,20 @@ const resetOutstandingDevicePermissions = async (
   await platformInstance.deviceState?.permissions.resetOutstanding();
 };
 
+const applyConfiguredDevicePermissions = async (
+  platformInstance: HarnessPlatformRunner,
+  runtimeConfig: HarnessConfig,
+): Promise<void> => {
+  if (!runtimeConfig.permissions) {
+    return;
+  }
+
+  await platformInstance.deviceState?.permissions.apply({
+    kind: 'permission-all',
+    decision: 'grant',
+  });
+};
+
 const getDefaultResourceLockKey = (platform: HarnessPlatform): string =>
   `${platform.platformId}:${platform.name}`;
 
@@ -673,6 +687,10 @@ export const createHarnessSession = async (
       );
 
       await resetOutstandingDevicePermissions(platformInstance);
+
+      if (testFilePath) {
+        await applyConfiguredDevicePermissions(platformInstance, runtimeConfig);
+      }
 
       if (testFilePath) {
         await platformInstance.stopApp();

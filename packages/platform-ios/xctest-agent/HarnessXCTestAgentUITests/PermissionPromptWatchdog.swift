@@ -36,8 +36,7 @@ final class PermissionPromptWatchdog: AgentCapability {
       "Cancel",
       "Deny",
       "No",
-      "Keep Only While Using",
-      "Allow Once"
+      "Keep Only While Using"
     ]
   }
 
