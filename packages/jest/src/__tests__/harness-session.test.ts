@@ -1,11 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config as JestConfig } from 'jest-runner';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type {
   AppMonitor,
   DeviceStateController,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import { createHarnessSession } from '../harness-session.js';
+
+const permissionPromptWatchdogPath = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  'platform-ios',
+  'xctest-agent',
+  'HarnessXCTestAgentUITests',
+  'PermissionPromptWatchdog.swift',
+);
 
 const pluginManagerMocks = vi.hoisted(() => ({
   callHook: vi.fn(async () => undefined),
@@ -319,5 +333,25 @@ describe('createHarnessSession permission cleanup', () => {
 
     expect(deviceState.permissions.resetOutstanding).toHaveBeenCalledTimes(1);
     expect(callOrder).toEqual(['resetOutstanding', 'dispose']);
+  });
+});
+
+describe('ios permission watchdog labels', () => {
+  it('keeps deny and grant prompt button labels disjoint', () => {
+    const source = fs.readFileSync(permissionPromptWatchdogPath, 'utf8');
+    const listPattern = /static let known(Positive|Negative)ButtonLabels = \[(.*?)\]/gs;
+    const labelsByKind = new Map<string, string[]>();
+
+    for (const match of source.matchAll(listPattern)) {
+      const kind = match[1];
+      const body = match[2] ?? '';
+      const labels = [...body.matchAll(/"([^"]+)"/g)].map((labelMatch) => labelMatch[1] ?? '');
+      labelsByKind.set(kind, labels);
+    }
+
+    const positiveLabels = new Set(labelsByKind.get('Positive') ?? []);
+    const negativeLabels = labelsByKind.get('Negative') ?? [];
+
+    expect(negativeLabels.filter((label) => positiveLabels.has(label))).toEqual([]);
   });
 });

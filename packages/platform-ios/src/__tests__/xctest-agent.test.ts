@@ -703,28 +703,6 @@ describe('xctest-agent orchestration', () => {
     expect(mocks.kill).not.toHaveBeenCalled();
   });
 
-  it('keeps deny and grant prompt button labels disjoint', () => {
-    const watchdogPath = path.join(
-      projectRoot,
-      'HarnessXCTestAgentUITests',
-      'PermissionPromptWatchdog.swift'
-    );
-    const source = fs.readFileSync(watchdogPath, 'utf8');
-    const listPattern = /static let known(Positive|Negative)ButtonLabels = \[(.*?)\]/gs;
-    const labelsByKind = new Map<string, string[]>();
-
-    for (const match of source.matchAll(listPattern)) {
-      const kind = match[1];
-      const body = match[2] ?? '';
-      const labels = [...body.matchAll(/"([^"]+)"/g)].map((labelMatch) => labelMatch[1] ?? '');
-      labelsByKind.set(kind, labels);
-    }
-
-    const positiveLabels = new Set(labelsByKind.get('Positive') ?? []);
-    const negativeLabels = labelsByKind.get('Negative') ?? [];
-
-    expect(negativeLabels.filter((label) => positiveLabels.has(label))).toEqual([]);
-  });
 });
 
 const rmBuildRoot = () => {
