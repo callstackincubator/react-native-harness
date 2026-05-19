@@ -22,6 +22,10 @@ export default defineConfig(() => ({
     alias: {
       '@vitest/spy': path.resolve(__dirname, 'node_modules/@vitest/spy'),
       '@vitest/expect': path.resolve(__dirname, 'node_modules/@vitest/expect'),
+      'react-native-url-polyfill': path.resolve(
+        __dirname,
+        'src/test-utils/react-native-url-polyfill.ts',
+      ),
     },
   },
 }));
