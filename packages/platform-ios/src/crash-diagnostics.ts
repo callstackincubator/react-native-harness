@@ -14,8 +14,8 @@ import * as simctl from './xcrun/simctl.js';
 
 const crashDiagnosticsLogger = logger.child('ios-crash-diagnostics');
 
-const CRASH_ARTIFACT_WAIT_TIMEOUT_MS = 30000;
-const CRASH_ARTIFACT_POLL_INTERVAL_MS = 1500;
+const CRASH_ARTIFACT_WAIT_TIMEOUT_MS = 3000;
+const CRASH_ARTIFACT_POLL_INTERVAL_MS = 250;
 
 type CollectIosCrashArtifactsOptions = {
   processNames: string[];

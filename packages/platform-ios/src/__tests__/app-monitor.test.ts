@@ -45,10 +45,11 @@ describe('createUnifiedLogEvent', () => {
     });
 
     expect(event).toMatchObject({
-      type: 'possible_crash',
-      confirmed: true,
+      type: 'crash_suspected',
       crashDetails: {
         platform: 'ios-simulator',
+        kind: 'native-crash',
+        confidence: 'medium',
         source: 'logs',
         processName: 'HarnessPlayground',
         pid: 1234,
@@ -65,10 +66,11 @@ describe('createUnifiedLogEvent', () => {
     });
 
     expect(event).toMatchObject({
-      type: 'possible_crash',
-      confirmed: true,
+      type: 'crash_suspected',
       crashDetails: {
         platform: 'ios-simulator',
+        kind: 'native-crash',
+        confidence: 'medium',
         source: 'logs',
         processName: 'HarnessPlayground',
         pid: 34784,
@@ -127,6 +129,8 @@ describe('createIosSimulatorAppMonitor', () => {
   });
 
   it('rejects the watch with best-effort simulator crash details from recent log blocks', async () => {
+    vi.useFakeTimers();
+
     vi.spyOn(simctl, 'streamLogs').mockReturnValue(
       createStreamingSubprocess([
         {
@@ -138,6 +142,11 @@ describe('createIosSimulatorAppMonitor', () => {
         },
       ])
     );
+    const isAppRunning = vi
+      .fn<() => Promise<boolean>>()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(false);
     vi.spyOn(diagnostics, 'waitForCrashArtifact').mockResolvedValue({
       source: 'logs',
       processName: 'HarnessPlayground',
@@ -161,26 +170,46 @@ describe('createIosSimulatorAppMonitor', () => {
     const monitor = createIosSimulatorAppMonitor({
       udid: 'sim-udid',
       bundleId: 'com.harnessplayground',
-      isAppRunning: async () => true,
+      isAppRunning,
     });
     const crashWatch = monitor.watch('example.test.ts', 'startup');
+    crashWatch.promise.catch(() => undefined);
 
-    await monitor.start();
-    await expect(crashWatch.promise).rejects.toBeInstanceOf(NativeCrashError);
-    await expect(crashWatch.promise).rejects.toMatchObject({
-      testFilePath: 'example.test.ts',
-      details: {
-        phase: 'startup',
-        processName: 'HarnessPlayground',
-        pid: 1234,
-        exceptionType: 'NSInternalInconsistencyException',
-      },
-    });
+    try {
+      await monitor.start();
+      monitor.launchRequested({
+        type: 'launch_requested',
+        launchId: 'launch-1',
+        at: Date.now(),
+        reason: 'start',
+      });
+      monitor.launchCompleted({
+        type: 'launch_completed',
+        launchId: 'launch-1',
+        at: Date.now(),
+        reason: 'start',
+      });
+      await vi.advanceTimersByTimeAsync(1010);
+      await expect(crashWatch.promise).rejects.toBeInstanceOf(NativeCrashError);
+      await expect(crashWatch.promise).rejects.toMatchObject({
+        testFilePath: 'example.test.ts',
+        details: {
+          phase: 'startup',
+          processName: 'HarnessPlayground',
+          pid: 1234,
+          exceptionType: 'NSInternalInconsistencyException',
+        },
+      });
 
-    await monitor.stop();
+      await monitor.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('rejects the watch with a matched simulator crash report when one is found', async () => {
+    vi.useFakeTimers();
+
     vi.spyOn(simctl, 'streamLogs').mockReturnValue(
       createStreamingSubprocess([
         {
@@ -188,6 +217,11 @@ describe('createIosSimulatorAppMonitor', () => {
         },
       ])
     );
+    const isAppRunning = vi
+      .fn<() => Promise<boolean>>()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(false);
     const sourcePath = join(
       artifactRoot,
       'HarnessPlayground-2026-03-12-122756.ips'
@@ -215,7 +249,7 @@ describe('createIosSimulatorAppMonitor', () => {
     const monitor = createIosSimulatorAppMonitor({
       udid: 'sim-udid',
       bundleId: 'com.harnessplayground',
-      isAppRunning: async () => true,
+      isAppRunning,
       crashArtifactWriter: createCrashArtifactWriter({
         runnerName: 'ios-simulator',
         platformId: 'ios',
@@ -224,15 +258,33 @@ describe('createIosSimulatorAppMonitor', () => {
       }),
     });
     const crashWatch = monitor.watch('example.test.ts', 'startup');
+    crashWatch.promise.catch(() => undefined);
 
-    await monitor.start();
-    await expect(crashWatch.promise).rejects.toMatchObject({
-      details: {
-        artifactType: 'ios-crash-report',
-        summary: 'simulator crash report',
-      },
-    });
-    await monitor.stop();
+    try {
+      await monitor.start();
+      monitor.launchRequested({
+        type: 'launch_requested',
+        launchId: 'launch-1',
+        at: Date.now(),
+        reason: 'start',
+      });
+      monitor.launchCompleted({
+        type: 'launch_completed',
+        launchId: 'launch-1',
+        at: Date.now(),
+        reason: 'start',
+      });
+      await vi.advanceTimersByTimeAsync(1000);
+      await expect(crashWatch.promise).rejects.toMatchObject({
+        details: {
+          artifactType: 'ios-crash-report',
+          summary: 'simulator crash report',
+        },
+      });
+      await monitor.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -267,8 +319,21 @@ describe('createIosDeviceAppMonitor', () => {
       isAppRunning: async () => false,
     });
     const crashWatch = monitor.watch('example.test.ts', 'execution');
+    crashWatch.promise.catch(() => undefined);
 
     await monitor.start();
+    monitor.launchRequested({
+      type: 'launch_requested',
+      launchId: 'launch-1',
+      at: Date.now(),
+      reason: 'start',
+    });
+    monitor.launchCompleted({
+      type: 'launch_completed',
+      launchId: 'launch-1',
+      at: Date.now(),
+      reason: 'start',
+    });
     await expect(crashWatch.promise).rejects.toMatchObject({
       details: {
         phase: 'execution',
@@ -326,8 +391,21 @@ describe('createIosDeviceAppMonitor', () => {
       }),
     });
     const crashWatch = monitor.watch('example.test.ts', 'execution');
+    crashWatch.promise.catch(() => undefined);
 
     await monitor.start();
+    monitor.launchRequested({
+      type: 'launch_requested',
+      launchId: 'launch-1',
+      at: Date.now(),
+      reason: 'start',
+    });
+    monitor.launchCompleted({
+      type: 'launch_completed',
+      launchId: 'launch-1',
+      at: Date.now(),
+      reason: 'start',
+    });
     await expect(crashWatch.promise).rejects.toMatchObject({
       details: {
         artifactType: 'ios-crash-report',

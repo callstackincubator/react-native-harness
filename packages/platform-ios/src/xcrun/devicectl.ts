@@ -14,18 +14,14 @@ export const devicectl = async <TOutput>(
   args: string[]
 ): Promise<TOutput> => {
   const tempFile = join(tmpdir(), `devicectl-${randomUUID()}.json`);
-  const separatorIndex = args.indexOf('--');
-  const argsWithJsonOutput =
-    separatorIndex === -1
-      ? [...args, '--json-output', tempFile]
-      : [
-          ...args.slice(0, separatorIndex),
-          '--json-output',
-          tempFile,
-          ...args.slice(separatorIndex),
-        ];
 
-  await spawn('xcrun', ['devicectl', command, ...argsWithJsonOutput]);
+  await spawn('xcrun', [
+    'devicectl',
+    '--json-output',
+    tempFile,
+    command,
+    ...args,
+  ]);
 
   if (!fs.existsSync(tempFile)) {
     throw new Error(`devicectl did not produce JSON output at ${tempFile}`);
@@ -178,16 +174,8 @@ export const getAppInfo = async (
   identifier: string,
   bundleId: string
 ): Promise<AppleAppInfo | null> => {
-  const result = await devicectl<{ apps: AppleAppInfo[] }>('device', [
-    'info',
-    'apps',
-    '--device',
-    identifier,
-    '--bundle-id',
-    bundleId,
-  ]);
-
-  return result.apps[0] ?? null;
+  const apps = await listApps(identifier);
+  return apps.find((app) => app.bundleIdentifier === bundleId) ?? null;
 };
 
 export const isAppInstalled = async (
@@ -224,7 +212,7 @@ export const getDeviceCtlLaunchArgs = (
   args.push(bundleId);
 
   if (options?.arguments?.length) {
-    args.push('--', ...options.arguments);
+    args.push(...options.arguments);
   }
 
   return args;
