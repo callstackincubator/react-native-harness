@@ -5,7 +5,29 @@ This guide covers how to define and organize tests in Harness using test functio
 The following types are used in the type signatures below:
 
 ```typescript
-type TestFn = () => void | Promise<void>
+type HarnessTaskContext = {
+  name: string
+  type: 'test'
+  mode: 'run' | 'skip' | 'todo'
+  file: {
+    name: string
+  }
+  suite: {
+    name: string
+  }
+}
+
+type HarnessTestContext = {
+  task: HarnessTaskContext
+  onTestFailed: (fn: () => void | Promise<void>) => void
+  onTestFinished: (fn: () => void | Promise<void>) => void
+  skip: {
+    (note?: string): never
+    (condition: boolean, note?: string): void
+  }
+}
+
+type TestFn = (context: HarnessTestContext) => void | Promise<void>
 ```
 
 When a test function returns a promise, the runner will wait until it is resolved to collect async expectations. If the promise is rejected, the test will fail.
@@ -23,6 +45,37 @@ import { test, expect } from 'react-native-harness'
 
 test('should work as expected', () => {
   expect(Math.sqrt(4)).toBe(2)
+})
+```
+
+Test callbacks always receive a `HarnessTestContext` object at runtime. You can ignore the parameter when you do not need it.
+
+```typescript
+import { test, expect } from 'react-native-harness'
+
+test('can inspect task metadata', (context) => {
+  expect(context.task.type).toBe('test')
+  expect(context.task.name).toBe('can inspect task metadata')
+})
+```
+
+The context also lets you dynamically skip a test and register lifecycle callbacks that run after the test finishes or fails.
+
+```typescript
+import { test } from 'react-native-harness'
+
+test('can skip dynamically', (context) => {
+  context.skip('Blocked by a missing backend fixture')
+})
+
+test('can react to the final test outcome', (context) => {
+  context.onTestFinished(() => {
+    cleanupTemporaryFiles()
+  })
+
+  context.onTestFailed(() => {
+    captureDebugLogs()
+  })
 })
 ```
 
@@ -139,6 +192,22 @@ describe('user tests', () => {
 })
 ```
 
+`beforeEach` receives the same `HarnessTestContext` object as the test callback, so you can inspect task metadata or dynamically skip from setup code.
+
+```typescript
+import { describe, beforeEach, test } from 'react-native-harness'
+
+describe('user tests', () => {
+  beforeEach((context) => {
+    context.skip(context.task.name === 'requires seed data', 'Seed data missing')
+  })
+
+  test('requires seed data', (context) => {
+    // Test implementation
+  })
+})
+```
+
 ### afterEach
 
 Register a callback to be called after each one of the tests in the current context completes.
@@ -158,9 +227,13 @@ describe('user tests', () => {
 })
 ```
 
+`afterEach` also receives `HarnessTestContext`, which is useful for cleanup keyed to the current task.
+
 ### beforeAll
 
 Register a callback to be called once before starting to run all tests in the current context.
+
+Unlike `test`, `beforeEach`, and `afterEach`, `beforeAll` does not receive a test context because it runs outside any single test case.
 
 ```typescript
 import { describe, test, beforeAll } from 'react-native-harness'
@@ -180,6 +253,8 @@ describe('user tests', () => {
 ### afterAll
 
 Register a callback to be called once after all tests have run in the current context.
+
+Like `beforeAll`, `afterAll` does not receive a test context.
 
 ```typescript
 import { describe, test, afterAll } from 'react-native-harness'
