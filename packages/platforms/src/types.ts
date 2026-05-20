@@ -45,6 +45,7 @@ export type CrashArtifactWriter = {
 
 export type CreateAppMonitorOptions = {
   crashArtifactWriter?: CrashArtifactWriter;
+  eventReporter?: AppMonitorReporter;
 };
 
 export type CrashDetailsLookupOptions = {
@@ -108,6 +109,62 @@ export type AppLifecycleMonitor = {
   reset: () => void;
   isAlive: () => boolean;
 };
+
+export type AppMonitorEventBase = {
+  timestamp: number;
+  appPlatform: NonNullable<AppCrashDetails['platform']>;
+  targetIdentifier: string;
+  testFile?: string;
+  phase?: AppLifecyclePhase;
+  launchId?: string;
+  processName?: string;
+  pid?: number;
+  source?: AppCrashDetails['source'];
+  summary?: string;
+  kind?: AppCrashDetails['kind'];
+  confidence?: AppCrashDetails['confidence'];
+  signal?: string;
+  exceptionType?: string;
+  artifactType?: AppCrashDetails['artifactType'];
+  artifactPath?: string;
+  crashDetails?: AppCrashDetails;
+};
+
+export type AppStartedEvent = AppMonitorEventBase & {
+  type: 'app:started';
+};
+
+export type AppExitedEvent = AppMonitorEventBase & {
+  type: 'app:exited';
+};
+
+export type AppCrashSuspectedEvent = AppMonitorEventBase & {
+  type: 'app:crash-suspected';
+};
+
+export type AppCrashConfirmedEvent = AppMonitorEventBase & {
+  type: 'app:crash-confirmed';
+};
+
+export type AppCrashReportReadyEvent = AppMonitorEventBase & {
+  type: 'app:crash-report-ready';
+  crashDetails: AppCrashDetails;
+};
+
+export type AppMonitorWarningEvent = AppMonitorEventBase & {
+  type: 'app:monitor-warning';
+  warning: string;
+};
+
+export type AppMonitorEvent =
+  | AppStartedEvent
+  | AppExitedEvent
+  | AppCrashSuspectedEvent
+  | AppCrashConfirmedEvent
+  | AppCrashReportReadyEvent
+  | AppMonitorWarningEvent;
+
+export type AppMonitorReporter = (event: AppMonitorEvent) => void;
 
 export type AndroidAppLaunchOptions = {
   extras?: Record<string, string | number | boolean>;

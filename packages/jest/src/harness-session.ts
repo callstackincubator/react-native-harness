@@ -13,6 +13,7 @@ import {
 import {
   type AppLaunchOptions,
   type AppLifecycleMonitor,
+  type AppMonitorEvent,
   type HarnessPlatform,
   type HarnessPlatformInitOptions,
   type HarnessPlatformRunner,
@@ -354,6 +355,68 @@ const buildBridgeHookScheduler = (
   }
 };
 
+const buildAppMonitorHookScheduler = (
+  hooks: HookQueue,
+  pluginManager: HarnessPluginManager<HarnessConfig, HarnessPlatform>,
+  getCurrentRunId: () => string | undefined,
+) => (event: AppMonitorEvent) => {
+  const runId = getCurrentRunId();
+  if (!runId) return;
+
+  const payloadBase = {
+    runId,
+    appPlatform: event.appPlatform,
+    targetIdentifier: event.targetIdentifier,
+    testFile: event.testFile,
+    phase: event.phase,
+    launchId: event.launchId,
+    processName: event.processName,
+    pid: event.pid,
+    source: event.source,
+    summary: event.summary,
+    kind: event.kind,
+    confidence: event.confidence,
+    signal: event.signal,
+    exceptionType: event.exceptionType,
+    artifactType: event.artifactType,
+    artifactPath: event.artifactPath,
+    crashDetails: event.crashDetails,
+  };
+
+  switch (event.type) {
+    case 'app:started':
+      return hooks.schedule(() =>
+        pluginManager.callHook('app:started', payloadBase),
+      );
+    case 'app:exited':
+      return hooks.schedule(() =>
+        pluginManager.callHook('app:exited', payloadBase),
+      );
+    case 'app:crash-suspected':
+      return hooks.schedule(() =>
+        pluginManager.callHook('app:crash-suspected', payloadBase),
+      );
+    case 'app:crash-confirmed':
+      return hooks.schedule(() =>
+        pluginManager.callHook('app:crash-confirmed', payloadBase),
+      );
+    case 'app:crash-report-ready':
+      return hooks.schedule(() =>
+        pluginManager.callHook('app:crash-report-ready', {
+          ...payloadBase,
+          crashDetails: event.crashDetails,
+        }),
+      );
+    case 'app:monitor-warning':
+      return hooks.schedule(() =>
+        pluginManager.callHook('app:monitor-warning', {
+          ...payloadBase,
+          warning: event.warning,
+        }),
+      );
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Config loading
 // ---------------------------------------------------------------------------
@@ -495,6 +558,11 @@ export const createHarnessSession = async (
     let currentRun: HarnessRunState | null = null;
     const getCurrentRunId = () => currentRun?.runId;
     const clientLogCollector = createClientLogCollector();
+    const appMonitorEventListener = buildAppMonitorHookScheduler(
+      hooks,
+      pluginManager,
+      getCurrentRunId,
+    );
 
     const context: HarnessContext = { platform };
 
@@ -548,7 +616,10 @@ export const createHarnessSession = async (
       runnerName: platform.name,
       platformId: platform.platformId,
     });
-    const appMonitor = platformInstance.createAppMonitor({ crashArtifactWriter });
+    const appMonitor = platformInstance.createAppMonitor({
+      crashArtifactWriter,
+      eventReporter: appMonitorEventListener,
+    });
     const appLaunchOptions = (platform.config as { appLaunchOptions?: AppLaunchOptions }).appLaunchOptions;
     const nextLaunchId = () => randomUUID();
 

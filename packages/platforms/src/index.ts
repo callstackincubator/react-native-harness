@@ -7,6 +7,15 @@ export type {
   AppCrashDetails,
   AppLifecycleMonitor,
   AppLifecyclePhase,
+  AppMonitorEvent,
+  AppMonitorEventBase,
+  AppMonitorReporter,
+  AppStartedEvent,
+  AppExitedEvent,
+  AppCrashSuspectedEvent,
+  AppCrashConfirmedEvent,
+  AppCrashReportReadyEvent,
+  AppMonitorWarningEvent,
   AppLifecycleEventBase,
   LaunchRequestedEvent,
   LaunchCompletedEvent,
@@ -36,10 +45,5 @@ export {
 } from './errors.js';
 export {
   CrashWatchCancelledError,
-  createManagedAppLifecycleMonitor,
   createNoopAppLifecycleMonitor,
-} from './app-lifecycle-monitor.js';
-export type {
-  CreateManagedAppLifecycleMonitorOptions,
-  ManagedCrashEvent,
 } from './app-lifecycle-monitor.js';

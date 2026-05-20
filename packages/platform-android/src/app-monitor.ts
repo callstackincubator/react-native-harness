@@ -4,6 +4,7 @@ import {
   type AppCrashDetails,
   type AppLifecycleMonitor,
   type AppLifecyclePhase,
+  type AppMonitorReporter,
   type CrashArtifactWriter,
   type CrashDetailsLookupOptions,
   type LaunchRequestedEvent,
@@ -528,12 +529,14 @@ export const createAndroidAppMonitor = ({
   appUid,
   isAppRunning,
   crashArtifactWriter,
+  eventReporter,
 }: {
   adbId: string;
   bundleId: string;
   appUid: number;
   isAppRunning: () => Promise<boolean>;
   crashArtifactWriter?: CrashArtifactWriter;
+  eventReporter?: AppMonitorReporter;
 }): AppLifecycleMonitor => {
   let logcatProcess: Subprocess | null = null;
   let logTask: Promise<void> | null = null;
@@ -550,9 +553,50 @@ export const createAndroidAppMonitor = ({
   let resolvingCrash = false;
   let crashReported = false;
   let controlledStop = false;
+  let startedReported = false;
   let lastKnownRunning: boolean | null = null;
   let pendingCrash: PendingCrash | null = null;
   const watchers = new Set<WatchReject>();
+
+  const reportEvent = (event: Parameters<AppMonitorReporter>[0]) => {
+    try {
+      eventReporter?.(event);
+    } catch (error) {
+      androidAppMonitorLogger.debug('Android app monitor event reporter failed', error);
+    }
+  };
+
+  const createReportedDetails = (details?: AppCrashDetails) => {
+    const normalizedDetails = details ? normalizeCrashDetails(details) : undefined;
+
+    return {
+      timestamp: Date.now(),
+      appPlatform: 'android' as const,
+      targetIdentifier: adbId,
+      testFile: currentTestFilePath || undefined,
+      phase: currentTestFilePath ? currentPhase : undefined,
+      launchId: normalizedDetails?.launchId ?? currentLaunchId,
+      processName: normalizedDetails?.processName,
+      pid: normalizedDetails?.pid,
+      source: normalizedDetails?.source,
+      summary: normalizedDetails?.summary,
+      kind: normalizedDetails?.kind,
+      confidence: normalizedDetails?.confidence,
+      signal: normalizedDetails?.signal,
+      exceptionType: normalizedDetails?.exceptionType,
+      artifactType: normalizedDetails?.artifactType,
+      artifactPath: normalizedDetails?.artifactPath,
+      crashDetails: normalizedDetails,
+    };
+  };
+
+  const reportWarning = (warning: string, details?: AppCrashDetails) => {
+    reportEvent({
+      type: 'app:monitor-warning',
+      ...createReportedDetails(details),
+      warning,
+    });
+  };
 
   const resetTransientState = () => {
     recentLogLines = [];
@@ -563,6 +607,7 @@ export const createAndroidAppMonitor = ({
     crashReported = false;
     resolvingCrash = false;
     controlledStop = false;
+    startedReported = false;
   };
 
   const normalizeCrashDetails = (details: AppCrashDetails): AppCrashDetails => ({
@@ -677,8 +722,23 @@ export const createAndroidAppMonitor = ({
     alive = false;
     crashReported = true;
 
+    const initialDetails = details ? normalizeCrashDetails(details) : pendingCrash?.details;
+
+    reportEvent({
+      type: 'app:crash-confirmed',
+      ...createReportedDetails(initialDetails),
+    });
+
     try {
       const resolvedDetails = await resolveCrashDetails(details, fallbackSummary);
+
+      if (resolvedDetails.artifactType || resolvedDetails.artifactPath) {
+        reportEvent({
+          type: 'app:crash-report-ready',
+          ...createReportedDetails(resolvedDetails),
+          crashDetails: resolvedDetails,
+        });
+      }
 
       notifyCrash(new NativeCrashError(currentTestFilePath, resolvedDetails));
     } finally {
@@ -689,6 +749,14 @@ export const createAndroidAppMonitor = ({
 
   const handleAppExit = (details?: AppCrashDetails) => {
     alive = false;
+    startedReported = false;
+
+    if (details) {
+      reportEvent({
+        type: 'app:exited',
+        ...createReportedDetails(details),
+      });
+    }
 
     if (controlledStop || disposed || !monitoring || crashReported) {
       return;
@@ -715,6 +783,20 @@ export const createAndroidAppMonitor = ({
     }
 
     if (event.type === 'app_started') {
+      if (!startedReported) {
+        reportEvent({
+          type: 'app:started',
+          ...createReportedDetails({
+            platform: 'android',
+            processName: bundleId,
+            pid: event.pid,
+            source: 'logs',
+            summary: `Process ${bundleId} started`,
+          }),
+        });
+        startedReported = true;
+      }
+
       alive = true;
       controlledStop = false;
       pendingCrash = null;
@@ -732,6 +814,10 @@ export const createAndroidAppMonitor = ({
     recordCrashArtifact(event.crashDetails);
 
     if (event.type === 'crash_suspected') {
+      reportEvent({
+        type: 'app:crash-suspected',
+        ...createReportedDetails(event.crashDetails),
+      });
       recordPendingCrash(event.crashDetails);
       return;
     }
@@ -755,6 +841,19 @@ export const createAndroidAppMonitor = ({
           lastKnownRunning = running;
 
           if (running) {
+            if (!startedReported) {
+              reportEvent({
+                type: 'app:started',
+                ...createReportedDetails({
+                  platform: 'android',
+                  processName: bundleId,
+                  source: 'polling',
+                  summary: `Process ${bundleId} is running`,
+                }),
+              });
+              startedReported = true;
+            }
+
             alive = true;
 
             if (wasRunning === false) {
@@ -782,6 +881,7 @@ export const createAndroidAppMonitor = ({
               'Android process poller failed',
               error,
             );
+            reportWarning('Android process poller failed');
           }
         }
 
@@ -821,6 +921,7 @@ export const createAndroidAppMonitor = ({
       } catch (error) {
         if (!(error instanceof SubprocessError && error.signalName === 'SIGTERM')) {
           androidAppMonitorLogger.debug('Android logcat monitor stopped', error);
+          reportWarning('Android logcat monitor stopped unexpectedly');
         }
       }
     })();

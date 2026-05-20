@@ -4,6 +4,7 @@ import {
   type AppCrashDetails,
   type AppLifecycleMonitor,
   type AppLifecyclePhase,
+  type AppMonitorReporter,
   type CrashArtifactWriter,
   type CrashDetailsLookupOptions,
   type LaunchCompletedEvent,
@@ -490,13 +491,17 @@ type WatchReject = (error: Error) => void;
 
 const createIosMonitorRuntime = ({
   platform,
+  targetIdentifier,
   resolveCrashDetails,
+  eventReporter,
   onReset,
 }: {
   platform: 'ios-simulator' | 'ios-device';
+  targetIdentifier: string;
   resolveCrashDetails: (
     options: CrashDetailsLookupOptions,
   ) => Promise<AppCrashDetails | null>;
+  eventReporter?: AppMonitorReporter;
   onReset?: () => void;
 }) => {
   let alive = false;
@@ -505,6 +510,7 @@ const createIosMonitorRuntime = ({
   let resolvingCrash = false;
   let crashReported = false;
   let controlledStop = false;
+  let startedReported = false;
   let currentLaunchId: string | undefined;
   let launchCompletedAt: number | undefined;
   let currentTestFilePath = '';
@@ -516,6 +522,50 @@ const createIosMonitorRuntime = ({
       }
     | undefined;
   const watchers = new Set<WatchReject>();
+
+  const reportEvent = (event: Parameters<AppMonitorReporter>[0]) => {
+    try {
+      eventReporter?.(event);
+    } catch (error) {
+      iosAppMonitorLogger.debug('iOS app monitor event reporter failed', error);
+    }
+  };
+
+  const createReportedDetails = (details?: AppCrashDetails) => {
+    const normalizedDetails = normalizeCrashDetails(
+      details,
+      platform,
+      currentLaunchId,
+    );
+
+    return {
+      timestamp: Date.now(),
+      appPlatform: platform,
+      targetIdentifier,
+      testFile: currentTestFilePath || undefined,
+      phase: currentTestFilePath ? currentPhase : undefined,
+      launchId: normalizedDetails?.launchId ?? currentLaunchId,
+      processName: normalizedDetails?.processName,
+      pid: normalizedDetails?.pid,
+      source: normalizedDetails?.source,
+      summary: normalizedDetails?.summary,
+      kind: normalizedDetails?.kind,
+      confidence: normalizedDetails?.confidence,
+      signal: normalizedDetails?.signal,
+      exceptionType: normalizedDetails?.exceptionType,
+      artifactType: normalizedDetails?.artifactType,
+      artifactPath: normalizedDetails?.artifactPath,
+      crashDetails: normalizedDetails,
+    };
+  };
+
+  const reportWarning = (warning: string, details?: AppCrashDetails) => {
+    reportEvent({
+      type: 'app:monitor-warning',
+      ...createReportedDetails(details),
+      warning,
+    });
+  };
 
   const setMonitoring = (nextMonitoring: boolean) => {
     monitoring = nextMonitoring;
@@ -588,22 +638,37 @@ const createIosMonitorRuntime = ({
         occurredAt: initialDetails?.occurredAt ?? Date.now(),
       });
 
+       reportEvent({
+        type: 'app:crash-confirmed',
+        ...createReportedDetails(initialDetails),
+      });
+
       crashReported = true;
       pendingCrash = undefined;
+
+      const mergedDetails = mergeNativeCrashDetails({
+        phase: currentPhase,
+        initial: initialDetails,
+        enriched: normalizeCrashDetails(
+          enrichedDetails,
+          platform,
+          currentLaunchId,
+        ),
+        fallbackSummary,
+      });
+
+      if (mergedDetails.artifactType || mergedDetails.artifactPath) {
+        reportEvent({
+          type: 'app:crash-report-ready',
+          ...createReportedDetails(mergedDetails),
+          crashDetails: mergedDetails,
+        });
+      }
 
       notifyCrash(
         new NativeCrashError(
           currentTestFilePath,
-          mergeNativeCrashDetails({
-            phase: currentPhase,
-            initial: initialDetails,
-            enriched: normalizeCrashDetails(
-              enrichedDetails,
-              platform,
-              currentLaunchId,
-            ),
-            fallbackSummary,
-          }),
+          mergedDetails,
         ),
       );
     } finally {
@@ -619,6 +684,14 @@ const createIosMonitorRuntime = ({
     alive = true;
     controlledStop = false;
     clearCrashState();
+
+    if (!startedReported) {
+      reportEvent({
+        type: 'app:started',
+        ...createReportedDetails(),
+      });
+      startedReported = true;
+    }
   };
 
   const crashSuspected = (details?: AppCrashDetails) => {
@@ -626,21 +699,36 @@ const createIosMonitorRuntime = ({
       return;
     }
 
+    reportEvent({
+      type: 'app:crash-suspected',
+      ...createReportedDetails(details),
+    });
+
     recordPendingCrash(details);
   };
 
   const processExited = (details?: AppCrashDetails) => {
-    if (disposed || !monitoring || controlledStop) {
+    if (disposed || !monitoring) {
       return;
     }
-
-    alive = false;
 
     const normalizedDetails = normalizeCrashDetails(
       details,
       platform,
       currentLaunchId,
     );
+
+    alive = false;
+    startedReported = false;
+
+    reportEvent({
+      type: 'app:exited',
+      ...createReportedDetails(normalizedDetails),
+    });
+
+    if (controlledStop) {
+      return;
+    }
 
     if (!hasRecentSuspicion() && !isLaunchRecent()) {
       return;
@@ -654,6 +742,7 @@ const createIosMonitorRuntime = ({
     currentLaunchId = event.launchId;
     launchCompletedAt = undefined;
     alive = false;
+    startedReported = false;
     controlledStop = false;
     clearCrashState();
   };
@@ -667,6 +756,7 @@ const createIosMonitorRuntime = ({
 
   const launchFailed = () => {
     alive = false;
+    startedReported = false;
     launchCompletedAt = undefined;
     clearCrashState();
   };
@@ -674,6 +764,7 @@ const createIosMonitorRuntime = ({
   const stopRequested = () => {
     controlledStop = true;
     alive = false;
+    startedReported = false;
     pendingCrash = undefined;
   };
 
@@ -705,6 +796,7 @@ const createIosMonitorRuntime = ({
   const reset = () => {
     alive = false;
     controlledStop = false;
+    startedReported = false;
     currentLaunchId = undefined;
     launchCompletedAt = undefined;
     currentTestFilePath = '';
@@ -719,6 +811,7 @@ const createIosMonitorRuntime = ({
     monitoring = false;
     alive = false;
     controlledStop = false;
+    startedReported = false;
     currentLaunchId = undefined;
     launchCompletedAt = undefined;
     watchers.clear();
@@ -744,6 +837,7 @@ const createIosMonitorRuntime = ({
     isLaunchRecent,
     getCurrentLaunchId: () => currentLaunchId,
     getLaunchCompletedAt: () => launchCompletedAt,
+    reportWarning,
   };
 };
 
@@ -752,11 +846,13 @@ export const createIosSimulatorAppMonitor = ({
   bundleId,
   isAppRunning,
   crashArtifactWriter,
+  eventReporter,
 }: {
   udid: string;
   bundleId: string;
   isAppRunning: () => Promise<boolean>;
   crashArtifactWriter?: CrashArtifactWriter;
+  eventReporter?: AppMonitorReporter;
 }): AppLifecycleMonitor => {
   const base = createAppMonitorBase();
   let logProcess: Subprocess | null = null;
@@ -769,6 +865,7 @@ export const createIosSimulatorAppMonitor = ({
 
   const runtime = createIosMonitorRuntime({
     platform: 'ios-simulator',
+    targetIdentifier: udid,
     resolveCrashDetails: createCrashDetailsLookup({
       targetId: udid,
       targetType: 'simulator',
@@ -780,6 +877,7 @@ export const createIosSimulatorAppMonitor = ({
       crashArtifactWriter,
       base,
     }),
+    eventReporter,
     onReset: () => {
       base.reset();
     },
@@ -869,6 +967,7 @@ export const createIosSimulatorAppMonitor = ({
             }
           } catch (error) {
             iosAppMonitorLogger.debug('iOS simulator log monitor stopped', error);
+            runtime.reportWarning('iOS simulator log monitor stopped unexpectedly');
           }
         })();
       }
@@ -902,6 +1001,7 @@ export const createIosSimulatorAppMonitor = ({
               'iOS simulator process polling failed',
               error,
             );
+            runtime.reportWarning('iOS simulator process polling failed');
           }
 
           await waitForPollInterval(signal);
@@ -991,11 +1091,13 @@ export const createIosDeviceAppMonitor = ({
   bundleId,
   isAppRunning,
   crashArtifactWriter,
+  eventReporter,
 }: {
   deviceId: string;
   bundleId: string;
   isAppRunning: () => Promise<boolean>;
   crashArtifactWriter?: CrashArtifactWriter;
+  eventReporter?: AppMonitorReporter;
 }): AppLifecycleMonitor => {
   const base = createAppMonitorBase();
   let pollTask: Promise<void> | null = null;
@@ -1007,6 +1109,7 @@ export const createIosDeviceAppMonitor = ({
 
   const runtime = createIosMonitorRuntime({
     platform: 'ios-device',
+    targetIdentifier: deviceId,
     resolveCrashDetails: createCrashDetailsLookup({
       targetId: deviceId,
       targetType: 'device',
@@ -1018,6 +1121,7 @@ export const createIosDeviceAppMonitor = ({
       crashArtifactWriter,
       base,
     }),
+    eventReporter,
     onReset: () => {
       lastKnownPid = undefined;
       base.reset();
@@ -1112,6 +1216,7 @@ export const createIosDeviceAppMonitor = ({
             }
           } catch (error) {
             iosAppMonitorLogger.debug('iOS device process polling failed', error);
+            runtime.reportWarning('iOS device process polling failed');
           }
 
           await waitForPollInterval(signal);

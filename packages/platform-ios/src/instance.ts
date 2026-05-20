@@ -190,6 +190,7 @@ export const getAppleSimulatorPlatformInstance = async (
         bundleId: config.bundleId,
         isAppRunning: () => simctl.isAppRunning(udid, config.bundleId),
         crashArtifactWriter: options?.crashArtifactWriter,
+        eventReporter: options?.eventReporter,
       });
     },
     collectNativeCoverage: async (options: CollectNativeCoverageOptions) => {
@@ -300,6 +301,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
         bundleId: config.bundleId,
         isAppRunning: () => devicectl.isAppRunning(deviceId, config.bundleId),
         crashArtifactWriter: options?.crashArtifactWriter,
+        eventReporter: options?.eventReporter,
       });
     },
   };

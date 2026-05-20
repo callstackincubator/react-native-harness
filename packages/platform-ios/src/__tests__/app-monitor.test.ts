@@ -128,6 +128,99 @@ describe('createIosSimulatorAppMonitor', () => {
     );
   });
 
+  it('reports simulator lifecycle and crash events through the reporter', async () => {
+    vi.useFakeTimers();
+
+    const eventReporter = vi.fn();
+    vi.spyOn(simctl, 'streamLogs').mockReturnValue(
+      createStreamingSubprocess([
+        {
+          line: '2026-03-12 11:35:08.000 HarnessPlayground[1234:abcd] Terminating app due to uncaught exception: NSInternalInconsistencyException',
+        },
+      ])
+    );
+    vi.spyOn(diagnostics, 'waitForCrashArtifact').mockResolvedValue({
+      artifactType: 'ios-crash-report',
+      artifactPath: '/tmp/report.ips',
+      processName: 'HarnessPlayground',
+      pid: 1234,
+      summary: 'simulator crash report',
+      rawLines: ['simulator crash report'],
+    });
+    vi.spyOn(simctl, 'getAppInfo').mockResolvedValue({
+      Bundle: 'com.harnessplayground',
+      CFBundleIdentifier: 'com.harnessplayground',
+      CFBundleExecutable: 'HarnessPlayground',
+      CFBundleName: 'HarnessPlayground',
+      CFBundleDisplayName: 'Harness Playground',
+      Path: '/tmp/HarnessPlayground.app',
+    });
+    const isAppRunning = vi
+      .fn<() => Promise<boolean>>()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(false);
+
+    const monitor = createIosSimulatorAppMonitor({
+      udid: 'sim-udid',
+      bundleId: 'com.harnessplayground',
+      isAppRunning,
+      eventReporter,
+    });
+    const crashWatch = monitor.watch('example.test.ts', 'startup');
+    crashWatch.promise.catch(() => undefined);
+
+    try {
+      await monitor.start();
+      monitor.launchRequested({
+        type: 'launch_requested',
+        launchId: 'launch-1',
+        at: Date.now(),
+        reason: 'start',
+      });
+      monitor.launchCompleted({
+        type: 'launch_completed',
+        launchId: 'launch-1',
+        at: Date.now(),
+        reason: 'start',
+      });
+      await vi.advanceTimersByTimeAsync(1010);
+
+      expect(eventReporter).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'app:crash-suspected',
+          appPlatform: 'ios-simulator',
+          targetIdentifier: 'sim-udid',
+          launchId: 'launch-1',
+        }),
+      );
+      expect(eventReporter).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'app:crash-confirmed',
+          appPlatform: 'ios-simulator',
+          targetIdentifier: 'sim-udid',
+        }),
+      );
+      expect(eventReporter).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'app:crash-report-ready',
+          appPlatform: 'ios-simulator',
+          artifactType: 'ios-crash-report',
+        }),
+      );
+      expect(eventReporter).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'app:exited',
+          appPlatform: 'ios-simulator',
+        }),
+      );
+
+      await monitor.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rejects the watch with best-effort simulator crash details from recent log blocks', async () => {
     vi.useFakeTimers();
 

@@ -233,10 +233,16 @@ export type AppStartedContext<
   TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<TState, TConfig, TRunner, 'app:started'> & {
   runId: string;
+  appPlatform: NonNullable<AppCrashDetails['platform']>;
+  targetIdentifier: string;
   testFile?: string;
+  phase?: 'startup' | 'execution';
+  launchId?: string;
+  processName?: string;
   pid?: number;
-  source?: 'polling' | 'logs';
-  line?: string;
+  source?: AppCrashDetails['source'];
+  summary?: string;
+  crashDetails?: AppCrashDetails;
 };
 
 export type AppExitedContext<
@@ -245,25 +251,118 @@ export type AppExitedContext<
   TRunner extends HarnessPlatform
 > = HarnessBaseHookContext<TState, TConfig, TRunner, 'app:exited'> & {
   runId: string;
+  appPlatform: NonNullable<AppCrashDetails['platform']>;
+  targetIdentifier: string;
   testFile?: string;
+  phase?: 'startup' | 'execution';
+  launchId?: string;
+  processName?: string;
   pid?: number;
-  source?: 'polling' | 'logs';
-  line?: string;
-  isConfirmed?: boolean;
+  source?: AppCrashDetails['source'];
+  summary?: string;
+  kind?: AppCrashDetails['kind'];
+  confidence?: AppCrashDetails['confidence'];
+  signal?: string;
+  exceptionType?: string;
+  artifactType?: AppCrashDetails['artifactType'];
+  artifactPath?: string;
   crashDetails?: AppCrashDetails;
 };
 
-export type AppPossibleCrashContext<
+export type AppCrashSuspectedContext<
   TState extends object,
   TConfig,
   TRunner extends HarnessPlatform
-> = HarnessBaseHookContext<TState, TConfig, TRunner, 'app:possible-crash'> & {
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'app:crash-suspected'> & {
   runId: string;
+  appPlatform: NonNullable<AppCrashDetails['platform']>;
+  targetIdentifier: string;
   testFile?: string;
+  phase?: 'startup' | 'execution';
+  launchId?: string;
+  processName?: string;
   pid?: number;
-  source?: 'polling' | 'logs';
-  line?: string;
-  isConfirmed?: boolean;
+  source?: AppCrashDetails['source'];
+  summary?: string;
+  kind?: AppCrashDetails['kind'];
+  confidence?: AppCrashDetails['confidence'];
+  signal?: string;
+  exceptionType?: string;
+  artifactType?: AppCrashDetails['artifactType'];
+  artifactPath?: string;
+  crashDetails?: AppCrashDetails;
+};
+
+export type AppCrashConfirmedContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'app:crash-confirmed'> & {
+  runId: string;
+  appPlatform: NonNullable<AppCrashDetails['platform']>;
+  targetIdentifier: string;
+  testFile?: string;
+  phase?: 'startup' | 'execution';
+  launchId?: string;
+  processName?: string;
+  pid?: number;
+  source?: AppCrashDetails['source'];
+  summary?: string;
+  kind?: AppCrashDetails['kind'];
+  confidence?: AppCrashDetails['confidence'];
+  signal?: string;
+  exceptionType?: string;
+  artifactType?: AppCrashDetails['artifactType'];
+  artifactPath?: string;
+  crashDetails?: AppCrashDetails;
+};
+
+export type AppCrashReportReadyContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'app:crash-report-ready'> & {
+  runId: string;
+  appPlatform: NonNullable<AppCrashDetails['platform']>;
+  targetIdentifier: string;
+  testFile?: string;
+  phase?: 'startup' | 'execution';
+  launchId?: string;
+  processName?: string;
+  pid?: number;
+  source?: AppCrashDetails['source'];
+  summary?: string;
+  kind?: AppCrashDetails['kind'];
+  confidence?: AppCrashDetails['confidence'];
+  signal?: string;
+  exceptionType?: string;
+  artifactType?: AppCrashDetails['artifactType'];
+  artifactPath?: string;
+  crashDetails: AppCrashDetails;
+};
+
+export type AppMonitorWarningContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = HarnessBaseHookContext<TState, TConfig, TRunner, 'app:monitor-warning'> & {
+  runId: string;
+  appPlatform: NonNullable<AppCrashDetails['platform']>;
+  targetIdentifier: string;
+  testFile?: string;
+  phase?: 'startup' | 'execution';
+  launchId?: string;
+  processName?: string;
+  pid?: number;
+  source?: AppCrashDetails['source'];
+  summary?: string;
+  kind?: AppCrashDetails['kind'];
+  confidence?: AppCrashDetails['confidence'];
+  signal?: string;
+  exceptionType?: string;
+  artifactType?: AppCrashDetails['artifactType'];
+  artifactPath?: string;
+  warning: string;
   crashDetails?: AppCrashDetails;
 };
 
@@ -384,7 +483,10 @@ export type FlatHarnessHookContexts<
   'metro:client-log': MetroClientLogContext<TState, TConfig, TRunner>;
   'app:started': AppStartedContext<TState, TConfig, TRunner>;
   'app:exited': AppExitedContext<TState, TConfig, TRunner>;
-  'app:possible-crash': AppPossibleCrashContext<TState, TConfig, TRunner>;
+  'app:crash-suspected': AppCrashSuspectedContext<TState, TConfig, TRunner>;
+  'app:crash-confirmed': AppCrashConfirmedContext<TState, TConfig, TRunner>;
+  'app:crash-report-ready': AppCrashReportReadyContext<TState, TConfig, TRunner>;
+  'app:monitor-warning': AppMonitorWarningContext<TState, TConfig, TRunner>;
   'collection:started': CollectionStartedContext<TState, TConfig, TRunner>;
   'collection:finished': CollectionFinishedContext<TState, TConfig, TRunner>;
   'test-file:started': TestFileStartedContext<TState, TConfig, TRunner>;
@@ -452,8 +554,17 @@ export type HarnessPluginHooks<
   app?: {
     started?: HarnessHookHandler<AppStartedContext<TState, TConfig, TRunner>>;
     exited?: HarnessHookHandler<AppExitedContext<TState, TConfig, TRunner>>;
-    possibleCrash?: HarnessHookHandler<
-      AppPossibleCrashContext<TState, TConfig, TRunner>
+    crashSuspected?: HarnessHookHandler<
+      AppCrashSuspectedContext<TState, TConfig, TRunner>
+    >;
+    crashConfirmed?: HarnessHookHandler<
+      AppCrashConfirmedContext<TState, TConfig, TRunner>
+    >;
+    crashReportReady?: HarnessHookHandler<
+      AppCrashReportReadyContext<TState, TConfig, TRunner>
+    >;
+    monitorWarning?: HarnessHookHandler<
+      AppMonitorWarningContext<TState, TConfig, TRunner>
     >;
   };
   collection?: {
@@ -512,7 +623,10 @@ export const HARNESS_HOOKS = [
   { flatName: 'metro:client-log', path: ['metro', 'clientLog'] },
   { flatName: 'app:started', path: ['app', 'started'] },
   { flatName: 'app:exited', path: ['app', 'exited'] },
-  { flatName: 'app:possible-crash', path: ['app', 'possibleCrash'] },
+  { flatName: 'app:crash-suspected', path: ['app', 'crashSuspected'] },
+  { flatName: 'app:crash-confirmed', path: ['app', 'crashConfirmed'] },
+  { flatName: 'app:crash-report-ready', path: ['app', 'crashReportReady'] },
+  { flatName: 'app:monitor-warning', path: ['app', 'monitorWarning'] },
   { flatName: 'collection:started', path: ['collection', 'started'] },
   { flatName: 'collection:finished', path: ['collection', 'finished'] },
   { flatName: 'test-file:started', path: ['testFile', 'started'] },

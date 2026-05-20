@@ -320,6 +320,7 @@ export const getAndroidEmulatorPlatformInstance = async (
         appUid,
         isAppRunning: () => adb.isAppRunning(adbId, config.bundleId),
         crashArtifactWriter: options?.crashArtifactWriter,
+        eventReporter: options?.eventReporter,
       });
     },
   };

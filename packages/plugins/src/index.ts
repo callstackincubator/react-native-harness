@@ -2,8 +2,11 @@ export { definePlugin, isHarnessPlugin } from './plugin.js';
 export { createHarnessPluginManager } from './manager.js';
 export type { HarnessPluginManager } from './manager.js';
 export type {
+  AppCrashConfirmedContext,
+  AppCrashReportReadyContext,
+  AppCrashSuspectedContext,
   AppExitedContext,
-  AppPossibleCrashContext,
+  AppMonitorWarningContext,
   AppStartedContext,
   CollectionFinishedContext,
   CollectionStartedContext,

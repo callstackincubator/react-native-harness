@@ -84,6 +84,68 @@ describe('createAndroidAppMonitor', () => {
     ]);
   });
 
+  it('reports app lifecycle and crash events through the reporter', async () => {
+    vi.spyOn(adb, 'startLogcat').mockReturnValue(
+      createStreamingSubprocess([
+        {
+          line: '05-20 12:00:00.000  1234  1234 I ActivityManager: Start proc 1234:com.harnessplayground/u0a123 for activity',
+        },
+        {
+          line: '05-20 12:00:00.100  1234  1234 E AndroidRuntime: Process: com.harnessplayground, PID: 1234',
+        },
+        {
+          line: '05-20 12:00:00.200  1000  1000 I am_crash: [0,1234,com.harnessplayground,123,java.lang.IllegalStateException,boom]',
+        },
+      ]),
+    );
+
+    const eventReporter = vi.fn();
+    const monitor = createAndroidAppMonitor({
+      adbId: 'emulator-5554',
+      bundleId: 'com.harnessplayground',
+      appUid: 10234,
+      isAppRunning: async () => true,
+      eventReporter,
+    });
+    const crashWatch = monitor.watch('example.test.ts', 'startup');
+    crashWatch.promise.catch(() => undefined);
+
+    monitor.launchRequested({
+      type: 'launch_requested',
+      launchId: 'launch-1',
+      at: Date.now(),
+      reason: 'start',
+    });
+
+    await monitor.start();
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(eventReporter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'app:started',
+        appPlatform: 'android',
+        targetIdentifier: 'emulator-5554',
+        launchId: 'launch-1',
+      }),
+    );
+    expect(eventReporter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'app:crash-suspected',
+        appPlatform: 'android',
+        processName: 'com.harnessplayground',
+      }),
+    );
+    expect(eventReporter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'app:crash-confirmed',
+        appPlatform: 'android',
+        processName: 'com.harnessplayground',
+      }),
+    );
+
+    await monitor.stop();
+  });
+
   it('rejects the watch for Java crashes when am_crash arrives even if the process still looks alive', async () => {
     vi.spyOn(adb, 'startLogcat').mockReturnValue(
       createStreamingSubprocess([
