@@ -5,9 +5,15 @@ export type {
   AndroidAppLaunchOptions,
   AppleAppLaunchOptions,
   AppCrashDetails,
-  AppMonitor,
-  AppMonitorEvent,
-  AppMonitorListener,
+  AppLifecycleMonitor,
+  AppLifecyclePhase,
+  AppLifecycleEventBase,
+  LaunchRequestedEvent,
+  LaunchCompletedEvent,
+  LaunchFailedEvent,
+  StopRequestedEvent,
+  StopCompletedEvent,
+  CrashWatch,
   AppLaunchOptions,
   CrashDetailsLookupOptions,
   CrashArtifactSource,
@@ -25,4 +31,15 @@ export {
   AppNotInstalledError,
   DeviceNotFoundError,
   DependencyNotFoundError,
+  NativeCrashError,
+  type NativeCrashDetails,
 } from './errors.js';
+export {
+  CrashWatchCancelledError,
+  createManagedAppLifecycleMonitor,
+  createNoopAppLifecycleMonitor,
+} from './app-lifecycle-monitor.js';
+export type {
+  CreateManagedAppLifecycleMonitorOptions,
+  ManagedCrashEvent,
+} from './app-lifecycle-monitor.js';

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { NativeCrashError } from '@react-native-harness/platforms';
 import {
   createIosDeviceAppMonitor,
   createIosSimulatorAppMonitor,
@@ -40,13 +41,14 @@ describe('createUnifiedLogEvent', () => {
     const event = createUnifiedLogEvent({
       line: '2026-03-12 11:35:08.000 HarnessPlayground[1234:abcd] Terminating app due to uncaught exception: NSInternalInconsistencyException',
       processNames: ['HarnessPlayground', 'com.harnessplayground'],
+      platform: 'ios-simulator',
     });
 
     expect(event).toMatchObject({
       type: 'possible_crash',
-      source: 'logs',
-      isConfirmed: true,
+      confirmed: true,
       crashDetails: {
+        platform: 'ios-simulator',
         source: 'logs',
         processName: 'HarnessPlayground',
         pid: 1234,
@@ -59,13 +61,14 @@ describe('createUnifiedLogEvent', () => {
     const event = createUnifiedLogEvent({
       line: '2026-03-13 10:29:13.868 Df HarnessPlayground[34784:8f92b3] (libswiftCore.dylib) HarnessPlayground/AppDelegate.swift:31: Fatal error: Intentional pre-RN startup crash',
       processNames: ['HarnessPlayground', 'com.harnessplayground'],
+      platform: 'ios-simulator',
     });
 
     expect(event).toMatchObject({
       type: 'possible_crash',
-      source: 'logs',
-      isConfirmed: true,
+      confirmed: true,
       crashDetails: {
+        platform: 'ios-simulator',
         source: 'logs',
         processName: 'HarnessPlayground',
         pid: 34784,
@@ -77,6 +80,7 @@ describe('createUnifiedLogEvent', () => {
     const event = createUnifiedLogEvent({
       line: '2026-03-12 11:35:08.000 runningboardd[55:aaaa] Acquiring assertion for com.harnessplayground',
       processNames: ['HarnessPlayground', 'com.harnessplayground'],
+      platform: 'ios-simulator',
     });
 
     expect(event).toBeNull();
@@ -110,6 +114,7 @@ describe('createIosSimulatorAppMonitor', () => {
     const monitor = createIosSimulatorAppMonitor({
       udid: 'sim-udid',
       bundleId: 'com.harnessplayground',
+      isAppRunning: async () => true,
     });
 
     await monitor.start();
@@ -121,7 +126,7 @@ describe('createIosSimulatorAppMonitor', () => {
     );
   });
 
-  it('returns best-effort simulator crash details from recent log blocks', async () => {
+  it('rejects the watch with best-effort simulator crash details from recent log blocks', async () => {
     vi.spyOn(simctl, 'streamLogs').mockReturnValue(
       createStreamingSubprocess([
         {
@@ -156,26 +161,26 @@ describe('createIosSimulatorAppMonitor', () => {
     const monitor = createIosSimulatorAppMonitor({
       udid: 'sim-udid',
       bundleId: 'com.harnessplayground',
+      isAppRunning: async () => true,
     });
+    const crashWatch = monitor.watch('example.test.ts', 'startup');
 
     await monitor.start();
-    await new Promise((resolve) => setTimeout(resolve, 25));
-
-    const details = await monitor.getCrashDetails({
-      pid: 1234,
-      occurredAt: Date.now(),
+    await expect(crashWatch.promise).rejects.toBeInstanceOf(NativeCrashError);
+    await expect(crashWatch.promise).rejects.toMatchObject({
+      testFilePath: 'example.test.ts',
+      details: {
+        phase: 'startup',
+        processName: 'HarnessPlayground',
+        pid: 1234,
+        exceptionType: 'NSInternalInconsistencyException',
+      },
     });
 
     await monitor.stop();
-
-    expect(details).toMatchObject({
-      processName: 'HarnessPlayground',
-      pid: 1234,
-      exceptionType: 'NSInternalInconsistencyException',
-    });
   });
 
-  it('prefers a matched simulator crash report when one is found', async () => {
+  it('rejects the watch with a matched simulator crash report when one is found', async () => {
     vi.spyOn(simctl, 'streamLogs').mockReturnValue(
       createStreamingSubprocess([
         {
@@ -210,6 +215,7 @@ describe('createIosSimulatorAppMonitor', () => {
     const monitor = createIosSimulatorAppMonitor({
       udid: 'sim-udid',
       bundleId: 'com.harnessplayground',
+      isAppRunning: async () => true,
       crashArtifactWriter: createCrashArtifactWriter({
         runnerName: 'ios-simulator',
         platformId: 'ios',
@@ -217,18 +223,16 @@ describe('createIosSimulatorAppMonitor', () => {
         runTimestamp: '2026-03-12T11-35-08-000Z',
       }),
     });
+    const crashWatch = monitor.watch('example.test.ts', 'startup');
 
     await monitor.start();
-    const details = await monitor.getCrashDetails({
-      pid: 1234,
-      occurredAt: Date.now(),
+    await expect(crashWatch.promise).rejects.toMatchObject({
+      details: {
+        artifactType: 'ios-crash-report',
+        summary: 'simulator crash report',
+      },
     });
     await monitor.stop();
-
-    expect(details).toMatchObject({
-      artifactType: 'ios-crash-report',
-      summary: 'simulator crash report',
-    });
   });
 });
 
@@ -237,7 +241,7 @@ describe('createIosDeviceAppMonitor', () => {
     vi.restoreAllMocks();
   });
 
-  it('polls device processes and emits app_exited when the app disappears', async () => {
+  it('rejects the watch when the app disappears from device processes', async () => {
     vi.spyOn(devicectl, 'getAppInfo').mockResolvedValue({
       bundleIdentifier: 'com.harnessplayground',
       name: 'HarnessPlayground',
@@ -245,6 +249,7 @@ describe('createIosDeviceAppMonitor', () => {
       url: '/private/var/HarnessPlayground.app',
     });
     vi.spyOn(diagnostics, 'collectCrashArtifacts').mockResolvedValue([]);
+    vi.spyOn(diagnostics, 'waitForCrashArtifact').mockResolvedValue(null);
     const getProcesses = vi
       .spyOn(devicectl, 'getProcesses')
       .mockResolvedValueOnce([
@@ -256,31 +261,44 @@ describe('createIosDeviceAppMonitor', () => {
       .mockResolvedValueOnce([])
       .mockResolvedValue([]);
 
-    const events: Array<{ type: string }> = [];
     const monitor = createIosDeviceAppMonitor({
       deviceId: 'device-udid',
       bundleId: 'com.harnessplayground',
+      isAppRunning: async () => false,
     });
-    monitor.addListener((event) => {
-      events.push(event);
-    });
+    const crashWatch = monitor.watch('example.test.ts', 'execution');
 
     await monitor.start();
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await expect(crashWatch.promise).rejects.toMatchObject({
+      details: {
+        phase: 'execution',
+        platform: 'ios-device',
+        source: 'polling',
+        processName: 'HarnessPlayground',
+        pid: 4321,
+      },
+    });
     await monitor.stop();
 
     expect(getProcesses).toHaveBeenCalled();
-    expect(events.some((event) => event.type === 'app_exited')).toBe(true);
   });
 
-  it('enriches device crashes with Apple-native pulled crash reports', async () => {
+  it('rejects the watch with Apple-native pulled crash reports for device crashes', async () => {
     vi.spyOn(devicectl, 'getAppInfo').mockResolvedValue({
       bundleIdentifier: 'com.harnessplayground',
       name: 'HarnessPlayground',
       version: '1.0',
       url: '/private/var/HarnessPlayground.app',
     });
-    vi.spyOn(devicectl, 'getProcesses').mockResolvedValue([]);
+    vi.spyOn(devicectl, 'getProcesses')
+      .mockResolvedValueOnce([
+        {
+          executable: '/private/var/HarnessPlayground.app/HarnessPlayground',
+          processIdentifier: 1234,
+        },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([]);
     vi.spyOn(diagnostics, 'collectCrashArtifacts').mockResolvedValue([]);
 
     const sourcePath = join(artifactRoot, 'HarnessPlayground.crash');
@@ -299,6 +317,7 @@ describe('createIosDeviceAppMonitor', () => {
     const monitor = createIosDeviceAppMonitor({
       deviceId: 'device-udid',
       bundleId: 'com.harnessplayground',
+      isAppRunning: async () => false,
       crashArtifactWriter: createCrashArtifactWriter({
         runnerName: 'ios-device',
         platformId: 'ios',
@@ -306,17 +325,15 @@ describe('createIosDeviceAppMonitor', () => {
         runTimestamp: '2026-03-12T11-35-08-000Z',
       }),
     });
+    const crashWatch = monitor.watch('example.test.ts', 'execution');
 
     await monitor.start();
-    const details = await monitor.getCrashDetails({
-      pid: 1234,
-      occurredAt: Date.now(),
+    await expect(crashWatch.promise).rejects.toMatchObject({
+      details: {
+        artifactType: 'ios-crash-report',
+        summary: 'full crash report',
+      },
     });
     await monitor.stop();
-
-    expect(details).toMatchObject({
-      artifactType: 'ios-crash-report',
-      summary: 'full crash report',
-    });
   });
 });

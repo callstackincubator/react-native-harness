@@ -8,10 +8,10 @@ import type {
 } from 'jest-runner';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { NativeCrashError } from '@react-native-harness/platforms';
 import { type HarnessSession, type HarnessRunState } from './harness-session.js';
 import { runHarnessTestFile } from './run.js';
 import {
-  NativeCrashError,
   StartupStallError,
 } from './errors.js';
 import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';

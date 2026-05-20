@@ -2,6 +2,7 @@ import {
   AppNotInstalledError,
   CreateAppMonitorOptions,
   DeviceNotFoundError,
+  createNoopAppLifecycleMonitor,
   type HarnessPlatformInitOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
@@ -33,17 +34,8 @@ import {
 } from './environment.js';
 import { isInteractive } from '@react-native-harness/tools';
 import fs from 'node:fs';
-import type { AppMonitor } from '@react-native-harness/platforms';
 
 const androidInstanceLogger = logger.child('android-instance');
-
-const createNoopAppMonitor = (): AppMonitor => ({
-  start: async () => undefined,
-  stop: async () => undefined,
-  dispose: async () => undefined,
-  addListener: () => undefined,
-  removeListener: () => undefined,
-});
 
 const getHarnessAppPath = (): string => {
   const appPath = process.env.HARNESS_APP_PATH;
@@ -319,13 +311,14 @@ export const getAndroidEmulatorPlatformInstance = async (
     },
     createAppMonitor: (options?: CreateAppMonitorOptions) => {
       if (!detectNativeCrashes) {
-        return createNoopAppMonitor();
+        return createNoopAppLifecycleMonitor();
       }
 
       return createAndroidAppMonitor({
         adbId,
         bundleId: config.bundleId,
         appUid,
+        isAppRunning: () => adb.isAppRunning(adbId, config.bundleId),
         crashArtifactWriter: options?.crashArtifactWriter,
       });
     },
@@ -394,13 +387,14 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
     },
     createAppMonitor: (options?: CreateAppMonitorOptions) => {
       if (!detectNativeCrashes) {
-        return createNoopAppMonitor();
+        return createNoopAppLifecycleMonitor();
       }
 
       return createAndroidAppMonitor({
         adbId,
         bundleId: config.bundleId,
         appUid,
+        isAppRunning: () => adb.isAppRunning(adbId, config.bundleId),
         crashArtifactWriter: options?.crashArtifactWriter,
       });
     },

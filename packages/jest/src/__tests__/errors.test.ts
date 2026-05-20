@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { NativeCrashError, PlatformReadyTimeoutError } from '../errors.js';
+import { NativeCrashError } from '@react-native-harness/platforms';
+import { PlatformReadyTimeoutError } from '../errors.js';
 
 describe('PlatformReadyTimeoutError', () => {
   it('includes the configured timeout and config hint', () => {

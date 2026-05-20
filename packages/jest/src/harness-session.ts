@@ -12,6 +12,7 @@ import {
 } from '@react-native-harness/bridge';
 import {
   type AppLaunchOptions,
+  type AppLifecycleMonitor,
   type HarnessPlatform,
   type HarnessPlatformInitOptions,
   type HarnessPlatformRunner,
@@ -44,10 +45,10 @@ import {
   ConfigSchema,
 } from '@react-native-harness/config';
 import type { Config as JestConfig } from 'jest-runner';
+import { randomUUID } from 'node:crypto';
 import { preRunMessage } from 'jest-util';
 import { PlatformReadyTimeoutError } from './errors.js';
 import { NoRunnerSpecifiedError, RunnerNotFoundError } from './errors.js';
-import { createCrashMonitor, type CrashMonitor } from './crash-monitor.js';
 import { createHookQueue, type HookQueue } from './hook-queue.js';
 import {
   createClientLogCollector,
@@ -152,8 +153,77 @@ type AppReadyOptions = {
   bundleStartTimeout: number;
   readyTimeout: number;
   maxAppRestarts: number;
-  crashMonitor: CrashMonitor;
+  appMonitor: AppLifecycleMonitor;
   appLaunchOptions?: AppLaunchOptions;
+  nextLaunchId: () => string;
+};
+
+type LaunchReason = 'start' | 'restart' | 'ensure_ready';
+type StopReason = 'restart' | 'dispose' | 'coverage' | 'manual';
+
+const stopAppWithMonitor = async ({
+  appMonitor,
+  platformInstance,
+  reason,
+}: {
+  appMonitor: AppLifecycleMonitor;
+  platformInstance: HarnessPlatformRunner;
+  reason: StopReason;
+}) => {
+  appMonitor.stopRequested({
+    type: 'stop_requested',
+    at: Date.now(),
+    reason,
+  });
+  await appMonitor.stop();
+  await platformInstance.stopApp();
+  appMonitor.stopCompleted({
+    type: 'stop_completed',
+    at: Date.now(),
+    reason,
+  });
+};
+
+const startAppWithMonitor = async ({
+  appMonitor,
+  platformInstance,
+  appLaunchOptions,
+  nextLaunchId,
+  reason,
+}: {
+  appMonitor: AppLifecycleMonitor;
+  platformInstance: HarnessPlatformRunner;
+  appLaunchOptions?: AppLaunchOptions;
+  nextLaunchId: () => string;
+  reason: LaunchReason;
+}) => {
+  const launchId = nextLaunchId();
+
+  appMonitor.launchRequested({
+    type: 'launch_requested',
+    launchId,
+    at: Date.now(),
+    reason,
+  });
+
+  try {
+    await platformInstance.startApp(appLaunchOptions);
+    appMonitor.launchCompleted({
+      type: 'launch_completed',
+      launchId,
+      at: Date.now(),
+      reason,
+    });
+  } catch (error) {
+    appMonitor.launchFailed({
+      type: 'launch_failed',
+      launchId,
+      at: Date.now(),
+      reason,
+      error,
+    });
+    throw error;
+  }
 };
 
 const waitForAppReady = async (
@@ -168,8 +238,9 @@ const waitForAppReady = async (
     bundleStartTimeout,
     readyTimeout,
     maxAppRestarts,
-    crashMonitor,
+    appMonitor,
     appLaunchOptions,
+    nextLaunchId,
   } = base;
 
   const logWait = (message: string, ...args: unknown[]) =>
@@ -184,7 +255,20 @@ const waitForAppReady = async (
     signal: new AbortController().signal,
     startAttempt: async () => {
       logWait('launching app for %s', testFilePath);
-      await platformInstance.restartApp(appLaunchOptions);
+      await stopAppWithMonitor({
+        appMonitor,
+        platformInstance,
+        reason: 'restart',
+      });
+      appMonitor.reset();
+      await appMonitor.start();
+      await startAppWithMonitor({
+        appMonitor,
+        platformInstance,
+        appLaunchOptions,
+        nextLaunchId,
+        reason: 'ensure_ready',
+      });
       logWait('launch request completed, waiting for bridge ready');
     },
     waitForReady: async (signal) => {
@@ -208,7 +292,7 @@ const waitForAppReady = async (
       logWait('runtime ready received');
     },
     waitForCrash: async (signal) => {
-      const watch = crashMonitor.watch(testFilePath, 'startup');
+      const watch = appMonitor.watch(testFilePath, 'startup');
       watch.promise.catch(ignorePromiseRejection); // suppress unhandled-rejection when abort wins race
       try {
         logWait('waiting for crash or runtime ready');
@@ -466,8 +550,7 @@ export const createHarnessSession = async (
     });
     const appMonitor = platformInstance.createAppMonitor({ crashArtifactWriter });
     const appLaunchOptions = (platform.config as { appLaunchOptions?: AppLaunchOptions }).appLaunchOptions;
-
-    const crashMonitor = createCrashMonitor({ appMonitor, platformRunner: platformInstance });
+    const nextLaunchId = () => randomUUID();
 
     // Pre-build the options that are constant across all app-ready calls;
     // only testFilePath varies per call.
@@ -479,8 +562,9 @@ export const createHarnessSession = async (
       bundleStartTimeout: runtimeConfig.bundleStartTimeout ?? 60000,
       readyTimeout: runtimeConfig.bridgeTimeout,
       maxAppRestarts: runtimeConfig.maxAppRestarts ?? 2,
-      crashMonitor,
+      appMonitor,
       appLaunchOptions,
+      nextLaunchId,
     };
 
     // --- Event listeners ---
@@ -561,7 +645,11 @@ export const createHarnessSession = async (
       const nativeCoverageConfig = runtimeConfig.coverage?.native?.ios;
       if (nativeCoverageConfig?.pods?.length && platformInstance.collectNativeCoverage) {
         try {
-          await platformInstance.stopApp();
+          await stopAppWithMonitor({
+            appMonitor,
+            platformInstance,
+            reason: 'coverage',
+          });
           const lcovPath = await platformInstance.collectNativeCoverage({
             pods: nativeCoverageConfig.pods,
             outputDir: projectRoot,
@@ -577,7 +665,7 @@ export const createHarnessSession = async (
       let cleanupError: unknown;
       try {
         await Promise.all([
-          crashMonitor.dispose(),
+          appMonitor.dispose(),
           bridge.dispose(),
           platformInstance.dispose(),
           metroInstance.dispose(),
@@ -634,12 +722,12 @@ export const createHarnessSession = async (
       await hooks.drain();
       sessionLogger.debug('ensuring app is ready for %s', testFilePath);
 
-      if (crashMonitor.isAlive() && bridge.connection !== null && await platformInstance.isAppRunning()) {
+      if (appMonitor.isAlive() && bridge.connection !== null && await platformInstance.isAppRunning()) {
         sessionLogger.debug('reusing existing ready app for %s', testFilePath);
         return;
       }
 
-      crashMonitor.reset();
+      appMonitor.reset();
       sessionLogger.debug('app not ready, waiting for launch and runtime readiness');
       await waitForAppReady(appReadyBaseOptions, testFilePath);
       await hooks.drain();
@@ -648,24 +736,31 @@ export const createHarnessSession = async (
 
     const restartApp = async (testFilePath?: string): Promise<void> => {
       await hooks.drain();
-      await crashMonitor.stop();
       sessionLogger.debug(
         'restarting app (testFile=%s mode=%s)',
         testFilePath ?? 'n/a',
         testFilePath ? 'stop-and-ensure-ready' : 'direct-restart',
       );
 
-      if (testFilePath) {
-        await platformInstance.stopApp();
-      } else {
-        await platformInstance.restartApp(appLaunchOptions);
-      }
+      await stopAppWithMonitor({
+        appMonitor,
+        platformInstance,
+        reason: 'restart',
+      });
 
-      crashMonitor.reset();
-      await crashMonitor.start();
+      appMonitor.reset();
+      await appMonitor.start();
 
       if (testFilePath) {
         await ensureAppReady(testFilePath);
+      } else {
+        await startAppWithMonitor({
+          appMonitor,
+          platformInstance,
+          appLaunchOptions,
+          nextLaunchId,
+          reason: 'restart',
+        });
       }
 
       await hooks.drain();
@@ -681,13 +776,7 @@ export const createHarnessSession = async (
       if (!conn) throw new Error('No active app connection');
       sessionLogger.debug('running test file on client: %s', testPath);
 
-      if (!runtimeConfig.detectNativeCrashes) {
-        const result = await conn.runTests(testPath, { ...options, runner: platform.runner });
-        await hooks.drain();
-        return result;
-      }
-
-      const crashWatch = crashMonitor.watch(testPath, 'execution');
+      const crashWatch = appMonitor.watch(testPath, 'execution');
       // Attach a handler now so the rejection is always observed, whether the
       // crash wins the race or cancel() is called after the test run wins.
       crashWatch.promise.catch(ignorePromiseRejection);
@@ -703,14 +792,14 @@ export const createHarnessSession = async (
       }
     };
 
-    return {
-      config: runtimeConfig,
-      context,
-      runTestFile,
-      ensureAppReady,
-      restartApp,
-      resetCrashState: () => crashMonitor.reset(),
-      flushClientLogs,
+      return {
+        config: runtimeConfig,
+        context,
+        runTestFile,
+        ensureAppReady,
+        restartApp,
+        resetCrashState: () => appMonitor.reset(),
+        flushClientLogs,
       callHook: async (name, payload) => {
         await hooks.drain();
         await pluginManager.callHook(name, payload);

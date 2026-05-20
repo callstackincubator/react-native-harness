@@ -502,14 +502,37 @@ describe('Android platform instance', () => {
       init,
     );
 
-    const listener = vi.fn();
     const appMonitor = instance.createAppMonitor();
 
     await expect(appMonitor.start()).resolves.toBeUndefined();
     await expect(appMonitor.stop()).resolves.toBeUndefined();
     await expect(appMonitor.dispose()).resolves.toBeUndefined();
-    expect(appMonitor.addListener(listener)).toBeUndefined();
-    expect(appMonitor.removeListener(listener)).toBeUndefined();
+    expect(appMonitor.launchRequested({
+      type: 'launch_requested',
+      launchId: 'launch-1',
+      at: Date.now(),
+      reason: 'start',
+    })).toBeUndefined();
+    expect(appMonitor.launchCompleted({
+      type: 'launch_completed',
+      launchId: 'launch-1',
+      at: Date.now(),
+      reason: 'start',
+    })).toBeUndefined();
+    expect(appMonitor.stopRequested({
+      type: 'stop_requested',
+      at: Date.now(),
+      reason: 'manual',
+    })).toBeUndefined();
+    expect(appMonitor.stopCompleted({
+      type: 'stop_completed',
+      at: Date.now(),
+      reason: 'manual',
+    })).toBeUndefined();
+    expect(appMonitor.reset()).toBeUndefined();
+    expect(appMonitor.isAlive()).toBe(true);
+    const watch = appMonitor.watch('example.ts', 'startup');
+    watch.cancel();
   });
 
   it('returns a noop physical device app monitor when native crash detection is disabled', async () => {
@@ -556,14 +579,37 @@ describe('Android platform instance', () => {
       harnessConfigWithoutNativeCrashDetection,
     );
 
-    const listener = vi.fn();
     const appMonitor = instance.createAppMonitor();
 
     await expect(appMonitor.start()).resolves.toBeUndefined();
     await expect(appMonitor.stop()).resolves.toBeUndefined();
     await expect(appMonitor.dispose()).resolves.toBeUndefined();
-    expect(appMonitor.addListener(listener)).toBeUndefined();
-    expect(appMonitor.removeListener(listener)).toBeUndefined();
+    expect(appMonitor.launchRequested({
+      type: 'launch_requested',
+      launchId: 'launch-1',
+      at: Date.now(),
+      reason: 'start',
+    })).toBeUndefined();
+    expect(appMonitor.launchCompleted({
+      type: 'launch_completed',
+      launchId: 'launch-1',
+      at: Date.now(),
+      reason: 'start',
+    })).toBeUndefined();
+    expect(appMonitor.stopRequested({
+      type: 'stop_requested',
+      at: Date.now(),
+      reason: 'manual',
+    })).toBeUndefined();
+    expect(appMonitor.stopCompleted({
+      type: 'stop_completed',
+      at: Date.now(),
+      reason: 'manual',
+    })).toBeUndefined();
+    expect(appMonitor.reset()).toBeUndefined();
+    expect(appMonitor.isAlive()).toBe(true);
+    const watch = appMonitor.watch('example.ts', 'startup');
+    watch.cancel();
   });
 
   it('grants permissions when permissions are enabled for emulator', async () => {

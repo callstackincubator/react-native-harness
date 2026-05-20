@@ -1,4 +1,17 @@
 export type AppCrashDetails = {
+  platform?: 'android' | 'ios-simulator' | 'ios-device' | 'web' | 'vega';
+  kind?:
+    | 'java-exception'
+    | 'native-crash'
+    | 'anr'
+    | 'watchdog'
+    | 'process-exit'
+    | 'crash-report'
+    | 'device-offline'
+    | 'unknown';
+  confidence?: 'low' | 'medium' | 'high';
+  occurredAt?: number;
+  launchId?: string;
   source?: 'polling' | 'logs' | 'bridge';
   summary?: string;
   signal?: string;
@@ -40,43 +53,60 @@ export type CrashDetailsLookupOptions = {
   occurredAt: number;
 };
 
-export type AppMonitorEvent =
-  | {
-      type: 'app_started';
-      pid?: number;
-      source?: 'polling' | 'logs';
-      line?: string;
-    }
-  | {
-      type: 'app_exited';
-      pid?: number;
-      source?: 'polling' | 'logs';
-      line?: string;
-      isConfirmed?: boolean;
-      crashDetails?: AppCrashDetails;
-    }
-  | {
-      type: 'possible_crash';
-      pid?: number;
-      source?: 'polling' | 'logs';
-      line?: string;
-      isConfirmed?: boolean;
-      crashDetails?: AppCrashDetails;
-    }
-  | {
-      type: 'log';
-      source?: 'polling' | 'logs';
-      line: string;
-    };
+export type AppLifecyclePhase = 'startup' | 'execution';
 
-export type AppMonitorListener = (event: AppMonitorEvent) => void;
+export type AppLifecycleEventBase = {
+  launchId: string;
+  at: number;
+};
 
-export type AppMonitor = {
+export type LaunchRequestedEvent = AppLifecycleEventBase & {
+  type: 'launch_requested';
+  reason: 'start' | 'restart' | 'ensure_ready';
+};
+
+export type LaunchCompletedEvent = AppLifecycleEventBase & {
+  type: 'launch_completed';
+  reason: 'start' | 'restart' | 'ensure_ready';
+};
+
+export type LaunchFailedEvent = AppLifecycleEventBase & {
+  type: 'launch_failed';
+  reason: 'start' | 'restart' | 'ensure_ready';
+  error: unknown;
+};
+
+export type StopRequestedEvent = {
+  type: 'stop_requested';
+  at: number;
+  reason: 'restart' | 'dispose' | 'coverage' | 'manual';
+};
+
+export type StopCompletedEvent = {
+  type: 'stop_completed';
+  at: number;
+  reason: 'restart' | 'dispose' | 'coverage' | 'manual';
+};
+
+export type CrashWatch = {
+  promise: Promise<never>;
+  cancel: () => void;
+};
+
+export type AppLifecycleMonitor = {
   start: () => Promise<void>;
   stop: () => Promise<void>;
   dispose: () => Promise<void>;
-  addListener: (listener: AppMonitorListener) => void;
-  removeListener: (listener: AppMonitorListener) => void;
+
+  launchRequested: (event: LaunchRequestedEvent) => void;
+  launchCompleted: (event: LaunchCompletedEvent) => void;
+  launchFailed: (event: LaunchFailedEvent) => void;
+  stopRequested: (event: StopRequestedEvent) => void;
+  stopCompleted: (event: StopCompletedEvent) => void;
+
+  watch: (testFilePath: string, phase: AppLifecyclePhase) => CrashWatch;
+  reset: () => void;
+  isAlive: () => boolean;
 };
 
 export type AndroidAppLaunchOptions = {
@@ -109,10 +139,7 @@ export type HarnessPlatformRunner = {
   stopApp: () => Promise<void>;
   dispose: () => Promise<void>;
   isAppRunning: () => Promise<boolean>;
-  createAppMonitor: (options?: CreateAppMonitorOptions) => AppMonitor;
-  getCrashDetails?: (
-    options: CrashDetailsLookupOptions,
-  ) => Promise<AppCrashDetails | null>;
+  createAppMonitor: (options?: CreateAppMonitorOptions) => AppLifecycleMonitor;
   collectNativeCoverage?: (
     options: CollectNativeCoverageOptions
   ) => Promise<string | null>;

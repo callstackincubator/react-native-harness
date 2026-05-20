@@ -4,9 +4,6 @@
   "include": [],
   "references": [
     {
-      "path": "../tools"
-    },
-    {
       "path": "../platforms"
     },
     {

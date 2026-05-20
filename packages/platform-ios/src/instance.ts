@@ -1,9 +1,9 @@
 import {
-  AppMonitor,
   AppNotInstalledError,
   type CollectNativeCoverageOptions,
   CreateAppMonitorOptions,
   DeviceNotFoundError,
+  createNoopAppLifecycleMonitor,
   type HarnessPlatformInitOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
@@ -45,14 +45,6 @@ const getHarnessAppPath = (): string => {
 
   return appPath;
 };
-
-const createNoopAppMonitor = (): AppMonitor => ({
-  start: async () => undefined,
-  stop: async () => undefined,
-  dispose: async () => undefined,
-  addListener: () => undefined,
-  removeListener: () => undefined,
-});
 
 export const getAppleSimulatorPlatformInstance = async (
   config: ApplePlatformConfig,
@@ -190,12 +182,13 @@ export const getAppleSimulatorPlatformInstance = async (
     },
     createAppMonitor: (options?: CreateAppMonitorOptions) => {
       if (!detectNativeCrashes) {
-        return createNoopAppMonitor();
+        return createNoopAppLifecycleMonitor();
       }
 
       return createIosSimulatorAppMonitor({
         udid,
         bundleId: config.bundleId,
+        isAppRunning: () => simctl.isAppRunning(udid, config.bundleId),
         crashArtifactWriter: options?.crashArtifactWriter,
       });
     },
@@ -299,12 +292,13 @@ export const getApplePhysicalDevicePlatformInstance = async (
     },
     createAppMonitor: (options?: CreateAppMonitorOptions) => {
       if (!detectNativeCrashes) {
-        return createNoopAppMonitor();
+        return createNoopAppLifecycleMonitor();
       }
 
       return createIosDeviceAppMonitor({
         deviceId,
         bundleId: config.bundleId,
+        isAppRunning: () => devicectl.isAppRunning(deviceId, config.bundleId),
         crashArtifactWriter: options?.crashArtifactWriter,
       });
     },

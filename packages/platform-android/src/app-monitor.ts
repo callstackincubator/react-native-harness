@@ -1,14 +1,12 @@
 import {
-  type AppMonitor,
+  createManagedAppLifecycleMonitor,
   type AppCrashDetails,
+  type AppLifecycleMonitor,
   type CrashArtifactWriter,
   type CrashDetailsLookupOptions,
-  type AppMonitorEvent,
-  type AppMonitorListener,
 } from '@react-native-harness/platforms';
 import {
   escapeRegExp,
-  getEmitter,
   logger,
   SubprocessError,
   type Subprocess,
@@ -44,10 +42,8 @@ const nativeCrashPattern = (bundleId: string) =>
 
 const processDiedPattern = (bundleId: string) =>
   new RegExp(
-    `Process\\s+${escapeRegExp(
-      bundleId
-    )}\\s+\\(pid\\s+(\\d+)\\)\\s+has\\s+died`,
-    'i'
+    `Process\\s+${escapeRegExp(bundleId)}\\s+\\(pid\\s+(\\d+)\\)\\s+has\\s+died`,
+    'i',
   );
 
 const getSignal = (line: string) => {
@@ -79,6 +75,7 @@ const getAndroidLogLineCrashDetails = ({
   const processMatch = line.match(processPattern(bundleId));
 
   return {
+    platform: 'android',
     source: 'logs',
     summary: line.trim(),
     signal: getSignal(line),
@@ -86,8 +83,8 @@ const getAndroidLogLineCrashDetails = ({
     processName: processMatch
       ? bundleId
       : line.includes(bundleId)
-      ? bundleId
-      : undefined,
+        ? bundleId
+        : undefined,
     pid: pid ?? (processMatch ? Number(processMatch[1]) : undefined),
     rawLines: [line],
   };
@@ -119,7 +116,7 @@ const getLatestCrashBlock = (recentLogLines: TimedLogLine[]) => {
 
   const blockStartIndex = Math.max(
     lines.lastIndexOf(CRASH_BLOCK_HEADER),
-    latestCrashHeaderIndex
+    latestCrashHeaderIndex,
   );
 
   if (blockStartIndex === -1) {
@@ -140,7 +137,7 @@ const getCrashBlockForArtifact = ({
     ({ line, occurredAt }) =>
       line === artifact.triggerLine &&
       (artifact.triggerOccurredAt === undefined ||
-        occurredAt === artifact.triggerOccurredAt)
+        occurredAt === artifact.triggerOccurredAt),
   );
 
   if (targetIndex === -1) {
@@ -150,9 +147,7 @@ const getCrashBlockForArtifact = ({
   let blockStartIndex = targetIndex;
 
   for (let index = targetIndex; index >= 0; index -= 1) {
-    const { line } = recentLogLines[index];
-
-    if (line === CRASH_BLOCK_HEADER) {
+    if (recentLogLines[index].line === CRASH_BLOCK_HEADER) {
       blockStartIndex = index;
       break;
     }
@@ -194,6 +189,7 @@ const hydrateCrashArtifact = ({
   return {
     ...artifact,
     ...parsedDetails,
+    platform: 'android',
     artifactType: artifact.artifactType,
     artifactPath: artifact.artifactPath,
     rawLines,
@@ -227,6 +223,7 @@ const createCrashArtifact = ({
 
   return {
     ...parsedDetails,
+    platform: 'android',
     occurredAt,
     triggerLine: details.summary ?? '',
     triggerOccurredAt,
@@ -288,12 +285,12 @@ const getLatestCrashArtifact = ({
     matchingByPid.length > 0
       ? matchingByPid
       : matchingByProcess.length > 0
-      ? matchingByProcess
-      : crashArtifacts;
+        ? matchingByProcess
+        : crashArtifacts;
   const sortedCandidates = [...candidates].sort(
     (left, right) =>
       Math.abs(left.occurredAt - occurredAt) -
-      Math.abs(right.occurredAt - occurredAt)
+      Math.abs(right.occurredAt - occurredAt),
   );
 
   const artifact = sortedCandidates[0];
@@ -308,19 +305,27 @@ const getLatestCrashArtifact = ({
   });
 };
 
+type AndroidMonitorSignal =
+  | { type: 'app_started' }
+  | {
+      type: 'app_exited';
+      confirmed?: boolean;
+      crashDetails?: AppCrashDetails;
+    }
+  | {
+      type: 'possible_crash';
+      confirmed?: boolean;
+      crashDetails?: AppCrashDetails;
+    };
+
 const createAndroidLogEvent = (
   line: string,
-  bundleId: string
-): AppMonitorEvent | null => {
+  bundleId: string,
+): AndroidMonitorSignal | null => {
   const startMatch = line.match(startProcPattern(bundleId));
 
   if (startMatch) {
-    return {
-      type: 'app_started',
-      pid: Number(startMatch[1]),
-      source: 'logs',
-      line,
-    };
+    return { type: 'app_started' };
   }
 
   const processMatch = line.match(processPattern(bundleId));
@@ -328,9 +333,6 @@ const createAndroidLogEvent = (
   if (processMatch) {
     return {
       type: 'possible_crash',
-      pid: Number(processMatch[1]),
-      source: 'logs',
-      line,
       crashDetails: getAndroidLogLineCrashDetails({
         line,
         bundleId,
@@ -342,8 +344,6 @@ const createAndroidLogEvent = (
   if (nativeCrashPattern(bundleId).test(line)) {
     return {
       type: 'possible_crash',
-      source: 'logs',
-      line,
       crashDetails: getAndroidLogLineCrashDetails({
         line,
         bundleId,
@@ -356,9 +356,6 @@ const createAndroidLogEvent = (
   if (diedMatch) {
     return {
       type: 'app_exited',
-      pid: Number(diedMatch[1]),
-      source: 'logs',
-      line,
       crashDetails: getAndroidLogLineCrashDetails({
         line,
         bundleId,
@@ -373,8 +370,6 @@ const createAndroidLogEvent = (
   ) {
     return {
       type: 'possible_crash',
-      source: 'logs',
-      line,
       crashDetails: getAndroidLogLineCrashDetails({
         line,
         bundleId,
@@ -389,30 +384,24 @@ export const createAndroidAppMonitor = ({
   adbId,
   bundleId,
   appUid,
+  isAppRunning,
   crashArtifactWriter,
 }: {
   adbId: string;
   bundleId: string;
   appUid: number;
+  isAppRunning: () => Promise<boolean>;
   crashArtifactWriter?: CrashArtifactWriter;
-}): AndroidAppMonitor => {
-  const emitter = getEmitter<AppMonitorEvent>();
-
-  let isStarted = false;
+}): AppLifecycleMonitor => {
   let logcatProcess: Subprocess | null = null;
   let logTask: Promise<void> | null = null;
   let recentLogLines: TimedLogLine[] = [];
   let recentCrashArtifacts: AndroidCrashArtifact[] = [];
 
-  const emit = (event: AppMonitorEvent) => {
-    emitter.emit(event);
-  };
-
   const recordLogLine = (line: string) => {
-    recentLogLines = [
-      ...recentLogLines,
-      { line, occurredAt: Date.now() },
-    ].slice(-MAX_RECENT_LOG_LINES);
+    recentLogLines = [...recentLogLines, { line, occurredAt: Date.now() }].slice(
+      -MAX_RECENT_LOG_LINES,
+    );
   };
 
   const recordCrashArtifact = (details?: AppCrashDetails) => {
@@ -422,10 +411,7 @@ export const createAndroidAppMonitor = ({
 
     recentCrashArtifacts = [
       ...recentCrashArtifacts,
-      createCrashArtifact({
-        details,
-        recentLogLines,
-      }),
+      createCrashArtifact({ details, recentLogLines }),
     ].slice(-MAX_RECENT_CRASH_ARTIFACTS);
   };
 
@@ -441,60 +427,57 @@ export const createAndroidAppMonitor = ({
     }
   };
 
-  const startLogcat = async () => {
-    const logcatTimestamp = await adb.getLogcatTimestamp(adbId);
+  const managed = createManagedAppLifecycleMonitor({
+    startCollectors: async () => {
+      const logcatTimestamp = await adb.getLogcatTimestamp(adbId);
 
-    logcatProcess = adb.startLogcat(
-      adbId,
-      getLogcatArgs(appUid, logcatTimestamp)
-    );
+      logcatProcess = adb.startLogcat(adbId, getLogcatArgs(appUid, logcatTimestamp));
 
-    const currentProcess = logcatProcess;
+      const currentProcess = logcatProcess;
 
-    if (!currentProcess) {
-      return;
-    }
+      if (!currentProcess) {
+        return;
+      }
 
-    logTask = (async () => {
-      try {
-        for await (const line of currentProcess) {
-          recordLogLine(line);
-          emit({ type: 'log', source: 'logs', line });
+      logTask = (async () => {
+        try {
+          for await (const line of currentProcess) {
+            recordLogLine(line);
 
-          const event = createAndroidLogEvent(line, bundleId);
+            const event = createAndroidLogEvent(line, bundleId);
 
-          if (event) {
-            if (
-              event.type === 'possible_crash' ||
-              event.type === 'app_exited'
-            ) {
-              recordCrashArtifact(event.crashDetails);
+            if (!event) {
+              continue;
             }
-            emit(event);
+
+            if (event.type === 'app_started') {
+              managed.appStarted();
+              continue;
+            }
+
+            recordCrashArtifact(event.crashDetails);
+
+            if (event.type === 'app_exited') {
+              managed.appExited({
+                confirmed: event.confirmed,
+                details: event.crashDetails,
+              });
+              continue;
+            }
+
+            managed.possibleCrash({
+              confirmed: event.confirmed,
+              details: event.crashDetails,
+            });
+          }
+        } catch (error) {
+          if (!(error instanceof SubprocessError && error.signalName === 'SIGTERM')) {
+            androidAppMonitorLogger.debug('Android logcat monitor stopped', error);
           }
         }
-      } catch (error) {
-        if (
-          !(error instanceof SubprocessError && error.signalName === 'SIGTERM')
-        ) {
-          androidAppMonitorLogger.debug(
-            'Android logcat monitor stopped',
-            error
-          );
-        }
-      }
-    })();
-  };
-
-  const start = async () => {
-    if (isStarted) {
-      return;
-    }
-
-    try {
-      await startLogcat();
-      isStarted = true;
-    } catch (error) {
+      })();
+    },
+    stopCollectors: async () => {
       const currentProcess = logcatProcess;
       const currentTask = logTask;
 
@@ -503,52 +486,11 @@ export const createAndroidAppMonitor = ({
 
       await stopProcess(currentProcess);
       await currentTask;
-
-      throw error;
-    }
-  };
-
-  const stop = async () => {
-    if (!isStarted) {
-      return;
-    }
-
-    isStarted = false;
-
-    const currentProcess = logcatProcess;
-    const currentTask = logTask;
-
-    logcatProcess = null;
-    logTask = null;
-
-    await stopProcess(currentProcess);
-    await currentTask;
-  };
-
-  const dispose = async () => {
-    await stop();
-    emitter.clearAllListeners();
-    recentLogLines = [];
-    recentCrashArtifacts = [];
-  };
-
-  const addListener = (listener: AppMonitorListener) => {
-    emitter.addListener(listener);
-  };
-
-  const removeListener = (listener: AppMonitorListener) => {
-    emitter.removeListener(listener);
-  };
-
-  return {
-    start,
-    stop,
-    dispose,
-    addListener,
-    removeListener,
-    getCrashDetails: async (options: CrashDetailsLookupOptions) => {
+    },
+    isAppRunning,
+    resolveCrashDetails: async (options: CrashDetailsLookupOptions) => {
       await new Promise((resolve) =>
-        setTimeout(resolve, CRASH_ARTIFACT_SETTLE_DELAY_MS)
+        setTimeout(resolve, CRASH_ARTIFACT_SETTLE_DELAY_MS),
       );
 
       const details = getLatestCrashArtifact({
@@ -566,12 +508,13 @@ export const createAndroidAppMonitor = ({
         crashArtifactWriter,
       });
     },
-  } satisfies AndroidAppMonitor;
+    onReset: () => {
+      recentLogLines = [];
+      recentCrashArtifacts = [];
+    },
+  });
+
+  return managed.monitor;
 };
 
 export { createAndroidLogEvent };
-export type AndroidAppMonitor = AppMonitor & {
-  getCrashDetails: (
-    options: CrashDetailsLookupOptions
-  ) => Promise<AppCrashDetails | null>;
-};

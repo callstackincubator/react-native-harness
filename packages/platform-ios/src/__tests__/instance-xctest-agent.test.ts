@@ -113,6 +113,7 @@ describe('iOS XCTest agent runner integration', () => {
         device: {
           type: 'physical',
           name: 'My iPhone',
+          codeSign: { teamId: 'TESTTEAM01' },
         },
         bundleId: 'com.harnessplayground',
       },
@@ -132,6 +133,7 @@ describe('iOS XCTest agent runner integration', () => {
       target: {
         kind: 'device',
         id: 'device-udid',
+        codeSign: { teamId: 'TESTTEAM01' },
       },
     });
     expect(mocks.prepare).not.toHaveBeenCalled();
