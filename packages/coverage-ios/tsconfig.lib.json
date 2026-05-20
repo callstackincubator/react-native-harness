@@ -10,5 +10,10 @@
     "types": ["node"],
     "lib": ["DOM", "ES2022"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "references": [
+    {
+      "path": "../config/tsconfig.lib.json"
+    }
+  ]
 }

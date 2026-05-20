@@ -79,7 +79,7 @@ export default {
     }),
     applePlatform({
       name: 'ios',
-      device: appleSimulator('iPhone 17 Pro', '26.2'),
+      device: appleSimulator('iPhone 17 Pro', '26.4'),
       bundleId: 'com.harnessplayground',
     }),
     applePlatform({

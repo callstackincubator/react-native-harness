@@ -2,7 +2,7 @@ import type { HarnessTestContext } from './test-context.js';
 
 export type TestStatus = 'active' | 'skipped' | 'todo';
 
-export type TestFn = (context?: HarnessTestContext) => void | Promise<void>;
+export type TestFn = (context: HarnessTestContext) => void | Promise<void>;
 
 export type SuiteHookFn = () => void | Promise<void>;
 

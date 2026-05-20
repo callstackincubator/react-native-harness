@@ -5,7 +5,7 @@ import {
   type HarnessTestContext,
 } from '@react-native-harness/bridge';
 
-export type TestFn = (context?: HarnessTestContext) => void | Promise<void>;
+export type TestFn = (context: HarnessTestContext) => void | Promise<void>;
 
 export type SuiteHookFn = () => void | Promise<void>;
 

@@ -15,19 +15,11 @@ vi.mock('../symbolicate.js', async () => {
   };
 });
 
-const getTask = (context?: HarnessTestContext) => {
-  if (!context) {
-    throw new Error('Expected test context to be defined');
-  }
-
+const getTask = (context: HarnessTestContext) => {
   return context.task;
 };
 
-const getTaskContext = (context?: HarnessTestContext) => {
-  if (!context) {
-    throw new Error('Expected test context to be defined');
-  }
-
+const getTaskContext = (context: HarnessTestContext) => {
   return context;
 };
 
@@ -49,15 +41,15 @@ describe('runner task context', () => {
     try {
       const collection = await collector.collect(() => {
         harnessDescribe('Task Context Suite', () => {
-          beforeEach((context: HarnessTestContext | undefined) => {
+          beforeEach((context: HarnessTestContext) => {
             observedTasks.push({ source: 'beforeEach', task: getTask(context) });
           });
 
-          afterEach((context: HarnessTestContext | undefined) => {
+          afterEach((context: HarnessTestContext) => {
             observedTasks.push({ source: 'afterEach', task: getTask(context) });
           });
 
-          harnessIt('exposes task metadata', (context: HarnessTestContext | undefined) => {
+          harnessIt('exposes task metadata', (context: HarnessTestContext) => {
             observedTasks.push({ source: 'test', task: getTask(context) });
           });
         });
@@ -160,7 +152,7 @@ describe('runner task context', () => {
             calls.push('afterEach');
           });
 
-          harnessIt('skips from context', (context: HarnessTestContext | undefined) => {
+          harnessIt('skips from context', (context: HarnessTestContext) => {
             const { skip } = getTaskContext(context);
 
             calls.push('before-skip');
@@ -204,7 +196,7 @@ describe('runner task context', () => {
     try {
       const collection = await collector.collect(() => {
         harnessDescribe('Conditional Skip Suite', () => {
-          harnessIt('continues when condition is false', (context: HarnessTestContext | undefined) => {
+          harnessIt('continues when condition is false', (context: HarnessTestContext) => {
             const { skip } = getTaskContext(context);
 
             calls.push('before');
@@ -240,7 +232,7 @@ describe('runner task context', () => {
             calls.push('afterEach');
           });
 
-          harnessIt('runs finished callbacks', (context: HarnessTestContext | undefined) => {
+          harnessIt('runs finished callbacks', (context: HarnessTestContext) => {
             const { onTestFinished } = getTaskContext(context);
 
             onTestFinished(() => {
@@ -288,7 +280,7 @@ describe('runner task context', () => {
 
           harnessIt(
             'runs finished callback after skip',
-            (context: HarnessTestContext | undefined) => {
+            (context: HarnessTestContext) => {
               const { onTestFinished, skip } = getTaskContext(context);
 
             onTestFinished(() => {
@@ -330,7 +322,7 @@ describe('runner task context', () => {
 
           harnessIt(
             'runs finished callback after failure',
-            (context: HarnessTestContext | undefined) => {
+            (context: HarnessTestContext) => {
               const { onTestFinished } = getTaskContext(context);
 
             onTestFinished(() => {
@@ -370,7 +362,7 @@ describe('runner task context', () => {
             calls.push('afterEach');
           });
 
-          harnessIt('runs failed callbacks', (context: HarnessTestContext | undefined) => {
+          harnessIt('runs failed callbacks', (context: HarnessTestContext) => {
             const { onTestFailed } = getTaskContext(context);
 
             onTestFailed(() => {
@@ -419,7 +411,7 @@ describe('runner task context', () => {
 
           harnessIt(
             'does not run failed callbacks on skip',
-            (context: HarnessTestContext | undefined) => {
+            (context: HarnessTestContext) => {
               const { onTestFailed, skip } = getTaskContext(context);
 
             onTestFailed(() => {
@@ -462,7 +454,7 @@ describe('runner task context', () => {
 
           harnessIt(
             'runs failed callback after afterEach failure',
-            (context: HarnessTestContext | undefined) => {
+            (context: HarnessTestContext) => {
               const { onTestFailed } = getTaskContext(context);
 
             onTestFailed(() => {
