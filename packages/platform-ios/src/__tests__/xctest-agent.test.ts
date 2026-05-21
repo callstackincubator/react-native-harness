@@ -8,12 +8,12 @@ import { fileURLToPath } from 'node:url';
 
 const mocks = vi.hoisted(() => ({
   activeAgentStops: [] as Array<() => void>,
-  configurePermissions: vi.fn(async () => ({ autoAcceptPermissions: true })),
+  configurePermissions: vi.fn(async () => ({ permissionPromptPolicy: 'grant-all' })),
   disposeClient: vi.fn(async () => undefined),
   disposeTransport: vi.fn(async () => undefined),
   health: vi.fn(async () => ({
     permissions: {
-      autoAcceptPermissions: false,
+      permissionPromptPolicy: 'disabled',
     },
     status: 'ok',
   })),
@@ -409,14 +409,14 @@ describe('xctest-agent orchestration', () => {
           getLaunchEnvironment: () => ({
             HARNESS_XCTEST_AGENT_MODE: 'test',
           }),
-          updateConfiguration: (configuration) => ({
-            ...configuration,
-            permissions: {
-              ...configuration.permissions,
-              autoAcceptPermissions: true,
-            },
-          }),
-        },
+            updateConfiguration: (configuration) => ({
+              ...configuration,
+              permissions: {
+                ...configuration.permissions,
+                permissionPromptPolicy: 'grant-all',
+              },
+            }),
+          },
       ],
     });
 
@@ -443,7 +443,7 @@ describe('xctest-agent orchestration', () => {
     });
     expect(mocks.health).toHaveBeenCalledTimes(1);
     expect(mocks.configurePermissions).toHaveBeenCalledWith({
-      autoAcceptPermissions: true,
+      permissionPromptPolicy: 'grant-all',
     });
     const logDirectories = fs.readdirSync(
       path.join(tempProjectRoot, '.harness', 'logs')
@@ -702,6 +702,7 @@ describe('xctest-agent orchestration', () => {
 
     expect(mocks.kill).not.toHaveBeenCalled();
   });
+
 });
 
 const rmBuildRoot = () => {

@@ -1,3 +1,5 @@
+import type { DeviceStateController } from './device-state.js';
+
 export type AppCrashDetails = {
   source?: 'polling' | 'logs' | 'bridge';
   summary?: string;
@@ -109,6 +111,7 @@ export type HarnessPlatformRunner = {
   stopApp: () => Promise<void>;
   dispose: () => Promise<void>;
   isAppRunning: () => Promise<boolean>;
+  deviceState?: DeviceStateController;
   createAppMonitor: (options?: CreateAppMonitorOptions) => AppMonitor;
   getCrashDetails?: (
     options: CrashDetailsLookupOptions,

@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@react-native-harness/bridge": "workspace:*",
+    "@react-native-harness/platforms": "workspace:*",
     "@vitest/expect": "4.0.16",
     "@vitest/spy": "4.0.16",
     "chai": "^6.2.2",

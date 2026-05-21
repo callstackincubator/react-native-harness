@@ -226,6 +226,26 @@ const waitForAppReady = async (
   });
 };
 
+const resetOutstandingDevicePermissions = async (
+  platformInstance: HarnessPlatformRunner,
+): Promise<void> => {
+  await platformInstance.deviceState?.permissions.resetOutstanding();
+};
+
+const applyConfiguredDevicePermissions = async (
+  platformInstance: HarnessPlatformRunner,
+  runtimeConfig: HarnessConfig,
+): Promise<void> => {
+  if (!runtimeConfig.permissions) {
+    return;
+  }
+
+  await platformInstance.deviceState?.permissions.apply({
+    kind: 'permission-all',
+    decision: 'grant',
+  });
+};
+
 const getDefaultResourceLockKey = (platform: HarnessPlatform): string =>
   `${platform.platformId}:${platform.name}`;
 
@@ -412,7 +432,11 @@ export const createHarnessSession = async (
     const getCurrentRunId = () => currentRun?.runId;
     const clientLogCollector = createClientLogCollector();
 
-    const context: HarnessContext = { platform };
+    let platformInstance!: HarnessPlatformRunner;
+    const context: HarnessContext = {
+      platform,
+      getDeviceState: () => platformInstance?.deviceState,
+    };
 
     const bridge = await createHarnessBridge({
       noServer: true,
@@ -422,7 +446,6 @@ export const createHarnessSession = async (
     sessionLogger.debug('bridge initialized on Metro websocket path %s', HARNESS_BRIDGE_PATH);
 
     let metroInstance: MetroInstance;
-    let platformInstance: HarnessPlatformRunner;
 
     try {
       [metroInstance, platformInstance] = await Promise.all([
@@ -527,6 +550,7 @@ export const createHarnessSession = async (
     const disposeOnce = async (reason: 'normal' | 'abort' | 'error') => {
       sessionLogger.debug('disposing session (reason=%s)', reason);
       let hookError: unknown;
+      let permissionResetError: unknown;
 
       try {
         await hooks.drain();
@@ -576,6 +600,12 @@ export const createHarnessSession = async (
 
       let cleanupError: unknown;
       try {
+        await resetOutstandingDevicePermissions(platformInstance);
+      } catch (error) {
+        permissionResetError = error;
+      }
+
+      try {
         await Promise.all([
           crashMonitor.dispose(),
           bridge.dispose(),
@@ -593,6 +623,7 @@ export const createHarnessSession = async (
       sessionLogger.debug('session resources disposed');
 
       if (hookError) throw hookError;
+      if (permissionResetError) throw permissionResetError;
       if (cleanupError) throw cleanupError;
     };
 
@@ -654,6 +685,12 @@ export const createHarnessSession = async (
         testFilePath ?? 'n/a',
         testFilePath ? 'stop-and-ensure-ready' : 'direct-restart',
       );
+
+      await resetOutstandingDevicePermissions(platformInstance);
+
+      if (testFilePath) {
+        await applyConfiguredDevicePermissions(platformInstance, runtimeConfig);
+      }
 
       if (testFilePath) {
         await platformInstance.stopApp();

@@ -4,6 +4,9 @@
   "include": [],
   "references": [
     {
+      "path": "../platforms"
+    },
+    {
       "path": "../bridge"
     },
     {

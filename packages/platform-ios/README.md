@@ -47,6 +47,23 @@ const config = {
 export default config;
 ```
 
+## Permissions
+
+Apple runners support the shared `device.permissions` fixture API with platform-specific behavior.
+
+```ts
+import { device } from 'react-native-harness';
+
+await device.permissions.grant('photos');
+await device.permissions.resetAll();
+```
+
+- iOS simulator: supported permissions are applied through `xcrun simctl privacy`.
+- iOS physical device: named permission calls warn and no-op; `grantAll()`, `denyAll()`, and `resetAll()` configure XCTest Agent prompt handling for future prompts.
+- iOS simulator `camera` is intentionally unsupported in v1.
+
+Existing config-driven `permissions: true` support is routed through the same controller as `grantAll()`.
+
 ## API
 
 ### `applePlatform(config)`

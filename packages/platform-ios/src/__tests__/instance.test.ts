@@ -13,6 +13,25 @@ import { HarnessAppPathError } from '../errors.js';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createDeviceXCTestAgentTransport } from '../xctest-agent-transport-device.js';
+
+vi.mock('../xctest-agent-transport-device.js', () => ({
+  createDeviceXCTestAgentTransport: vi.fn(() => ({
+    dispose: vi.fn(async () => undefined),
+    request: vi.fn(),
+  })),
+}));
+
+const xctestAgentClientMocks = vi.hoisted(() => ({
+  configurePermissions: vi.fn(async () => ({ permissionPromptPolicy: 'grant-all' })),
+  createXCTestAgentClient: vi.fn(),
+  dispose: vi.fn(async () => undefined),
+  getPermissionsConfig: vi.fn(async () => ({ permissionPromptPolicy: 'disabled' })),
+}));
+
+vi.mock('../xctest-agent-client.js', () => ({
+  createXCTestAgentClient: xctestAgentClientMocks.createXCTestAgentClient,
+}));
 
 const xctestAgentMocks = vi.hoisted(() => ({
   createXCTestAgentController: vi.fn(),
@@ -50,6 +69,15 @@ describe('iOS platform instance dependency validation', () => {
       ensureStarted: xctestAgentMocks.ensureStarted,
       stop: vi.fn(async () => undefined),
       dispose: xctestAgentMocks.dispose,
+    });
+    xctestAgentClientMocks.createXCTestAgentClient.mockReturnValue({
+      configurePermissions: xctestAgentClientMocks.configurePermissions,
+      dispose: xctestAgentClientMocks.dispose,
+      getPermissionsConfig: xctestAgentClientMocks.getPermissionsConfig,
+      health: vi.fn(async () => ({
+        permissions: { permissionPromptPolicy: 'disabled' },
+        status: 'ok',
+      })),
     });
   });
 
@@ -98,6 +126,40 @@ describe('iOS platform instance dependency validation', () => {
       init,
     );
 
+    expect(xctestAgentMocks.createXCTestAgentController).not.toHaveBeenCalled();
+  });
+
+  it('grants supported simulator permissions via simctl privacy when permissions are enabled', async () => {
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+    const setPrivacyPermission = vi
+      .spyOn(simctl, 'setPrivacyPermission')
+      .mockResolvedValue(undefined);
+
+    await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfigWithPermissionsEnabled,
+      init,
+    );
+
+    expect(setPrivacyPermission).toHaveBeenCalledWith({
+      bundleId: 'com.harnessplayground',
+      decision: 'grant',
+      service: 'all',
+      udid: 'sim-udid',
+    });
     expect(xctestAgentMocks.createXCTestAgentController).not.toHaveBeenCalled();
   });
 
@@ -157,6 +219,53 @@ describe('iOS platform instance dependency validation', () => {
     );
 
     expect(xctestAgentMocks.createXCTestAgentController).not.toHaveBeenCalled();
+  });
+
+  it('lazily starts the physical-device XCTest agent when permissions are enabled', async () => {
+    vi.spyOn(devicectl, 'getDevice').mockResolvedValue({
+      identifier: 'physical-device-id',
+      deviceProperties: {
+        name: 'My iPhone',
+        osVersionNumber: '18.0',
+      },
+      hardwareProperties: {
+        marketingName: 'iPhone',
+        productType: 'iPhone17,1',
+        udid: '00008140-001600222422201C',
+      },
+    });
+    vi.spyOn(devicectl, 'isAppInstalled').mockResolvedValue(true);
+
+    await getApplePhysicalDevicePlatformInstance(
+      {
+        name: 'ios-device',
+        device: {
+          type: 'physical',
+          name: 'My iPhone',
+          codeSign: { teamId: 'TESTTEAM01' },
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfigWithPermissionsEnabled,
+    );
+
+    expect(xctestAgentMocks.createXCTestAgentController).toHaveBeenCalledWith({
+      appBundleId: 'com.harnessplayground',
+      port: 49200,
+      target: {
+        kind: 'device',
+        id: '00008140-001600222422201C',
+        codeSign: { teamId: 'TESTTEAM01' },
+      },
+    });
+    expect(xctestAgentMocks.ensureStarted).toHaveBeenCalledTimes(1);
+    expect(createDeviceXCTestAgentTransport).toHaveBeenCalledWith({
+      deviceId: 'physical-device-id',
+      port: 49200,
+    });
+    expect(xctestAgentClientMocks.configurePermissions).toHaveBeenCalledWith({
+      permissionPromptPolicy: 'grant-all',
+    });
   });
 
   it('skips physical crash monitoring setup when native crash detection is disabled', async () => {

@@ -27,6 +27,12 @@ export type HarnessHandle = {
   reportReady: (device: DeviceDescriptor) => void;
   /** Forward a test or bundler event to the CLI. */
   emitEvent: (event: BridgeEvents) => void;
+  applyDevicePermission: (
+    command: Parameters<BridgeServerFunctions['device.permissions.apply']>[0],
+  ) => ReturnType<BridgeServerFunctions['device.permissions.apply']>;
+  revertDevicePermission: (
+    mutationId: string,
+  ) => ReturnType<BridgeServerFunctions['device.permissions.revert']>;
   /** Send a screenshot to the CLI and receive a file reference for snapshot comparison. */
   transferScreenshot: (
     data: Uint8Array,
@@ -96,6 +102,9 @@ export const connectToHarness = (
       resolve({
         reportReady: (device) => void rpc.reportReady(device),
         emitEvent: (event) => void rpc.emitEvent(event.type, event),
+        applyDevicePermission: (command) => rpc['device.permissions.apply'](command),
+        revertDevicePermission: (mutationId) =>
+          rpc['device.permissions.revert'](mutationId),
         transferScreenshot: async (data, metadata) => {
           const transferId = generateTransferId();
           ws.send(createBinaryFrame(transferId, data));

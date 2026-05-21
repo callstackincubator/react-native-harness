@@ -8,14 +8,18 @@ import type { HarnessBridge } from '@react-native-harness/bridge/server';
 import { createHarnessBridge } from '@react-native-harness/bridge/server';
 import { connectToHarness } from '@react-native-harness/bridge/client';
 import type { HarnessContext } from '@react-native-harness/bridge';
+import type { DeviceStateController } from '@react-native-harness/platforms';
 
-const makeContext = (): HarnessContext => ({
+const makeContext = (
+  deviceState?: DeviceStateController,
+): HarnessContext => ({
   platform: {
     name: 'ios',
     platformId: 'ios',
     runner: '/dev/null',
     config: {},
   },
+  getDeviceState: () => deviceState,
 });
 
 // ---------------------------------------------------------------------------
@@ -149,6 +153,64 @@ describe('bridge: createHarnessBridge + connectToHarness', () => {
 
       expect(runTestsCb).toHaveBeenCalledWith('example.ts', expect.objectContaining({ runner: '/runner.js' }));
       expect(result.tests[0].name).toBe('passes');
+      handle.disconnect();
+    });
+  });
+
+  describe('device permissions RPCs', () => {
+    it('applies permission mutations through the host-side controller', async () => {
+      const apply = vi.fn(async () => ({
+        mutation: {
+          id: 'mutation-1',
+          revert: vi.fn(async () => undefined),
+        },
+      }));
+      const revert = vi.fn(async () => undefined);
+
+      bridge.dispose();
+      bridge = await createHarnessBridge({
+        port: 0,
+        context: makeContext({
+          permissions: {
+            apply,
+            revert,
+            resetOutstanding: vi.fn(async () => undefined),
+          },
+        }),
+      });
+      bridgePort = (bridge.ws.address() as { port: number }).port;
+
+      const handle = await connect();
+
+      await expect(
+        handle.applyDevicePermission({
+          kind: 'permission',
+          permission: 'microphone',
+          decision: 'grant',
+        }),
+      ).resolves.toEqual({ mutationId: 'mutation-1' });
+
+      await handle.revertDevicePermission('mutation-1');
+
+      expect(apply).toHaveBeenCalledWith({
+        kind: 'permission',
+        permission: 'microphone',
+        decision: 'grant',
+      });
+      expect(revert).toHaveBeenCalledWith('mutation-1');
+      handle.disconnect();
+    });
+
+    it('returns a clear error when no device-state controller exists', async () => {
+      const handle = await connect();
+
+      await expect(
+        handle.applyDevicePermission({
+          kind: 'permission-all',
+          decision: 'grant',
+        }),
+      ).rejects.toThrow('device.permissions is not supported by runner "ios".');
+
       handle.disconnect();
     });
   });

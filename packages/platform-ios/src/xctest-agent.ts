@@ -718,7 +718,7 @@ export const buildXCTestAgent = async (
 const getDefaultRuntimeConfiguration = (): XCTestAgentRuntimeConfiguration => {
   return {
     permissions: {
-      autoAcceptPermissions: false,
+      permissionPromptPolicy: 'disabled',
     },
   };
 };

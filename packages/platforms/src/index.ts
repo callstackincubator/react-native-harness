@@ -1,4 +1,12 @@
 export type {
+  DeviceStateApplyResult,
+  DevicePermissionCommand,
+  DeviceStateController,
+  DeviceStateMutation,
+  PermissionDecision,
+  PermissionName,
+} from './device-state.js';
+export type {
   HarnessCliCommand,
   HarnessCliCommandContext,
   HarnessCliModule,

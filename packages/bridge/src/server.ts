@@ -159,6 +159,27 @@ export const createHarnessBridge = async (
       emitEvent: (_, data) => {
         emitter.emit('event', data);
       },
+      'device.permissions.apply': async (command) => {
+        const deviceState = context.getDeviceState();
+        if (!deviceState) {
+          throw new Error(
+            `device.permissions is not supported by runner "${context.platform.name}".`,
+          );
+        }
+
+        const result = await deviceState.permissions.apply(command);
+        return { mutationId: result.mutation?.id, warning: result.warning };
+      },
+      'device.permissions.revert': async (mutationId) => {
+        const deviceState = context.getDeviceState();
+        if (!deviceState) {
+          throw new Error(
+            `device.permissions is not supported by runner "${context.platform.name}".`,
+          );
+        }
+
+        await deviceState.permissions.revert(mutationId);
+      },
       'device.screenshot.receive': (ref) => receiveScreenshot(binaryStore, ref),
       'test.matchImageSnapshot': (screenshot, testPath, opts) =>
         matchImageSnapshot(screenshot, testPath, opts, context.platform.name),
@@ -201,7 +222,6 @@ export const createHarnessBridge = async (
             functionName,
             args,
           );
-          throw error;
         },
         onTimeoutError: (fn, args) => {
           throw new DeviceNotRespondingError(fn, args);
