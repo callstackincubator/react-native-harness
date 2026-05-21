@@ -2,6 +2,19 @@
   "name": "@react-native-harness/playground",
   "version": "0.0.1",
   "private": true,
+  "codegenConfig": {
+    "name": "PlaygroundCrashSpec",
+    "type": "modules",
+    "jsSrcsDir": "src/specs",
+    "android": {
+      "javaPackageName": "com.harnessplayground"
+    },
+    "ios": {
+      "modulesProvider": {
+        "PlaygroundCrash": "PlaygroundCrash"
+      }
+    }
+  },
   "scripts": {
     "test:harness": "jest --selectProjects react-native-harness"
   },

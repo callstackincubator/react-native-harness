@@ -75,11 +75,43 @@ const configureAndroidRuntime = async (
   await Promise.all([
     adb.reversePort(adbId, metroPort),
     adb.reversePort(adbId, 8080),
-    adb.setHideErrorDialogs(adbId, true),
+    setHideErrorDialogsBestEffort(adbId, true),
     applyHarnessDebugHttpHost(adbId, config.bundleId, `localhost:${metroPort}`),
   ]);
 
   return adb.getAppUid(adbId, config.bundleId);
+};
+
+const setHideErrorDialogsBestEffort = async (
+  adbId: string,
+  hide: boolean,
+): Promise<void> => {
+  try {
+    await adb.setHideErrorDialogs(adbId, hide);
+  } catch (error) {
+    androidInstanceLogger.warn(
+      'failed to %s Android crash dialogs on %s: %s',
+      hide ? 'hide' : 'restore',
+      adbId,
+      error,
+    );
+  }
+};
+
+const grantPermissionsBestEffort = async (
+  adbId: string,
+  bundleId: string,
+): Promise<void> => {
+  try {
+    await adb.grantPermissions(adbId, bundleId);
+  } catch (error) {
+    androidInstanceLogger.warn(
+      'failed to grant Android permissions for %s on %s: %s',
+      bundleId,
+      adbId,
+      error,
+    );
+  }
 };
 
 const startAndWaitForBoot = async ({
@@ -270,7 +302,7 @@ export const getAndroidEmulatorPlatformInstance = async (
   const appUid = await configureAndroidRuntime(adbId, config, harnessConfig);
 
   if (permissionsEnabled) {
-    await adb.grantPermissions(adbId, config.bundleId);
+    await grantPermissionsBestEffort(adbId, config.bundleId);
   }
 
   return {
@@ -299,7 +331,7 @@ export const getAndroidEmulatorPlatformInstance = async (
     dispose: async () => {
       await adb.stopApp(adbId, config.bundleId);
       await clearHarnessDebugHttpHost(adbId, config.bundleId);
-      await adb.setHideErrorDialogs(adbId, false);
+      await setHideErrorDialogsBestEffort(adbId, false);
 
       if (startedByHarness) {
         logger.info('Shutting down Android emulator %s...', emulatorName);
@@ -352,7 +384,7 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
   const appUid = await configureAndroidRuntime(adbId, config, harnessConfig);
 
   if (permissionsEnabled) {
-    await adb.grantPermissions(adbId, config.bundleId);
+    await grantPermissionsBestEffort(adbId, config.bundleId);
   }
 
   return {
@@ -381,7 +413,7 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
     dispose: async () => {
       await adb.stopApp(adbId, config.bundleId);
       await clearHarnessDebugHttpHost(adbId, config.bundleId);
-      await adb.setHideErrorDialogs(adbId, false);
+      await setHideErrorDialogsBestEffort(adbId, false);
     },
     isAppRunning: async () => {
       return await adb.isAppRunning(adbId, config.bundleId);
@@ -397,6 +429,7 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
         appUid,
         isAppRunning: () => adb.isAppRunning(adbId, config.bundleId),
         crashArtifactWriter: options?.crashArtifactWriter,
+        eventReporter: options?.eventReporter,
       });
     },
   };

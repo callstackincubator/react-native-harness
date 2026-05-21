@@ -31,6 +31,7 @@ const PROCESS_POLL_INTERVAL_MS = 250;
 const POST_LAUNCH_CRASH_SWEEP_DELAY_MS = 1000;
 const RECENT_LAUNCH_WINDOW_MS = 5000;
 const SUSPICION_WINDOW_MS = 3000;
+const CRASH_ARTIFACT_MIN_OCCURRED_AT_TOLERANCE_MS = 2000;
 
 type TimedLogLine = {
   line: string;
@@ -65,15 +66,17 @@ const getSignal = (line: string) => {
 
 const getProcessName = (line: string, processNames: string[]) =>
   processNames.find((processName) =>
-    new RegExp(`\\b${escapeRegExp(processName)}\\b`).test(line),
+    new RegExp(`\\b${escapeRegExp(processName)}\\b`).test(line)
   );
 
 const getPid = (line: string, processNames: string[]) => {
   for (const processName of processNames) {
     const match = line.match(
       new RegExp(
-        `\\b${escapeRegExp(processName)}(?:\\([^)]*\\))?\\[(\\d+)(?::[^\\]]+)?\\]`,
-      ),
+        `\\b${escapeRegExp(
+          processName
+        )}(?:\\([^)]*\\))?\\[(\\d+)(?::[^\\]]+)?\\]`
+      )
     );
 
     if (match) {
@@ -92,19 +95,17 @@ const getPid = (line: string, processNames: string[]) => {
 
 const isRelevantProcessLine = (line: string, processNames: string[]) =>
   processNames.some((processName) =>
-    new RegExp(`\\b${escapeRegExp(processName)}(?:\\[|\\b)`).test(line),
+    new RegExp(`\\b${escapeRegExp(processName)}(?:\\[|\\b)`).test(line)
   );
 
 const isRelevantProcessLogLine = (line: string, processNames: string[]) =>
   processNames.some((processName) =>
-    new RegExp(`\\b${escapeRegExp(processName)}(?:\\([^)]*\\))?\\[`).test(
-      line,
-    ),
+    new RegExp(`\\b${escapeRegExp(processName)}(?:\\([^)]*\\))?\\[`).test(line)
   );
 
 const isCrashSignal = (line: string) =>
   /uncaught exception|terminating app due to|fatal error|EXC_[A-Z_]+|termination reason|watchdog/i.test(
-    line,
+    line
   ) || /\bSIG[A-Z]{2,}\b/.test(line);
 
 const classifyIosCrashKind = (line: string): AppCrashDetails['kind'] => {
@@ -112,7 +113,11 @@ const classifyIosCrashKind = (line: string): AppCrashDetails['kind'] => {
     return 'watchdog';
   }
 
-  if (/EXC_[A-Z_]+|SIG[A-Z]+|fatal error|uncaught exception|terminating app due to/i.test(line)) {
+  if (
+    /EXC_[A-Z_]+|SIG[A-Z]+|fatal error|uncaught exception|terminating app due to/i.test(
+      line
+    )
+  ) {
     return 'native-crash';
   }
 
@@ -181,9 +186,10 @@ const createAppMonitorBase = () => {
   let recentCrashArtifacts: IosCrashArtifact[] = [];
 
   const recordLogLine = (line: string) => {
-    recentLogLines = [...recentLogLines, { line, occurredAt: Date.now() }].slice(
-      -MAX_RECENT_LOG_LINES,
-    );
+    recentLogLines = [
+      ...recentLogLines,
+      { line, occurredAt: Date.now() },
+    ].slice(-MAX_RECENT_LOG_LINES);
   };
 
   const recordCrashArtifact = (details: AppCrashDetails) => {
@@ -197,24 +203,24 @@ const createAppMonitorBase = () => {
   };
 
   const getLatestCrashArtifact = (
-    options: CrashDetailsLookupOptions,
+    options: CrashDetailsLookupOptions
   ): AppCrashDetails | null => {
     const matchingByPid = options.pid
       ? recentCrashArtifacts.filter((artifact) => artifact.pid === options.pid)
       : [];
     const matchingByProcess = options.processName
       ? recentCrashArtifacts.filter(
-          (artifact) => artifact.processName === options.processName,
+          (artifact) => artifact.processName === options.processName
         )
       : [];
     const candidates =
       matchingByPid.length > 0
         ? matchingByPid
         : matchingByProcess.length > 0
-          ? matchingByProcess
-          : recentCrashArtifacts;
+        ? matchingByProcess
+        : recentCrashArtifacts;
     const preferredCandidates = candidates.filter(
-      (artifact) => artifact.artifactType === 'ios-crash-report',
+      (artifact) => artifact.artifactType === 'ios-crash-report'
     );
     const prioritizedCandidates =
       preferredCandidates.length > 0 ? preferredCandidates : candidates;
@@ -223,7 +229,7 @@ const createAppMonitorBase = () => {
       [...prioritizedCandidates].sort(
         (left, right) =>
           Math.abs(left.occurredAt - options.occurredAt) -
-          Math.abs(right.occurredAt - options.occurredAt),
+          Math.abs(right.occurredAt - options.occurredAt)
       )[0] ?? null
     );
   };
@@ -244,7 +250,7 @@ const createAppMonitorBase = () => {
 
 const mergeCrashDetails = (
   existing?: AppCrashDetails,
-  incoming?: AppCrashDetails | null,
+  incoming?: AppCrashDetails | null
 ): AppCrashDetails | undefined => {
   if (!existing) {
     return incoming ?? undefined;
@@ -305,7 +311,7 @@ const mergeNativeCrashDetails = ({
 const normalizeCrashDetails = (
   details: AppCrashDetails | null | undefined,
   platform: 'ios-simulator' | 'ios-device',
-  launchId?: string,
+  launchId?: string
 ): AppCrashDetails | undefined => {
   if (!details) {
     return undefined;
@@ -338,7 +344,7 @@ const getRecentLogBlock = ({
   occurredAt: number;
 }) => {
   const nearbyLines = recentLogLines.filter(
-    (line) => Math.abs(line.occurredAt - occurredAt) <= 1000,
+    (line) => Math.abs(line.occurredAt - occurredAt) <= 1000
   );
 
   return nearbyLines.map((line) => line.line);
@@ -393,7 +399,7 @@ const createCrashDetailsLookup = ({
 }) => {
   return async (options: CrashDetailsLookupOptions) => {
     await new Promise((resolve) =>
-      setTimeout(resolve, CRASH_ARTIFACT_SETTLE_DELAY_MS),
+      setTimeout(resolve, CRASH_ARTIFACT_SETTLE_DELAY_MS)
     );
 
     const artifact = await waitForCrashArtifact({
@@ -427,7 +433,7 @@ const createCrashDetailsLookup = ({
             : artifact.confidence,
       },
       platform,
-      getCurrentLaunchId(),
+      getCurrentLaunchId()
     );
 
     if (!normalizedArtifact) {
@@ -499,7 +505,7 @@ const createIosMonitorRuntime = ({
   platform: 'ios-simulator' | 'ios-device';
   targetIdentifier: string;
   resolveCrashDetails: (
-    options: CrashDetailsLookupOptions,
+    options: CrashDetailsLookupOptions
   ) => Promise<AppCrashDetails | null>;
   eventReporter?: AppMonitorReporter;
   onReset?: () => void;
@@ -512,6 +518,7 @@ const createIosMonitorRuntime = ({
   let controlledStop = false;
   let startedReported = false;
   let currentLaunchId: string | undefined;
+  let launchRequestedAt: number | undefined;
   let launchCompletedAt: number | undefined;
   let currentTestFilePath = '';
   let currentPhase: AppLifecyclePhase = 'startup';
@@ -535,7 +542,7 @@ const createIosMonitorRuntime = ({
     const normalizedDetails = normalizeCrashDetails(
       details,
       platform,
-      currentLaunchId,
+      currentLaunchId
     );
 
     return {
@@ -598,7 +605,7 @@ const createIosMonitorRuntime = ({
     const normalizedDetails = normalizeCrashDetails(
       details,
       platform,
-      currentLaunchId,
+      currentLaunchId
     );
 
     if (!normalizedDetails) {
@@ -610,14 +617,14 @@ const createIosMonitorRuntime = ({
       details:
         mergeCrashDetails(
           hasRecentSuspicion() ? pendingCrash?.details : undefined,
-          normalizedDetails,
+          normalizedDetails
         ) ?? normalizedDetails,
     };
   };
 
   const confirmCrash = async (
     details?: AppCrashDetails,
-    fallbackSummary?: string,
+    fallbackSummary?: string
   ) => {
     if (disposed || !monitoring || resolvingCrash || crashReported) {
       return;
@@ -628,23 +635,33 @@ const createIosMonitorRuntime = ({
 
     const initialDetails = mergeCrashDetails(
       pendingCrash?.details,
-      normalizeCrashDetails(details, platform, currentLaunchId),
+      normalizeCrashDetails(details, platform, currentLaunchId)
     );
 
+    reportEvent({
+      type: 'app:crash-confirmed',
+      ...createReportedDetails(initialDetails),
+    });
+
+    crashReported = true;
+    pendingCrash = undefined;
+
     try {
-      const enrichedDetails = await resolveCrashDetails({
-        processName: initialDetails?.processName,
-        pid: initialDetails?.pid,
-        occurredAt: initialDetails?.occurredAt ?? Date.now(),
-      });
+      let enrichedDetails: AppCrashDetails | null = null;
 
-       reportEvent({
-        type: 'app:crash-confirmed',
-        ...createReportedDetails(initialDetails),
-      });
-
-      crashReported = true;
-      pendingCrash = undefined;
+      try {
+        enrichedDetails = await resolveCrashDetails({
+          processName: initialDetails?.processName,
+          pid: initialDetails?.pid,
+          occurredAt: initialDetails?.occurredAt ?? Date.now(),
+        });
+      } catch (error) {
+        iosAppMonitorLogger.debug(
+          'iOS crash artifact collection failed',
+          error
+        );
+        reportWarning('iOS crash artifact collection failed', initialDetails);
+      }
 
       const mergedDetails = mergeNativeCrashDetails({
         phase: currentPhase,
@@ -652,7 +669,7 @@ const createIosMonitorRuntime = ({
         enriched: normalizeCrashDetails(
           enrichedDetails,
           platform,
-          currentLaunchId,
+          currentLaunchId
         ),
         fallbackSummary,
       });
@@ -665,12 +682,7 @@ const createIosMonitorRuntime = ({
         });
       }
 
-      notifyCrash(
-        new NativeCrashError(
-          currentTestFilePath,
-          mergedDetails,
-        ),
-      );
+      notifyCrash(new NativeCrashError(currentTestFilePath, mergedDetails));
     } finally {
       resolvingCrash = false;
     }
@@ -715,7 +727,7 @@ const createIosMonitorRuntime = ({
     const normalizedDetails = normalizeCrashDetails(
       details,
       platform,
-      currentLaunchId,
+      currentLaunchId
     );
 
     alive = false;
@@ -730,7 +742,14 @@ const createIosMonitorRuntime = ({
       return;
     }
 
-    if (!hasRecentSuspicion() && !isLaunchRecent()) {
+    const hasActiveExecutionWatch =
+      currentPhase === 'execution' && watchers.size > 0;
+
+    if (
+      !hasActiveExecutionWatch &&
+      !hasRecentSuspicion() &&
+      !isLaunchRecent()
+    ) {
       return;
     }
 
@@ -740,6 +759,7 @@ const createIosMonitorRuntime = ({
 
   const launchRequested = (event: { launchId: string }) => {
     currentLaunchId = event.launchId;
+    launchRequestedAt = Date.now();
     launchCompletedAt = undefined;
     alive = false;
     startedReported = false;
@@ -757,6 +777,7 @@ const createIosMonitorRuntime = ({
   const launchFailed = () => {
     alive = false;
     startedReported = false;
+    launchRequestedAt = undefined;
     launchCompletedAt = undefined;
     clearCrashState();
   };
@@ -798,6 +819,7 @@ const createIosMonitorRuntime = ({
     controlledStop = false;
     startedReported = false;
     currentLaunchId = undefined;
+    launchRequestedAt = undefined;
     launchCompletedAt = undefined;
     currentTestFilePath = '';
     currentPhase = 'startup';
@@ -813,6 +835,7 @@ const createIosMonitorRuntime = ({
     controlledStop = false;
     startedReported = false;
     currentLaunchId = undefined;
+    launchRequestedAt = undefined;
     launchCompletedAt = undefined;
     watchers.clear();
     clearCrashState();
@@ -836,7 +859,18 @@ const createIosMonitorRuntime = ({
     isControlledStop: () => controlledStop,
     isLaunchRecent,
     getCurrentLaunchId: () => currentLaunchId,
-    getLaunchCompletedAt: () => launchCompletedAt,
+    getArtifactMinOccurredAt: () => {
+      const minOccurredAt = launchRequestedAt ?? launchCompletedAt;
+
+      if (minOccurredAt === undefined) {
+        return undefined;
+      }
+
+      return Math.max(
+        0,
+        minOccurredAt - CRASH_ARTIFACT_MIN_OCCURRED_AT_TOLERANCE_MS
+      );
+    },
     reportWarning,
   };
 };
@@ -872,7 +906,8 @@ export const createIosSimulatorAppMonitor = ({
       platform: 'ios-simulator',
       bundleId,
       getProcessNames: () => processNames,
-      getMinOccurredAt: () => runtime.getLaunchCompletedAt() ?? monitorStartedAt,
+      getMinOccurredAt: () =>
+        runtime.getArtifactMinOccurredAt() ?? monitorStartedAt,
       getCurrentLaunchId: () => runtime.getCurrentLaunchId(),
       crashArtifactWriter,
       base,
@@ -916,7 +951,7 @@ export const createIosSimulatorAppMonitor = ({
       } catch (error) {
         iosAppMonitorLogger.debug(
           'iOS simulator post-launch crash sweep failed',
-          error,
+          error
         );
       }
     }, POST_LAUNCH_CRASH_SWEEP_DELAY_MS);
@@ -930,8 +965,8 @@ export const createIosSimulatorAppMonitor = ({
       processNames = [
         ...new Set(
           [appInfo?.CFBundleExecutable, appInfo?.CFBundleName, bundleId].filter(
-            (value): value is string => Boolean(value),
-          ),
+            (value): value is string => Boolean(value)
+          )
         ),
       ];
 
@@ -966,8 +1001,13 @@ export const createIosSimulatorAppMonitor = ({
               runtime.crashSuspected(event.crashDetails);
             }
           } catch (error) {
-            iosAppMonitorLogger.debug('iOS simulator log monitor stopped', error);
-            runtime.reportWarning('iOS simulator log monitor stopped unexpectedly');
+            iosAppMonitorLogger.debug(
+              'iOS simulator log monitor stopped',
+              error
+            );
+            runtime.reportWarning(
+              'iOS simulator log monitor stopped unexpectedly'
+            );
           }
         })();
       }
@@ -999,7 +1039,7 @@ export const createIosSimulatorAppMonitor = ({
           } catch (error) {
             iosAppMonitorLogger.debug(
               'iOS simulator process polling failed',
-              error,
+              error
             );
             runtime.reportWarning('iOS simulator process polling failed');
           }
@@ -1116,7 +1156,8 @@ export const createIosDeviceAppMonitor = ({
       platform: 'ios-device',
       bundleId,
       getProcessNames: () => processNames,
-      getMinOccurredAt: () => runtime.getLaunchCompletedAt() ?? monitorStartedAt,
+      getMinOccurredAt: () =>
+        runtime.getArtifactMinOccurredAt() ?? monitorStartedAt,
       getCurrentLaunchId: () => runtime.getCurrentLaunchId(),
       crashArtifactWriter,
       base,
@@ -1162,7 +1203,7 @@ export const createIosDeviceAppMonitor = ({
       } catch (error) {
         iosAppMonitorLogger.debug(
           'iOS device post-launch crash sweep failed',
-          error,
+          error
         );
       }
     }, POST_LAUNCH_CRASH_SWEEP_DELAY_MS);
@@ -1175,7 +1216,9 @@ export const createIosDeviceAppMonitor = ({
       const appInfo = await devicectl.getAppInfo(deviceId, bundleId);
       processNames = [
         ...new Set(
-          [appInfo?.name, bundleId].filter((value): value is string => Boolean(value)),
+          [appInfo?.name, bundleId].filter((value): value is string =>
+            Boolean(value)
+          )
         ),
       ];
 
@@ -1193,7 +1236,7 @@ export const createIosDeviceAppMonitor = ({
               }
 
               return processNames.some((processName) =>
-                process.executable.includes(processName),
+                process.executable.includes(processName)
               );
             });
 
@@ -1215,7 +1258,10 @@ export const createIosDeviceAppMonitor = ({
               wasRunning = false;
             }
           } catch (error) {
-            iosAppMonitorLogger.debug('iOS device process polling failed', error);
+            iosAppMonitorLogger.debug(
+              'iOS device process polling failed',
+              error
+            );
             runtime.reportWarning('iOS device process polling failed');
           }
 
@@ -1223,20 +1269,31 @@ export const createIosDeviceAppMonitor = ({
         }
       })();
 
-      const initialArtifacts = await collectCrashArtifacts({
-        targetId: deviceId,
-        targetType: 'device',
-        bundleId,
-        processNames,
-        crashArtifactWriter,
-        minOccurredAt: monitorStartedAt,
-      });
+      try {
+        const initialArtifacts = await collectCrashArtifacts({
+          targetId: deviceId,
+          targetType: 'device',
+          bundleId,
+          processNames,
+          crashArtifactWriter,
+          minOccurredAt: monitorStartedAt,
+        });
 
-      for (const artifact of initialArtifacts) {
-        base.recordCrashArtifact(
-          normalizeCrashDetails(artifact, 'ios-device', runtime.getCurrentLaunchId()) ??
-            artifact,
+        for (const artifact of initialArtifacts) {
+          base.recordCrashArtifact(
+            normalizeCrashDetails(
+              artifact,
+              'ios-device',
+              runtime.getCurrentLaunchId()
+            ) ?? artifact
+          );
+        }
+      } catch (error) {
+        iosAppMonitorLogger.debug(
+          'iOS device initial crash artifact sweep failed',
+          error
         );
+        runtime.reportWarning('iOS device initial crash artifact sweep failed');
       }
     },
     stop: async () => {

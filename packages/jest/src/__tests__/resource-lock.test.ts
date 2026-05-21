@@ -1,16 +1,223 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createResourceLockManager } from '../resource-lock.js';
 
+type ReaddirOptions = {
+  withFileTypes?: boolean;
+};
+
+const { mockFs } = vi.hoisted(() => {
+  const directories = new Set<string>();
+  const files = new Map<string, string>();
+
+  const normalizePath = (value: unknown): string => {
+    const normalized = String(value).replace(/\/+$/g, '');
+    return normalized === '' ? '/' : normalized;
+  };
+
+  const getParentDir = (filePath: string): string => {
+    const normalized = normalizePath(filePath);
+    const index = normalized.lastIndexOf('/');
+
+    if (index <= 0) {
+      return '/';
+    }
+
+    return normalized.slice(0, index);
+  };
+
+  const createFsError = (code: string, targetPath: string) =>
+    Object.assign(new Error(`${code}: ${targetPath}`), {
+      code,
+      path: targetPath,
+    });
+
+  const ensureDirectory = (directoryPath: string): void => {
+    const normalized = normalizePath(directoryPath);
+    const parts = normalized.split('/').filter(Boolean);
+    let current = normalized.startsWith('/') ? '/' : '';
+
+    directories.add(current || '.');
+
+    for (const part of parts) {
+      current =
+        current === '/' || current === ''
+          ? `${current}${part}`
+          : `${current}/${part}`;
+      directories.add(current);
+    }
+  };
+
+  const listChildren = (directoryPath: string) => {
+    const normalized = normalizePath(directoryPath);
+    const prefix = normalized === '/' ? '/' : `${normalized}/`;
+    const childNames = new Set<string>();
+
+    for (const directory of directories) {
+      if (directory === normalized || !directory.startsWith(prefix)) {
+        continue;
+      }
+
+      const rest = directory.slice(prefix.length);
+      const [name] = rest.split('/');
+      if (name) childNames.add(name);
+    }
+
+    for (const filePath of files.keys()) {
+      if (!filePath.startsWith(prefix)) {
+        continue;
+      }
+
+      const rest = filePath.slice(prefix.length);
+      const [name] = rest.split('/');
+      if (name) childNames.add(name);
+    }
+
+    return [...childNames].sort();
+  };
+
+  const removePath = (targetPath: string, recursive: boolean): void => {
+    const normalized = normalizePath(targetPath);
+
+    files.delete(normalized);
+
+    if (recursive) {
+      const prefix = normalized === '/' ? '/' : `${normalized}/`;
+      for (const filePath of [...files.keys()]) {
+        if (filePath.startsWith(prefix)) {
+          files.delete(filePath);
+        }
+      }
+      for (const directory of [...directories]) {
+        if (directory === normalized || directory.startsWith(prefix)) {
+          directories.delete(directory);
+        }
+      }
+      return;
+    }
+
+    directories.delete(normalized);
+  };
+
+  directories.add('/');
+
+  const writeFileRaw = async (
+    filePath: unknown,
+    data: unknown,
+    options?: unknown
+  ) => {
+    const normalized = normalizePath(filePath);
+    const parentDir = getParentDir(normalized);
+
+    if (!directories.has(parentDir)) {
+      throw createFsError('ENOENT', normalized);
+    }
+
+    const flag =
+      options !== null && typeof options === 'object' && 'flag' in options
+        ? options.flag
+        : undefined;
+    if (flag === 'wx' && files.has(normalized)) {
+      throw createFsError('EEXIST', normalized);
+    }
+
+    files.set(normalized, String(data));
+  };
+
+  const api = {
+    reset: () => {
+      files.clear();
+      directories.clear();
+      directories.add('/');
+    },
+    mkdir: vi.fn(async (directoryPath: string) => {
+      ensureDirectory(directoryPath);
+    }),
+    readFile: vi.fn(async (filePath: string) => {
+      const normalized = normalizePath(filePath);
+      const value = files.get(normalized);
+
+      if (value === undefined) {
+        throw createFsError('ENOENT', normalized);
+      }
+
+      return value;
+    }),
+    writeFile: vi.fn(writeFileRaw),
+    writeFileRaw,
+    rename: vi.fn(async (source: string, destination: string) => {
+      const normalizedSource = normalizePath(source);
+      const normalizedDestination = normalizePath(destination);
+      const value = files.get(normalizedSource);
+
+      if (value === undefined) {
+        throw createFsError('ENOENT', normalizedSource);
+      }
+
+      if (!directories.has(getParentDir(normalizedDestination))) {
+        throw createFsError('ENOENT', normalizedDestination);
+      }
+
+      files.delete(normalizedSource);
+      files.set(normalizedDestination, value);
+    }),
+    rm: vi.fn(
+      async (
+        targetPath: string,
+        options?: { recursive?: boolean; force?: boolean }
+      ) => {
+        const normalized = normalizePath(targetPath);
+        const exists = files.has(normalized) || directories.has(normalized);
+
+        if (!exists && !options?.force) {
+          throw createFsError('ENOENT', normalized);
+        }
+
+        removePath(normalized, options?.recursive ?? false);
+      }
+    ),
+    readdir: vi.fn(async (directoryPath: string, options?: ReaddirOptions) => {
+      const normalized = normalizePath(directoryPath);
+
+      if (!directories.has(normalized)) {
+        throw createFsError('ENOENT', normalized);
+      }
+
+      const childNames = listChildren(normalized);
+
+      if (options?.withFileTypes) {
+        return childNames.map((name) => {
+          const childPath =
+            normalized === '/' ? `/${name}` : `${normalized}/${name}`;
+
+          return {
+            name,
+            isFile: () => files.has(childPath),
+            isDirectory: () => directories.has(childPath),
+          };
+        });
+      }
+
+      return childNames;
+    }),
+  };
+
+  return { mockFs: api };
+});
+
+vi.mock('node:fs/promises', () => ({
+  default: mockFs,
+  ...mockFs,
+}));
+
 describe('resource lock manager', () => {
   let rootDir: string;
 
-  beforeEach(async () => {
-    rootDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'react-native-harness-resource-lock-test-'),
-    );
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockFs.reset();
+    rootDir = '/tmp/react-native-harness-resource-lock-test';
   });
 
   afterEach(async () => {
@@ -27,7 +234,7 @@ describe('resource lock manager', () => {
     const order: string[] = [];
 
     const firstLease = await manager.acquire(
-      'ios:simulator:iPhone 17 Pro:26.2',
+      'ios:simulator:iPhone 17 Pro:26.2'
     );
     const secondAcquire = manager
       .acquire('ios:simulator:iPhone 17 Pro:26.2', {
@@ -134,16 +341,19 @@ describe('resource lock manager', () => {
       staleLockTimeoutMs: 200,
     });
     const key = 'ios:simulator:iPhone 17 Pro:26.2';
-    const actualWriteFile = fs.writeFile.bind(fs);
     const writeFileSpy = vi
       .spyOn(fs, 'writeFile')
       .mockImplementation(async (file, data, options) => {
         // Delay atomic temp-file writes to simulate overlapping heartbeat flushes.
-        if (typeof file === 'string' && file.startsWith(rootDir) && file.endsWith('.tmp')) {
+        if (
+          typeof file === 'string' &&
+          file.startsWith(rootDir) &&
+          file.endsWith('.tmp')
+        ) {
           await new Promise((resolve) => setTimeout(resolve, 25));
         }
 
-        return await actualWriteFile(file, data, options);
+        return await mockFs.writeFileRaw(file, data, options);
       });
 
     try {
@@ -154,20 +364,21 @@ describe('resource lock manager', () => {
       const ownerFilePath = path.join(rootDir, keyDirName, 'owner.json');
 
       const initialOwner = JSON.parse(
-        await fs.readFile(ownerFilePath, 'utf8'),
+        await fs.readFile(ownerFilePath, 'utf8')
       ) as ResourceLockOwner;
 
       await new Promise((resolve) => setTimeout(resolve, 80));
 
       for (let index = 0; index < 5; index += 1) {
         const owner = JSON.parse(
-          await fs.readFile(ownerFilePath, 'utf8'),
+          await fs.readFile(ownerFilePath, 'utf8')
         ) as ResourceLockOwner;
         expect(owner.ticketId).toBe(initialOwner.ticketId);
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
 
       await lease.release();
+      await new Promise((resolve) => setTimeout(resolve, 40));
     } finally {
       writeFileSpy.mockRestore();
     }

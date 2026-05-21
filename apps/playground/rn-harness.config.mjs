@@ -19,6 +19,9 @@ import {
 } from '@react-native-harness/platform-web';
 import { harnessLoggingPlugin } from './harness-logging-plugin.mjs';
 
+const playgroundDevelopmentTeam =
+  process.env.HARNESS_PLAYGROUND_DEVELOPMENT_TEAM;
+
 export default {
   entryPoint: './index.js',
   appRegistryComponentName: 'HarnessPlayground',
@@ -72,9 +75,12 @@ export default {
     }),
     applePlatform({
       name: 'iphone-16-pro',
-      device: applePhysicalDevice('iPhone (Szymon) (2)', {
-        codeSign: { teamId: 'BAJL5U28HC' },
-      }),
+      device: applePhysicalDevice(
+        'iPhone (Szymon) (2)',
+        playgroundDevelopmentTeam
+          ? { codeSign: { teamId: playgroundDevelopmentTeam } }
+          : undefined
+      ),
       bundleId: 'com.harnessplayground',
     }),
     applePlatform({

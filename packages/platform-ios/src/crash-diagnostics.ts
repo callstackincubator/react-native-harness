@@ -222,15 +222,38 @@ const parseCrashArtifacts = ({
 
 const collectSimulatorCrashArtifacts = async ({
   targetId,
-  ...options
+  processNames,
+  bundleId,
+  crashArtifactWriter,
+  minOccurredAt,
 }: CollectSimulatorCrashArtifactsOptions) => {
+  const hostArtifacts = collectCrashArtifactsFromDiagnosticReports({
+    targetId,
+    targetType: 'simulator',
+    processNames,
+    bundleId,
+    crashArtifactWriter,
+    minOccurredAt,
+  });
+
+  if (hostArtifacts.length > 0) {
+    return hostArtifacts;
+  }
+
   const outputDir = createTempDirectory('rn-harness-simctl-diagnose');
 
   try {
     await simctl.diagnose(targetId, outputDir);
     return parseCrashArtifacts({
       rootDir: outputDir,
-      options: { ...options, targetId, targetType: 'simulator' },
+      options: {
+        targetId,
+        targetType: 'simulator',
+        processNames,
+        bundleId,
+        crashArtifactWriter,
+        minOccurredAt,
+      },
     });
   } finally {
     fs.rmSync(outputDir, { recursive: true, force: true });
@@ -272,6 +295,14 @@ const collectCrashArtifactsFromDiagnosticReports = (
     if (
       options.minOccurredAt !== undefined &&
       parsed.occurredAt < options.minOccurredAt
+    ) {
+      continue;
+    }
+
+    if (
+      options.targetType === 'simulator' &&
+      parsed.targetId !== undefined &&
+      parsed.targetId !== options.targetId
     ) {
       continue;
     }

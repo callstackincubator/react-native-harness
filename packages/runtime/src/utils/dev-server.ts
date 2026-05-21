@@ -1,13 +1,24 @@
-import { Platform } from 'react-native';
-import getDevServer from 'react-native/Libraries/Core/Devtools/getDevServer';
+import { Platform, TurboModuleRegistry } from 'react-native';
+
+type SourceCodeModule = {
+  getConstants: () => {
+    scriptURL?: string;
+  };
+};
+
+const FALLBACK_DEV_SERVER_URL = 'http://localhost:8081/';
+
+const getScriptURL = (): string | null => {
+  const sourceCode = TurboModuleRegistry.get<SourceCodeModule>('SourceCode');
+  return sourceCode?.getConstants()?.scriptURL ?? null;
+};
 
 export const getDevServerUrl = (): string => {
   if (Platform.OS === 'web') {
-    // This is going to be the same as the current URL
-    return window.location.origin + '/';
+    return `${window.location.origin}/`;
   }
-  
-  
-  const devServer = getDevServer();
-  return devServer.url;
+
+  const scriptUrl = getScriptURL();
+  const match = scriptUrl?.match(/^https?:\/\/.*?\//);
+  return match?.[0] ?? FALLBACK_DEV_SERVER_URL;
 };
