@@ -10,11 +10,10 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { iosCrashParser } from './crash-parser.js';
 import * as devicectl from './xcrun/devicectl.js';
-import * as simctl from './xcrun/simctl.js';
 
 const crashDiagnosticsLogger = logger.child('ios-crash-diagnostics');
 
-const CRASH_ARTIFACT_WAIT_TIMEOUT_MS = 3000;
+const CRASH_ARTIFACT_WAIT_TIMEOUT_MS = 10000;
 const CRASH_ARTIFACT_POLL_INTERVAL_MS = 250;
 
 type CollectIosCrashArtifactsOptions = {
@@ -54,6 +53,13 @@ type WaitForCrashArtifactOptions = {
   recordArtifact: (artifact: AppCrashDetails) => void;
 };
 
+type CrashArtifactCollector = {
+  name: string;
+  collect: () =>
+    | Promise<DiagnosedCrashArtifact[]>
+    | DiagnosedCrashArtifact[];
+};
+
 const isCrashReportFile = (path: string) =>
   path.endsWith('.ips') || path.endsWith('.crash');
 
@@ -86,6 +92,10 @@ const createTempDirectory = (prefix: string) => {
   fs.mkdirSync(path, { recursive: true });
   return path;
 };
+
+const getDiagnosticReportsDir = () =>
+  process.env.RN_HARNESS_IOS_DIAGNOSTIC_REPORTS_DIR ??
+  join(homedir(), 'Library', 'Logs', 'DiagnosticReports');
 
 const scoreCrashArtifact = ({
   artifact,
@@ -227,7 +237,11 @@ const collectSimulatorCrashArtifacts = async ({
   crashArtifactWriter,
   minOccurredAt,
 }: CollectSimulatorCrashArtifactsOptions) => {
-  const hostArtifacts = collectCrashArtifactsFromDiagnosticReports({
+  // Do not fall back to `simctl diagnose` here. It collects broad simulator
+  // diagnostics, not just this app's crash report, and can block long enough
+  // to trip Harness/Jest timeouts on CI. Simulator crash reports are therefore
+  // best-effort from host DiagnosticReports only.
+  return collectCrashArtifactsFromDiagnosticReports({
     targetId,
     targetType: 'simulator',
     processNames,
@@ -235,40 +249,12 @@ const collectSimulatorCrashArtifacts = async ({
     crashArtifactWriter,
     minOccurredAt,
   });
-
-  if (hostArtifacts.length > 0) {
-    return hostArtifacts;
-  }
-
-  const outputDir = createTempDirectory('rn-harness-simctl-diagnose');
-
-  try {
-    await simctl.diagnose(targetId, outputDir);
-    return parseCrashArtifacts({
-      rootDir: outputDir,
-      options: {
-        targetId,
-        targetType: 'simulator',
-        processNames,
-        bundleId,
-        crashArtifactWriter,
-        minOccurredAt,
-      },
-    });
-  } finally {
-    fs.rmSync(outputDir, { recursive: true, force: true });
-  }
 };
 
 const collectCrashArtifactsFromDiagnosticReports = (
   options: CollectCrashArtifactsOptions,
 ): DiagnosedCrashArtifact[] => {
-  const diagnosticReportsDir = join(
-    homedir(),
-    'Library',
-    'Logs',
-    'DiagnosticReports',
-  );
+  const diagnosticReportsDir = getDiagnosticReportsDir();
 
   if (!fs.existsSync(diagnosticReportsDir)) {
     return [];
@@ -334,7 +320,7 @@ const collectCrashArtifactsFromDiagnosticReports = (
   });
 };
 
-const collectPhysicalCrashArtifacts = async ({
+const collectPhysicalCrashArtifactsFromDevice = async ({
   targetId,
   processNames,
   bundleId,
@@ -387,14 +373,47 @@ const collectPhysicalCrashArtifacts = async ({
     fs.rmSync(crashLogsDir, { recursive: true, force: true });
   }
 
-  return collectCrashArtifactsFromDiagnosticReports({
-    targetId,
-    targetType: 'device',
-    processNames,
-    bundleId,
-    crashArtifactWriter,
-    minOccurredAt,
-  });
+  return [];
+};
+
+const createCrashArtifactCollectors = (
+  options: CollectCrashArtifactsOptions,
+): CrashArtifactCollector[] => {
+  if (options.targetType === 'simulator') {
+    return [
+      {
+        name: 'host DiagnosticReports',
+        collect: () => collectSimulatorCrashArtifacts(options),
+      },
+    ];
+  }
+
+  return [
+    {
+      name: 'device systemCrashLogs',
+      collect: () =>
+        collectPhysicalCrashArtifactsFromDevice({
+          targetId: options.targetId,
+          targetType: 'device',
+          processNames: options.processNames,
+          bundleId: options.bundleId,
+          crashArtifactWriter: options.crashArtifactWriter,
+          minOccurredAt: options.minOccurredAt,
+        }),
+    },
+    {
+      name: 'host DiagnosticReports',
+      collect: () =>
+        collectCrashArtifactsFromDiagnosticReports({
+          targetId: options.targetId,
+          targetType: 'device',
+          processNames: options.processNames,
+          bundleId: options.bundleId,
+          crashArtifactWriter: options.crashArtifactWriter,
+          minOccurredAt: options.minOccurredAt,
+        }),
+    },
+  ];
 };
 
 export const collectCrashArtifacts = async (
@@ -407,11 +426,34 @@ export const collectCrashArtifacts = async (
     minOccurredAt: options.minOccurredAt,
   });
 
-  if (options.targetType === 'simulator') {
-    return collectSimulatorCrashArtifacts(options);
+  const results = await Promise.allSettled(
+    createCrashArtifactCollectors(options).map(async (collector) => ({
+      name: collector.name,
+      artifacts: await collector.collect(),
+    })),
+  );
+
+  const artifacts: DiagnosedCrashArtifact[] = [];
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      artifacts.push(...result.value.artifacts);
+      continue;
+    }
+
+    crashDiagnosticsLogger.debug(
+      'crash artifact collector failed',
+      result.reason,
+    );
   }
 
-  return collectPhysicalCrashArtifacts(options);
+  return artifacts.sort((left, right) => {
+    if ((right.score ?? 0) !== (left.score ?? 0)) {
+      return (right.score ?? 0) - (left.score ?? 0);
+    }
+
+    return right.occurredAt - left.occurredAt;
+  });
 };
 
 export const waitForCrashArtifact = async ({
@@ -422,34 +464,87 @@ export const waitForCrashArtifact = async ({
 }: WaitForCrashArtifactOptions): Promise<AppCrashDetails | null> => {
   const deadline = Date.now() + CRASH_ARTIFACT_WAIT_TIMEOUT_MS;
   let fallbackArtifact = getFallbackArtifact();
+  let settled = false;
 
-  while (Date.now() < deadline) {
-    const artifacts = await collectCrashArtifacts(options);
+  const waitForNextPoll = async () => {
+    const remainingMs = deadline - Date.now();
 
-    for (const artifact of artifacts) {
-      recordArtifact(artifact);
-    }
-
-    const matchingArtifact = getBestMatchingArtifact({
-      artifacts,
-      options,
-      lookup,
-    });
-
-    if (matchingArtifact) {
-      return matchingArtifact;
-    }
-
-    fallbackArtifact = getFallbackArtifact();
-
-    if (Date.now() >= deadline) {
-      return fallbackArtifact;
+    if (remainingMs <= 0) {
+      return;
     }
 
     await new Promise((resolve) =>
-      setTimeout(resolve, CRASH_ARTIFACT_POLL_INTERVAL_MS),
+      setTimeout(resolve, Math.min(CRASH_ARTIFACT_POLL_INTERVAL_MS, remainingMs)),
     );
-  }
+  };
 
-  return getFallbackArtifact() ?? fallbackArtifact;
+  const pollCollector = async (
+    collector: CrashArtifactCollector,
+  ): Promise<AppCrashDetails | null> => {
+    while (!settled && Date.now() < deadline) {
+      try {
+        const artifacts = await collector.collect();
+
+        for (const artifact of artifacts) {
+          recordArtifact(artifact);
+        }
+
+        const matchingArtifact = getBestMatchingArtifact({
+          artifacts,
+          options,
+          lookup,
+        });
+
+        if (matchingArtifact) {
+          return matchingArtifact;
+        }
+      } catch (error) {
+        crashDiagnosticsLogger.debug(
+          '%s crash artifact collector failed',
+          collector.name,
+          error,
+        );
+      }
+
+      fallbackArtifact = getFallbackArtifact();
+      await waitForNextPoll();
+    }
+
+    return null;
+  };
+
+  const collectors = createCrashArtifactCollectors(options);
+  const foundArtifact = new Promise<AppCrashDetails | null>((resolve) => {
+    let pendingCollectors = collectors.length;
+
+    for (const collector of collectors) {
+      void pollCollector(collector).then((artifact) => {
+        if (settled) {
+          return;
+        }
+
+        if (artifact) {
+          settled = true;
+          resolve(artifact);
+          return;
+        }
+
+        pendingCollectors -= 1;
+
+        if (pendingCollectors === 0) {
+          settled = true;
+          resolve(getFallbackArtifact() ?? fallbackArtifact);
+        }
+      });
+    }
+  });
+
+  const timeout = new Promise<AppCrashDetails | null>((resolve) => {
+    setTimeout(() => {
+      settled = true;
+      resolve(getFallbackArtifact() ?? fallbackArtifact);
+    }, CRASH_ARTIFACT_WAIT_TIMEOUT_MS);
+  });
+
+  return Promise.race([foundArtifact, timeout]);
 };

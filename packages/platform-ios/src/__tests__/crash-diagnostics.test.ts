@@ -1,49 +1,63 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createCrashArtifactWriter } from '@react-native-harness/tools';
-import { collectCrashArtifacts } from '../crash-diagnostics.js';
-import * as simctl from '../xcrun/simctl.js';
+import {
+  collectCrashArtifacts,
+  waitForCrashArtifact,
+} from '../crash-diagnostics.js';
 import * as devicectl from '../xcrun/devicectl.js';
 
+const writeIosIpsCrashReport = (path: string) => {
+  fs.writeFileSync(
+    path,
+    [
+      JSON.stringify({
+        app_name: 'HarnessPlayground',
+        bundleID: 'com.harnessplayground',
+        timestamp: '2026-03-12 11:35:08 +0000',
+      }),
+      JSON.stringify({
+        pid: 1234,
+        procName: 'HarnessPlayground',
+        procPath:
+          '/Users/me/Library/Developer/CoreSimulator/Devices/sim-udid/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground',
+        exception: {
+          type: 'EXC_BREAKPOINT',
+          signal: 'SIGTRAP',
+        },
+      }),
+    ].join('\n'),
+    'utf8',
+  );
+};
+
 describe('collectCrashArtifacts', () => {
+  const originalDiagnosticReportsDir =
+    process.env.RN_HARNESS_IOS_DIAGNOSTIC_REPORTS_DIR;
+  let diagnosticReportsDir: string;
+
   beforeEach(() => {
     vi.restoreAllMocks();
+    diagnosticReportsDir = fs.mkdtempSync(
+      join(tmpdir(), 'rn-harness-diagnostic-reports-'),
+    );
+    process.env.RN_HARNESS_IOS_DIAGNOSTIC_REPORTS_DIR = diagnosticReportsDir;
   });
 
-  it('collects simulator crash artifacts from simctl diagnose output', async () => {
-    const outputRoot = fs.mkdtempSync(
-      join(tmpdir(), 'rn-harness-simctl-diagnose-'),
-    );
-    const crashPath = join(outputRoot, 'HarnessPlayground.ips');
-    fs.writeFileSync(
-      crashPath,
-      [
-        JSON.stringify({
-          app_name: 'HarnessPlayground',
-          bundleID: 'com.harnessplayground',
-          timestamp: '2026-03-12 11:35:08 +0000',
-        }),
-        JSON.stringify({
-          pid: 1234,
-          procName: 'HarnessPlayground',
-          procPath:
-            '/Users/me/Library/Developer/CoreSimulator/Devices/sim-udid/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground',
-          exception: {
-            type: 'EXC_BREAKPOINT',
-            signal: 'SIGTRAP',
-          },
-        }),
-      ].join('\n'),
-      'utf8',
-    );
+  afterEach(() => {
+    if (originalDiagnosticReportsDir === undefined) {
+      delete process.env.RN_HARNESS_IOS_DIAGNOSTIC_REPORTS_DIR;
+    } else {
+      process.env.RN_HARNESS_IOS_DIAGNOSTIC_REPORTS_DIR =
+        originalDiagnosticReportsDir;
+    }
+  });
 
-    vi.spyOn(simctl, 'diagnose').mockImplementation(
-      async (_udid, outputDir) => {
-        fs.mkdirSync(outputDir, { recursive: true });
-        fs.copyFileSync(crashPath, join(outputDir, 'HarnessPlayground.ips'));
-      },
+  it('collects simulator crash artifacts from host DiagnosticReports', async () => {
+    writeIosIpsCrashReport(
+      join(diagnosticReportsDir, 'HarnessPlayground-2026-03-12-113508.ips'),
     );
 
     const artifacts = await collectCrashArtifacts({
@@ -107,43 +121,14 @@ describe('collectCrashArtifacts', () => {
   });
 
   it('persists matched crash artifacts with the provided writer', async () => {
-    const sourceRoot = fs.mkdtempSync(
-      join(tmpdir(), 'rn-harness-crash-diagnostics-'),
-    );
-    const sourcePath = join(sourceRoot, 'HarnessPlayground.ips');
-    fs.writeFileSync(
-      sourcePath,
-      [
-        JSON.stringify({
-          app_name: 'HarnessPlayground',
-          bundleID: 'com.harnessplayground',
-          timestamp: '2026-03-12 11:35:08 +0000',
-        }),
-        JSON.stringify({
-          pid: 1234,
-          procName: 'HarnessPlayground',
-          procPath:
-            '/Users/me/Library/Developer/CoreSimulator/Devices/sim-udid/data/Containers/Bundle/Application/ABC/HarnessPlayground.app/HarnessPlayground',
-          exception: {
-            type: 'EXC_BREAKPOINT',
-            signal: 'SIGTRAP',
-          },
-        }),
-      ].join('\n'),
-      'utf8',
-    );
-
-    vi.spyOn(simctl, 'diagnose').mockImplementation(
-      async (_udid, outputDir) => {
-        fs.mkdirSync(outputDir, { recursive: true });
-        fs.copyFileSync(sourcePath, join(outputDir, 'HarnessPlayground.ips'));
-      },
+    writeIosIpsCrashReport(
+      join(diagnosticReportsDir, 'HarnessPlayground-2026-03-12-113508.ips'),
     );
 
     const writer = createCrashArtifactWriter({
       runnerName: 'ios-sim',
       platformId: 'ios',
-      rootDir: join(sourceRoot, '.harness', 'crash-reports'),
+      rootDir: join(diagnosticReportsDir, '.harness', 'crash-reports'),
       runTimestamp: '2026-03-12T11-35-08-000Z',
     });
 
@@ -157,5 +142,41 @@ describe('collectCrashArtifacts', () => {
 
     expect(artifacts[0]?.artifactPath).toContain('/.harness/crash-reports/');
     expect(fs.existsSync(artifacts[0]?.artifactPath ?? '')).toBe(true);
+  });
+
+  it('returns a host crash report without waiting for device crash log lookup to finish', async () => {
+    writeIosIpsCrashReport(
+      join(diagnosticReportsDir, 'HarnessPlayground-2026-03-12-113508.ips'),
+    );
+
+    vi.spyOn(devicectl, 'listFiles').mockImplementation(
+      () =>
+        new Promise(() => {
+          // Keep the device-side collector pending so the host lookup must win.
+        }),
+    );
+
+    const artifact = await waitForCrashArtifact({
+      lookup: {
+        processName: 'HarnessPlayground',
+        pid: 1234,
+        occurredAt: Date.parse('2026-03-12T11:35:08.000Z'),
+      },
+      options: {
+        targetId: 'device-udid',
+        targetType: 'device',
+        processNames: ['HarnessPlayground'],
+        bundleId: 'com.harnessplayground',
+        minOccurredAt: Date.parse('2026-03-12T11:35:07.000Z'),
+      },
+      getFallbackArtifact: () => null,
+      recordArtifact: vi.fn(),
+    });
+
+    expect(artifact).toMatchObject({
+      processName: 'HarnessPlayground',
+      pid: 1234,
+      signal: 'SIGTRAP',
+    });
   });
 });
