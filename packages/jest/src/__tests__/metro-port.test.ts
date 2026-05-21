@@ -16,7 +16,6 @@ const createConfig = (overrides: Partial<HarnessConfig> = {}): HarnessConfig =>
     appRegistryComponentName: 'App',
     bridgeTimeout: 60_000,
     bundleStartTimeout: 60_000,
-    crashDetectionInterval: 500,
     defaultRunner: 'ios-device',
     detectNativeCrashes: true,
     disableViewFlattening: false,

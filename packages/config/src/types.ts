@@ -79,10 +79,6 @@ export const ConfigSchema = z
       ),
 
     detectNativeCrashes: z.boolean().optional().default(true),
-    crashDetectionInterval: z
-      .number()
-      .min(100, 'Crash detection interval must be at least 100ms')
-      .default(500),
 
     disableViewFlattening: z
       .boolean()

@@ -73,8 +73,20 @@ export const harnessLoggingPlugin = () => ({
         'app.exited',
         (ctx) => `runId=${ctx.runId} testFile=${ctx.testFile ?? 'n/a'}`
       ),
-      possibleCrash: logWithDetails(
-        'app.possibleCrash',
+      crashSuspected: logWithDetails(
+        'app.crashSuspected',
+        (ctx) => `runId=${ctx.runId} testFile=${ctx.testFile ?? 'n/a'}`
+      ),
+      crashConfirmed: logWithDetails(
+        'app.crashConfirmed',
+        (ctx) => `runId=${ctx.runId} testFile=${ctx.testFile ?? 'n/a'}`
+      ),
+      crashReportReady: logWithDetails(
+        'app.crashReportReady',
+        (ctx) => `runId=${ctx.runId} artifact=${ctx.artifactPath ?? 'n/a'}`
+      ),
+      monitorWarning: logWithDetails(
+        'app.monitorWarning',
         (ctx) => `runId=${ctx.runId} testFile=${ctx.testFile ?? 'n/a'}`
       ),
     },
