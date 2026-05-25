@@ -30,7 +30,7 @@ export const disableLogBoxUI = (): void => {
   harnessLogBox.addLog = noop;
   harnessLogBox.addConsoleLog = noop;
 
-  const nativeLogBox = TurboModuleRegistry.get<NativeLogBoxModule>('LogBox');
+  const nativeLogBox = TurboModuleRegistry?.get<NativeLogBoxModule>('LogBox');
   if (nativeLogBox != null) {
     nativeLogBox.show = noop;
     nativeLogBox.hide = noop;
