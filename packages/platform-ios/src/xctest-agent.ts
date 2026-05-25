@@ -996,7 +996,7 @@ export const createXCTestAgentController = (options: {
     });
 
     preparedDerivedDataPath = buildResult.derivedDataPath;
-    preparedXCTestRunFilePath = null;
+    preparedXCTestRunFilePath = buildResult.xctestrunPath ?? null;
     prepared = true;
   };
 

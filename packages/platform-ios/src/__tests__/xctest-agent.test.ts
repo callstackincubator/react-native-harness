@@ -423,11 +423,16 @@ describe('xctest-agent orchestration', () => {
     await controller.ensureStarted();
     await controller.ensureStarted();
 
+    const startCall = mocks.spawn.mock.calls.at(-1);
+    const startArgs = startCall?.[1] ?? [];
+
     expect(mocks.spawn).toHaveBeenCalledTimes(4);
     expect(mocks.spawn).toHaveBeenLastCalledWith(
       'xcodebuild',
       expect.arrayContaining([
         'test-without-building',
+        '-xctestrun',
+        expect.stringContaining('.xctestrun'),
         '-destination',
         'platform=iOS Simulator,id=sim-999',
       ]),
@@ -438,6 +443,8 @@ describe('xctest-agent orchestration', () => {
         }),
       })
     );
+    expect(startArgs).not.toContain('-project');
+    expect(startArgs).not.toContain('-scheme');
     expect(createSimulatorXCTestAgentTransport).toHaveBeenCalledWith({
       port: 49152,
     });
