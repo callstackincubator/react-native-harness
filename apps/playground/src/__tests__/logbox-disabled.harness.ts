@@ -5,7 +5,6 @@ import {
   type TurboModule,
   TurboModuleRegistry,
 } from 'react-native';
-import PlaygroundCrash from '../native/PlaygroundCrash';
 
 const HANDLED_ERROR_MARKER = 'HARNESS_LOGBOX_HANDLED_NATIVE_ERROR';
 const CONSOLE_PROBE_MARKER = 'HARNESS_LOGBOX_CONSOLE_PROBE';
@@ -40,7 +39,7 @@ describe('LogBox disabled for harness', () => {
 
   it('noops the native LogBox TurboModule when linked', () => {
     const nativeLogBox =
-      TurboModuleRegistry.get<NativeLogBoxModule>('LogBox');
+      TurboModuleRegistry?.get<NativeLogBoxModule>('LogBox');
 
     if (nativeLogBox == null) {
       return;
@@ -50,7 +49,15 @@ describe('LogBox disabled for harness', () => {
     expect(() => nativeLogBox.hide()).not.toThrow();
   });
 
-  it('surfaces handled native errors on the sync Turbo Module path', () => {
+  it('surfaces handled native errors on the sync Turbo Module path', async (context) => {
+    context.skip(
+      Platform.OS === 'web',
+      'PlaygroundCrash is a native-only TurboModule',
+    );
+
+    const { default: PlaygroundCrash } = await import(
+      '../native/PlaygroundCrash'
+    );
     const marker = `${HANDLED_ERROR_MARKER} platform=${Platform.OS}`;
 
     expect(() => PlaygroundCrash.crashHandled(marker)).toThrow(
