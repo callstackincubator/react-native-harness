@@ -3,7 +3,6 @@ import './globals.js';
 
 export { createElement } from './jsx/jsx-runtime.js';
 export { UI as ReactNativeHarness } from './ui/index.js';
-export { disableLogBoxUI, isLogBoxSuppressed } from './logbox.js';
 export * from './spy/index.js';
 export * from './expect/index.js';
 export * from './collector/index.js';
