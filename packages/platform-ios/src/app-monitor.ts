@@ -32,6 +32,7 @@ const POST_LAUNCH_CRASH_SWEEP_DELAY_MS = 1000;
 const RECENT_LAUNCH_WINDOW_MS = 5000;
 const SUSPICION_WINDOW_MS = 3000;
 const CRASH_ARTIFACT_MIN_OCCURRED_AT_TOLERANCE_MS = 2000;
+const LOG_STREAM_SHUTDOWN_TIMEOUT_MS = 1000;
 
 type TimedLogLine = {
   line: string;
@@ -471,6 +472,58 @@ const waitForPollInterval = async (signal: AbortSignal) => {
 
     signal.addEventListener('abort', onAbort, { once: true });
   });
+};
+
+const waitForTaskShutdown = async (
+  task: Promise<void> | null,
+  timeoutMs: number,
+  timeoutMessage: string
+) => {
+  if (!task) {
+    return;
+  }
+
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const timeoutTask = new Promise<'timeout'>((resolve) => {
+    timeout = setTimeout(() => resolve('timeout'), timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([
+      task.then(
+        () => 'settled' as const,
+        (error) => {
+          iosAppMonitorLogger.debug('iOS monitor task stopped with error', error);
+          return 'settled' as const;
+        }
+      ),
+      timeoutTask,
+    ]);
+
+    if (result === 'timeout') {
+      iosAppMonitorLogger.warn(timeoutMessage);
+    }
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+};
+
+const stopLogProcess = async (process: Subprocess | null) => {
+  if (!process) {
+    return;
+  }
+
+  try {
+    const childProcess = await process.nodeChildProcess;
+
+    if (!childProcess.killed) {
+      childProcess.kill();
+    }
+  } catch {
+    // Ignore termination failures for background monitors.
+  }
 };
 
 const createProcessExitDetails = ({
@@ -1063,15 +1116,12 @@ export const createIosSimulatorAppMonitor = ({
       logTask = null;
       pollTask = null;
 
-      if (currentLogProcess) {
-        try {
-          (await currentLogProcess.nodeChildProcess).kill();
-        } catch {
-          // Ignore termination failures for background monitors.
-        }
-      }
-
-      await currentLogTask;
+      await stopLogProcess(currentLogProcess);
+      await waitForTaskShutdown(
+        currentLogTask,
+        LOG_STREAM_SHUTDOWN_TIMEOUT_MS,
+        'iOS simulator log stream did not stop within shutdown timeout; continuing'
+      );
       await currentPollTask;
     },
     dispose: async () => {
@@ -1089,15 +1139,12 @@ export const createIosSimulatorAppMonitor = ({
       logTask = null;
       pollTask = null;
 
-      if (currentLogProcess) {
-        try {
-          (await currentLogProcess.nodeChildProcess).kill();
-        } catch {
-          // Ignore termination failures for background monitors.
-        }
-      }
-
-      await currentLogTask;
+      await stopLogProcess(currentLogProcess);
+      await waitForTaskShutdown(
+        currentLogTask,
+        LOG_STREAM_SHUTDOWN_TIMEOUT_MS,
+        'iOS simulator log stream did not stop within dispose timeout; continuing'
+      );
       await currentPollTask;
     },
     launchRequested: (event) => {

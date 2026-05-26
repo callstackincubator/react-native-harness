@@ -32,6 +32,18 @@ const createStreamingSubprocess = (
     },
   } as unknown as Subprocess);
 
+const createHangingSubprocess = (kill: () => void): Subprocess =>
+  ({
+    nodeChildProcess: Promise.resolve({
+      kill,
+    }),
+    [Symbol.asyncIterator]() {
+      return {
+        next: () => new Promise(() => undefined),
+      };
+    },
+  } as unknown as Subprocess);
+
 const artifactRoot = fs.mkdtempSync(
   join(tmpdir(), 'rn-harness-ios-monitor-artifacts-')
 );
@@ -126,6 +138,38 @@ describe('createIosSimulatorAppMonitor', () => {
       'sim-udid',
       'process == "HarnessPlayground" OR process == "com.harnessplayground"'
     );
+  });
+
+  it('does not hang when simulator log stream does not finish after kill', async () => {
+    vi.useFakeTimers();
+
+    const kill = vi.fn();
+    vi.spyOn(simctl, 'streamLogs').mockReturnValue(createHangingSubprocess(kill));
+    vi.spyOn(simctl, 'getAppInfo').mockResolvedValue({
+      Bundle: 'com.harnessplayground',
+      CFBundleIdentifier: 'com.harnessplayground',
+      CFBundleExecutable: 'HarnessPlayground',
+      CFBundleName: 'HarnessPlayground',
+      CFBundleDisplayName: 'Harness Playground',
+      Path: '/tmp/HarnessPlayground.app',
+    });
+
+    const monitor = createIosSimulatorAppMonitor({
+      udid: 'sim-udid',
+      bundleId: 'com.harnessplayground',
+      isAppRunning: async () => true,
+    });
+
+    try {
+      await monitor.start();
+      const stopPromise = monitor.stop();
+
+      await vi.advanceTimersByTimeAsync(1000);
+      await expect(stopPromise).resolves.toBeUndefined();
+      expect(kill).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('reports simulator lifecycle and crash events through the reporter', async () => {
