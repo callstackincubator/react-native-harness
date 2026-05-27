@@ -56,7 +56,27 @@ type WaitForCrashArtifactOptions = {
 
 type CrashArtifactCollector = {
   name: string;
-  collect: () => Promise<DiagnosedCrashArtifact[]> | DiagnosedCrashArtifact[];
+  collect: () =>
+    | Promise<CrashArtifactCollectorResult>
+    | CrashArtifactCollectorResult;
+};
+
+type CrashArtifactCollectorDiagnostics = {
+  source: string;
+  root?: string;
+  totalFiles?: number;
+  matchingFiles?: number;
+  copiedFiles?: number;
+  parseFailures?: number;
+  skippedBeforeMin?: number;
+  skippedAfterMax?: number;
+  skippedTarget?: number;
+  accepted?: number;
+};
+
+type CrashArtifactCollectorResult = {
+  artifacts: DiagnosedCrashArtifact[];
+  diagnostics: CrashArtifactCollectorDiagnostics;
 };
 
 const isCrashReportFile = (path: string) =>
@@ -95,6 +115,59 @@ const createTempDirectory = (prefix: string) => {
 const getDiagnosticReportsDir = () =>
   process.env.RN_HARNESS_IOS_DIAGNOSTIC_REPORTS_DIR ??
   join(homedir(), 'Library', 'Logs', 'DiagnosticReports');
+
+const getBestScore = (
+  artifacts: DiagnosedCrashArtifact[],
+  options: CollectCrashArtifactsOptions,
+  lookup?: CrashDetailsLookupOptions
+) =>
+  artifacts.reduce<number | undefined>((bestScore, artifact) => {
+    const score = scoreCrashArtifact({ artifact, options, lookup });
+
+    if (score <= 0) {
+      return bestScore;
+    }
+
+    return bestScore === undefined ? score : Math.max(bestScore, score);
+  }, undefined);
+
+const createCollectionLogPayload = ({
+  diagnostics,
+  artifacts,
+  options,
+  lookup,
+  polls,
+}: {
+  diagnostics: CrashArtifactCollectorDiagnostics;
+  artifacts: DiagnosedCrashArtifact[];
+  options: CollectCrashArtifactsOptions;
+  lookup?: CrashDetailsLookupOptions;
+  polls?: number;
+}) => ({
+  source: diagnostics.source,
+  root: diagnostics.root,
+  targetType: options.targetType,
+  targetId: options.targetId,
+  processNames: options.processNames,
+  minOccurredAt: options.minOccurredAt,
+  maxOccurredAt: options.maxOccurredAt,
+  lookupOccurredAt: lookup?.occurredAt,
+  lookupPid: lookup?.pid,
+  lookupProcessName: lookup?.processName,
+  polls,
+  totalFiles: diagnostics.totalFiles ?? 0,
+  matchingFiles: diagnostics.matchingFiles ?? 0,
+  copiedFiles: diagnostics.copiedFiles,
+  parseFailures: diagnostics.parseFailures ?? 0,
+  skippedBeforeMin: diagnostics.skippedBeforeMin ?? 0,
+  skippedAfterMax: diagnostics.skippedAfterMax ?? 0,
+  skippedTarget: diagnostics.skippedTarget ?? 0,
+  accepted: diagnostics.accepted ?? 0,
+  scoredMatches: artifacts.filter(
+    (artifact) => scoreCrashArtifact({ artifact, options, lookup }) > 0
+  ).length,
+  bestScore: getBestScore(artifacts, options, lookup),
+});
 
 const scoreCrashArtifact = ({
   artifact,
@@ -192,14 +265,28 @@ const parseCrashArtifacts = ({
   rootDir: string;
   options: CollectCrashArtifactsOptions;
   lookup?: CrashDetailsLookupOptions;
-}): DiagnosedCrashArtifact[] => {
-  const candidates = collectFilesRecursively(rootDir)
-    .filter(isCrashReportFile)
+}): CrashArtifactCollectorResult => {
+  const diagnostics: CrashArtifactCollectorDiagnostics = {
+    source: 'copied crash logs',
+    root: rootDir,
+    totalFiles: 0,
+    matchingFiles: 0,
+    parseFailures: 0,
+    skippedBeforeMin: 0,
+    skippedAfterMax: 0,
+    accepted: 0,
+  };
+  const candidates = collectFilesRecursively(rootDir).filter(isCrashReportFile);
+  diagnostics.totalFiles = candidates.length;
+  diagnostics.matchingFiles = candidates.length;
+
+  const artifacts = candidates
     .map((path) => {
       const contents = fs.readFileSync(path, 'utf8');
       const parsed = iosCrashParser.parse({ path, contents });
 
       if (!parsed) {
+        diagnostics.parseFailures = (diagnostics.parseFailures ?? 0) + 1;
         return null;
       }
 
@@ -207,6 +294,7 @@ const parseCrashArtifacts = ({
         options.minOccurredAt !== undefined &&
         parsed.occurredAt < options.minOccurredAt
       ) {
+        diagnostics.skippedBeforeMin = (diagnostics.skippedBeforeMin ?? 0) + 1;
         return null;
       }
 
@@ -214,6 +302,7 @@ const parseCrashArtifacts = ({
         options.maxOccurredAt !== undefined &&
         parsed.occurredAt > options.maxOccurredAt
       ) {
+        diagnostics.skippedAfterMax = (diagnostics.skippedAfterMax ?? 0) + 1;
         return null;
       }
 
@@ -235,19 +324,23 @@ const parseCrashArtifacts = ({
       };
 
       artifact.score = scoreCrashArtifact({ artifact, options, lookup });
+      diagnostics.accepted = (diagnostics.accepted ?? 0) + 1;
       return artifact;
     })
     .filter((artifact): artifact is DiagnosedCrashArtifact =>
       Boolean(artifact)
     );
 
-  return candidates.sort((left, right) => {
-    if ((right.score ?? 0) !== (left.score ?? 0)) {
-      return (right.score ?? 0) - (left.score ?? 0);
-    }
+  return {
+    artifacts: artifacts.sort((left, right) => {
+      if ((right.score ?? 0) !== (left.score ?? 0)) {
+        return (right.score ?? 0) - (left.score ?? 0);
+      }
 
-    return right.occurredAt - left.occurredAt;
-  });
+      return right.occurredAt - left.occurredAt;
+    }),
+    diagnostics,
+  };
 };
 
 const collectSimulatorCrashArtifacts = async ({
@@ -275,19 +368,32 @@ const collectSimulatorCrashArtifacts = async ({
 
 const collectCrashArtifactsFromDiagnosticReports = (
   options: CollectCrashArtifactsOptions
-): DiagnosedCrashArtifact[] => {
+): CrashArtifactCollectorResult => {
   const diagnosticReportsDir = getDiagnosticReportsDir();
+  const diagnostics: CrashArtifactCollectorDiagnostics = {
+    source: 'host DiagnosticReports',
+    root: diagnosticReportsDir,
+    totalFiles: 0,
+    matchingFiles: 0,
+    parseFailures: 0,
+    skippedBeforeMin: 0,
+    skippedAfterMax: 0,
+    skippedTarget: 0,
+    accepted: 0,
+  };
 
   if (!fs.existsSync(diagnosticReportsDir)) {
-    return [];
+    return { artifacts: [], diagnostics };
   }
 
-  const matchingEntries = fs
+  const allIpsEntries = fs
     .readdirSync(diagnosticReportsDir)
-    .filter((entry) => entry.endsWith('.ips'))
-    .filter((entry) =>
-      options.processNames.some((name) => entry.startsWith(`${name}-`))
-    );
+    .filter((entry) => entry.endsWith('.ips'));
+  const matchingEntries = allIpsEntries.filter((entry) =>
+    options.processNames.some((name) => entry.startsWith(`${name}-`))
+  );
+  diagnostics.totalFiles = allIpsEntries.length;
+  diagnostics.matchingFiles = matchingEntries.length;
 
   const artifacts: DiagnosedCrashArtifact[] = [];
 
@@ -297,6 +403,7 @@ const collectCrashArtifactsFromDiagnosticReports = (
     const parsed = iosCrashParser.parse({ path, contents });
 
     if (!parsed) {
+      diagnostics.parseFailures = (diagnostics.parseFailures ?? 0) + 1;
       continue;
     }
 
@@ -304,6 +411,7 @@ const collectCrashArtifactsFromDiagnosticReports = (
       options.minOccurredAt !== undefined &&
       parsed.occurredAt < options.minOccurredAt
     ) {
+      diagnostics.skippedBeforeMin = (diagnostics.skippedBeforeMin ?? 0) + 1;
       continue;
     }
 
@@ -311,6 +419,7 @@ const collectCrashArtifactsFromDiagnosticReports = (
       options.maxOccurredAt !== undefined &&
       parsed.occurredAt > options.maxOccurredAt
     ) {
+      diagnostics.skippedAfterMax = (diagnostics.skippedAfterMax ?? 0) + 1;
       continue;
     }
 
@@ -319,6 +428,7 @@ const collectCrashArtifactsFromDiagnosticReports = (
       parsed.targetId !== undefined &&
       parsed.targetId !== options.targetId
     ) {
+      diagnostics.skippedTarget = (diagnostics.skippedTarget ?? 0) + 1;
       continue;
     }
 
@@ -337,16 +447,20 @@ const collectCrashArtifactsFromDiagnosticReports = (
     };
 
     artifact.score = scoreCrashArtifact({ artifact, options });
+    diagnostics.accepted = (diagnostics.accepted ?? 0) + 1;
     artifacts.push(artifact);
   }
 
-  return artifacts.sort((left, right) => {
-    if ((right.score ?? 0) !== (left.score ?? 0)) {
-      return (right.score ?? 0) - (left.score ?? 0);
-    }
+  return {
+    artifacts: artifacts.sort((left, right) => {
+      if ((right.score ?? 0) !== (left.score ?? 0)) {
+        return (right.score ?? 0) - (left.score ?? 0);
+      }
 
-    return right.occurredAt - left.occurredAt;
-  });
+      return right.occurredAt - left.occurredAt;
+    }),
+    diagnostics,
+  };
 };
 
 const collectPhysicalCrashArtifactsFromDevice = async ({
@@ -356,17 +470,30 @@ const collectPhysicalCrashArtifactsFromDevice = async ({
   crashArtifactWriter,
   minOccurredAt,
   maxOccurredAt,
-}: CollectPhysicalCrashArtifactsOptions) => {
+}: CollectPhysicalCrashArtifactsOptions): Promise<CrashArtifactCollectorResult> => {
   const crashLogsDir = createTempDirectory('rn-harness-devicectl-crash-logs');
+  const diagnostics: CrashArtifactCollectorDiagnostics = {
+    source: 'device systemCrashLogs',
+    root: crashLogsDir,
+    totalFiles: 0,
+    matchingFiles: 0,
+    copiedFiles: 0,
+    parseFailures: 0,
+    skippedBeforeMin: 0,
+    skippedAfterMax: 0,
+    accepted: 0,
+  };
 
   try {
     const remoteCrashLogPaths = await devicectl.listFiles(targetId, {
       domainType: 'systemCrashLogs',
       recursive: true,
     });
+    diagnostics.totalFiles = remoteCrashLogPaths.length;
     const filteredCrashLogPaths = remoteCrashLogPaths.filter((remotePath) =>
       processNames.some((processName) => remotePath.includes(processName))
     );
+    diagnostics.matchingFiles = filteredCrashLogPaths.length;
 
     if (filteredCrashLogPaths.length > 0) {
       for (const remotePath of filteredCrashLogPaths) {
@@ -381,6 +508,7 @@ const collectPhysicalCrashArtifactsFromDevice = async ({
           destination: join(crashLogsDir, fileName),
           domainType: 'systemCrashLogs',
         });
+        diagnostics.copiedFiles = (diagnostics.copiedFiles ?? 0) + 1;
       }
 
       const copiedArtifacts = parseCrashArtifacts({
@@ -396,7 +524,13 @@ const collectPhysicalCrashArtifactsFromDevice = async ({
         },
       });
 
-      if (copiedArtifacts.length > 0) {
+      copiedArtifacts.diagnostics.source = diagnostics.source;
+      copiedArtifacts.diagnostics.root = diagnostics.root;
+      copiedArtifacts.diagnostics.totalFiles = diagnostics.totalFiles;
+      copiedArtifacts.diagnostics.matchingFiles = diagnostics.matchingFiles;
+      copiedArtifacts.diagnostics.copiedFiles = diagnostics.copiedFiles;
+
+      if (copiedArtifacts.artifacts.length > 0) {
         return copiedArtifacts;
       }
     }
@@ -404,7 +538,7 @@ const collectPhysicalCrashArtifactsFromDevice = async ({
     fs.rmSync(crashLogsDir, { recursive: true, force: true });
   }
 
-  return [];
+  return { artifacts: [], diagnostics };
 };
 
 const createCrashArtifactCollectors = (
@@ -457,12 +591,13 @@ export const collectCrashArtifacts = async (
     targetType: options.targetType,
     processNames: options.processNames,
     minOccurredAt: options.minOccurredAt,
+    maxOccurredAt: options.maxOccurredAt,
   });
 
   const results = await Promise.allSettled(
     createCrashArtifactCollectors(options).map(async (collector) => ({
       name: collector.name,
-      artifacts: await collector.collect(),
+      result: await collector.collect(),
     }))
   );
 
@@ -470,7 +605,16 @@ export const collectCrashArtifacts = async (
 
   for (const result of results) {
     if (result.status === 'fulfilled') {
-      artifacts.push(...result.value.artifacts);
+      const collectorArtifacts = result.value.result.artifacts;
+      artifacts.push(...collectorArtifacts);
+      crashDiagnosticsLogger.debug(
+        'crash artifact collector summary: %o',
+        createCollectionLogPayload({
+          diagnostics: result.value.result.diagnostics,
+          artifacts: collectorArtifacts,
+          options,
+        })
+      );
       continue;
     }
 
@@ -498,6 +642,25 @@ export const waitForCrashArtifact = async ({
   const deadline = Date.now() + CRASH_ARTIFACT_WAIT_TIMEOUT_MS;
   let fallbackArtifact = getFallbackArtifact();
   let settled = false;
+  const collectorDiagnostics = new Map<
+    string,
+    {
+      polls: number;
+      artifacts: DiagnosedCrashArtifact[];
+      diagnostics: CrashArtifactCollectorDiagnostics;
+    }
+  >();
+
+  crashDiagnosticsLogger.debug('waiting for crash artifact: %o', {
+    targetId: options.targetId,
+    targetType: options.targetType,
+    processNames: options.processNames,
+    minOccurredAt: options.minOccurredAt,
+    maxOccurredAt: options.maxOccurredAt,
+    lookupOccurredAt: lookup.occurredAt,
+    lookupPid: lookup.pid,
+    lookupProcessName: lookup.processName,
+  });
 
   const waitForNextPoll = async () => {
     const remainingMs = deadline - Date.now();
@@ -519,7 +682,14 @@ export const waitForCrashArtifact = async ({
   ): Promise<AppCrashDetails | null> => {
     while (!settled && Date.now() < deadline) {
       try {
-        const artifacts = await collector.collect();
+        const result = await collector.collect();
+        const artifacts = result.artifacts;
+        const previousDiagnostics = collectorDiagnostics.get(collector.name);
+        collectorDiagnostics.set(collector.name, {
+          polls: (previousDiagnostics?.polls ?? 0) + 1,
+          artifacts,
+          diagnostics: result.diagnostics,
+        });
 
         for (const artifact of artifacts) {
           recordArtifact(artifact);
@@ -532,6 +702,23 @@ export const waitForCrashArtifact = async ({
         });
 
         if (matchingArtifact) {
+          crashDiagnosticsLogger.debug(
+            'matched crash artifact from %s: %o',
+            collector.name,
+            {
+              artifactPath: matchingArtifact.artifactPath,
+              processName: matchingArtifact.processName,
+              pid: matchingArtifact.pid,
+              occurredAt: matchingArtifact.occurredAt,
+              signal: matchingArtifact.signal,
+              exceptionType: matchingArtifact.exceptionType,
+              score: scoreCrashArtifact({
+                artifact: matchingArtifact,
+                options,
+                lookup,
+              }),
+            }
+          );
           return matchingArtifact;
         }
       } catch (error) {
@@ -582,5 +769,26 @@ export const waitForCrashArtifact = async ({
     }, CRASH_ARTIFACT_WAIT_TIMEOUT_MS);
   });
 
-  return Promise.race([foundArtifact, timeout]);
+  const artifact = await Promise.race([foundArtifact, timeout]);
+
+  if (artifact?.artifactType !== 'ios-crash-report') {
+    crashDiagnosticsLogger.debug(
+      'crash artifact lookup finished without report'
+    );
+
+    for (const diagnostics of collectorDiagnostics.values()) {
+      crashDiagnosticsLogger.debug(
+        'crash artifact collector summary: %o',
+        createCollectionLogPayload({
+          diagnostics: diagnostics.diagnostics,
+          artifacts: diagnostics.artifacts,
+          options,
+          lookup,
+          polls: diagnostics.polls,
+        })
+      );
+    }
+  }
+
+  return artifact;
 };

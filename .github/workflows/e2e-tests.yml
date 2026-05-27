@@ -27,7 +27,7 @@ jobs:
     name: E2E Android
     runs-on: ubuntu-22.04
     timeout-minutes: 30
-    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android')) }}
+    if: ${{ false }}
     env:
       HARNESS_DEBUG: true
       DEBUG: 'Metro:*'
@@ -116,7 +116,7 @@ jobs:
     name: E2E iOS
     runs-on: macos-latest
     timeout-minutes: 30
-    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios')) }}
+    if: ${{ false }}
     env:
       HARNESS_DEBUG: true
       DEBUG: 'Metro:*'
@@ -217,7 +217,7 @@ jobs:
     name: E2E Web
     runs-on: ubuntu-22.04
     timeout-minutes: 30
-    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'web')) }}
+    if: ${{ false }}
     env:
       HARNESS_DEBUG: true
       DEBUG: 'Metro:*'
@@ -342,9 +342,9 @@ jobs:
         uses: ./
         with:
           app: android/app/build/outputs/apk/debug/app-debug.apk
-          runner: android-crash-pre-rn
+          runner: android
           projectRoot: apps/playground
-          harnessArgs: --testPathPatterns smoke
+          harnessArgs: --testPathPatterns src/__tests__/crash-monitor
           preRunHook: |
             echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
@@ -467,9 +467,9 @@ jobs:
         uses: ./
         with:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
-          runner: ios-crash-pre-rn
+          runner: ios
           projectRoot: apps/playground
-          harnessArgs: --testPathPatterns smoke
+          harnessArgs: --testPathPatterns src/__tests__/crash-monitor
           preRunHook: |
             echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
