@@ -32,6 +32,7 @@ const POST_LAUNCH_CRASH_SWEEP_DELAY_MS = 1000;
 const RECENT_LAUNCH_WINDOW_MS = 5000;
 const SUSPICION_WINDOW_MS = 3000;
 const CRASH_ARTIFACT_MIN_OCCURRED_AT_TOLERANCE_MS = 2000;
+const CRASH_ARTIFACT_MAX_OCCURRED_AT_TOLERANCE_MS = 2000;
 const LOG_STREAM_SHUTDOWN_TIMEOUT_MS = 1000;
 
 type TimedLogLine = {
@@ -384,6 +385,7 @@ const createCrashDetailsLookup = ({
   bundleId,
   getProcessNames,
   getMinOccurredAt,
+  getMaxOccurredAt,
   getCurrentLaunchId,
   crashArtifactWriter,
   base,
@@ -394,6 +396,7 @@ const createCrashDetailsLookup = ({
   bundleId: string;
   getProcessNames: () => string[];
   getMinOccurredAt: () => number | undefined;
+  getMaxOccurredAt: () => number | undefined;
   getCurrentLaunchId: () => string | undefined;
   crashArtifactWriter?: CrashArtifactWriter;
   base: ReturnType<typeof createAppMonitorBase>;
@@ -412,6 +415,7 @@ const createCrashDetailsLookup = ({
         processNames: getProcessNames(),
         crashArtifactWriter,
         minOccurredAt: getMinOccurredAt(),
+        maxOccurredAt: getMaxOccurredAt(),
       },
       getFallbackArtifact: () => base.getLatestCrashArtifact(options),
       recordArtifact: (details) => base.recordCrashArtifact(details),
@@ -493,7 +497,10 @@ const waitForTaskShutdown = async (
       task.then(
         () => 'settled' as const,
         (error) => {
-          iosAppMonitorLogger.debug('iOS monitor task stopped with error', error);
+          iosAppMonitorLogger.debug(
+            'iOS monitor task stopped with error',
+            error
+          );
           return 'settled' as const;
         }
       ),
@@ -573,6 +580,7 @@ const createIosMonitorRuntime = ({
   let currentLaunchId: string | undefined;
   let launchRequestedAt: number | undefined;
   let launchCompletedAt: number | undefined;
+  let lastUnexpectedExitAt: number | undefined;
   let currentTestFilePath = '';
   let currentPhase: AppLifecyclePhase = 'startup';
   let pendingCrash:
@@ -707,6 +715,8 @@ const createIosMonitorRuntime = ({
           processName: initialDetails?.processName,
           pid: initialDetails?.pid,
           occurredAt: initialDetails?.occurredAt ?? Date.now(),
+          minOccurredAt: getCrashArtifactMinOccurredAt(),
+          maxOccurredAt: getCrashArtifactMaxOccurredAt(),
         });
       } catch (error) {
         iosAppMonitorLogger.debug(
@@ -777,8 +787,9 @@ const createIosMonitorRuntime = ({
       return;
     }
 
+    const exitAt = Date.now();
     const normalizedDetails = normalizeCrashDetails(
-      details,
+      details ? { occurredAt: exitAt, ...details } : { occurredAt: exitAt },
       platform,
       currentLaunchId
     );
@@ -794,6 +805,8 @@ const createIosMonitorRuntime = ({
     if (controlledStop) {
       return;
     }
+
+    lastUnexpectedExitAt = exitAt;
 
     const hasActiveExecutionWatch =
       currentPhase === 'execution' && watchers.size > 0;
@@ -814,6 +827,7 @@ const createIosMonitorRuntime = ({
     currentLaunchId = event.launchId;
     launchRequestedAt = Date.now();
     launchCompletedAt = undefined;
+    lastUnexpectedExitAt = undefined;
     alive = false;
     startedReported = false;
     controlledStop = false;
@@ -832,6 +846,7 @@ const createIosMonitorRuntime = ({
     startedReported = false;
     launchRequestedAt = undefined;
     launchCompletedAt = undefined;
+    lastUnexpectedExitAt = undefined;
     clearCrashState();
   };
 
@@ -874,6 +889,7 @@ const createIosMonitorRuntime = ({
     currentLaunchId = undefined;
     launchRequestedAt = undefined;
     launchCompletedAt = undefined;
+    lastUnexpectedExitAt = undefined;
     currentTestFilePath = '';
     currentPhase = 'startup';
     watchers.clear();
@@ -890,8 +906,32 @@ const createIosMonitorRuntime = ({
     currentLaunchId = undefined;
     launchRequestedAt = undefined;
     launchCompletedAt = undefined;
+    lastUnexpectedExitAt = undefined;
     watchers.clear();
     clearCrashState();
+  };
+
+  const getCrashArtifactMinOccurredAt = () => {
+    const minOccurredAt = launchRequestedAt ?? launchCompletedAt;
+
+    if (minOccurredAt === undefined) {
+      return undefined;
+    }
+
+    return Math.max(
+      0,
+      minOccurredAt - CRASH_ARTIFACT_MIN_OCCURRED_AT_TOLERANCE_MS
+    );
+  };
+
+  const getCrashArtifactMaxOccurredAt = () => {
+    const maxOccurredAt = lastUnexpectedExitAt;
+
+    if (maxOccurredAt === undefined) {
+      return undefined;
+    }
+
+    return maxOccurredAt + CRASH_ARTIFACT_MAX_OCCURRED_AT_TOLERANCE_MS;
   };
 
   return {
@@ -912,17 +952,10 @@ const createIosMonitorRuntime = ({
     isControlledStop: () => controlledStop,
     isLaunchRecent,
     getCurrentLaunchId: () => currentLaunchId,
-    getArtifactMinOccurredAt: () => {
-      const minOccurredAt = launchRequestedAt ?? launchCompletedAt;
-
-      if (minOccurredAt === undefined) {
-        return undefined;
-      }
-
-      return Math.max(
-        0,
-        minOccurredAt - CRASH_ARTIFACT_MIN_OCCURRED_AT_TOLERANCE_MS
-      );
+    getArtifactMinOccurredAt: getCrashArtifactMinOccurredAt,
+    getArtifactMaxOccurredAt: getCrashArtifactMaxOccurredAt,
+    recordUnexpectedExit: (at: number) => {
+      lastUnexpectedExitAt = at;
     },
     reportWarning,
   };
@@ -961,6 +994,7 @@ export const createIosSimulatorAppMonitor = ({
       getProcessNames: () => processNames,
       getMinOccurredAt: () =>
         runtime.getArtifactMinOccurredAt() ?? monitorStartedAt,
+      getMaxOccurredAt: () => runtime.getArtifactMaxOccurredAt(),
       getCurrentLaunchId: () => runtime.getCurrentLaunchId(),
       crashArtifactWriter,
       base,
@@ -1000,6 +1034,7 @@ export const createIosSimulatorAppMonitor = ({
         });
 
         base.recordCrashArtifact(crashDetails);
+        runtime.recordUnexpectedExit(Date.now());
         await runtime.confirmCrash(crashDetails, crashDetails.summary);
       } catch (error) {
         iosAppMonitorLogger.debug(
@@ -1205,6 +1240,7 @@ export const createIosDeviceAppMonitor = ({
       getProcessNames: () => processNames,
       getMinOccurredAt: () =>
         runtime.getArtifactMinOccurredAt() ?? monitorStartedAt,
+      getMaxOccurredAt: () => runtime.getArtifactMaxOccurredAt(),
       getCurrentLaunchId: () => runtime.getCurrentLaunchId(),
       crashArtifactWriter,
       base,
@@ -1246,6 +1282,7 @@ export const createIosDeviceAppMonitor = ({
         });
 
         base.recordCrashArtifact(crashDetails);
+        runtime.recordUnexpectedExit(Date.now());
         await runtime.confirmCrash(crashDetails, crashDetails.summary);
       } catch (error) {
         iosAppMonitorLogger.debug(

@@ -144,7 +144,9 @@ describe('createIosSimulatorAppMonitor', () => {
     vi.useFakeTimers();
 
     const kill = vi.fn();
-    vi.spyOn(simctl, 'streamLogs').mockReturnValue(createHangingSubprocess(kill));
+    vi.spyOn(simctl, 'streamLogs').mockReturnValue(
+      createHangingSubprocess(kill)
+    );
     vi.spyOn(simctl, 'getAppInfo').mockResolvedValue({
       Bundle: 'com.harnessplayground',
       CFBundleIdentifier: 'com.harnessplayground',
@@ -236,27 +238,27 @@ describe('createIosSimulatorAppMonitor', () => {
           appPlatform: 'ios-simulator',
           targetIdentifier: 'sim-udid',
           launchId: 'launch-1',
-        }),
+        })
       );
       expect(eventReporter).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'app:crash-confirmed',
           appPlatform: 'ios-simulator',
           targetIdentifier: 'sim-udid',
-        }),
+        })
       );
       expect(eventReporter).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'app:crash-report-ready',
           appPlatform: 'ios-simulator',
           artifactType: 'ios-crash-report',
-        }),
+        })
       );
       expect(eventReporter).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'app:exited',
           appPlatform: 'ios-simulator',
-        }),
+        })
       );
 
       await monitor.stop();
@@ -337,6 +339,96 @@ describe('createIosSimulatorAppMonitor', () => {
           exceptionType: 'NSInternalInconsistencyException',
         },
       });
+
+      await monitor.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('looks up simulator crash reports across the launch-to-exit window', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-12T11:35:00.000Z'));
+
+    vi.spyOn(simctl, 'streamLogs').mockReturnValue(
+      createStreamingSubprocess([
+        {
+          line: '2026-03-12 11:35:08.000 HarnessPlayground[1234:abcd] Terminating app due to uncaught exception: PlaygroundCrash',
+        },
+      ])
+    );
+    const waitForCrashArtifactSpy = vi
+      .spyOn(diagnostics, 'waitForCrashArtifact')
+      .mockResolvedValue({
+        artifactType: 'ios-crash-report',
+        artifactPath: '/tmp/report.ips',
+        processName: 'HarnessPlayground',
+        pid: 1234,
+        stackTrace: ['0 PlaygroundCrash crash'],
+      });
+    vi.spyOn(simctl, 'getAppInfo').mockResolvedValue({
+      Bundle: 'com.harnessplayground',
+      CFBundleIdentifier: 'com.harnessplayground',
+      CFBundleExecutable: 'HarnessPlayground',
+      CFBundleName: 'HarnessPlayground',
+      CFBundleDisplayName: 'Harness Playground',
+      Path: '/tmp/HarnessPlayground.app',
+    });
+    const isAppRunning = vi
+      .fn<() => Promise<boolean>>()
+      .mockImplementation(
+        async () => Date.now() < Date.parse('2026-03-12T11:35:25.000Z')
+      );
+
+    const monitor = createIosSimulatorAppMonitor({
+      udid: 'sim-udid',
+      bundleId: 'com.harnessplayground',
+      isAppRunning,
+    });
+    const crashWatch = monitor.watch('example.test.ts', 'execution');
+    crashWatch.promise.catch(() => undefined);
+
+    try {
+      await monitor.start();
+      monitor.launchRequested({
+        type: 'launch_requested',
+        launchId: 'launch-1',
+        at: Date.now(),
+        reason: 'start',
+      });
+      monitor.launchCompleted({
+        type: 'launch_completed',
+        launchId: 'launch-1',
+        at: Date.now(),
+        reason: 'start',
+      });
+
+      await vi.advanceTimersByTimeAsync(26_000);
+      await expect(crashWatch.promise).rejects.toMatchObject({
+        details: {
+          stackTrace: ['0 PlaygroundCrash crash'],
+        },
+      });
+
+      expect(waitForCrashArtifactSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lookup: expect.objectContaining({
+            minOccurredAt: Date.parse('2026-03-12T11:34:58.000Z'),
+            maxOccurredAt: expect.any(Number),
+          }),
+          options: expect.objectContaining({
+            minOccurredAt: Date.parse('2026-03-12T11:34:58.000Z'),
+            maxOccurredAt: expect.any(Number),
+          }),
+        })
+      );
+      const call = waitForCrashArtifactSpy.mock.calls[0]?.[0];
+      expect(call?.lookup.maxOccurredAt).toBeGreaterThanOrEqual(
+        Date.parse('2026-03-12T11:35:25.000Z')
+      );
+      expect(call?.lookup.maxOccurredAt).toBeLessThanOrEqual(
+        Date.parse('2026-03-12T11:35:28.000Z')
+      );
 
       await monitor.stop();
     } finally {

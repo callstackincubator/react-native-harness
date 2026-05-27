@@ -52,6 +52,8 @@ export type CrashDetailsLookupOptions = {
   processName?: string;
   pid?: number;
   occurredAt: number;
+  minOccurredAt?: number;
+  maxOccurredAt?: number;
 };
 
 export type AppLifecyclePhase = 'startup' | 'execution';
@@ -214,10 +216,7 @@ export type HarnessCliCommandContext = {
 export type HarnessCliCommand = {
   name: string;
   aliases?: string[];
-  run: (
-    args: string[],
-    context: HarnessCliCommandContext
-  ) => Promise<void>;
+  run: (args: string[], context: HarnessCliCommandContext) => Promise<void>;
 };
 
 export type HarnessCliModule = {

@@ -21,6 +21,7 @@ type CollectIosCrashArtifactsOptions = {
   bundleId: string;
   crashArtifactWriter?: CrashArtifactWriter;
   minOccurredAt?: number;
+  maxOccurredAt?: number;
 };
 
 type CollectSimulatorCrashArtifactsOptions = CollectIosCrashArtifactsOptions & {
@@ -55,9 +56,7 @@ type WaitForCrashArtifactOptions = {
 
 type CrashArtifactCollector = {
   name: string;
-  collect: () =>
-    | Promise<DiagnosedCrashArtifact[]>
-    | DiagnosedCrashArtifact[];
+  collect: () => Promise<DiagnosedCrashArtifact[]> | DiagnosedCrashArtifact[];
 };
 
 const isCrashReportFile = (path: string) =>
@@ -130,6 +129,20 @@ const scoreCrashArtifact = ({
 
   const referenceTime = lookup?.occurredAt ?? options.minOccurredAt;
 
+  if (
+    lookup?.minOccurredAt !== undefined &&
+    artifact.occurredAt < lookup.minOccurredAt
+  ) {
+    return -1;
+  }
+
+  if (
+    lookup?.maxOccurredAt !== undefined &&
+    artifact.occurredAt > lookup.maxOccurredAt
+  ) {
+    return -1;
+  }
+
   if (referenceTime !== undefined) {
     const distance = Math.abs(artifact.occurredAt - referenceTime);
 
@@ -197,6 +210,13 @@ const parseCrashArtifacts = ({
         return null;
       }
 
+      if (
+        options.maxOccurredAt !== undefined &&
+        parsed.occurredAt > options.maxOccurredAt
+      ) {
+        return null;
+      }
+
       const artifactPath = options.crashArtifactWriter
         ? options.crashArtifactWriter.persistArtifact({
             artifactKind: 'ios-crash-report',
@@ -218,7 +238,7 @@ const parseCrashArtifacts = ({
       return artifact;
     })
     .filter((artifact): artifact is DiagnosedCrashArtifact =>
-      Boolean(artifact),
+      Boolean(artifact)
     );
 
   return candidates.sort((left, right) => {
@@ -236,6 +256,7 @@ const collectSimulatorCrashArtifacts = async ({
   bundleId,
   crashArtifactWriter,
   minOccurredAt,
+  maxOccurredAt,
 }: CollectSimulatorCrashArtifactsOptions) => {
   // Do not fall back to `simctl diagnose` here. It collects broad simulator
   // diagnostics, not just this app's crash report, and can block long enough
@@ -248,11 +269,12 @@ const collectSimulatorCrashArtifacts = async ({
     bundleId,
     crashArtifactWriter,
     minOccurredAt,
+    maxOccurredAt,
   });
 };
 
 const collectCrashArtifactsFromDiagnosticReports = (
-  options: CollectCrashArtifactsOptions,
+  options: CollectCrashArtifactsOptions
 ): DiagnosedCrashArtifact[] => {
   const diagnosticReportsDir = getDiagnosticReportsDir();
 
@@ -264,7 +286,7 @@ const collectCrashArtifactsFromDiagnosticReports = (
     .readdirSync(diagnosticReportsDir)
     .filter((entry) => entry.endsWith('.ips'))
     .filter((entry) =>
-      options.processNames.some((name) => entry.startsWith(`${name}-`)),
+      options.processNames.some((name) => entry.startsWith(`${name}-`))
     );
 
   const artifacts: DiagnosedCrashArtifact[] = [];
@@ -281,6 +303,13 @@ const collectCrashArtifactsFromDiagnosticReports = (
     if (
       options.minOccurredAt !== undefined &&
       parsed.occurredAt < options.minOccurredAt
+    ) {
+      continue;
+    }
+
+    if (
+      options.maxOccurredAt !== undefined &&
+      parsed.occurredAt > options.maxOccurredAt
     ) {
       continue;
     }
@@ -326,6 +355,7 @@ const collectPhysicalCrashArtifactsFromDevice = async ({
   bundleId,
   crashArtifactWriter,
   minOccurredAt,
+  maxOccurredAt,
 }: CollectPhysicalCrashArtifactsOptions) => {
   const crashLogsDir = createTempDirectory('rn-harness-devicectl-crash-logs');
 
@@ -335,7 +365,7 @@ const collectPhysicalCrashArtifactsFromDevice = async ({
       recursive: true,
     });
     const filteredCrashLogPaths = remoteCrashLogPaths.filter((remotePath) =>
-      processNames.some((processName) => remotePath.includes(processName)),
+      processNames.some((processName) => remotePath.includes(processName))
     );
 
     if (filteredCrashLogPaths.length > 0) {
@@ -362,6 +392,7 @@ const collectPhysicalCrashArtifactsFromDevice = async ({
           bundleId,
           crashArtifactWriter,
           minOccurredAt,
+          maxOccurredAt,
         },
       });
 
@@ -377,7 +408,7 @@ const collectPhysicalCrashArtifactsFromDevice = async ({
 };
 
 const createCrashArtifactCollectors = (
-  options: CollectCrashArtifactsOptions,
+  options: CollectCrashArtifactsOptions
 ): CrashArtifactCollector[] => {
   if (options.targetType === 'simulator') {
     return [
@@ -399,6 +430,7 @@ const createCrashArtifactCollectors = (
           bundleId: options.bundleId,
           crashArtifactWriter: options.crashArtifactWriter,
           minOccurredAt: options.minOccurredAt,
+          maxOccurredAt: options.maxOccurredAt,
         }),
     },
     {
@@ -411,13 +443,14 @@ const createCrashArtifactCollectors = (
           bundleId: options.bundleId,
           crashArtifactWriter: options.crashArtifactWriter,
           minOccurredAt: options.minOccurredAt,
+          maxOccurredAt: options.maxOccurredAt,
         }),
     },
   ];
 };
 
 export const collectCrashArtifacts = async (
-  options: CollectCrashArtifactsOptions,
+  options: CollectCrashArtifactsOptions
 ): Promise<DiagnosedCrashArtifact[]> => {
   crashDiagnosticsLogger.debug('collecting crash artifacts: %o', {
     targetId: options.targetId,
@@ -430,7 +463,7 @@ export const collectCrashArtifacts = async (
     createCrashArtifactCollectors(options).map(async (collector) => ({
       name: collector.name,
       artifacts: await collector.collect(),
-    })),
+    }))
   );
 
   const artifacts: DiagnosedCrashArtifact[] = [];
@@ -443,7 +476,7 @@ export const collectCrashArtifacts = async (
 
     crashDiagnosticsLogger.debug(
       'crash artifact collector failed',
-      result.reason,
+      result.reason
     );
   }
 
@@ -474,12 +507,15 @@ export const waitForCrashArtifact = async ({
     }
 
     await new Promise((resolve) =>
-      setTimeout(resolve, Math.min(CRASH_ARTIFACT_POLL_INTERVAL_MS, remainingMs)),
+      setTimeout(
+        resolve,
+        Math.min(CRASH_ARTIFACT_POLL_INTERVAL_MS, remainingMs)
+      )
     );
   };
 
   const pollCollector = async (
-    collector: CrashArtifactCollector,
+    collector: CrashArtifactCollector
   ): Promise<AppCrashDetails | null> => {
     while (!settled && Date.now() < deadline) {
       try {
@@ -502,7 +538,7 @@ export const waitForCrashArtifact = async ({
         crashDiagnosticsLogger.debug(
           '%s crash artifact collector failed',
           collector.name,
-          error,
+          error
         );
       }
 
