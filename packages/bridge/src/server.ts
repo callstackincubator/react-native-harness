@@ -140,6 +140,8 @@ export const createHarnessBridge = async (
   wss.on('connection', (ws: WebSocket) => {
     bridgeLogger.debug('app connected');
     const binaryStore = new BinaryStore();
+    let readyConnection: AppConnection | null = null;
+    let disconnected = false;
 
     const serverFunctions: BridgeServerFunctions = {
       reportReady: (device) => {
@@ -147,6 +149,7 @@ export const createHarnessBridge = async (
           device,
           runTests: (testPath, opts) => rpc.runTests(testPath, opts),
         };
+        readyConnection = conn;
         currentConnection = conn;
         bridgeLogger.debug(
           'app ready: platform=%s model=%s',
@@ -209,11 +212,25 @@ export const createHarnessBridge = async (
       },
     );
 
-    ws.on('close', () => {
+    const disconnect = (reason?: Error) => {
+      if (disconnected) return;
+      disconnected = true;
+
       bridgeLogger.debug('app disconnected');
       binaryStore.dispose();
-      currentConnection = null;
+      if (currentConnection === readyConnection) {
+        currentConnection = null;
+      }
+      rpc.$close(reason ?? new Error('App bridge disconnected'));
       emitter.emit('disconnected');
+    };
+
+    ws.on('close', () => {
+      disconnect();
+    });
+
+    ws.on('error', (error) => {
+      disconnect(error instanceof Error ? error : new Error('App bridge socket error'));
     });
   });
 
