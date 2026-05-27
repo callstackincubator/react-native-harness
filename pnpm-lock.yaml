@@ -226,9 +226,6 @@ importers:
       '@react-native-harness/tools':
         specifier: workspace:*
         version: link:../tools
-      birpc:
-        specifier: ^2.4.0
-        version: 2.4.0
       pixelmatch:
         specifier: ^7.1.0
         version: 7.1.0
@@ -254,6 +251,12 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      vite:
+        specifier: ^7.2.2
+        version: 7.2.2(@types/node@20.19.25)(jiti@2.6.1)(terser@5.42.0)(yaml@2.8.0)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.25)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@22.1.0)(terser@5.42.0)(yaml@2.8.0)
 
   packages/bundler-metro:
     dependencies:
@@ -3789,9 +3792,6 @@ packages:
   binary-extensions@2.3.0:
     resolution: {integrity: sha512-Ceh+7ox5qe7LJuLHoY0feh3pHuUDHAcRUeyL2VYghZwfpkNIy/+8Ocg0a3UuSoYzavmylwuLWQOf3hl0jjMMIw==}
     engines: {node: '>=8'}
-
-  birpc@2.4.0:
-    resolution: {integrity: sha512-5IdNxTyhXHv2UlgnPHQ0h+5ypVmkrYHzL8QT+DwFZ//2N/oNV8Ch+BCRmTJ3x6/z9Axo/cXYBc9eprsUVK/Jsg==}
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
@@ -12069,6 +12069,14 @@ snapshots:
     optionalDependencies:
       vite: 7.2.2(@types/node@20.19.25)(jiti@2.4.2)(terser@5.42.0)(yaml@2.8.0)
 
+  '@vitest/mocker@3.2.4(vite@7.2.2(@types/node@20.19.25)(jiti@2.6.1)(terser@5.42.0)(yaml@2.8.0))':
+    dependencies:
+      '@vitest/spy': 3.2.4
+      estree-walker: 3.0.3
+      magic-string: 0.30.17
+    optionalDependencies:
+      vite: 7.2.2(@types/node@20.19.25)(jiti@2.6.1)(terser@5.42.0)(yaml@2.8.0)
+
   '@vitest/pretty-format@3.2.4':
     dependencies:
       tinyrainbow: 2.0.0
@@ -12104,7 +12112,7 @@ snapshots:
       sirv: 3.0.1
       tinyglobby: 0.2.15
       tinyrainbow: 2.0.0
-      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.25)(@vitest/ui@3.2.4)(jiti@2.4.2)(jsdom@22.1.0)(terser@5.42.0)(yaml@2.8.0)
+      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.25)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@22.1.0)(terser@5.42.0)(yaml@2.8.0)
 
   '@vitest/utils@3.2.4':
     dependencies:
@@ -12609,8 +12617,6 @@ snapshots:
   big.js@5.2.2: {}
 
   binary-extensions@2.3.0: {}
-
-  birpc@2.4.0: {}
 
   bl@4.1.0:
     dependencies:
@@ -18285,6 +18291,27 @@ snapshots:
       - tsx
       - yaml
 
+  vite-node@3.2.4(@types/node@20.19.25)(jiti@2.6.1)(terser@5.42.0)(yaml@2.8.0):
+    dependencies:
+      cac: 6.7.14
+      debug: 4.4.1
+      es-module-lexer: 1.7.0
+      pathe: 2.0.3
+      vite: 7.2.2(@types/node@20.19.25)(jiti@2.6.1)(terser@5.42.0)(yaml@2.8.0)
+    transitivePeerDependencies:
+      - '@types/node'
+      - jiti
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
   vite@7.2.2(@types/node@20.19.25)(jiti@2.4.2)(terser@5.42.0)(yaml@2.8.0):
     dependencies:
       esbuild: 0.25.5
@@ -18339,6 +18366,50 @@ snapshots:
       tinyrainbow: 2.0.0
       vite: 7.2.2(@types/node@20.19.25)(jiti@2.4.2)(terser@5.42.0)(yaml@2.8.0)
       vite-node: 3.2.4(@types/node@20.19.25)(jiti@2.4.2)(terser@5.42.0)(yaml@2.8.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/debug': 4.1.12
+      '@types/node': 20.19.25
+      '@vitest/ui': 3.2.4(vitest@3.2.4)
+      jsdom: 22.1.0
+    transitivePeerDependencies:
+      - jiti
+      - less
+      - lightningcss
+      - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
+  vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.19.25)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@22.1.0)(terser@5.42.0)(yaml@2.8.0):
+    dependencies:
+      '@types/chai': 5.2.3
+      '@vitest/expect': 3.2.4
+      '@vitest/mocker': 3.2.4(vite@7.2.2(@types/node@20.19.25)(jiti@2.6.1)(terser@5.42.0)(yaml@2.8.0))
+      '@vitest/pretty-format': 3.2.4
+      '@vitest/runner': 3.2.4
+      '@vitest/snapshot': 3.2.4
+      '@vitest/spy': 3.2.4
+      '@vitest/utils': 3.2.4
+      chai: 5.3.1
+      debug: 4.4.1
+      expect-type: 1.2.1
+      magic-string: 0.30.17
+      pathe: 2.0.3
+      picomatch: 4.0.3
+      std-env: 3.9.0
+      tinybench: 2.9.0
+      tinyexec: 0.3.2
+      tinyglobby: 0.2.15
+      tinypool: 1.1.1
+      tinyrainbow: 2.0.0
+      vite: 7.2.2(@types/node@20.19.25)(jiti@2.6.1)(terser@5.42.0)(yaml@2.8.0)
+      vite-node: 3.2.4(@types/node@20.19.25)(jiti@2.6.1)(terser@5.42.0)(yaml@2.8.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/debug': 4.1.12
