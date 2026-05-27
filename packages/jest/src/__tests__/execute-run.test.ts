@@ -1,11 +1,21 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Config, Test, TestWatcher } from 'jest-runner';
 import type { TestResult as JestTestResult } from '@jest/test-result';
-import type { TestSuiteResult } from '@react-native-harness/bridge';
+import type {
+  TestRunnerTestFinishedEvent,
+  TestRunnerTestStartedEvent,
+  TestSuiteResult,
+} from '@react-native-harness/bridge';
 import { NativeCrashError, StartupStallError } from '../errors.js';
 import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
 import type { HarnessSession } from '../harness-session.js';
 import { executeRun } from '../execute-run.js';
+
+type EmitEvent = Parameters<typeof executeRun>[3];
+type RecordedEmitEvent = {
+  emitEvent: EmitEvent;
+  calls: Array<unknown[]>;
+};
 
 const resolveUndefined = async () => undefined;
 
@@ -93,10 +103,20 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
   resetCrashState: vi.fn(),
   flushClientLogs: vi.fn(() => []),
   callHook: vi.fn(resolveUndefined),
+  onTestRunnerEvent: vi.fn(() => () => undefined),
   setRunState: vi.fn(),
   dispose: vi.fn(resolveUndefined),
   ...overrides,
 });
+
+const makeEmitEvent = (): RecordedEmitEvent => {
+  const calls: Array<unknown[]> = [];
+  const emitEvent: EmitEvent = (async (...eventData) => {
+    calls.push(eventData);
+  }) as EmitEvent;
+
+  return { emitEvent, calls };
+};
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -115,7 +135,7 @@ describe('executeRun', () => {
         callHook: vi.fn(async (name) => { hookNames.push(name as string); }),
       });
 
-      await executeRun(session, [makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeGlobalConfig());
+      await executeRun(session, [makeTest()], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
 
       expect(hookNames[0]).toBe('run:started');
       expect(hookNames[hookNames.length - 1]).toBe('run:finished');
@@ -127,7 +147,7 @@ describe('executeRun', () => {
         callHook: vi.fn(async (name) => { hookNames.push(name as string); }),
       });
 
-      await executeRun(session, [makeTest('/a.ts'), makeTest('/b.ts')], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeGlobalConfig());
+      await executeRun(session, [makeTest('/a.ts'), makeTest('/b.ts')], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
 
       const fileHooks = hookNames.filter((n) =>
         n === 'test-file:started' || n === 'test-file:finished',
@@ -145,29 +165,41 @@ describe('executeRun', () => {
         ensureAppReady: vi.fn(async () => { throw new Error('unexpected'); }),
       });
 
-      await executeRun(session, [makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeGlobalConfig());
+      await executeRun(session, [makeTest()], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
 
       expect(hookNames).toContain('run:finished');
     });
   });
 
   describe('happy path', () => {
-    it('calls onStart, ensureAppReady, runTestFile, onResult in order', async () => {
+    it('emits file start, ensureAppReady, runTestFile, file success in order', async () => {
       const order: string[] = [];
       const session = makeSession({
         ensureAppReady: vi.fn(async () => { order.push('ensureAppReady'); }),
       });
-      const onStart = vi.fn(async () => { order.push('onStart'); });
-      const onResult = vi.fn(async () => { order.push('onResult'); });
+      const emitEvent: EmitEvent = (async (eventName, ..._eventData) => {
+        if (eventName === 'test-file-start') {
+          order.push('test-file-start');
+        }
+
+        if (eventName === 'test-file-success') {
+          order.push('test-file-success');
+        }
+      }) as EmitEvent;
 
       mockRunHarnessTestFile.mockImplementation(async () => {
         order.push('runTestFile');
         return makeFileRunResult();
       });
 
-      await executeRun(session, [makeTest()], makeWatcher(), onStart, onResult, vi.fn(), makeGlobalConfig());
+      await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
 
-      expect(order).toEqual(['onStart', 'ensureAppReady', 'runTestFile', 'onResult']);
+      expect(order).toEqual([
+        'test-file-start',
+        'ensureAppReady',
+        'runTestFile',
+        'test-file-success',
+      ]);
     });
 
     it('accumulates passing test counts in run:finished summary', async () => {
@@ -182,7 +214,7 @@ describe('executeRun', () => {
         makeFileRunResult({ jestResult: makeJestResult({ numPassingTests: 3 }) }),
       );
 
-      await executeRun(session, [makeTest(), makeTest('/b.ts')], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeGlobalConfig());
+      await executeRun(session, [makeTest(), makeTest('/b.ts')], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
 
       const payload = finishedPayload as { summary: { passed: number }; status: string };
       expect(payload.summary.passed).toBe(6);
@@ -196,55 +228,126 @@ describe('executeRun', () => {
           .mockReturnValueOnce([])
           .mockReturnValueOnce(clientLogs),
       });
-      const onResult = vi.fn();
+      const { emitEvent, calls } = makeEmitEvent();
 
       await executeRun(
         session,
         [makeTest()],
         makeWatcher(),
-        vi.fn(),
-        onResult,
-        vi.fn(),
+        emitEvent,
         makeGlobalConfig(),
       );
 
       expect(session.flushClientLogs).toHaveBeenCalledTimes(2);
-      expect(onResult).toHaveBeenCalledWith(
+      expect(calls).toContainEqual([
+        'test-file-success',
         expect.anything(),
         expect.objectContaining({ console: clientLogs }),
-      );
+      ]);
+    });
+
+    it('emits test-case events before file success', async () => {
+      let testRunnerListener:
+        | ((event: TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent) => void)
+        | undefined;
+      const { emitEvent, calls: emittedEvents } = makeEmitEvent();
+      const session = makeSession({
+        onTestRunnerEvent: vi.fn((listener) => {
+          testRunnerListener = listener as typeof testRunnerListener;
+          return () => undefined;
+        }),
+      });
+
+      mockRunHarnessTestFile.mockImplementation(async () => {
+        testRunnerListener?.({
+          type: 'test-started',
+          file: 'example.ts',
+          suite: 'suite',
+          name: 'works',
+          ancestorTitles: ['suite'],
+          fullName: 'suite works',
+          startedAt: 10,
+          declarationMode: 'only',
+        });
+        testRunnerListener?.({
+          type: 'test-finished',
+          file: 'example.ts',
+          suite: 'suite',
+          name: 'works',
+          ancestorTitles: ['suite'],
+          fullName: 'suite works',
+          startedAt: 10,
+          declarationMode: 'only',
+          duration: 5,
+          status: 'passed',
+        });
+
+        return makeFileRunResult();
+      });
+
+      await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
+
+      expect(emittedEvents).toEqual([
+        ['test-file-start', expect.anything()],
+        [
+          'test-case-start',
+          'example.ts',
+          expect.objectContaining({
+            ancestorTitles: ['suite'],
+            fullName: 'suite works',
+            mode: 'only',
+            title: 'works',
+            startedAt: 10,
+          }),
+        ],
+        [
+          'test-case-result',
+          'example.ts',
+          expect.objectContaining({
+            ancestorTitles: ['suite'],
+            fullName: 'suite works',
+            numPassingAsserts: 1,
+            startedAt: 10,
+            status: 'passed',
+            title: 'works',
+          }),
+        ],
+        ['test-file-success', expect.anything(), expect.anything()],
+      ]);
     });
   });
 
   describe('runtime failures', () => {
     it('passes StartupStallError to onFailure with an empty stack', async () => {
-      const onFailure = vi.fn();
+      const { emitEvent, calls } = makeEmitEvent();
       const session = makeSession({
         ensureAppReady: vi.fn().mockRejectedValue(new StartupStallError(1500, 3)),
       });
 
-      await executeRun(session, [makeTest()], makeWatcher(), vi.fn(), vi.fn(), onFailure, makeGlobalConfig());
+      await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
 
-      expect(onFailure).toHaveBeenCalledWith(
+      expect(calls).toContainEqual([
+        'test-file-failure',
         expect.objectContaining({ path: '/test/example.ts' }),
         expect.objectContaining({ message: expect.stringContaining('1500'), stack: '' }),
-      );
+      ]);
     });
 
     it('passes DeviceNotRespondingError to onFailure with an empty stack', async () => {
-      const onFailure = vi.fn();
+      const { emitEvent, calls } = makeEmitEvent();
       const session = makeSession({
         ensureAppReady: vi.fn().mockRejectedValue(
           new DeviceNotRespondingError('runTests', []),
         ),
       });
 
-      await executeRun(session, [makeTest()], makeWatcher(), vi.fn(), vi.fn(), onFailure, makeGlobalConfig());
+      await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
 
-      expect(onFailure).toHaveBeenCalledWith(
+      expect(calls).toContainEqual([
+        'test-file-failure',
         expect.anything(),
         expect.objectContaining({ stack: '' }),
-      );
+      ]);
     });
 
     it('calls resetCrashState after a NativeCrashError', async () => {
@@ -254,7 +357,7 @@ describe('executeRun', () => {
         ),
       });
 
-      await executeRun(session, [makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeGlobalConfig());
+      await executeRun(session, [makeTest()], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
 
       expect(session.resetCrashState).toHaveBeenCalled();
     });
@@ -268,7 +371,7 @@ describe('executeRun', () => {
         ensureAppReady: vi.fn().mockRejectedValue(new StartupStallError(1000, 2)),
       });
 
-      await executeRun(session, [makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeGlobalConfig());
+      await executeRun(session, [makeTest()], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
 
       const payload = finishedPayload as { summary: { failed: number }; status: string };
       expect(payload.summary.failed).toBe(1);
@@ -282,20 +385,18 @@ describe('executeRun', () => {
       const session = makeSession({
         callHook: vi.fn(async (name) => { hookNames.push(name as string); }),
       });
-      const onStart = vi.fn();
+      const { emitEvent, calls } = makeEmitEvent();
 
       await executeRun(
         session,
         [makeTest('/a.ts'), makeTest('/b.ts')],
         makeWatcher(true /* interrupted */),
-        onStart,
-        vi.fn(),
-        vi.fn(),
+        emitEvent,
         makeGlobalConfig(),
       );
 
       // No test was started; watcher was already interrupted.
-      expect(onStart).not.toHaveBeenCalled();
+      expect(calls).not.toContainEqual(['test-file-start', expect.anything()]);
       expect(hookNames).toContain('run:finished');
     });
   });
@@ -314,7 +415,7 @@ describe('executeRun', () => {
         session,
         [makeTest('/a.ts'), makeTest('/b.ts'), makeTest('/c.ts')],
         makeWatcher(),
-        vi.fn(), vi.fn(), vi.fn(),
+        makeEmitEvent().emitEvent,
         makeGlobalConfig(),
       );
 

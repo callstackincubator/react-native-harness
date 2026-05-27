@@ -439,6 +439,55 @@ describe('runner task context', () => {
     }
   });
 
+  it('returns skipped descendants for describe.skip()', async () => {
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+
+    try {
+      const collection = await collector.collect(() => {
+        harnessDescribe.skip('Skipped Suite', () => {
+          harnessIt('skipped test', () => undefined);
+
+          harnessDescribe('Nested Suite', () => {
+            harnessIt('nested skipped test', () => undefined);
+          });
+        });
+      }, 'runtime/describe-skip-descendants.test.ts');
+
+      const result = await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/describe-skip-descendants.test.ts',
+        runner: 'ios',
+      });
+
+      expect(result.suites[0]).toMatchObject({
+        name: 'Skipped Suite',
+        status: 'skipped',
+        tests: [
+          {
+            name: 'skipped test',
+            status: 'skipped',
+          },
+        ],
+        suites: [
+          {
+            name: 'Nested Suite',
+            status: 'skipped',
+            tests: [
+              {
+                name: 'nested skipped test',
+                status: 'skipped',
+              },
+            ],
+          },
+        ],
+      });
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
+
   it('runs onTestFailed when afterEach fails', async () => {
     const calls: string[] = [];
     const collector = getTestCollector();

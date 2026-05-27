@@ -7,6 +7,7 @@ import {
   HARNESS_BRIDGE_PATH,
   type HarnessContext,
   type BridgeEvents,
+  type TestRunnerEvents,
   type TestExecutionOptions,
   type TestSuiteResult,
 } from '@react-native-harness/bridge';
@@ -92,6 +93,7 @@ export type HarnessRunTestsOptions = Exclude<TestExecutionOptions, 'platform'>;
 export type HarnessSession = {
   readonly config: HarnessConfig;
   readonly context: HarnessContext;
+  onTestRunnerEvent: (listener: (event: TestRunnerEvents) => void) => () => void;
   runTestFile: (path: string, options: HarnessRunTestsOptions) => Promise<TestSuiteResult>;
   ensureAppReady: (testFilePath: string) => Promise<void>;
   restartApp: (testFilePath?: string) => Promise<void>;
@@ -497,6 +499,19 @@ export const createHarnessSession = async (
     const flushClientLogs = (): ClientLogBuffer => clientLogCollector.flush();
 
     const clientLogListener = clientLogCollector.handleEvent;
+    const testRunnerEventListeners = new Set<(event: TestRunnerEvents) => void>();
+    const onTestRunnerEvent = (event: BridgeEvents) => {
+      if (
+        event.type === 'test-started' ||
+        event.type === 'test-finished' ||
+        event.type === 'suite-started' ||
+        event.type === 'suite-finished' ||
+        event.type === 'file-started' ||
+        event.type === 'file-finished'
+      ) {
+        testRunnerEventListeners.forEach((listener) => listener(event));
+      }
+    };
 
     const onConnected = (conn: AppConnection) => {
       const runId = getCurrentRunId();
@@ -513,6 +528,7 @@ export const createHarnessSession = async (
     bridge.on('connected', onConnected);
     bridge.on('disconnected', onDisconnected);
     bridge.on('event', bridgeEventListener);
+    bridge.on('event', onTestRunnerEvent);
     metroInstance.events.addListener(onMetroEvent);
     if (runtimeConfig.forwardClientLogs) {
       metroInstance.events.addListener(clientLogListener);
@@ -557,6 +573,7 @@ export const createHarnessSession = async (
       bridge.off('connected', onConnected);
       bridge.off('disconnected', onDisconnected);
       bridge.off('event', bridgeEventListener);
+      bridge.off('event', onTestRunnerEvent);
 
       const nativeCoverageConfig = runtimeConfig.coverage?.native?.ios;
       if (nativeCoverageConfig?.pods?.length && platformInstance.collectNativeCoverage) {
@@ -706,6 +723,12 @@ export const createHarnessSession = async (
     return {
       config: runtimeConfig,
       context,
+      onTestRunnerEvent: (listener) => {
+        testRunnerEventListeners.add(listener);
+        return () => {
+          testRunnerEventListeners.delete(listener);
+        };
+      },
       runTestFile,
       ensureAppReady,
       restartApp,

@@ -1,10 +1,8 @@
 import type {
-  CallbackTestRunnerInterface,
   Config,
-  OnTestFailure,
-  OnTestStart,
-  OnTestSuccess,
+  EmittingTestRunnerInterface,
   Test,
+  TestEvents,
   TestRunnerOptions,
   TestWatcher,
 } from 'jest-runner';
@@ -13,22 +11,41 @@ import { executeRun } from './execute-run.js';
 import { HarnessError } from '@react-native-harness/tools';
 import { getErrorMessage } from './logs.js';
 
-export default class JestHarness implements CallbackTestRunnerInterface {
+type TestEventListener<Name extends keyof TestEvents> = (
+  eventData: TestEvents[Name],
+) => void | Promise<void>;
+
+export default class JestHarness implements EmittingTestRunnerInterface {
   readonly isSerial = true;
+  readonly supportsEventEmitters = true as const;
 
   #globalConfig: Config.GlobalConfig;
   #session: HarnessSession | null = null;
+  #listeners = new Map<keyof TestEvents, Set<TestEventListener<keyof TestEvents>>>();
 
   constructor(globalConfig: Config.GlobalConfig) {
     this.#globalConfig = globalConfig;
   }
 
+  on<Name extends keyof TestEvents>(
+    eventName: Name,
+    listener: TestEventListener<Name>,
+  ): () => void {
+    const listeners = this.#listeners.get(eventName) ?? new Set();
+    listeners.add(listener as TestEventListener<keyof TestEvents>);
+    this.#listeners.set(eventName, listeners);
+
+    return () => {
+      listeners.delete(listener as TestEventListener<keyof TestEvents>);
+      if (listeners.size === 0) {
+        this.#listeners.delete(eventName);
+      }
+    };
+  }
+
   async runTests(
     tests: Array<Test>,
     watcher: TestWatcher,
-    onStart: OnTestStart,
-    onResult: OnTestSuccess,
-    onFailure: OnTestFailure,
     options: TestRunnerOptions,
   ): Promise<void> {
     if (!options.serial) {
@@ -46,9 +63,7 @@ export default class JestHarness implements CallbackTestRunnerInterface {
         this.#session,
         tests,
         watcher,
-        onStart,
-        onResult,
-        onFailure,
+        this.#emit,
         this.#globalConfig,
       );
     } catch (error) {
@@ -63,4 +78,18 @@ export default class JestHarness implements CallbackTestRunnerInterface {
       }
     }
   }
+
+  #emit = async <Name extends keyof TestEvents>(
+    eventName: Name,
+    ...eventData: TestEvents[Name]
+  ): Promise<void> => {
+    const listeners = this.#listeners.get(eventName);
+    if (!listeners) {
+      return;
+    }
+
+    for (const listener of listeners) {
+      await listener(eventData);
+    }
+  };
 }

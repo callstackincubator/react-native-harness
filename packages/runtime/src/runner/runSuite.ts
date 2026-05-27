@@ -21,6 +21,55 @@ import {
   runOnTestFinished,
 } from './test-context.js';
 
+const getAncestorTitles = (suite: TestSuite): string[] => {
+  const ancestorTitles: string[] = [];
+  let currentSuite = suite.parent;
+
+  while (currentSuite) {
+    if (currentSuite.name !== 'root') {
+      ancestorTitles.unshift(currentSuite.name);
+    }
+    currentSuite = currentSuite.parent;
+  }
+
+  if (suite.name !== 'root') {
+    ancestorTitles.push(suite.name);
+  }
+
+  return ancestorTitles;
+};
+
+const getFullName = (ancestorTitles: string[], testName: string): string =>
+  [...ancestorTitles, testName].join(' ');
+
+const emitTestFinished = (
+  context: TestRunnerContext,
+  options: {
+    test: TestCase;
+    suite: TestSuite;
+    startedAt: number;
+    duration: number;
+    status: 'passed' | 'failed' | 'skipped' | 'todo';
+    error?: TestResult['error'];
+  },
+) => {
+  const ancestorTitles = getAncestorTitles(options.suite);
+
+  context.events.emit({
+    type: 'test-finished',
+    file: context.testFilePath,
+    suite: options.suite.name,
+    name: options.test.name,
+    ancestorTitles,
+    fullName: getFullName(ancestorTitles, options.test.name),
+    startedAt: options.startedAt,
+    declarationMode: options.test.declarationMode,
+    duration: options.duration,
+    error: options.error,
+    status: options.status,
+  });
+};
+
 declare global {
   var HARNESS_TEST_PATH: string;
 }
@@ -30,7 +79,7 @@ const runTest = async (
   suite: TestSuite,
   context: TestRunnerContext,
 ): Promise<TestResult> => {
-  const startTime = Date.now();
+  const startedAt = Date.now();
   const task: HarnessTaskContext = {
     name: test.name,
     type: 'test',
@@ -54,11 +103,16 @@ const runTest = async (
   );
 
   // Emit test-started event
+  const ancestorTitles = getAncestorTitles(suite);
   context.events.emit({
     type: 'test-started',
     name: test.name,
     suite: suite.name,
     file: context.testFilePath,
+    ancestorTitles,
+    fullName: getFullName(ancestorTitles, test.name),
+    startedAt,
+    declarationMode: test.declarationMode,
   });
 
   try {
@@ -67,14 +121,16 @@ const runTest = async (
         name: test.name,
         status: 'skipped' as const,
         duration: 0,
+        ancestorTitles,
+        fullName: getFullName(ancestorTitles, test.name),
+        startedAt,
+        declarationMode: test.declarationMode,
       };
 
-      // Emit test-finished event
-      context.events.emit({
-        type: 'test-finished',
-        name: test.name,
-        suite: suite.name,
-        file: context.testFilePath,
+      emitTestFinished(context, {
+        test,
+        suite,
+        startedAt,
         duration: 0,
         status: 'skipped',
       });
@@ -88,14 +144,16 @@ const runTest = async (
         name: test.name,
         status: 'todo' as const,
         duration: 0,
+        ancestorTitles,
+        fullName: getFullName(ancestorTitles, test.name),
+        startedAt,
+        declarationMode: test.declarationMode,
       };
 
-      // Emit test-finished event
-      context.events.emit({
-        type: 'test-finished',
-        name: test.name,
-        suite: suite.name,
-        file: context.testFilePath,
+      emitTestFinished(context, {
+        test,
+        suite,
+        startedAt,
         duration: 0,
         status: 'todo',
       });
@@ -127,7 +185,7 @@ const runTest = async (
       }
 
       if (didSkip) {
-        const duration = Date.now() - startTime;
+        const duration = Date.now() - startedAt;
 
         await runOnTestFinished(lifecycleState);
 
@@ -135,13 +193,16 @@ const runTest = async (
           name: test.name,
           status: 'skipped' as const,
           duration,
+          ancestorTitles,
+          fullName: getFullName(ancestorTitles, test.name),
+          startedAt,
+          declarationMode: test.declarationMode,
         };
 
-        context.events.emit({
-          type: 'test-finished',
-          file: context.testFilePath,
-          suite: suite.name,
-          name: test.name,
+        emitTestFinished(context, {
+          test,
+          suite,
+          startedAt,
           duration,
           status: 'skipped',
         });
@@ -155,20 +216,22 @@ const runTest = async (
       setCurrentExpectTestState(undefined);
     }
 
-    const duration = Date.now() - startTime;
+    const duration = Date.now() - startedAt;
 
     const result = {
       name: test.name,
       status: 'passed' as const,
       duration,
+      ancestorTitles,
+      fullName: getFullName(ancestorTitles, test.name),
+      startedAt,
+      declarationMode: test.declarationMode,
     };
 
-    // Emit test-finished event
-    context.events.emit({
-      type: 'test-finished',
-      file: context.testFilePath,
-      suite: suite.name,
-      name: test.name,
+    emitTestFinished(context, {
+      test,
+      suite,
+      startedAt,
       duration,
       status: 'passed',
     });
@@ -184,21 +247,23 @@ const runTest = async (
       suite.name,
       test.name,
     );
-    const duration = Date.now() - startTime;
+    const duration = Date.now() - startedAt;
 
     const result = {
       name: test.name,
       status: 'failed' as const,
       error: testError.toSerializedJSON(),
       duration,
+      ancestorTitles,
+      fullName: getFullName(ancestorTitles, test.name),
+      startedAt,
+      declarationMode: test.declarationMode,
     };
 
-    // Emit test-finished event
-    context.events.emit({
-      type: 'test-finished',
-      file: context.testFilePath,
-      suite: suite.name,
-      name: test.name,
+    emitTestFinished(context, {
+      test,
+      suite,
+      startedAt,
       duration,
       error: testError.toSerializedJSON(),
       status: 'failed',
@@ -223,10 +288,19 @@ export const runSuite = async (
 
   // Check if suite should be skipped or is todo
   if (suite.status === 'skipped') {
+    const testResults = await Promise.all(
+      suite.tests.map((test) => runTest({ ...test, status: 'skipped' }, suite, context)),
+    );
+    const suiteResults = await Promise.all(
+      suite.suites.map((childSuite) =>
+        runSuite({ ...childSuite, status: 'skipped' }, context),
+      ),
+    );
+
     const result = {
       name: suite.name,
-      tests: [],
-      suites: [],
+      tests: testResults,
+      suites: suiteResults,
       status: 'skipped' as const,
       duration: 0,
     };

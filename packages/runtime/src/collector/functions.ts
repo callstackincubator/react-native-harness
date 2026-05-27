@@ -76,10 +76,19 @@ const convertRawTestCaseToTestCase = (
   rawTest: RawTestCase,
   suiteContext: { hasFocusedTests: boolean }
 ): TestCase => {
+  const declarationMode = rawTest.options.todo
+    ? 'todo'
+    : rawTest.options.skip
+      ? 'skip'
+      : rawTest.options.only
+        ? 'only'
+        : undefined;
+
   return {
     name: rawTest.name,
     fn: rawTest.fn,
     status: computeTestStatus(rawTest, suiteContext),
+    declarationMode,
   };
 };
 

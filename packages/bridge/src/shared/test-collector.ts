@@ -2,6 +2,8 @@ import type { HarnessTestContext } from './test-context.js';
 
 export type TestStatus = 'active' | 'skipped' | 'todo';
 
+export type TestDeclarationMode = 'only' | 'skip' | 'todo';
+
 export type TestFn = (context: HarnessTestContext) => void | Promise<void>;
 
 export type SuiteHookFn = () => void | Promise<void>;
@@ -10,6 +12,7 @@ export type TestCase = {
   name: string;
   fn: TestFn;
   status: TestStatus;
+  declarationMode?: TestDeclarationMode;
 };
 
 export type TestSuite = {
