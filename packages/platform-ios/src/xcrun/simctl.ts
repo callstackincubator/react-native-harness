@@ -285,9 +285,20 @@ export const startApp = async (
   const environment = getSimctlChildEnvironment(options);
   const argumentsList = options?.arguments ?? [];
 
-  await spawn('xcrun', ['simctl', 'launch', udid, bundleId, ...argumentsList], {
-    env: environment,
-  });
+  await spawn(
+    'xcrun',
+    [
+      'simctl',
+      'launch',
+      '--terminate-running-process',
+      udid,
+      bundleId,
+      ...argumentsList,
+    ],
+    {
+      env: environment,
+    },
+  );
 };
 
 export const launchAppProcess = (
@@ -300,7 +311,15 @@ export const launchAppProcess = (
 
   return spawn(
     'xcrun',
-    ['simctl', 'launch', '--console', udid, bundleId, ...argumentsList],
+    [
+      'simctl',
+      'launch',
+      '--console',
+      '--terminate-running-process',
+      udid,
+      bundleId,
+      ...argumentsList,
+    ],
     {
       env: environment,
       stdout: 'pipe',

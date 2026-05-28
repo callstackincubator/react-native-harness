@@ -216,7 +216,13 @@ export const launchAppProcess = (
 ): Subprocess =>
   spawn(
     'xcrun',
-    ['devicectl', 'device', ...getDeviceCtlLaunchArgs(identifier, bundleId, options)],
+    [
+      'devicectl',
+      'device',
+      ...getDeviceCtlLaunchArgs(identifier, bundleId, options, {
+        console: true,
+      }),
+    ],
     {
       stdout: 'pipe',
       stderr: 'pipe',
@@ -226,9 +232,23 @@ export const launchAppProcess = (
 export const getDeviceCtlLaunchArgs = (
   identifier: string,
   bundleId: string,
-  options?: AppleAppLaunchOptions
+  options?: AppleAppLaunchOptions,
+  flags?: {
+    console?: boolean;
+  }
 ): string[] => {
-  const args = ['process', 'launch', '--device', identifier];
+  const args = [
+    'process',
+    'launch',
+    '--device',
+    identifier,
+    '--terminate-existing',
+  ];
+
+  if (flags?.console) {
+    args.push('--console');
+  }
+
   const environment = options?.environment;
 
   if (environment && Object.keys(environment).length > 0) {

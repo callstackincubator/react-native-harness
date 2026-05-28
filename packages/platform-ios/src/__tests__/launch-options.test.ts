@@ -1,10 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import * as tools from '@react-native-harness/tools';
+import { describe, expect, it, vi } from 'vitest';
 import {
   getDeviceConnectionHost,
   getDeviceCtlLaunchArgs,
   isMatchingDevice,
+  launchAppProcess as launchDeviceAppProcess,
 } from '../xcrun/devicectl.js';
-import { getSimctlChildEnvironment } from '../xcrun/simctl.js';
+import {
+  getSimctlChildEnvironment,
+  launchAppProcess,
+  startApp,
+} from '../xcrun/simctl.js';
 
 describe('Apple app launch options', () => {
   it('maps simulator environment to SIMCTL_CHILD variables', () => {
@@ -34,6 +40,7 @@ describe('Apple app launch options', () => {
       'launch',
       '--device',
       'device-id',
+      '--terminate-existing',
       '--environment-variables',
       '{"FEATURE_X":"1"}',
       'com.example.app',
@@ -41,6 +48,91 @@ describe('Apple app launch options', () => {
       '--mode=test',
       '--retry=1',
     ]);
+  });
+
+  it('passes console mode to devicectl process launch streams', () => {
+    const spawnSpy = vi
+      .spyOn(tools, 'spawn')
+      .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>);
+
+    launchDeviceAppProcess('device-id', 'com.example.app', {
+      arguments: ['--mode=test'],
+      environment: {
+        FEATURE_X: '1',
+      },
+    });
+
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'xcrun',
+      [
+        'devicectl',
+        'device',
+        'process',
+        'launch',
+        '--device',
+        'device-id',
+        '--terminate-existing',
+        '--console',
+        '--environment-variables',
+        '{"FEATURE_X":"1"}',
+        'com.example.app',
+        '--',
+        '--mode=test',
+      ],
+      {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+    );
+  });
+
+  it('passes terminate-running-process to simctl launch commands', async () => {
+    const spawnSpy = vi
+      .spyOn(tools, 'spawn')
+      .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>);
+
+    await startApp('sim-udid', 'com.example.app', {
+      arguments: ['--mode=test'],
+    });
+
+    launchAppProcess('sim-udid', 'com.example.app', {
+      arguments: ['--mode=test'],
+    });
+
+    expect(spawnSpy).toHaveBeenNthCalledWith(
+      1,
+      'xcrun',
+      [
+        'simctl',
+        'launch',
+        '--terminate-running-process',
+        'sim-udid',
+        'com.example.app',
+        '--mode=test',
+      ],
+      {
+        env: {},
+      },
+    );
+
+    expect(spawnSpy).toHaveBeenNthCalledWith(
+      2,
+      'xcrun',
+      [
+        'simctl',
+        'launch',
+        '--console',
+        '--terminate-running-process',
+        'sim-udid',
+        'com.example.app',
+        '--mode=test',
+      ],
+      {
+        env: {},
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+    );
   });
 
   it('uses the CoreDevice tunnel IP as the direct device connection host', () => {
