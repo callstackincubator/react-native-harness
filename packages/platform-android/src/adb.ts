@@ -699,6 +699,13 @@ export const isAppRunning = async (
   adbId: string,
   bundleId: string,
 ): Promise<boolean> => {
+  return (await getAppPid(adbId, bundleId)) != null;
+};
+
+export const getAppPid = async (
+  adbId: string,
+  bundleId: string,
+): Promise<number | null> => {
   try {
     const { stdout } = await spawn(getAdbBinaryPath(), [
       '-s',
@@ -707,10 +714,15 @@ export const isAppRunning = async (
       'pidof',
       bundleId,
     ]);
-    return stdout.trim() !== '';
+    const pid = stdout
+      .trim()
+      .split(/\s+/)
+      .find((value) => value !== '');
+
+    return pid ? Number(pid) : null;
   } catch (error) {
     if (error instanceof SubprocessError && error.exitCode === 1) {
-      return false;
+      return null;
     }
 
     throw error;

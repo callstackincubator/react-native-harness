@@ -5,7 +5,7 @@ PODS:
   - FBLazyVector (0.82.1)
   - fmt (11.0.2)
   - glog (0.3.5)
-  - HarnessUI (1.1.0):
+  - HarnessUI (1.2.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -2691,7 +2691,7 @@ SPEC CHECKSUMS:
   FBLazyVector: 0aa6183b9afe3c31fc65b5d1eeef1f3c19b63bfa
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
-  HarnessUI: 01740b858c62c55d42995d4ca459ead036b96c9a
+  HarnessUI: c5f2b106cfb3944569b791515e304b5e96d63bb6
   hermes-engine: 273e30e7fb618279934b0b95ffab60ecedb7acf5
   NitroImage: dfec7a8d5e6ba8228ed780bc70041e762cbbbd0b
   NitroModules: b24827b7772f5a030aef074547a2393a6e03579e
@@ -2758,12 +2758,12 @@ SPEC CHECKSUMS:
   React-utils: abf37b162f560cd0e3e5d037af30bb796512246d
   React-webperformancenativemodule: 50a57c713a90d27ae3ab947a6c9c8859bcb49709
   ReactAppDependencyProvider: a45ef34bb22dc1c9b2ac1f74167d9a28af961176
-  ReactCodegen: 65ae48ae967a383859da021028e6e8dd7b2d97d1
+  ReactCodegen: 7cbd647ef54597eb03252f261ce11338f72c1576
   ReactCommon: 804dc80944fa90b86800b43c871742ec005ca424
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   VisionCamera: 889238ad98665463fcc2fa44385614979263cfc7
   Yoga: 689c8e04277f3ad631e60fe2a08e41d411daf8eb
 
-PODFILE CHECKSUM: 0a1696308b49d81f7b7a744c9ae31d90de903a3e
+PODFILE CHECKSUM: 39c2ddc2e50df4393825350ad71964fe38e517c6
 
 COCOAPODS: 1.16.2

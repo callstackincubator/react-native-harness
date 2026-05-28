@@ -5,6 +5,19 @@
   "scripts": {
     "test:harness": "jest --selectProjects react-native-harness"
   },
+  "codegenConfig": {
+    "name": "PlaygroundCrashSpec",
+    "type": "modules",
+    "jsSrcsDir": "src/specs",
+    "android": {
+      "javaPackageName": "com.harnessplayground"
+    },
+    "ios": {
+      "modulesProvider": {
+        "PlaygroundCrash": "RCTPlaygroundCrash"
+      }
+    }
+  },
   "dependencies": {
     "react": "19.2.3",
     "react-dom": "19.2.3",

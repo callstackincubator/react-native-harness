@@ -9,9 +9,11 @@
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-HarnessPlayground.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-HarnessPlayground.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		14E8353EBA4BACCD574114DE /* PlaygroundSwiftCrash.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64AE27A5EB682B6DCF9372AB /* PlaygroundSwiftCrash.swift */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		7B16895B86EC58090B0C2218 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		D54969D45B5AA0766A189885 /* RCTPlaygroundCrash.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5007C986775F98C67667E633 /* RCTPlaygroundCrash.mm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,8 +22,11 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = HarnessPlayground/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = HarnessPlayground/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-HarnessPlayground.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-HarnessPlayground.debug.xcconfig"; path = "Target Support Files/Pods-HarnessPlayground/Pods-HarnessPlayground.debug.xcconfig"; sourceTree = "<group>"; };
+		5007C986775F98C67667E633 /* RCTPlaygroundCrash.mm */ = {isa = PBXFileReference; includeInIndex = 1; name = RCTPlaygroundCrash.mm; path = HarnessPlayground/RCTPlaygroundCrash.mm; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-HarnessPlayground.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-HarnessPlayground.release.xcconfig"; path = "Target Support Files/Pods-HarnessPlayground/Pods-HarnessPlayground.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-HarnessPlayground.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-HarnessPlayground.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5ED740C7C3F9A8F8CC6EB8D9 /* RCTPlaygroundCrash.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; name = RCTPlaygroundCrash.h; path = HarnessPlayground/RCTPlaygroundCrash.h; sourceTree = "<group>"; };
+		64AE27A5EB682B6DCF9372AB /* PlaygroundSwiftCrash.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PlaygroundSwiftCrash.swift; path = HarnessPlayground/PlaygroundSwiftCrash.swift; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = HarnessPlayground/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = HarnessPlayground/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
@@ -47,6 +52,9 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				5ED740C7C3F9A8F8CC6EB8D9 /* RCTPlaygroundCrash.h */,
+				5007C986775F98C67667E633 /* RCTPlaygroundCrash.mm */,
+				64AE27A5EB682B6DCF9372AB /* PlaygroundSwiftCrash.swift */,
 			);
 			name = HarnessPlayground;
 			sourceTree = "<group>";
@@ -247,6 +255,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				D54969D45B5AA0766A189885 /* RCTPlaygroundCrash.mm in Sources */,
+				14E8353EBA4BACCD574114DE /* PlaygroundSwiftCrash.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

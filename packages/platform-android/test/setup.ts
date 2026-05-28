@@ -57,6 +57,7 @@ vi.mock('../src/adb.js', async (importOriginal) => {
     waitForEmulatorDisconnect: vi.fn().mockResolvedValue(undefined),
     waitForBoot: vi.fn().mockResolvedValue('emulator-5554'),
     isAppRunning: vi.fn().mockResolvedValue(false),
+    getAppPid: vi.fn().mockResolvedValue(null),
     getAppUid: vi.fn().mockResolvedValue(0),
     setHideErrorDialogs: vi.fn().mockResolvedValue(undefined),
     getLogcatTimestamp: vi.fn().mockResolvedValue('01-01 00:00:00.000'),

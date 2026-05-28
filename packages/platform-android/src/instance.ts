@@ -1,10 +1,7 @@
 import {
   AppNotInstalledError,
   DeviceNotFoundError,
-  createAppSessionEmitter,
   type HarnessPlatformInitOptions,
-  type AppSession,
-  type AppSessionState,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
@@ -34,70 +31,9 @@ import {
 } from './environment.js';
 import { isInteractive } from '@react-native-harness/tools';
 import fs from 'node:fs';
+import { createAndroidAppSession } from './app-session.js';
 
 const androidInstanceLogger = logger.child('android-instance');
-const APP_EXIT_POLL_INTERVAL_MS = 1000;
-
-const sleep = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-const createAndroidAppSession = async ({
-  startApp,
-  stopApp,
-  isAppRunning,
-}: {
-  startApp: () => Promise<void>;
-  stopApp: () => Promise<void>;
-  isAppRunning: () => Promise<boolean>;
-}): Promise<AppSession> => {
-  const emitter = createAppSessionEmitter();
-  let state: AppSessionState = { status: 'running' };
-  let disposed = false;
-  let stopPolling = false;
-
-  await startApp();
-
-  const pollTask = (async () => {
-    while (!stopPolling) {
-      try {
-        if (!(await isAppRunning())) {
-          if (!disposed && state.status === 'running') {
-            state = {
-              status: 'exited',
-              occurredAt: Date.now(),
-              reason: 'process-gone',
-            };
-            emitter.emit({ type: 'app_exited' });
-          }
-          return;
-        }
-      } catch (error) {
-        androidInstanceLogger.debug('Android app session poll failed', error);
-      }
-
-      await sleep(APP_EXIT_POLL_INTERVAL_MS);
-    }
-  })();
-
-  return {
-    dispose: async () => {
-      if (disposed) {
-        return;
-      }
-
-      disposed = true;
-      stopPolling = true;
-      state = { status: 'disposed', occurredAt: Date.now() };
-      emitter.clear();
-      await stopApp();
-      await pollTask;
-    },
-    getState: async () => state,
-    getLogs: () => [],
-    addListener: emitter.addListener,
-    removeListener: emitter.removeListener,
-  };
-};
 
 const getHarnessAppPath = (): string => {
   const appPath = process.env.HARNESS_APP_PATH;
@@ -328,7 +264,7 @@ export const getAndroidEmulatorPlatformInstance = async (
     await adb.installApp(adbId, installPath);
   }
 
-  await configureAndroidRuntime(adbId, config, harnessConfig);
+  const appUid = await configureAndroidRuntime(adbId, config, harnessConfig);
 
   if (permissionsEnabled) {
     await adb.grantPermissions(adbId, config.bundleId);
@@ -342,6 +278,8 @@ export const getAndroidEmulatorPlatformInstance = async (
         config.appLaunchOptions;
 
       return await createAndroidAppSession({
+        appUid,
+        bundleId: config.bundleId,
         startApp: () =>
           adb.startApp(
             adbId,
@@ -350,7 +288,9 @@ export const getAndroidEmulatorPlatformInstance = async (
             launchOptions,
           ),
         stopApp: () => adb.stopApp(adbId, config.bundleId),
-        isAppRunning: () => adb.isAppRunning(adbId, config.bundleId),
+        getAppPid: () => adb.getAppPid(adbId, config.bundleId),
+        getLogcatTimestamp: () => adb.getLogcatTimestamp(adbId),
+        startLogcat: (args) => adb.startLogcat(adbId, args),
       });
     },
     dispose: async () => {
@@ -388,7 +328,7 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
     );
   }
 
-  await configureAndroidRuntime(adbId, config, harnessConfig);
+  const appUid = await configureAndroidRuntime(adbId, config, harnessConfig);
 
   if (permissionsEnabled) {
     await adb.grantPermissions(adbId, config.bundleId);
@@ -402,6 +342,8 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
         config.appLaunchOptions;
 
       return await createAndroidAppSession({
+        appUid,
+        bundleId: config.bundleId,
         startApp: () =>
           adb.startApp(
             adbId,
@@ -410,7 +352,9 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
             launchOptions,
           ),
         stopApp: () => adb.stopApp(adbId, config.bundleId),
-        isAppRunning: () => adb.isAppRunning(adbId, config.bundleId),
+        getAppPid: () => adb.getAppPid(adbId, config.bundleId),
+        getLogcatTimestamp: () => adb.getLogcatTimestamp(adbId),
+        startLogcat: (args) => adb.startLogcat(adbId, args),
       });
     },
     dispose: async () => {
