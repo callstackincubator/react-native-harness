@@ -7,19 +7,20 @@ import {
 } from './protocol.js';
 import type { RpcTransport } from './transport.js';
 
-type RpcMethod = (...args: any[]) => unknown;
+type RpcMethod = {
+  bivarianceHack(...args: unknown[]): unknown;
+}['bivarianceHack'];
 type RpcMethods = Record<string, RpcMethod>;
 
 type PendingInvocation = {
   args: unknown[];
   method: string;
   reject: (reason: unknown) => void;
-  resolve: (value: any) => void;
+  resolve: (value: unknown) => void;
   timeout: ReturnType<typeof setTimeout> | null;
 };
 
 export type RpcPeer<
-  Local extends RpcMethods,
   Remote extends RpcMethods,
   Event extends { type: string },
 > = {
@@ -53,7 +54,7 @@ export const createRpcPeer = <
   Event extends { type: string },
 >(
   options: CreateRpcPeerOptions<Local, Event>,
-): RpcPeer<Local, Remote, Event> => {
+): RpcPeer<Remote, Event> => {
   const pendingInvocations = new Map<number, PendingInvocation>();
   let nextMessageId = 1;
   let closedReason: Error | null = null;
@@ -100,7 +101,9 @@ export const createRpcPeer = <
           args,
           method: methodName,
           reject,
-          resolve,
+          resolve: (value) => {
+            resolve(value as Awaited<ReturnType<Remote[typeof method]>>);
+          },
           timeout: null,
         };
 
@@ -132,7 +135,7 @@ export const createRpcPeer = <
 
           reject(error);
         }
-      }) as Promise<Awaited<ReturnType<Remote[typeof method]>>>;
+      });
     },
     sendEvent: (event) => {
       if (closedReason) {
