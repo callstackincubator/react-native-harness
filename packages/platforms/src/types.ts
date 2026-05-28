@@ -79,6 +79,39 @@ export type AppMonitor = {
   removeListener: (listener: AppMonitorListener) => void;
 };
 
+export type AppSessionLog = {
+  line: string;
+  occurredAt: number;
+};
+
+export type AppSessionEvent = { type: 'app_exited' };
+
+export type AppSessionListener = (event: AppSessionEvent) => void;
+
+export type AppSessionState =
+  | {
+      status: 'running';
+      pid?: number;
+    }
+  | {
+      status: 'exited';
+      occurredAt: number;
+      pid?: number;
+      reason?: 'observed-exit' | 'process-gone';
+    }
+  | {
+      status: 'disposed';
+      occurredAt: number;
+    };
+
+export type AppSession = {
+  dispose: () => Promise<void>;
+  getState: () => Promise<AppSessionState>;
+  getLogs: () => AppSessionLog[];
+  addListener: (listener: AppSessionListener) => void;
+  removeListener: (listener: AppSessionListener) => void;
+};
+
 export type AndroidAppLaunchOptions = {
   extras?: Record<string, string | number | boolean>;
 };
@@ -104,15 +137,8 @@ export type CollectNativeCoverageOptions = {
 };
 
 export type HarnessPlatformRunner = {
-  startApp: (options?: AppLaunchOptions) => Promise<void>;
-  restartApp: (options?: AppLaunchOptions) => Promise<void>;
-  stopApp: () => Promise<void>;
+  createAppSession: (options?: AppLaunchOptions) => Promise<AppSession>;
   dispose: () => Promise<void>;
-  isAppRunning: () => Promise<boolean>;
-  createAppMonitor: (options?: CreateAppMonitorOptions) => AppMonitor;
-  getCrashDetails?: (
-    options: CrashDetailsLookupOptions,
-  ) => Promise<AppCrashDetails | null>;
   collectNativeCoverage?: (
     options: CollectNativeCoverageOptions
   ) => Promise<string | null>;

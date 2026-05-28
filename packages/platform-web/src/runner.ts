@@ -1,69 +1,12 @@
 import {
-  type AppMonitor,
-  type AppMonitorEvent,
-  type CreateAppMonitorOptions,
+  createAppSessionEmitter,
+  type AppSession,
+  type AppSessionState,
   type HarnessPlatformInitOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import { chromium, firefox, webkit, type Browser, type Page } from 'playwright';
-import { getEmitter } from '@react-native-harness/tools';
 import { WebPlatformConfigSchema, type WebPlatformConfig } from './config.js';
-
-const createPollingAppMonitor = ({
-  interval,
-  isAppRunning,
-}: {
-  interval: number;
-  isAppRunning: () => Promise<boolean>;
-}): AppMonitor => {
-  const emitter = getEmitter<AppMonitorEvent>();
-  let timer: NodeJS.Timeout | null = null;
-  let started = false;
-  let wasRunning = false;
-
-  const start = async () => {
-    if (started) {
-      return;
-    }
-
-    started = true;
-    wasRunning = await isAppRunning();
-
-    timer = setInterval(async () => {
-      const running = await isAppRunning();
-
-      if (running && !wasRunning) {
-        emitter.emit({ type: 'app_started', source: 'polling' });
-      } else if (!running && wasRunning) {
-        emitter.emit({ type: 'app_exited', source: 'polling' });
-      }
-
-      wasRunning = running;
-    }, interval);
-  };
-
-  const stop = async () => {
-    started = false;
-
-    if (timer) {
-      clearInterval(timer);
-      timer = null;
-    }
-  };
-
-  const dispose = async () => {
-    await stop();
-    emitter.clearAllListeners();
-  };
-
-  return {
-    start,
-    stop,
-    dispose,
-    addListener: emitter.addListener,
-    removeListener: emitter.removeListener,
-  };
-};
 
 const getWebRunner = async (
   config: WebPlatformConfig,
@@ -183,24 +126,43 @@ const getWebRunner = async (
   };
 
   return {
-    startApp: async () => {
-      if (!browser) {
-        await launchBrowser();
-      }
-    },
-    restartApp: async () => {
-      if (page) {
-        await page.reload();
-      } else {
-        await launchBrowser();
-      }
-    },
-    stopApp: async () => {
+    createAppSession: async (): Promise<AppSession> => {
       if (browser) {
         await browser.close();
         browser = null;
         page = null;
       }
+      await launchBrowser();
+
+      const emitter = createAppSessionEmitter();
+      let state: AppSessionState = { status: 'running' };
+
+      page?.on('close', () => {
+        if (state.status === 'running') {
+          state = { status: 'exited', occurredAt: Date.now(), reason: 'observed-exit' };
+          emitter.emit({ type: 'app_exited' });
+        }
+      });
+
+      return {
+        dispose: async () => {
+          if (state.status === 'disposed') {
+            return;
+          }
+
+          state = { status: 'disposed', occurredAt: Date.now() };
+          emitter.clear();
+          if (browser) {
+            await browser.close();
+            browser = null;
+            page = null;
+          }
+        },
+        getState: async () => state,
+        getLogs: () => [],
+        addListener: emitter.addListener,
+        removeListener: emitter.removeListener,
+      };
     },
     dispose: async () => {
       if (browser) {
@@ -208,17 +170,6 @@ const getWebRunner = async (
         browser = null;
         page = null;
       }
-    },
-    isAppRunning: async () => {
-      return browser !== null && page !== null && !page.isClosed();
-    },
-    createAppMonitor: (options?: CreateAppMonitorOptions) => {
-      void options;
-      return createPollingAppMonitor({
-        interval: 250,
-        isAppRunning: async () =>
-          browser !== null && page !== null && !page.isClosed(),
-      });
     },
   };
 };

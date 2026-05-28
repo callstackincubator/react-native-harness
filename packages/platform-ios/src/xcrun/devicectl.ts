@@ -1,5 +1,5 @@
 import { type AppleAppLaunchOptions } from '@react-native-harness/platforms';
-import { spawn } from '@react-native-harness/tools';
+import { spawn, type Subprocess } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -208,6 +208,20 @@ export const startApp = async (
     getDeviceCtlLaunchArgs(identifier, bundleId, options)
   );
 };
+
+export const launchAppProcess = (
+  identifier: string,
+  bundleId: string,
+  options?: AppleAppLaunchOptions
+): Subprocess =>
+  spawn(
+    'xcrun',
+    ['devicectl', 'device', ...getDeviceCtlLaunchArgs(identifier, bundleId, options)],
+    {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    }
+  );
 
 export const getDeviceCtlLaunchArgs = (
   identifier: string,

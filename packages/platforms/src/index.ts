@@ -5,6 +5,11 @@ export type {
   AndroidAppLaunchOptions,
   AppleAppLaunchOptions,
   AppCrashDetails,
+  AppSession,
+  AppSessionEvent,
+  AppSessionListener,
+  AppSessionLog,
+  AppSessionState,
   AppMonitor,
   AppMonitorEvent,
   AppMonitorListener,
@@ -21,6 +26,11 @@ export type {
   VegaAppLaunchOptions,
   WebAppLaunchOptions,
 } from './types.js';
+export {
+  createAppSessionEmitter,
+  createBoundedLogBuffer,
+  createNoopAppSession,
+} from './session.js';
 export {
   AppNotInstalledError,
   DeviceNotFoundError,

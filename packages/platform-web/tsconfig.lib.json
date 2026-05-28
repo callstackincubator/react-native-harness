@@ -13,9 +13,6 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../tools/tsconfig.lib.json"
-    },
-    {
       "path": "../platforms/tsconfig.lib.json"
     }
   ]

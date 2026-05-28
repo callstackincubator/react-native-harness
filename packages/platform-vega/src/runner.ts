@@ -1,71 +1,19 @@
 import {
-  type AppMonitor,
-  type AppMonitorEvent,
+  createAppSessionEmitter,
+  type AppSession,
+  type AppSessionState,
   DeviceNotFoundError,
   AppNotInstalledError,
-  type CreateAppMonitorOptions,
   type HarnessPlatformInitOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
-import { getEmitter } from '@react-native-harness/tools';
 import { VegaPlatformConfigSchema, type VegaPlatformConfig } from './config.js';
 import * as kepler from './kepler.js';
 
-const createPollingAppMonitor = ({
-  interval,
-  isAppRunning,
-}: {
-  interval: number;
-  isAppRunning: () => Promise<boolean>;
-}): AppMonitor => {
-  const emitter = getEmitter<AppMonitorEvent>();
-  let timer: NodeJS.Timeout | null = null;
-  let started = false;
-  let wasRunning = false;
+const APP_EXIT_POLL_INTERVAL_MS = 1000;
 
-  const start = async () => {
-    if (started) {
-      return;
-    }
-
-    started = true;
-    wasRunning = await isAppRunning();
-
-    timer = setInterval(async () => {
-      const running = await isAppRunning();
-
-      if (running && !wasRunning) {
-        emitter.emit({ type: 'app_started', source: 'polling' });
-      } else if (!running && wasRunning) {
-        emitter.emit({ type: 'app_exited', source: 'polling' });
-      }
-
-      wasRunning = running;
-    }, interval);
-  };
-
-  const stop = async () => {
-    started = false;
-
-    if (timer) {
-      clearInterval(timer);
-      timer = null;
-    }
-  };
-
-  const dispose = async () => {
-    await stop();
-    emitter.clearAllListeners();
-  };
-
-  return {
-    start,
-    stop,
-    dispose,
-    addListener: emitter.addListener,
-    removeListener: emitter.removeListener,
-  };
-};
+const sleep = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 const getVegaRunner = async (
   config: VegaPlatformConfig,
@@ -88,28 +36,50 @@ const getVegaRunner = async (
   }
 
   return {
-    startApp: async () => {
-      await kepler.startApp(deviceId, bundleId);
-    },
-    restartApp: async () => {
+    createAppSession: async (): Promise<AppSession> => {
       await kepler.stopApp(deviceId, bundleId);
       await kepler.startApp(deviceId, bundleId);
-    },
-    stopApp: async () => {
-      await kepler.stopApp(deviceId, bundleId);
+
+      const emitter = createAppSessionEmitter();
+      let state: AppSessionState = { status: 'running' };
+      let disposed = false;
+      let stopPolling = false;
+
+      const pollTask = (async () => {
+        while (!stopPolling) {
+          if (!(await kepler.isAppRunning(deviceId, bundleId))) {
+            if (!disposed && state.status === 'running') {
+              state = { status: 'exited', occurredAt: Date.now(), reason: 'process-gone' };
+              emitter.emit({ type: 'app_exited' });
+            }
+            return;
+          }
+
+          await sleep(APP_EXIT_POLL_INTERVAL_MS);
+        }
+      })();
+
+      return {
+        dispose: async () => {
+          if (disposed) {
+            return;
+          }
+
+          disposed = true;
+          stopPolling = true;
+          state = { status: 'disposed', occurredAt: Date.now() };
+          emitter.clear();
+          await kepler.stopApp(deviceId, bundleId);
+          await pollTask;
+        },
+        getState: async () => state,
+        getLogs: () => [],
+        addListener: emitter.addListener,
+        removeListener: emitter.removeListener,
+      };
     },
     dispose: async () => {
       await kepler.stopApp(deviceId, bundleId);
-    },
-    isAppRunning: async () => {
-      return await kepler.isAppRunning(deviceId, bundleId);
-    },
-    createAppMonitor: (options?: CreateAppMonitorOptions) => {
-      void options;
-      return createPollingAppMonitor({
-        interval: 250,
-        isAppRunning: () => kepler.isAppRunning(deviceId, bundleId),
-      });
     },
   };
 };

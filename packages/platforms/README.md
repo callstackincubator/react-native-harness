@@ -22,25 +22,22 @@ yarn add @react-native-harness/platforms
 This package provides the core abstractions for creating platform implementations. It's typically used by platform-specific packages rather than directly by end users.
 
 ```typescript
-import { createHarnessPlatform } from '@react-native-harness/platforms';
+import type { HarnessPlatformRunner } from '@react-native-harness/platforms';
 
-const platform = createHarnessPlatform({
-  name: 'my-platform',
-  getInstance: async () => ({
-    startApp: async () => {
-      /* implementation */
-    },
-    restartApp: async () => {
-      /* implementation */
-    },
-    stopApp: async () => {
-      /* implementation */
-    },
+const runner: HarnessPlatformRunner = {
+  createAppSession: async () => ({
     dispose: async () => {
-      /* implementation */
+      /* kill the launched app */
     },
+    getState: async () => ({ status: 'running' }),
+    getLogs: () => [],
+    addListener: () => undefined,
+    removeListener: () => undefined,
   }),
-});
+  dispose: async () => {
+    /* clean up platform resources */
+  },
+};
 ```
 
 ## API
@@ -65,16 +62,25 @@ Core platform interface.
 - `name` - Platform name
 - `getInstance()` - Returns a platform instance
 
-### `HarnessPlatformInstance`
+### `HarnessPlatformRunner`
 
-Platform instance interface with lifecycle methods.
+Platform runner interface with lifecycle methods.
 
 **Methods:**
 
-- `startApp()` - Starts the application
-- `restartApp()` - Restarts the application
-- `stopApp()` - Stops the application
+- `createAppSession()` - Launches the application and returns an `AppSession`
 - `dispose()` - Cleans up resources
+
+### `AppSession`
+
+One launched application session. Sessions are terminal; restarting means disposing the current session and creating a new one.
+
+**Methods:**
+
+- `dispose()` - Intentionally kills the launched app
+- `getState()` - Returns the cached session state
+- `getLogs()` - Returns bounded logs for this launched app session
+- `addListener()` / `removeListener()` - Subscribes to minimal session lifecycle events
 
 ### Error Classes
 

@@ -502,14 +502,17 @@ describe('Android platform instance', () => {
       init,
     );
 
-    const listener = vi.fn();
-    const appMonitor = instance.createAppMonitor();
+    vi.spyOn(adb, 'stopApp').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'startApp').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'isAppRunning').mockResolvedValue(false);
 
-    await expect(appMonitor.start()).resolves.toBeUndefined();
-    await expect(appMonitor.stop()).resolves.toBeUndefined();
-    await expect(appMonitor.dispose()).resolves.toBeUndefined();
-    expect(appMonitor.addListener(listener)).toBeUndefined();
-    expect(appMonitor.removeListener(listener)).toBeUndefined();
+    const listener = vi.fn();
+    const appSession = await instance.createAppSession();
+
+    expect(appSession.getLogs()).toEqual([]);
+    expect(appSession.addListener(listener)).toBeUndefined();
+    expect(appSession.removeListener(listener)).toBeUndefined();
+    await expect(appSession.dispose()).resolves.toBeUndefined();
   });
 
   it('returns a noop physical device app monitor when native crash detection is disabled', async () => {
@@ -556,14 +559,17 @@ describe('Android platform instance', () => {
       harnessConfigWithoutNativeCrashDetection,
     );
 
-    const listener = vi.fn();
-    const appMonitor = instance.createAppMonitor();
+    vi.spyOn(adb, 'stopApp').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'startApp').mockResolvedValue(undefined);
+    vi.spyOn(adb, 'isAppRunning').mockResolvedValue(false);
 
-    await expect(appMonitor.start()).resolves.toBeUndefined();
-    await expect(appMonitor.stop()).resolves.toBeUndefined();
-    await expect(appMonitor.dispose()).resolves.toBeUndefined();
-    expect(appMonitor.addListener(listener)).toBeUndefined();
-    expect(appMonitor.removeListener(listener)).toBeUndefined();
+    const listener = vi.fn();
+    const appSession = await instance.createAppSession();
+
+    expect(appSession.getLogs()).toEqual([]);
+    expect(appSession.addListener(listener)).toBeUndefined();
+    expect(appSession.removeListener(listener)).toBeUndefined();
+    await expect(appSession.dispose()).resolves.toBeUndefined();
   });
 
   it('grants permissions when permissions are enabled for emulator', async () => {

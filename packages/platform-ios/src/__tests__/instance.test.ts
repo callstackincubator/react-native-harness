@@ -188,7 +188,7 @@ describe('iOS platform instance dependency validation', () => {
     ).resolves.toBeDefined();
   });
 
-  it('returns a noop simulator app monitor when native crash detection is disabled', async () => {
+  it('exposes simulator app sessions when native crash detection is disabled', async () => {
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
@@ -210,14 +210,7 @@ describe('iOS platform instance dependency validation', () => {
       init,
     );
 
-    const listener = vi.fn();
-    const appMonitor = instance.createAppMonitor();
-
-    await expect(appMonitor.start()).resolves.toBeUndefined();
-    await expect(appMonitor.stop()).resolves.toBeUndefined();
-    await expect(appMonitor.dispose()).resolves.toBeUndefined();
-    expect(appMonitor.addListener(listener)).toBeUndefined();
-    expect(appMonitor.removeListener(listener)).toBeUndefined();
+    expect(instance.createAppSession).toEqual(expect.any(Function));
   });
 
   it('reuses a booted simulator and does not shut it down on dispose', async () => {

@@ -1,8 +1,10 @@
 import {
   AppNotInstalledError,
-  CreateAppMonitorOptions,
   DeviceNotFoundError,
+  createAppSessionEmitter,
   type HarnessPlatformInitOptions,
+  type AppSession,
+  type AppSessionState,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
@@ -24,7 +26,6 @@ import {
   clearHarnessDebugHttpHost,
 } from './shared-prefs.js';
 import { getDeviceName } from './utils.js';
-import { createAndroidAppMonitor } from './app-monitor.js';
 import { HarnessAppPathError, HarnessEmulatorConfigError } from './errors.js';
 import {
   ensureAndroidEmulatorAvailable,
@@ -33,17 +34,70 @@ import {
 } from './environment.js';
 import { isInteractive } from '@react-native-harness/tools';
 import fs from 'node:fs';
-import type { AppMonitor } from '@react-native-harness/platforms';
 
 const androidInstanceLogger = logger.child('android-instance');
+const APP_EXIT_POLL_INTERVAL_MS = 1000;
 
-const createNoopAppMonitor = (): AppMonitor => ({
-  start: async () => undefined,
-  stop: async () => undefined,
-  dispose: async () => undefined,
-  addListener: () => undefined,
-  removeListener: () => undefined,
-});
+const sleep = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+const createAndroidAppSession = async ({
+  startApp,
+  stopApp,
+  isAppRunning,
+}: {
+  startApp: () => Promise<void>;
+  stopApp: () => Promise<void>;
+  isAppRunning: () => Promise<boolean>;
+}): Promise<AppSession> => {
+  const emitter = createAppSessionEmitter();
+  let state: AppSessionState = { status: 'running' };
+  let disposed = false;
+  let stopPolling = false;
+
+  await startApp();
+
+  const pollTask = (async () => {
+    while (!stopPolling) {
+      try {
+        if (!(await isAppRunning())) {
+          if (!disposed && state.status === 'running') {
+            state = {
+              status: 'exited',
+              occurredAt: Date.now(),
+              reason: 'process-gone',
+            };
+            emitter.emit({ type: 'app_exited' });
+          }
+          return;
+        }
+      } catch (error) {
+        androidInstanceLogger.debug('Android app session poll failed', error);
+      }
+
+      await sleep(APP_EXIT_POLL_INTERVAL_MS);
+    }
+  })();
+
+  return {
+    dispose: async () => {
+      if (disposed) {
+        return;
+      }
+
+      disposed = true;
+      stopPolling = true;
+      state = { status: 'disposed', occurredAt: Date.now() };
+      emitter.clear();
+      await stopApp();
+      await pollTask;
+    },
+    getState: async () => state,
+    getLogs: () => [],
+    addListener: emitter.addListener,
+    removeListener: emitter.removeListener,
+  };
+};
 
 const getHarnessAppPath = (): string => {
   const appPath = process.env.HARNESS_APP_PATH;
@@ -193,7 +247,6 @@ export const getAndroidEmulatorPlatformInstance = async (
   init: HarnessPlatformInitOptions,
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDeviceEmulator(config.device);
-  const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
   const permissionsEnabled = harnessConfig.permissions ?? false;
   const emulatorConfig = config.device;
   const emulatorName = emulatorConfig.name;
@@ -275,34 +328,30 @@ export const getAndroidEmulatorPlatformInstance = async (
     await adb.installApp(adbId, installPath);
   }
 
-  const appUid = await configureAndroidRuntime(adbId, config, harnessConfig);
+  await configureAndroidRuntime(adbId, config, harnessConfig);
 
   if (permissionsEnabled) {
     await adb.grantPermissions(adbId, config.bundleId);
   }
 
   return {
-    startApp: async (options) => {
-      await adb.startApp(
-        adbId,
-        config.bundleId,
-        config.activityName,
-        (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions,
-      );
-    },
-    restartApp: async (options) => {
+    createAppSession: async (options) => {
       await adb.stopApp(adbId, config.bundleId);
-      await adb.startApp(
-        adbId,
-        config.bundleId,
-        config.activityName,
+      const launchOptions =
         (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions,
-      );
-    },
-    stopApp: async () => {
-      await adb.stopApp(adbId, config.bundleId);
+        config.appLaunchOptions;
+
+      return await createAndroidAppSession({
+        startApp: () =>
+          adb.startApp(
+            adbId,
+            config.bundleId,
+            config.activityName,
+            launchOptions,
+          ),
+        stopApp: () => adb.stopApp(adbId, config.bundleId),
+        isAppRunning: () => adb.isAppRunning(adbId, config.bundleId),
+      });
     },
     dispose: async () => {
       await adb.stopApp(adbId, config.bundleId);
@@ -314,21 +363,6 @@ export const getAndroidEmulatorPlatformInstance = async (
         await adb.stopEmulator(adbId);
       }
     },
-    isAppRunning: async () => {
-      return await adb.isAppRunning(adbId, config.bundleId);
-    },
-    createAppMonitor: (options?: CreateAppMonitorOptions) => {
-      if (!detectNativeCrashes) {
-        return createNoopAppMonitor();
-      }
-
-      return createAndroidAppMonitor({
-        adbId,
-        bundleId: config.bundleId,
-        appUid,
-        crashArtifactWriter: options?.crashArtifactWriter,
-      });
-    },
   };
 };
 
@@ -337,7 +371,6 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
   harnessConfig: HarnessConfig,
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDevicePhysical(config.device);
-  const detectNativeCrashes = harnessConfig.detectNativeCrashes ?? true;
   const permissionsEnabled = harnessConfig.permissions ?? false;
 
   const adbId = await getAdbId(config.device);
@@ -355,54 +388,35 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
     );
   }
 
-  const appUid = await configureAndroidRuntime(adbId, config, harnessConfig);
+  await configureAndroidRuntime(adbId, config, harnessConfig);
 
   if (permissionsEnabled) {
     await adb.grantPermissions(adbId, config.bundleId);
   }
 
   return {
-    startApp: async (options) => {
-      await adb.startApp(
-        adbId,
-        config.bundleId,
-        config.activityName,
-        (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions,
-      );
-    },
-    restartApp: async (options) => {
+    createAppSession: async (options) => {
       await adb.stopApp(adbId, config.bundleId);
-      await adb.startApp(
-        adbId,
-        config.bundleId,
-        config.activityName,
+      const launchOptions =
         (options as typeof config.appLaunchOptions | undefined) ??
-          config.appLaunchOptions,
-      );
-    },
-    stopApp: async () => {
-      await adb.stopApp(adbId, config.bundleId);
+        config.appLaunchOptions;
+
+      return await createAndroidAppSession({
+        startApp: () =>
+          adb.startApp(
+            adbId,
+            config.bundleId,
+            config.activityName,
+            launchOptions,
+          ),
+        stopApp: () => adb.stopApp(adbId, config.bundleId),
+        isAppRunning: () => adb.isAppRunning(adbId, config.bundleId),
+      });
     },
     dispose: async () => {
       await adb.stopApp(adbId, config.bundleId);
       await clearHarnessDebugHttpHost(adbId, config.bundleId);
       await adb.setHideErrorDialogs(adbId, false);
-    },
-    isAppRunning: async () => {
-      return await adb.isAppRunning(adbId, config.bundleId);
-    },
-    createAppMonitor: (options?: CreateAppMonitorOptions) => {
-      if (!detectNativeCrashes) {
-        return createNoopAppMonitor();
-      }
-
-      return createAndroidAppMonitor({
-        adbId,
-        bundleId: config.bundleId,
-        appUid,
-        crashArtifactWriter: options?.crashArtifactWriter,
-      });
     },
   };
 };

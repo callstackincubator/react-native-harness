@@ -12,6 +12,7 @@ import { type HarnessSession, type HarnessRunState } from './harness-session.js'
 import { runHarnessTestFile } from './run.js';
 import {
   NativeCrashError,
+  RuntimeDisconnectError,
   StartupStallError,
 } from './errors.js';
 import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
@@ -38,6 +39,7 @@ class CancelRun extends Error {
 const buildTestFailure = (err: unknown): { message: string; stack: string } => {
   if (
     err instanceof NativeCrashError ||
+    err instanceof RuntimeDisconnectError ||
     err instanceof StartupStallError ||
     err instanceof DeviceNotRespondingError
   ) {
@@ -163,6 +165,7 @@ export const executeRun = async (
 
         const isRuntimeFailure =
           err instanceof NativeCrashError ||
+          err instanceof RuntimeDisconnectError ||
           err instanceof StartupStallError ||
           err instanceof DeviceNotRespondingError;
 
@@ -171,7 +174,7 @@ export const executeRun = async (
           updateRunState();
         }
 
-        if (err instanceof NativeCrashError) {
+        if (err instanceof NativeCrashError || err instanceof RuntimeDisconnectError) {
           session.resetCrashState();
         }
 

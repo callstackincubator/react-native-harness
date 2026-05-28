@@ -55,6 +55,10 @@ export type NativeCrashDetails = AppCrashDetails & {
   phase: NativeCrashPhase;
 };
 
+export type RuntimeDisconnectDetails = AppCrashDetails & {
+  phase: NativeCrashPhase;
+};
+
 const buildNativeCrashMessage = ({
   phase,
   summary,
@@ -119,3 +123,44 @@ export class NativeCrashError extends HarnessError {
     return this.details.phase;
   }
 }
+
+const buildRuntimeDisconnectMessage = ({
+  phase,
+  summary,
+  rawLines,
+}: RuntimeDisconnectDetails) => {
+  const lines = [
+    phase === 'startup'
+      ? 'The native runtime disconnected while preparing to run this test file.'
+      : 'The native runtime disconnected during test execution.',
+  ];
+
+  if (summary) {
+    lines.push('');
+    lines.push(summary);
+  }
+
+  if (rawLines && rawLines.length > 0 && summary !== rawLines.join('\n')) {
+    lines.push('');
+    lines.push(...rawLines);
+  }
+
+  return lines.join('\n');
+};
+
+export class RuntimeDisconnectError extends HarnessError {
+  constructor(
+    public readonly testFilePath: string,
+    public readonly details: RuntimeDisconnectDetails
+  ) {
+    super(buildRuntimeDisconnectMessage(details));
+    this.name = 'RuntimeDisconnectError';
+    this.stack = `${this.name}: ${this.message.split('\n')[0]}`;
+  }
+
+  get phase() {
+    return this.details.phase;
+  }
+}
+
+export type HarnessRuntimeFailure = NativeCrashError | RuntimeDisconnectError;

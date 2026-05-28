@@ -12,6 +12,7 @@ import {
 } from '@react-native-harness/bridge';
 import {
   type AppLaunchOptions,
+  type AppSession,
   type HarnessPlatform,
   type HarnessPlatformInitOptions,
   type HarnessPlatformRunner,
@@ -34,7 +35,6 @@ import {
 } from '@react-native-harness/plugins';
 import {
   logger,
-  createCrashArtifactWriter,
   getTimeoutSignal,
   raceAbortSignals,
 } from '@react-native-harness/tools';
@@ -147,13 +147,12 @@ const withPlatformReadyTimeout = async <T>(options: {
 type AppReadyOptions = {
   metroInstance: MetroInstance;
   bridge: HarnessBridge;
-  platformInstance: HarnessPlatformRunner;
   platformId: string;
   bundleStartTimeout: number;
   readyTimeout: number;
   maxAppRestarts: number;
   crashMonitor: CrashMonitor;
-  appLaunchOptions?: AppLaunchOptions;
+  restartAppSession: () => Promise<AppSession>;
 };
 
 const waitForAppReady = async (
@@ -163,13 +162,12 @@ const waitForAppReady = async (
   const {
     metroInstance,
     bridge,
-    platformInstance,
     platformId,
     bundleStartTimeout,
     readyTimeout,
     maxAppRestarts,
     crashMonitor,
-    appLaunchOptions,
+    restartAppSession,
   } = base;
 
   const logWait = (message: string, ...args: unknown[]) =>
@@ -184,7 +182,7 @@ const waitForAppReady = async (
     signal: new AbortController().signal,
     startAttempt: async () => {
       logWait('launching app for %s', testFilePath);
-      await platformInstance.restartApp(appLaunchOptions);
+      await restartAppSession();
       logWait('launch request completed, waiting for bridge ready');
     },
     waitForReady: async (signal) => {
@@ -195,7 +193,7 @@ const waitForAppReady = async (
       // connection from a previous run would resolve the promise before startAttempt
       // even restarts the app — leaving bridge.connection null after the restart.
       await new Promise<void>((resolve, reject) => {
-        const onConnected = (_conn: AppConnection) => { cleanup(); resolve(); };
+        const onConnected = () => { cleanup(); resolve(); };
         const onAbort = () => { cleanup(); reject(signal.reason ?? new DOMException('Aborted', 'AbortError')); };
         const cleanup = () => {
           bridge.off('connected', onConnected);
@@ -460,27 +458,41 @@ export const createHarnessSession = async (
       throw error;
     }
 
-    const crashArtifactWriter = createCrashArtifactWriter({
-      runnerName: platform.name,
-      platformId: platform.platformId,
-    });
-    const appMonitor = platformInstance.createAppMonitor({ crashArtifactWriter });
     const appLaunchOptions = (platform.config as { appLaunchOptions?: AppLaunchOptions }).appLaunchOptions;
 
-    const crashMonitor = createCrashMonitor({ appMonitor, platformRunner: platformInstance });
+    let currentAppSession: AppSession | null = null;
+    const crashMonitor = createCrashMonitor();
+
+    const disposeCurrentAppSession = async () => {
+      const session = currentAppSession;
+      currentAppSession = null;
+      crashMonitor.setAppSession(null);
+      if (session) {
+        await session.dispose();
+      }
+    };
+
+    const restartAppSession = async (): Promise<AppSession> => {
+      await crashMonitor.stop();
+      await disposeCurrentAppSession();
+      const session = await platformInstance.createAppSession(appLaunchOptions);
+      currentAppSession = session;
+      crashMonitor.setAppSession(session);
+      await crashMonitor.start();
+      return session;
+    };
 
     // Pre-build the options that are constant across all app-ready calls;
     // only testFilePath varies per call.
     const appReadyBaseOptions: AppReadyOptions = {
       metroInstance,
       bridge,
-      platformInstance,
       platformId: platform.platformId,
       bundleStartTimeout: runtimeConfig.bundleStartTimeout ?? 60000,
       readyTimeout: runtimeConfig.bridgeTimeout,
       maxAppRestarts: runtimeConfig.maxAppRestarts ?? 2,
       crashMonitor,
-      appLaunchOptions,
+      restartAppSession,
     };
 
     // --- Event listeners ---
@@ -508,6 +520,9 @@ export const createHarnessSession = async (
       const runId = getCurrentRunId();
       if (!runId) return;
       hooks.schedule(() => pluginManager.callHook('runtime:disconnected', { runId, reason: 'bridge-disconnected' }));
+      if (runtimeConfig.detectNativeCrashes !== false) {
+        crashMonitor.handleBridgeDisconnect();
+      }
     };
 
     bridge.on('connected', onConnected);
@@ -561,7 +576,8 @@ export const createHarnessSession = async (
       const nativeCoverageConfig = runtimeConfig.coverage?.native?.ios;
       if (nativeCoverageConfig?.pods?.length && platformInstance.collectNativeCoverage) {
         try {
-          await platformInstance.stopApp();
+          await crashMonitor.stop();
+          await disposeCurrentAppSession();
           const lcovPath = await platformInstance.collectNativeCoverage({
             pods: nativeCoverageConfig.pods,
             outputDir: projectRoot,
@@ -578,6 +594,7 @@ export const createHarnessSession = async (
       try {
         await Promise.all([
           crashMonitor.dispose(),
+          disposeCurrentAppSession(),
           bridge.dispose(),
           platformInstance.dispose(),
           metroInstance.dispose(),
@@ -614,8 +631,6 @@ export const createHarnessSession = async (
     try {
       await pluginManager.callHook('harness:before-creation', { appLaunchOptions });
       await hooks.drain();
-      await appMonitor.start();
-      sessionLogger.debug('app monitor started');
       await pluginManager.callHook('harness:before-run', { appLaunchOptions });
       await hooks.drain();
     } catch (error) {
@@ -634,9 +649,12 @@ export const createHarnessSession = async (
       await hooks.drain();
       sessionLogger.debug('ensuring app is ready for %s', testFilePath);
 
-      if (crashMonitor.isAlive() && bridge.connection !== null && await platformInstance.isAppRunning()) {
-        sessionLogger.debug('reusing existing ready app for %s', testFilePath);
-        return;
+      if (crashMonitor.isAlive() && bridge.connection !== null && currentAppSession) {
+        const state = await currentAppSession.getState();
+        if (state.status === 'running') {
+          sessionLogger.debug('reusing existing ready app for %s', testFilePath);
+          return;
+        }
       }
 
       crashMonitor.reset();
@@ -655,17 +673,16 @@ export const createHarnessSession = async (
         testFilePath ? 'stop-and-ensure-ready' : 'direct-restart',
       );
 
-      if (testFilePath) {
-        await platformInstance.stopApp();
-      } else {
-        await platformInstance.restartApp(appLaunchOptions);
-      }
-
-      crashMonitor.reset();
-      await crashMonitor.start();
+      await disposeCurrentAppSession();
 
       if (testFilePath) {
         await ensureAppReady(testFilePath);
+      } else {
+        const session = await platformInstance.createAppSession(appLaunchOptions);
+        currentAppSession = session;
+        crashMonitor.setAppSession(session);
+        crashMonitor.reset();
+        await crashMonitor.start();
       }
 
       await hooks.drain();
@@ -681,7 +698,7 @@ export const createHarnessSession = async (
       if (!conn) throw new Error('No active app connection');
       sessionLogger.debug('running test file on client: %s', testPath);
 
-      if (!runtimeConfig.detectNativeCrashes) {
+      if (runtimeConfig.detectNativeCrashes === false) {
         const result = await conn.runTests(testPath, { ...options, runner: platform.runner });
         await hooks.drain();
         return result;

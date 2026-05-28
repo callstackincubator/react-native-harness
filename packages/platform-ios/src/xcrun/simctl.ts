@@ -290,6 +290,25 @@ export const startApp = async (
   });
 };
 
+export const launchAppProcess = (
+  udid: string,
+  bundleId: string,
+  options?: AppleAppLaunchOptions,
+): Subprocess => {
+  const environment = getSimctlChildEnvironment(options);
+  const argumentsList = options?.arguments ?? [];
+
+  return spawn(
+    'xcrun',
+    ['simctl', 'launch', '--console', udid, bundleId, ...argumentsList],
+    {
+      env: environment,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  );
+};
+
 export const stopApp = async (
   udid: string,
   bundleId: string,

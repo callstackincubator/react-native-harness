@@ -48,7 +48,6 @@ describe('iOS XCTest agent runner integration', () => {
     vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
       undefined,
     );
-    vi.spyOn(simctl, 'startApp').mockResolvedValue(undefined);
     vi.spyOn(simctl, 'stopApp').mockResolvedValue(undefined);
     vi.spyOn(simctl, 'clearHarnessJsLocationOverride').mockResolvedValue(
       undefined,
@@ -70,7 +69,6 @@ describe('iOS XCTest agent runner integration', () => {
       },
     );
 
-    await instance.startApp();
     await instance.dispose();
 
     expect(mocks.createXCTestAgentController).toHaveBeenCalledWith({
@@ -104,7 +102,6 @@ describe('iOS XCTest agent runner integration', () => {
       },
     });
     vi.spyOn(devicectl, 'isAppInstalled').mockResolvedValue(true);
-    vi.spyOn(devicectl, 'startApp').mockResolvedValue(undefined);
     vi.spyOn(devicectl, 'stopApp').mockResolvedValue(undefined);
 
     const instance = await getApplePhysicalDevicePlatformInstance(
@@ -113,13 +110,15 @@ describe('iOS XCTest agent runner integration', () => {
         device: {
           type: 'physical',
           name: 'My iPhone',
+          codeSign: {
+            teamId: 'TEAMID1234',
+          },
         },
         bundleId: 'com.harnessplayground',
       },
       harnessConfigWithPermissionsEnabled,
     );
 
-    await instance.restartApp();
     await instance.dispose();
 
     expect(mocks.createXCTestAgentController).toHaveBeenCalledWith({
@@ -132,6 +131,9 @@ describe('iOS XCTest agent runner integration', () => {
       target: {
         kind: 'device',
         id: 'device-udid',
+        codeSign: {
+          teamId: 'TEAMID1234',
+        },
       },
     });
     expect(mocks.prepare).not.toHaveBeenCalled();
