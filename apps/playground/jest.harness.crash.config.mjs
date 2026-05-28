@@ -1,6 +1,6 @@
 export default {
   preset: 'react-native-harness',
-  testMatch: ['<rootDir>/**/__tests__/normal/**/*.harness.[jt]s?(x)'],
+  testMatch: ['<rootDir>/**/__tests__/crash/**/*.harness.[jt]s?(x)'],
   setupFiles: ['./src/setupFile.ts'],
   setupFilesAfterEnv: ['./src/setupFileAfterEnv.ts'],
   // This is necessary to prevent Jest from transforming the workspace packages.

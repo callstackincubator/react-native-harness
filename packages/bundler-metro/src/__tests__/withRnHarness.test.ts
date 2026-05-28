@@ -86,13 +86,13 @@ describe('withRnHarness', () => {
 
     expect(
       config.serializer?.isThirdPartyModule?.({
-        path: '/repo/apps/playground/src/__tests__/smoke.harness.ts',
+        path: '/repo/apps/playground/src/__tests__/normal/smoke.harness.ts',
       }),
     ).toBe(false);
 
     await expect(
       config.symbolicator?.customizeFrame?.({
-        file: '/repo/apps/playground/src/__tests__/smoke.harness.ts',
+        file: '/repo/apps/playground/src/__tests__/normal/smoke.harness.ts',
       }),
     ).resolves.toEqual({
       collapse: false,
