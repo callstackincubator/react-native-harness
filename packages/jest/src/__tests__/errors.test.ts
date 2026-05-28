@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AppBridgeDisconnectedError } from '@react-native-harness/bridge/server';
 import { NativeCrashError, PlatformReadyTimeoutError } from '../errors.js';
 
 describe('PlatformReadyTimeoutError', () => {
@@ -77,6 +78,23 @@ describe('NativeCrashError', () => {
 
     expect(error.stack).toBe(
       'NativeCrashError: The native app crashed while preparing to run this test file.'
+    );
+  });
+});
+
+describe('AppBridgeDisconnectedError', () => {
+  it('explains likely causes without exposing an internal stack', () => {
+    const error = new AppBridgeDisconnectedError('app-disconnected');
+
+    expect(error.message).toBe(
+      'The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.'
+    );
+    expect(error.stack).toBe(`AppBridgeDisconnectedError: ${error.message}`);
+  });
+
+  it('uses a reconnection-specific message when a newer app connection replaces the old one', () => {
+    expect(new AppBridgeDisconnectedError('app-replaced').message).toBe(
+      'The app bridge was replaced by a newer app connection. This can happen when the app reloads, restarts, or reconnects while a test file is still running.'
     );
   });
 });

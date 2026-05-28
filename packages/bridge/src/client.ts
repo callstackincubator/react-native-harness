@@ -1,6 +1,11 @@
-import { createBirpc } from 'birpc';
-import { deserialize, serialize } from './serializer.js';
 import { createBinaryFrame, generateTransferId } from './binary-transfer.js';
+import { serializeBridgeMessage } from './protocol.js';
+import { createRpcPeer } from './rpc-peer.js';
+import {
+  createRpcTransport,
+  type BridgeTransport,
+} from './transport.js';
+import { createWebSocketClientTransport } from './websocket-client-transport.js';
 import type {
   BridgeClientFunctions,
   BridgeServerFunctions,
@@ -12,27 +17,17 @@ import type {
   TestSuiteResult,
 } from './shared.js';
 
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
-
-/** Handlers the app must implement for the CLI to call into. */
 export type HarnessCallbacks = {
   runTests: (path: string, options: TestExecutionOptions) => Promise<TestSuiteResult>;
 };
 
-/** The app-side handle returned by connectToHarness. */
 export type HarnessHandle = {
-  /** Call once when the app is initialised and ready to run tests. */
   reportReady: (device: DeviceDescriptor) => void;
-  /** Forward a test or bundler event to the CLI. */
   emitEvent: (event: BridgeEvents) => void;
-  /** Send a screenshot to the CLI and receive a file reference for snapshot comparison. */
   transferScreenshot: (
     data: Uint8Array,
     metadata: { width: number; height: number },
   ) => Promise<FileReference>;
-  /** Request an image snapshot comparison on the CLI. */
   matchImageSnapshot: (
     screenshot: FileReference,
     testPath: string,
@@ -42,83 +37,173 @@ export type HarnessHandle = {
   disconnect: () => void;
 };
 
-// ---------------------------------------------------------------------------
-// Factory
-// ---------------------------------------------------------------------------
+export type ConnectToHarnessOptions = {
+  transport?: BridgeTransport;
+};
 
-/**
- * Connect the app to the CLI harness bridge.
- *
- * Pass the handlers the CLI can call (runTests). Returns a HarnessHandle
- * exposing the operations the app needs to drive a test run. The binary
- * transfer protocol and RPC wiring are fully encapsulated.
- */
+export { createWebSocketClientTransport };
+
+const noop = (): void => undefined;
+
 export const connectToHarness = (
   url: string,
   callbacks: HarnessCallbacks,
+  options: ConnectToHarnessOptions = {},
 ): Promise<HarnessHandle> =>
   new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
-    ws.binaryType = 'arraybuffer';
+    const transport = options.transport ?? createWebSocketClientTransport(url);
     let settled = false;
+    let peerClosed = false;
+    let offOpen: () => void = noop;
+    let offError: () => void = noop;
+    let offClose: () => void = noop;
 
     const cleanup = () => {
-      ws.removeEventListener('open', handleOpen);
-      ws.removeEventListener('error', handleError);
-      ws.removeEventListener('close', handleClose);
+      offOpen();
+      offError();
+      offClose();
     };
 
     const fail = (message: string) => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
+
       settled = true;
       cleanup();
       reject(new Error(message));
     };
 
     const handleOpen = () => {
+      if (settled) {
+        return;
+      }
+
       settled = true;
       cleanup();
 
-      const rpc = createBirpc<BridgeServerFunctions, BridgeClientFunctions>(
-        callbacks,
-        {
-          post: (data) => ws.send(data),
-          on: (handler) => {
-            ws.addEventListener('message', (event: MessageEvent<string | ArrayBuffer>) => {
-              if (typeof event.data === 'string') handler(event.data);
-            });
-          },
-          serialize,
-          deserialize,
-        },
-      );
+      const getTransportNotOpenError = () => {
+        return new Error('Harness bridge transport is not open');
+      };
+
+      const rpc = createRpcPeer<
+        BridgeClientFunctions,
+        BridgeServerFunctions,
+        BridgeEvents
+      >({
+        localMethods: callbacks,
+        transport: createRpcTransport(transport),
+      });
+
+      let offMessage: () => void = noop;
+      let offRuntimeClose: () => void = noop;
+      let offRuntimeError: () => void = noop;
+
+      const closePeer = (reason: Error) => {
+        if (peerClosed) {
+          return;
+        }
+
+        peerClosed = true;
+        offMessage();
+        offRuntimeClose();
+        offRuntimeError();
+        rpc.close(reason);
+      };
+
+      const handleMessage = async (data: string) => {
+        const controlMessage = await rpc.handleMessage(data);
+
+        if (!controlMessage) {
+          return;
+        }
+
+        if (controlMessage.type === 'ping') {
+          transport.send(
+            serializeBridgeMessage({ type: 'pong', id: controlMessage.id }),
+          );
+        }
+      };
+
+      offMessage = transport.onMessage((message) => {
+        if (typeof message !== 'string') {
+          return;
+        }
+
+        void handleMessage(message).catch((error) => {
+          closePeer(
+            error instanceof Error
+              ? error
+              : new Error('Received invalid Harness bridge message'),
+          );
+
+          if (transport.state === 'open') {
+            transport.close(1002, 'Invalid message');
+          }
+        });
+      });
+
+      offRuntimeClose = transport.onClose((event) => {
+        closePeer(
+          new Error(
+            `Harness connection closed (code ${event.code}${
+              event.reason ? `, reason: ${event.reason}` : ''
+            })`,
+          ),
+        );
+      });
+
+      offRuntimeError = transport.onError((error) => {
+        closePeer(error);
+      });
 
       resolve({
-        reportReady: (device) => void rpc.reportReady(device),
-        emitEvent: (event) => void rpc.emitEvent(event.type, event),
+        reportReady: (device) => {
+          try {
+            if (transport.state !== 'open') {
+              throw getTransportNotOpenError();
+            }
+
+            transport.send(serializeBridgeMessage({ type: 'ready', device }));
+          } catch (error) {
+            closePeer(
+              error instanceof Error ? error : getTransportNotOpenError(),
+            );
+          }
+        },
+        emitEvent: (event) => {
+          rpc.sendEvent(event);
+        },
         transferScreenshot: async (data, metadata) => {
           const transferId = generateTransferId();
-          ws.send(createBinaryFrame(transferId, data));
-          return rpc['device.screenshot.receive'](
+          transport.send(createBinaryFrame(transferId, data));
+          return rpc.invoke(
+            'device.screenshot.receive',
             { type: 'binary', transferId, size: data.length, mimeType: 'image/png' },
             metadata,
           );
         },
         matchImageSnapshot: (screenshot, testPath, options, runner) =>
-          rpc['test.matchImageSnapshot'](screenshot, testPath, options, runner),
-        disconnect: () => ws.close(),
+          rpc.invoke(
+            'test.matchImageSnapshot',
+            screenshot,
+            testPath,
+            options,
+            runner,
+          ),
+        disconnect: () => {
+          closePeer(new Error('Harness connection closed by client'));
+          transport.close();
+        },
       });
     };
 
-    const handleError = (event: Event & { message?: string }) => {
-      const detail =
-        typeof event.message === 'string' && event.message
-          ? `: ${event.message}`
-          : '';
+    const handleError = (error: Error) => {
+      const detail = error.message ? `: ${error.message}` : '';
       fail(`Failed to connect to Harness at ${url}${detail}`);
     };
 
-    const handleClose = (event: CloseEvent) => {
+    const handleClose = (event: { code: number; reason: string }) => {
       fail(
         `Harness connection at ${url} closed before becoming ready (code ${event.code}${
           event.reason ? `, reason: ${event.reason}` : ''
@@ -126,7 +211,11 @@ export const connectToHarness = (
       );
     };
 
-    ws.addEventListener('open', handleOpen);
-    ws.addEventListener('error', handleError);
-    ws.addEventListener('close', handleClose);
+    offOpen = transport.onOpen(handleOpen);
+    offError = transport.onError(handleError);
+    offClose = transport.onClose(handleClose);
+
+    if (transport.state === 'open') {
+      handleOpen();
+    }
   });

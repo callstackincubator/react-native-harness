@@ -7,7 +7,10 @@ import type {
   TestSuiteResult,
 } from '@react-native-harness/bridge';
 import { NativeCrashError, StartupStallError } from '../errors.js';
-import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
+import {
+  AppBridgeDisconnectedError,
+  DeviceNotRespondingError,
+} from '@react-native-harness/bridge/server';
 import type { HarnessSession } from '../harness-session.js';
 import { executeRun } from '../execute-run.js';
 
@@ -347,6 +350,26 @@ describe('executeRun', () => {
         'test-file-failure',
         expect.anything(),
         expect.objectContaining({ stack: '' }),
+      ]);
+    });
+
+    it('passes AppBridgeDisconnectedError to onFailure with an empty stack', async () => {
+      const { emitEvent, calls } = makeEmitEvent();
+      const session = makeSession({
+        ensureAppReady: vi.fn().mockRejectedValue(
+          new AppBridgeDisconnectedError('app-disconnected'),
+        ),
+      });
+
+      await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
+
+      expect(calls).toContainEqual([
+        'test-file-failure',
+        expect.anything(),
+        expect.objectContaining({
+          message: expect.stringContaining('The app bridge disconnected during test execution.'),
+          stack: '',
+        }),
       ]);
     });
 

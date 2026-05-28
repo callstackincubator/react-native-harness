@@ -12,7 +12,10 @@ import {
   NativeCrashError,
   StartupStallError,
 } from './errors.js';
-import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
+import {
+  AppBridgeDisconnectedError,
+  DeviceNotRespondingError,
+} from '@react-native-harness/bridge/server';
 import type { TestCaseResult } from '@jest/test-result';
 import type {
   TestRunnerEvents,
@@ -48,6 +51,7 @@ const buildTestFailure = (err: unknown): { message: string; stack: string } => {
   if (
     err instanceof NativeCrashError ||
     err instanceof StartupStallError ||
+    err instanceof AppBridgeDisconnectedError ||
     err instanceof DeviceNotRespondingError
   ) {
     return { message: (err as Error).message, stack: '' };
@@ -231,6 +235,7 @@ export const executeRun = async (
         const isRuntimeFailure =
           err instanceof NativeCrashError ||
           err instanceof StartupStallError ||
+          err instanceof AppBridgeDisconnectedError ||
           err instanceof DeviceNotRespondingError;
 
         if (isRuntimeFailure) {

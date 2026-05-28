@@ -1,13 +1,14 @@
 /**
  * Integration test pairing createHarnessBridge (CLI side) with
  * connectToHarness (app side). Tests the full connection lifecycle and
- * RPC round-trip without knowing birpc internals.
+ * RPC round-trip without coupling tests to the transport internals.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HarnessBridge } from '@react-native-harness/bridge/server';
 import { createHarnessBridge } from '@react-native-harness/bridge/server';
 import { connectToHarness } from '@react-native-harness/bridge/client';
 import type { HarnessContext } from '@react-native-harness/bridge';
+import type { TestSuiteResult } from '@react-native-harness/bridge';
 
 const makeContext = (): HarnessContext => ({
   platform: {
@@ -151,6 +152,38 @@ describe('bridge: createHarnessBridge + connectToHarness', () => {
       expect(result.tests[0].name).toBe('passes');
       handle.disconnect();
     });
+
+    it('rejects pending app calls when a newer client replaces the session', async () => {
+      const firstHandle = await connect({
+        runTests: async (): Promise<TestSuiteResult> =>
+          await new Promise<TestSuiteResult>(() => undefined),
+      });
+      firstHandle.reportReady(device);
+
+      const firstConnection = await bridge.nextConnection();
+      const pendingRun = firstConnection.runTests('example.ts', {
+        runner: '/runner.js',
+      });
+      const pendingRunAssertion = expect(pendingRun).rejects.toThrow(
+        'The app bridge was replaced by a newer app connection.',
+      );
+
+      const secondHandle = await connect();
+      secondHandle.reportReady({
+        ...device,
+        model: 'iPhone 17 Pro Replacement',
+      });
+
+      await pendingRunAssertion;
+
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(bridge.connection?.device.model).toBe(
+        'iPhone 17 Pro Replacement',
+      );
+      secondHandle.disconnect();
+      firstHandle.disconnect();
+    });
   });
 
   describe('bridge events', () => {
@@ -178,7 +211,9 @@ describe('bridge: createHarnessBridge + connectToHarness', () => {
       const pending = bridge.nextConnection();
       bridge.dispose();
 
-      await expect(pending).rejects.toThrow('Bridge disposed');
+      await expect(pending).rejects.toThrow(
+        'The app bridge was disposed before the test file finished running.',
+      );
     });
   });
 });

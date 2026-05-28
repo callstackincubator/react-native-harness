@@ -1,5 +1,4 @@
 import { WebSocketServer, type WebSocket } from 'ws';
-import { createBirpc, type BirpcReturn } from 'birpc';
 import { EventEmitter } from 'node:events';
 import type { Server as HttpServer } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
@@ -9,9 +8,19 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { logger } from '@react-native-harness/tools';
 import { BinaryStore, parseBinaryFrame } from './binary-transfer.js';
-import { deserialize, serialize } from './serializer.js';
-import { DeviceNotRespondingError } from './errors.js';
+import {
+  AppBridgeDisconnectedError,
+  DeviceNotRespondingError,
+} from './errors.js';
+import { createHeartbeat } from './heartbeat.js';
 import { matchImageSnapshot } from './image-snapshot.js';
+import { serializeBridgeMessage } from './protocol.js';
+import { createRpcPeer } from './rpc-peer.js';
+import {
+  createRpcTransport,
+  type BridgeTransport,
+} from './transport.js';
+import { createNodeWebSocketTransport } from './websocket-server-transport.js';
 import type {
   BridgeServerFunctions,
   BridgeClientFunctions,
@@ -24,29 +33,22 @@ import type {
   TestSuiteResult,
 } from './shared.js';
 
-export { DeviceNotRespondingError } from './errors.js';
+export {
+  AppBridgeDisconnectedError,
+  DeviceNotRespondingError,
+} from './errors.js';
 
 const bridgeLogger = logger.child('bridge');
+const noop = (): void => undefined;
 
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
-
-/**
- * Represents a single app session — one app launch to the next restart.
- * Obtained via HarnessBridge.nextConnection().
- */
 export type AppConnection = {
   readonly device: DeviceDescriptor;
   runTests: (path: string, options: TestExecutionOptions) => Promise<TestSuiteResult>;
 };
 
 export type HarnessBridgeEvents = {
-  /** Fired when the app connects and calls reportReady. */
   connected: (connection: AppConnection) => void;
-  /** Fired when the app's WebSocket closes. */
   disconnected: () => void;
-  /** Fired for every test/bundler event the app emits. */
   event: (event: BridgeEvents) => void;
 };
 
@@ -60,30 +62,14 @@ export type HarnessBridgeOptions = TransportOptions & {
   context: HarnessContext;
 };
 
-/**
- * The persistent CLI-side bridge. Spans the full test run regardless of how
- * many times the app is restarted. Each restart produces a new AppConnection
- * via nextConnection().
- */
 export type HarnessBridge = {
-  /** The underlying WebSocket server, used to attach to Metro's HTTP server. */
   readonly ws: WebSocketServer;
-  /** The currently active app connection, null if the app is not connected. */
   readonly connection: AppConnection | null;
-  /**
-   * Resolves with the next AppConnection once the app connects and reports
-   * ready. Register this waiter before restarting the app so no ready signal
-   * is missed. Rejects if the supplied signal is aborted.
-   */
   nextConnection: (signal?: AbortSignal) => Promise<AppConnection>;
   on: <T extends keyof HarnessBridgeEvents>(event: T, listener: HarnessBridgeEvents[T]) => void;
   off: <T extends keyof HarnessBridgeEvents>(event: T, listener: HarnessBridgeEvents[T]) => void;
   dispose: () => void;
 };
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const createWss = (transport: TransportOptions): Promise<WebSocketServer> => {
   if ('port' in transport) {
@@ -94,6 +80,7 @@ const createWss = (transport: TransportOptions): Promise<WebSocketServer> => {
       );
     });
   }
+
   return Promise.resolve<WebSocketServer>(
     new WebSocketServer(
       'server' in transport
@@ -113,124 +100,193 @@ const receiveScreenshot = async (
       `Binary data for transfer ${reference.transferId} not found or expired`,
     );
   }
+
   binaryStore.delete(reference.transferId);
   const file = path.join(os.tmpdir(), `harness-screenshot-${randomUUID()}.png`);
   await fs.writeFile(file, data);
   return { path: file };
 };
 
-// ---------------------------------------------------------------------------
-// Factory
-// ---------------------------------------------------------------------------
-
 export const createHarnessBridge = async (
   options: HarnessBridgeOptions,
 ): Promise<HarnessBridge> => {
-  const { timeout, context, ...transport } = options;
-  const wss = await createWss(transport);
+  const { timeout, context, ...transportOptions } = options;
+  const wss = await createWss(transportOptions);
   bridgeLogger.debug('bridge server ready');
 
   const emitter = new EventEmitter();
   let currentConnection: AppConnection | null = null;
+  let activeSession: { disconnect: (reason?: Error) => void; transport: BridgeTransport } | null =
+    null;
   const connectionWaiters: Array<{
     resolve: (c: AppConnection) => void;
     reject: (e: unknown) => void;
   }> = [];
 
   wss.on('connection', (ws: WebSocket) => {
+    if (activeSession) {
+      bridgeLogger.info('replacing existing app connection with a newer client');
+      activeSession.disconnect(new AppBridgeDisconnectedError('app-replaced'));
+    }
+
     bridgeLogger.debug('app connected');
+    const transport = createNodeWebSocketTransport(ws);
     const binaryStore = new BinaryStore();
     let readyConnection: AppConnection | null = null;
     let disconnected = false;
+    let offMessage: () => void = noop;
+    let offClose: () => void = noop;
+    let offError: () => void = noop;
 
-    const serverFunctions: BridgeServerFunctions = {
-      reportReady: (device) => {
-        const conn: AppConnection = {
-          device,
-          runTests: (testPath, opts) => rpc.runTests(testPath, opts),
-        };
-        readyConnection = conn;
-        currentConnection = conn;
-        bridgeLogger.debug(
-          'app ready: platform=%s model=%s',
-          device.platform,
-          device.model,
-        );
-        emitter.emit('connected', conn);
-        for (const { resolve } of connectionWaiters.splice(0)) resolve(conn);
-      },
-      emitEvent: (_, data) => {
-        emitter.emit('event', data);
-      },
-      'device.screenshot.receive': (ref) => receiveScreenshot(binaryStore, ref),
-      'test.matchImageSnapshot': (screenshot, testPath, opts) =>
-        matchImageSnapshot(screenshot, testPath, opts, context.platform.name),
+    const closeTransport = () => {
+      if (transport.state === 'closing' || transport.state === 'closed') {
+        return;
+      }
+
+      transport.close(1012);
     };
 
-    const rpc: BirpcReturn<BridgeClientFunctions, BridgeServerFunctions> = createBirpc<BridgeClientFunctions, BridgeServerFunctions>(
-      serverFunctions,
-      {
-        post: (data) => ws.send(data),
-        on: (handler) => {
-          ws.on(
-            'message',
-            (msg: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
-              if (isBinary) {
-                try {
-                  const messageBuffer = Array.isArray(msg)
-                    ? Buffer.concat(msg)
-                    : Buffer.isBuffer(msg)
-                      ? msg
-                      : Buffer.from(msg);
-                  const { transferId, data } = parseBinaryFrame(
-                    new Uint8Array(messageBuffer),
-                  );
-                  binaryStore.add(transferId, data);
-                } catch (err) {
-                  bridgeLogger.warn('failed to parse binary frame: %s', err);
-                }
-              } else {
-                handler(msg.toString());
-              }
-            },
-          );
-        },
-        serialize,
-        deserialize,
-        timeout,
-        onFunctionError: (error, functionName, args) => {
-          bridgeLogger.error(
-            'rpc function failed: %s args=%o',
-            functionName,
-            args,
-          );
-          throw error;
-        },
-        onTimeoutError: (fn, args) => {
-          throw new DeviceNotRespondingError(fn, args);
-        },
+    const rpc = createRpcPeer<
+      BridgeServerFunctions,
+      BridgeClientFunctions,
+      BridgeEvents
+    >({
+      localMethods: {
+        'device.screenshot.receive': (ref) => receiveScreenshot(binaryStore, ref),
+        'test.matchImageSnapshot': (screenshot, testPath, opts) =>
+          matchImageSnapshot(screenshot, testPath, opts, context.platform.name),
       },
-    );
+      transport: createRpcTransport(transport),
+      onEvent: (event) => {
+        emitter.emit('event', event);
+      },
+      callTimeoutMs: timeout,
+      createTimeoutError: (functionName, args) => {
+        return new DeviceNotRespondingError(functionName, args) as unknown as Error;
+      },
+    });
+
+    const heartbeat = createHeartbeat({
+      sendPing: (id) => {
+        transport.send(serializeBridgeMessage({ type: 'ping', id }));
+      },
+      onTimeout: () => {
+        bridgeLogger.warn('app heartbeat timed out');
+        disconnect(new AppBridgeDisconnectedError('heartbeat-timeout'));
+      },
+    });
 
     const disconnect = (reason?: Error) => {
-      if (disconnected) return;
-      disconnected = true;
+      if (disconnected) {
+        return;
+      }
 
+      disconnected = true;
+      offMessage();
+      offClose();
+      offError();
       bridgeLogger.debug('app disconnected');
+      heartbeat.dispose();
       binaryStore.dispose();
+
+      if (activeSession?.transport === transport) {
+        activeSession = null;
+      }
+
       if (currentConnection === readyConnection) {
         currentConnection = null;
       }
-      rpc.$close(reason ?? new Error('App bridge disconnected'));
-      emitter.emit('disconnected');
+
+      rpc.close(reason ?? new AppBridgeDisconnectedError('app-disconnected'));
+      closeTransport();
+
+      if (readyConnection) {
+        emitter.emit('disconnected');
+      }
     };
 
-    ws.on('close', () => {
+    activeSession = { disconnect, transport };
+
+    const handleControlMessage = async (message: string) => {
+      const controlMessage = await rpc.handleMessage(message);
+
+      if (!controlMessage) {
+        return;
+      }
+
+      switch (controlMessage.type) {
+        case 'ready': {
+          if (readyConnection) {
+            return;
+          }
+
+          const conn: AppConnection = {
+            device: controlMessage.device,
+            runTests: (testPath, opts) => rpc.invoke('runTests', testPath, opts),
+          };
+
+          readyConnection = conn;
+          currentConnection = conn;
+          bridgeLogger.debug(
+            'app ready: platform=%s model=%s',
+            controlMessage.device.platform,
+            controlMessage.device.model,
+          );
+          emitter.emit('connected', conn);
+
+          for (const { resolve } of connectionWaiters.splice(0)) {
+            resolve(conn);
+          }
+          return;
+        }
+        case 'ping': {
+          transport.send(
+            serializeBridgeMessage({ type: 'pong', id: controlMessage.id }),
+          );
+          return;
+        }
+        case 'pong': {
+          heartbeat.notifyPong(controlMessage.id);
+          return;
+        }
+      }
+    };
+
+    const handleBinaryMessage = (message: Uint8Array) => {
+      try {
+        const { transferId, data } = parseBinaryFrame(message);
+        binaryStore.add(transferId, data);
+      } catch (error) {
+        bridgeLogger.warn('failed to parse binary frame: %s', error);
+      }
+    };
+
+    offMessage = transport.onMessage((message) => {
+      if (typeof message !== 'string') {
+        handleBinaryMessage(message);
+        return;
+      }
+
+      void handleControlMessage(message).catch((error) => {
+        bridgeLogger.warn('failed to handle bridge message: %s', error);
+        disconnect(
+          error instanceof Error
+            ? error
+            : new Error('Received invalid app bridge message'),
+        );
+      });
+    });
+
+    offClose = transport.onClose(() => {
       disconnect();
     });
 
-    ws.on('error', (error) => {
-      disconnect(error instanceof Error ? error : new Error('App bridge socket error'));
+    offError = transport.onError((error) => {
+      disconnect(
+        error instanceof Error
+          ? error
+          : new AppBridgeDisconnectedError('socket-error'),
+      );
     });
   });
 
@@ -247,12 +303,11 @@ export const createHarnessBridge = async (
           signal.reason ?? new DOMException('Aborted', 'AbortError'),
         );
       }
-      // If the app already connected before this call (e.g. fast simulator
-      // startup between startAttempt and waitForReady), return it immediately
-      // rather than waiting for a second reportReady that will never come.
+
       if (currentConnection) {
         return Promise.resolve(currentConnection);
       }
+
       return new Promise((resolve, reject) => {
         const entry = { resolve, reject };
         connectionWaiters.push(entry);
@@ -260,7 +315,10 @@ export const createHarnessBridge = async (
           'abort',
           () => {
             const idx = connectionWaiters.indexOf(entry);
-            if (idx !== -1) connectionWaiters.splice(idx, 1);
+            if (idx !== -1) {
+              connectionWaiters.splice(idx, 1);
+            }
+
             reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
           },
           { once: true },
@@ -271,10 +329,17 @@ export const createHarnessBridge = async (
     off: (event, listener) => emitter.off(event, listener),
     dispose: () => {
       bridgeLogger.debug('disposing bridge');
+
       for (const { reject } of connectionWaiters.splice(0)) {
-        reject(new Error('Bridge disposed'));
+        reject(new AppBridgeDisconnectedError('bridge-disposed'));
       }
-      for (const client of wss.clients) client.terminate();
+
+      activeSession?.disconnect(new AppBridgeDisconnectedError('bridge-disposed'));
+
+      for (const client of wss.clients) {
+        client.terminate();
+      }
+
       wss.close();
       emitter.removeAllListeners();
     },
