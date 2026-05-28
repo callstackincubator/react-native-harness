@@ -75,6 +75,48 @@ import {
 const sessionLogger = logger.child('runtime');
 const defaultResourceLockManager = createResourceLockManager();
 const ignorePromiseRejection = () => undefined;
+const isBridgeDisconnectError = (error: unknown) =>
+  error instanceof Error && error.message === 'App bridge disconnected';
+const TEST_RUN_BRIDGE_STABILITY_WAIT_MS = 500;
+
+type DisconnectObservableBridge = {
+  readonly connection: AppConnection | null;
+  on: (event: 'disconnected', listener: () => void) => void;
+  off: (event: 'disconnected', listener: () => void) => void;
+};
+
+export const waitForBridgeDisconnectOrTimeout = async ({
+  bridge,
+  connection,
+  timeoutMs,
+}: {
+  bridge: DisconnectObservableBridge;
+  connection: AppConnection;
+  timeoutMs: number;
+}): Promise<boolean> => {
+  if (bridge.connection !== connection) {
+    return true;
+  }
+
+  return await new Promise<boolean>((resolve) => {
+    const onDisconnected = () => {
+      cleanup();
+      resolve(true);
+    };
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      bridge.off('disconnected', onDisconnected);
+    };
+
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve(bridge.connection !== connection);
+    }, timeoutMs);
+
+    bridge.on('disconnected', onDisconnected);
+  });
+};
 
 export type HarnessRunState = {
   readonly runId: string;
@@ -709,12 +751,31 @@ export const createHarnessSession = async (
       // crash wins the race or cancel() is called after the test run wins.
       crashWatch.promise.catch(ignorePromiseRejection);
       try {
-        const result = await Promise.race([
-          conn.runTests(testPath, { ...options, runner: platform.runner }),
-          crashWatch.promise,
-        ]);
+        const testRunPromise = conn.runTests(testPath, {
+          ...options,
+          runner: platform.runner,
+        });
+        const result = await Promise.race([testRunPromise, crashWatch.promise]);
+        const bridgeDisconnected = await waitForBridgeDisconnectOrTimeout({
+          bridge,
+          connection: conn,
+          timeoutMs: TEST_RUN_BRIDGE_STABILITY_WAIT_MS,
+        });
+
+        if (bridgeDisconnected) {
+          return await crashWatch.promise;
+        }
+
         await hooks.drain();
         return result;
+      } catch (error) {
+        if (isBridgeDisconnectError(error)) {
+          const result = await crashWatch.promise;
+          await hooks.drain();
+          return result;
+        }
+
+        throw error;
       } finally {
         crashWatch.cancel();
       }

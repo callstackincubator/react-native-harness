@@ -14,7 +14,7 @@ import { NativeCrashError, RuntimeDisconnectError } from '../errors.js';
 
 const noop = () => undefined;
 const waitForClassification = () =>
-  new Promise((resolve) => setTimeout(resolve, 350));
+  new Promise((resolve) => setTimeout(resolve, 1600));
 
 const createAppSessionMock = (
   initialState: AppSessionState = { status: 'running' },

@@ -15,7 +15,7 @@ import {
 import { logger } from '@react-native-harness/tools';
 
 const crashLogger = logger.child('crash');
-const CRASH_CLASSIFICATION_SETTLE_MS = 300;
+const CRASH_CLASSIFICATION_SETTLE_MS = 1500;
 const CRASH_LOG_WINDOW_MS = 3000;
 
 export class CrashWatchCancelledError extends Error {
