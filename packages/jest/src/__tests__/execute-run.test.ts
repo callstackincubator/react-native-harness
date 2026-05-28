@@ -3,7 +3,10 @@ import type { Config, Test, TestWatcher } from 'jest-runner';
 import type { TestResult as JestTestResult } from '@jest/test-result';
 import type { TestSuiteResult } from '@react-native-harness/bridge';
 import { NativeCrashError, StartupStallError } from '../errors.js';
-import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
+import {
+  AppBridgeDisconnectedError,
+  DeviceNotRespondingError,
+} from '@react-native-harness/bridge/server';
 import type { HarnessSession } from '../harness-session.js';
 import { executeRun } from '../execute-run.js';
 
@@ -244,6 +247,25 @@ describe('executeRun', () => {
       expect(onFailure).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ stack: '' }),
+      );
+    });
+
+    it('passes AppBridgeDisconnectedError to onFailure with an empty stack', async () => {
+      const onFailure = vi.fn();
+      const session = makeSession({
+        ensureAppReady: vi.fn().mockRejectedValue(
+          new AppBridgeDisconnectedError('app-disconnected'),
+        ),
+      });
+
+      await executeRun(session, [makeTest()], makeWatcher(), vi.fn(), vi.fn(), onFailure, makeGlobalConfig());
+
+      expect(onFailure).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          message: expect.stringContaining('The app bridge disconnected during test execution.'),
+          stack: '',
+        }),
       );
     });
 

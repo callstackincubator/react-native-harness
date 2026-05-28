@@ -8,7 +8,10 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { logger } from '@react-native-harness/tools';
 import { BinaryStore, parseBinaryFrame } from './binary-transfer.js';
-import { DeviceNotRespondingError } from './errors.js';
+import {
+  AppBridgeDisconnectedError,
+  DeviceNotRespondingError,
+} from './errors.js';
 import { createHeartbeat } from './heartbeat.js';
 import { matchImageSnapshot } from './image-snapshot.js';
 import { serializeBridgeMessage } from './protocol.js';
@@ -30,7 +33,10 @@ import type {
   TestSuiteResult,
 } from './shared.js';
 
-export { DeviceNotRespondingError } from './errors.js';
+export {
+  AppBridgeDisconnectedError,
+  DeviceNotRespondingError,
+} from './errors.js';
 
 const bridgeLogger = logger.child('bridge');
 const noop = (): void => undefined;
@@ -120,9 +126,7 @@ export const createHarnessBridge = async (
   wss.on('connection', (ws: WebSocket) => {
     if (activeSession) {
       bridgeLogger.info('replacing existing app connection with a newer client');
-      activeSession.disconnect(
-        new Error('App bridge replaced by a newer connection'),
-      );
+      activeSession.disconnect(new AppBridgeDisconnectedError('app-replaced'));
     }
 
     bridgeLogger.debug('app connected');
@@ -134,12 +138,12 @@ export const createHarnessBridge = async (
     let offClose: () => void = noop;
     let offError: () => void = noop;
 
-    const closeTransport = (reason?: string) => {
+    const closeTransport = () => {
       if (transport.state === 'closing' || transport.state === 'closed') {
         return;
       }
 
-      transport.close(1012, reason);
+      transport.close(1012);
     };
 
     const rpc = createRpcPeer<
@@ -168,7 +172,7 @@ export const createHarnessBridge = async (
       },
       onTimeout: () => {
         bridgeLogger.warn('app heartbeat timed out');
-        disconnect(new Error('App bridge heartbeat timed out'));
+        disconnect(new AppBridgeDisconnectedError('heartbeat-timeout'));
       },
     });
 
@@ -193,8 +197,8 @@ export const createHarnessBridge = async (
         currentConnection = null;
       }
 
-      rpc.close(reason ?? new Error('App bridge disconnected'));
-      closeTransport(reason?.message);
+      rpc.close(reason ?? new AppBridgeDisconnectedError('app-disconnected'));
+      closeTransport();
 
       if (readyConnection) {
         emitter.emit('disconnected');
@@ -278,7 +282,11 @@ export const createHarnessBridge = async (
     });
 
     offError = transport.onError((error) => {
-      disconnect(error instanceof Error ? error : new Error('App bridge socket error'));
+      disconnect(
+        error instanceof Error
+          ? error
+          : new AppBridgeDisconnectedError('socket-error'),
+      );
     });
   });
 
@@ -323,10 +331,10 @@ export const createHarnessBridge = async (
       bridgeLogger.debug('disposing bridge');
 
       for (const { reject } of connectionWaiters.splice(0)) {
-        reject(new Error('Bridge disposed'));
+        reject(new AppBridgeDisconnectedError('bridge-disposed'));
       }
 
-      activeSession?.disconnect(new Error('Bridge disposed'));
+      activeSession?.disconnect(new AppBridgeDisconnectedError('bridge-disposed'));
 
       for (const client of wss.clients) {
         client.terminate();

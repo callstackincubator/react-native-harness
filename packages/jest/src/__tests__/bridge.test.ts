@@ -165,7 +165,7 @@ describe('bridge: createHarnessBridge + connectToHarness', () => {
         runner: '/runner.js',
       });
       const pendingRunAssertion = expect(pendingRun).rejects.toThrow(
-        'App bridge replaced by a newer connection',
+        'The app bridge was replaced by a newer app connection.',
       );
 
       const secondHandle = await connect();
@@ -211,7 +211,9 @@ describe('bridge: createHarnessBridge + connectToHarness', () => {
       const pending = bridge.nextConnection();
       bridge.dispose();
 
-      await expect(pending).rejects.toThrow('Bridge disposed');
+      await expect(pending).rejects.toThrow(
+        'The app bridge was disposed before the test file finished running.',
+      );
     });
   });
 });

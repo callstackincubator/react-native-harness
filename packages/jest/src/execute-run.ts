@@ -14,7 +14,10 @@ import {
   NativeCrashError,
   StartupStallError,
 } from './errors.js';
-import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
+import {
+  AppBridgeDisconnectedError,
+  DeviceNotRespondingError,
+} from '@react-native-harness/bridge/server';
 
 const createRunSummary = () => ({ passed: 0, failed: 0, skipped: 0, todo: 0 });
 
@@ -39,6 +42,7 @@ const buildTestFailure = (err: unknown): { message: string; stack: string } => {
   if (
     err instanceof NativeCrashError ||
     err instanceof StartupStallError ||
+    err instanceof AppBridgeDisconnectedError ||
     err instanceof DeviceNotRespondingError
   ) {
     return { message: (err as Error).message, stack: '' };
@@ -164,6 +168,7 @@ export const executeRun = async (
         const isRuntimeFailure =
           err instanceof NativeCrashError ||
           err instanceof StartupStallError ||
+          err instanceof AppBridgeDisconnectedError ||
           err instanceof DeviceNotRespondingError;
 
         if (isRuntimeFailure) {
