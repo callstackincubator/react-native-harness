@@ -22,6 +22,10 @@ import type {
   TestRunnerTestFinishedEvent,
   TestRunnerTestStartedEvent,
 } from '@react-native-harness/bridge';
+import {
+  createPlatformSkippedTestResult,
+  shouldRunHarnessTestFile,
+} from './test-file-platform-filter.js';
 
 type EmitTestEvent = <Name extends keyof TestEvents>(
   eventName: Name,
@@ -163,6 +167,10 @@ export const executeRun = async (
   });
 
   const shouldResetEnv = session.config.resetEnvironmentBetweenTestFiles;
+  const platformId = session.context.platform.platformId;
+  const knownPlatformIds = new Set(
+    session.config.runners.map((runner) => runner.platformId),
+  );
   let isFirstTest = true;
   let runError: unknown;
 
@@ -190,6 +198,34 @@ export const executeRun = async (
       };
 
       await session.callHook('test-file:started', { runId, file: relativeTestPath });
+
+      if (
+        !shouldRunHarnessTestFile(test.path, platformId, knownPlatformIds)
+      ) {
+        try {
+          await emitEvent('test-file-start', test);
+          const skippedResult = createPlatformSkippedTestResult(test.path);
+          applyJestResultToSummary(summary, skippedResult);
+          updateRunState();
+          await emitTestFileFinished({
+            status: 'skipped',
+            duration: Date.now() - fileStartedAt,
+            result: null,
+          });
+          await emitEvent('test-file-success', test, skippedResult);
+        } catch (err) {
+          if (!emittedTestFileFinished) {
+            await emitTestFileFinished({
+              status: 'failed',
+              duration: Date.now() - fileStartedAt,
+              result: null,
+            });
+          }
+          updateRunState({ error: err });
+          await emitEvent('test-file-failure', test, buildTestFailure(err));
+        }
+        continue;
+      }
 
       try {
         if (shouldResetEnv && !isFirstTest) {

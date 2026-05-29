@@ -98,8 +98,20 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
     host: undefined,
     resetEnvironmentBetweenTestFiles: false,
     detectNativeCrashes: true,
+    runners: [
+      { platformId: 'android', name: 'android' },
+      { platformId: 'ios', name: 'ios' },
+    ],
   } as HarnessSession['config'],
-  context: {} as HarnessSession['context'],
+  context: {
+    platform: {
+      platformId: 'android',
+      name: 'android',
+      runner: '/virtual/android-runner.js',
+      cli: '/virtual/android-cli.js',
+      config: {},
+    },
+  } as HarnessSession['context'],
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async () => makeHarnessResult()),
   restartApp: vi.fn(resolveUndefined),
@@ -431,6 +443,10 @@ describe('executeRun', () => {
           metroPort: 8081,
           resetEnvironmentBetweenTestFiles: true,
           detectNativeCrashes: false,
+          runners: [
+            { platformId: 'android', name: 'android' },
+            { platformId: 'ios', name: 'ios' },
+          ],
         } as HarnessSession['config'],
       });
 
@@ -444,6 +460,67 @@ describe('executeRun', () => {
 
       // restartApp should be called for tests 2 and 3, not test 1.
       expect(session.restartApp).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('platform-specific test files', () => {
+    it('skips files for other platforms without running them on the device', async () => {
+      const session = makeSession();
+      const { emitEvent, calls } = makeEmitEvent();
+
+      await executeRun(
+        session,
+        [
+          makeTest('/project/smoke.harness.ts'),
+          makeTest('/project/kotlin.android.harness.ts'),
+          makeTest('/project/swift.ios.harness.ts'),
+        ],
+        makeWatcher(),
+        emitEvent,
+        makeGlobalConfig(),
+      );
+
+      expect(mockRunHarnessTestFile).toHaveBeenCalledTimes(2);
+      expect(mockRunHarnessTestFile).toHaveBeenCalledWith(
+        expect.objectContaining({ testPath: '/project/smoke.harness.ts' }),
+      );
+      expect(mockRunHarnessTestFile).toHaveBeenCalledWith(
+        expect.objectContaining({ testPath: '/project/kotlin.android.harness.ts' }),
+      );
+      expect(session.ensureAppReady).toHaveBeenCalledTimes(2);
+      expect(calls).toContainEqual([
+        'test-file-success',
+        expect.objectContaining({ path: '/project/swift.ios.harness.ts' }),
+        expect.objectContaining({ skipped: true }),
+      ]);
+    });
+
+    it('does not restart the app for skipped platform-specific files', async () => {
+      const session = makeSession({
+        config: {
+          metroPort: 8081,
+          resetEnvironmentBetweenTestFiles: true,
+          detectNativeCrashes: false,
+          runners: [
+            { platformId: 'android', name: 'android' },
+            { platformId: 'ios', name: 'ios' },
+          ],
+        } as HarnessSession['config'],
+      });
+
+      await executeRun(
+        session,
+        [
+          makeTest('/project/swift.ios.harness.ts'),
+          makeTest('/project/kotlin.android.harness.ts'),
+        ],
+        makeWatcher(),
+        vi.fn(),
+        makeGlobalConfig(),
+      );
+
+      expect(session.restartApp).not.toHaveBeenCalled();
+      expect(mockRunHarnessTestFile).toHaveBeenCalledTimes(1);
     });
   });
 });
