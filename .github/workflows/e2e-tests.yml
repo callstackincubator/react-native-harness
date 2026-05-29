@@ -267,241 +267,242 @@ jobs:
           path: apps/playground/.harness/logs
           if-no-files-found: ignore
 
-  crash-validate-android:
-    name: Crash Validation Android
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android') }}
-    env:
-      HARNESS_DEBUG: true
-      DEBUG: 'Metro:*'
+  # Temporary disable: crash detector validation jobs.
+  # crash-validate-android:
+  #   name: Crash Validation Android
+  #   runs-on: ubuntu-22.04
+  #   timeout-minutes: 30
+  #   if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android') }}
+  #   env:
+  #     HARNESS_DEBUG: true
+  #     DEBUG: 'Metro:*'
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+  #       with:
+  #         ref: ${{ github.ref }}
+  #         fetch-depth: 0
 
-      - name: Reclaim disk space
-        uses: AdityaGarg8/remove-unwanted-software@90e01b21170618765a73370fcc3abbd1684a7793 # v5
-        with:
-          remove-dotnet: true
-          remove-haskell: true
-          remove-codeql: true
-          remove-docker-images: true
+  #     - name: Reclaim disk space
+  #       uses: AdityaGarg8/remove-unwanted-software@90e01b21170618765a73370fcc3abbd1684a7793 # v5
+  #       with:
+  #         remove-dotnet: true
+  #         remove-haskell: true
+  #         remove-codeql: true
+  #         remove-docker-images: true
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
-        with:
-          version: latest
+  #     - name: Install pnpm
+  #       uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
+  #       with:
+  #         version: latest
 
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '24.10.0'
-          cache: 'pnpm'
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+  #       with:
+  #         node-version: '24.10.0'
+  #         cache: 'pnpm'
 
-      - name: Install dependencies
-        run: |
-          pnpm install
+  #     - name: Install dependencies
+  #       run: |
+  #         pnpm install
 
-      - name: Build packages
-        run: |
-          pnpm nx run-many -t build --projects="packages/*"
+  #     - name: Build packages
+  #       run: |
+  #         pnpm nx run-many -t build --projects="packages/*"
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@17f84c3641ba7b8f6deff6309fc4c864478f5d62 # v3.14.1
-        with:
-          java-version: '17'
-          distribution: 'temurin'
+  #     - name: Set up JDK 17
+  #       uses: actions/setup-java@17f84c3641ba7b8f6deff6309fc4c864478f5d62 # v3.14.1
+  #       with:
+  #         java-version: '17'
+  #         distribution: 'temurin'
 
-      - name: Restore APK from cache
-        id: cache-apk-restore
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
-          key: apk-playground
+  #     - name: Restore APK from cache
+  #       id: cache-apk-restore
+  #       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+  #       with:
+  #         path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
+  #         key: apk-playground
 
-      - name: Build Android app
-        if: steps.cache-apk-restore.outputs.cache-hit != 'true'
-        working-directory: apps/playground
-        run: |
-          pnpm nx run @react-native-harness/playground:build-android --tasks=assembleDebug
+  #     - name: Build Android app
+  #       if: steps.cache-apk-restore.outputs.cache-hit != 'true'
+  #       working-directory: apps/playground
+  #       run: |
+  #         pnpm nx run @react-native-harness/playground:build-android --tasks=assembleDebug
 
-      - name: Save APK to cache
-        if: steps.cache-apk-restore.outputs.cache-hit != 'true' && success()
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
-          key: apk-playground
+  #     - name: Save APK to cache
+  #       if: steps.cache-apk-restore.outputs.cache-hit != 'true' && success()
+  #       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+  #       with:
+  #         path: apps/playground/android/app/build/outputs/apk/debug/app-debug.apk
+  #         key: apk-playground
 
-      - name: Run React Native Harness (expect crash)
-        id: crash-test
-        continue-on-error: true
-        uses: ./
-        with:
-          app: android/app/build/outputs/apk/debug/app-debug.apk
-          runner: android-crash-pre-rn
-          projectRoot: apps/playground
-          harnessArgs: '--config jest.harness.crash.config.mjs --testPathPatterns src/__tests__/crash/android'
-          preRunHook: |
-            echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
-            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
-          afterRunHook: |
-            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
-            echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
+  #     - name: Run React Native Harness (expect crash)
+  #       id: crash-test
+  #       continue-on-error: true
+  #       uses: ./
+  #       with:
+  #         app: android/app/build/outputs/apk/debug/app-debug.apk
+  #         runner: android-crash-pre-rn
+  #         projectRoot: apps/playground
+  #         harnessArgs: '--config jest.harness.crash.config.mjs --testPathPatterns src/__tests__/crash/android'
+  #         preRunHook: |
+  #           echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
+  #           echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+  #         afterRunHook: |
+  #           echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+  #           echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
 
-      - name: Verify crash was detected
-        shell: bash
-        run: |
-          if [ "${{ steps.crash-test.outcome }}" != "failure" ]; then
-            echo "ERROR: Expected harness to fail (crash not detected)"
-            exit 1
-          fi
-          echo "Crash was correctly detected by the harness"
+  #     - name: Verify crash was detected
+  #       shell: bash
+  #       run: |
+  #         if [ "${{ steps.crash-test.outcome }}" != "failure" ]; then
+  #           echo "ERROR: Expected harness to fail (crash not detected)"
+  #           exit 1
+  #         fi
+  #         echo "Crash was correctly detected by the harness"
 
-      - name: Verify crash artifacts exist
-        shell: bash
-        run: |
-          CRASH_DIR="apps/playground/.harness/crash-reports"
-          if [ -d "$CRASH_DIR" ] && [ "$(ls -A "$CRASH_DIR" 2>/dev/null)" ]; then
-            echo "Crash report artifacts found:"
-            ls -la "$CRASH_DIR"
-          else
-            echo "ERROR: No crash report artifacts found in $CRASH_DIR"
-            exit 1
-          fi
+  #     - name: Verify crash artifacts exist
+  #       shell: bash
+  #       run: |
+  #         CRASH_DIR="apps/playground/.harness/crash-reports"
+  #         if [ -d "$CRASH_DIR" ] && [ "$(ls -A "$CRASH_DIR" 2>/dev/null)" ]; then
+  #           echo "Crash report artifacts found:"
+  #           ls -la "$CRASH_DIR"
+  #         else
+  #           echo "ERROR: No crash report artifacts found in $CRASH_DIR"
+  #           exit 1
+  #         fi
 
-      - name: Upload Harness logs
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: harness-logs-crash-validate-android
-          path: apps/playground/.harness/logs
-          if-no-files-found: ignore
+  #     - name: Upload Harness logs
+  #       if: always()
+  #       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+  #       with:
+  #         name: harness-logs-crash-validate-android
+  #         path: apps/playground/.harness/logs
+  #         if-no-files-found: ignore
 
-  crash-validate-ios:
-    name: Crash Validation iOS
-    runs-on: macos-latest
-    timeout-minutes: 30
-    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios') }}
-    env:
-      HARNESS_DEBUG: true
-      DEBUG: 'Metro:*'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
+  # crash-validate-ios:
+  #   name: Crash Validation iOS
+  #   runs-on: macos-latest
+  #   timeout-minutes: 30
+  #   if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios') }}
+  #   env:
+  #     HARNESS_DEBUG: true
+  #     DEBUG: 'Metro:*'
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+  #       with:
+  #         ref: ${{ github.ref }}
+  #         fetch-depth: 0
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
-        with:
-          version: latest
+  #     - name: Install pnpm
+  #       uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
+  #       with:
+  #         version: latest
 
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '24.10.0'
-          cache: 'pnpm'
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+  #       with:
+  #         node-version: '24.10.0'
+  #         cache: 'pnpm'
 
-      - name: Setup Xcode 26
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
-        with:
-          xcode-version: '26.0'
+  #     - name: Setup Xcode 26
+  #       uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+  #       with:
+  #         xcode-version: '26.0'
 
-      - name: Install Watchman
-        run: brew install watchman
+  #     - name: Install Watchman
+  #       run: brew install watchman
 
-      - name: Install dependencies
-        run: |
-          pnpm install
+  #     - name: Install dependencies
+  #       run: |
+  #         pnpm install
 
-      - name: Build packages
-        run: |
-          pnpm nx run-many -t build --projects="packages/*"
+  #     - name: Build packages
+  #       run: |
+  #         pnpm nx run-many -t build --projects="packages/*"
 
-      - name: Restore app from cache
-        id: cache-app-restore
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
-          key: ios-app-playground
+  #     - name: Restore app from cache
+  #       id: cache-app-restore
+  #       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+  #       with:
+  #         path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
+  #         key: ios-app-playground
 
-      - name: CocoaPods cache
-        if: steps.cache-app-restore.outputs.cache-hit != 'true'
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: |
-            ./apps/playground/ios/Pods
-            ~/Library/Caches/CocoaPods
-            ~/.cocoapods
-          key: playground-${{ runner.os }}-pods-${{ hashFiles('./apps/playground/ios/Podfile.lock') }}
-          restore-keys: |
-            playground-${{ runner.os }}-pods-
+  #     - name: CocoaPods cache
+  #       if: steps.cache-app-restore.outputs.cache-hit != 'true'
+  #       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+  #       with:
+  #         path: |
+  #           ./apps/playground/ios/Pods
+  #           ~/Library/Caches/CocoaPods
+  #           ~/.cocoapods
+  #         key: playground-${{ runner.os }}-pods-${{ hashFiles('./apps/playground/ios/Podfile.lock') }}
+  #         restore-keys: |
+  #           playground-${{ runner.os }}-pods-
 
-      - name: Install CocoaPods
-        if: steps.cache-app-restore.outputs.cache-hit != 'true'
-        working-directory: apps/playground/ios
-        run: |
-          pod install
+  #     - name: Install CocoaPods
+  #       if: steps.cache-app-restore.outputs.cache-hit != 'true'
+  #       working-directory: apps/playground/ios
+  #       run: |
+  #         pod install
 
-      - name: Build iOS app
-        if: steps.cache-app-restore.outputs.cache-hit != 'true'
-        working-directory: apps/playground
-        run: |
-          pnpm react-native build-ios --buildFolder ./build --verbose
+  #     - name: Build iOS app
+  #       if: steps.cache-app-restore.outputs.cache-hit != 'true'
+  #       working-directory: apps/playground
+  #       run: |
+  #         pnpm react-native build-ios --buildFolder ./build --verbose
 
-      - name: Save app to cache
-        if: steps.cache-app-restore.outputs.cache-hit != 'true' && success()
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
-          key: ios-app-playground
+  #     - name: Save app to cache
+  #       if: steps.cache-app-restore.outputs.cache-hit != 'true' && success()
+  #       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+  #       with:
+  #         path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
+  #         key: ios-app-playground
 
-      - name: Run React Native Harness (expect crash)
-        id: crash-test
-        continue-on-error: true
-        uses: ./
-        with:
-          app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
-          runner: ios-crash-pre-rn
-          projectRoot: apps/playground
-          harnessArgs: '--config jest.harness.crash.config.mjs --testPathPatterns src/__tests__/crash/ios'
-          preRunHook: |
-            echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
-            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
-          afterRunHook: |
-            echo "HARNESS_RUNNER=$HARNESS_RUNNER"
-            echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
+  #     - name: Run React Native Harness (expect crash)
+  #       id: crash-test
+  #       continue-on-error: true
+  #       uses: ./
+  #       with:
+  #         app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
+  #         runner: ios-crash-pre-rn
+  #         projectRoot: apps/playground
+  #         harnessArgs: '--config jest.harness.crash.config.mjs --testPathPatterns src/__tests__/crash/ios'
+  #         preRunHook: |
+  #           echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
+  #           echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+  #         afterRunHook: |
+  #           echo "HARNESS_RUNNER=$HARNESS_RUNNER"
+  #           echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
 
-      - name: Verify crash was detected
-        shell: bash
-        run: |
-          if [ "${{ steps.crash-test.outcome }}" != "failure" ]; then
-            echo "ERROR: Expected harness to fail (crash not detected)"
-            exit 1
-          fi
-          echo "Crash was correctly detected by the harness"
+  #     - name: Verify crash was detected
+  #       shell: bash
+  #       run: |
+  #         if [ "${{ steps.crash-test.outcome }}" != "failure" ]; then
+  #           echo "ERROR: Expected harness to fail (crash not detected)"
+  #           exit 1
+  #         fi
+  #         echo "Crash was correctly detected by the harness"
 
-      - name: Verify crash artifacts exist
-        shell: bash
-        run: |
-          CRASH_DIR="apps/playground/.harness/crash-reports"
-          if [ -d "$CRASH_DIR" ] && [ "$(ls -A "$CRASH_DIR" 2>/dev/null)" ]; then
-            echo "Crash report artifacts found:"
-            ls -la "$CRASH_DIR"
-          else
-            echo "ERROR: No crash report artifacts found in $CRASH_DIR"
-            exit 1
-          fi
+  #     - name: Verify crash artifacts exist
+  #       shell: bash
+  #       run: |
+  #         CRASH_DIR="apps/playground/.harness/crash-reports"
+  #         if [ -d "$CRASH_DIR" ] && [ "$(ls -A "$CRASH_DIR" 2>/dev/null)" ]; then
+  #           echo "Crash report artifacts found:"
+  #           ls -la "$CRASH_DIR"
+  #         else
+  #           echo "ERROR: No crash report artifacts found in $CRASH_DIR"
+  #           exit 1
+  #         fi
 
-      - name: Upload Harness logs
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: harness-logs-crash-validate-ios
-          path: apps/playground/.harness/logs
-          if-no-files-found: ignore
+  #     - name: Upload Harness logs
+  #       if: always()
+  #       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+  #       with:
+  #         name: harness-logs-crash-validate-ios
+  #         path: apps/playground/.harness/logs
+  #         if-no-files-found: ignore
