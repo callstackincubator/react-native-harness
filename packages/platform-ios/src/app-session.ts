@@ -6,6 +6,7 @@ import {
   type AppleAppLaunchOptions,
 } from '@react-native-harness/platforms';
 import { logger, type Subprocess } from '@react-native-harness/tools';
+import type { IosCrashReporter } from './crash-reporter.js';
 
 const iosAppSessionLogger = logger.child('ios-app-session');
 const APP_EXIT_POLL_INTERVAL_MS = 1000;
@@ -15,15 +16,16 @@ type CreateIosAppSessionOptions = {
   launch: () => Subprocess;
   stopApp: () => Promise<void>;
   isAppRunning: () => Promise<boolean>;
+  crashReporter?: IosCrashReporter;
 };
 
-const sleep = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const createIosAppSession = async ({
   launch,
   stopApp,
   isAppRunning,
+  crashReporter,
 }: CreateIosAppSessionOptions): Promise<AppSession> => {
   const emitter = createAppSessionEmitter();
   const logBuffer = createBoundedLogBuffer();
@@ -87,7 +89,7 @@ export const createIosAppSession = async ({
   const launchSettled = await Promise.race([
     launchProcess.then(
       () => 'settled' as const,
-      () => 'settled' as const,
+      () => 'settled' as const
     ),
     sleep(LAUNCH_FAILURE_SETTLE_MS).then(() => 'running' as const),
   ]);
@@ -123,6 +125,7 @@ export const createIosAppSession = async ({
     },
     getState: async () => state,
     getLogs: () => logBuffer.getLogs(),
+    getCrashDetails: crashReporter?.getCrashDetails,
     addListener: emitter.addListener,
     removeListener: emitter.removeListener,
   };

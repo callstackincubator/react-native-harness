@@ -68,12 +68,28 @@ const buildNativeCrashMessage = ({
   pid,
   stackTrace,
   artifactType,
+  artifactPath,
+  enrichmentArtifacts,
 }: NativeCrashDetails) => {
   const lines = [
     phase === 'startup'
       ? 'The native app crashed while preparing to run this test file.'
       : 'The native app crashed during test execution.',
   ];
+
+  lines.push(
+    artifactPath
+      ? `Harness extracted the crash log: ${artifactPath}`
+      : "Harness couldn't extract the crash log."
+  );
+
+  if (enrichmentArtifacts && enrichmentArtifacts.length > 0) {
+    lines.push('Additional crash artifacts:');
+    for (const artifact of enrichmentArtifacts) {
+      lines.push(`  - ${artifact.artifactPath}`);
+    }
+  }
+
   const hasCrashBlock = summary?.includes('\n') ?? false;
   const shouldRenderSummary =
     Boolean(summary) &&

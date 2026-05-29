@@ -194,6 +194,7 @@ const parseCrashArtifacts = ({
               kind: 'file',
               path,
             },
+            testFilePath: lookup?.testFilePath,
           })
         : path;
 
@@ -208,7 +209,7 @@ const parseCrashArtifacts = ({
       return artifact;
     })
     .filter((artifact): artifact is DiagnosedCrashArtifact =>
-      Boolean(artifact),
+      Boolean(artifact)
     );
 
   return candidates.sort((left, right) => {
@@ -220,10 +221,23 @@ const parseCrashArtifacts = ({
   });
 };
 
-const collectSimulatorCrashArtifacts = async ({
-  targetId,
-  ...options
-}: CollectSimulatorCrashArtifactsOptions) => {
+const collectSimulatorCrashArtifacts = async (
+  { targetId, ...options }: CollectSimulatorCrashArtifactsOptions,
+  lookup?: CrashDetailsLookupOptions
+) => {
+  const diagnosticReportArtifacts = collectCrashArtifactsFromDiagnosticReports(
+    {
+      ...options,
+      targetId,
+      targetType: 'simulator',
+    },
+    lookup
+  );
+
+  if (diagnosticReportArtifacts.length > 0) {
+    return diagnosticReportArtifacts;
+  }
+
   const outputDir = createTempDirectory('rn-harness-simctl-diagnose');
 
   try {
@@ -231,6 +245,7 @@ const collectSimulatorCrashArtifacts = async ({
     return parseCrashArtifacts({
       rootDir: outputDir,
       options: { ...options, targetId, targetType: 'simulator' },
+      lookup,
     });
   } finally {
     fs.rmSync(outputDir, { recursive: true, force: true });
@@ -239,12 +254,13 @@ const collectSimulatorCrashArtifacts = async ({
 
 const collectCrashArtifactsFromDiagnosticReports = (
   options: CollectCrashArtifactsOptions,
+  lookup?: CrashDetailsLookupOptions
 ): DiagnosedCrashArtifact[] => {
   const diagnosticReportsDir = join(
     homedir(),
     'Library',
     'Logs',
-    'DiagnosticReports',
+    'DiagnosticReports'
   );
 
   if (!fs.existsSync(diagnosticReportsDir)) {
@@ -255,7 +271,7 @@ const collectCrashArtifactsFromDiagnosticReports = (
     .readdirSync(diagnosticReportsDir)
     .filter((entry) => entry.endsWith('.ips'))
     .filter((entry) =>
-      options.processNames.some((name) => entry.startsWith(`${name}-`)),
+      options.processNames.some((name) => entry.startsWith(`${name}-`))
     );
 
   const artifacts: DiagnosedCrashArtifact[] = [];
@@ -270,6 +286,14 @@ const collectCrashArtifactsFromDiagnosticReports = (
     }
 
     if (
+      options.targetType === 'simulator' &&
+      (parsed.targetId !== options.targetId ||
+        !contents.includes(options.targetId))
+    ) {
+      continue;
+    }
+
+    if (
       options.minOccurredAt !== undefined &&
       parsed.occurredAt < options.minOccurredAt
     ) {
@@ -280,6 +304,7 @@ const collectCrashArtifactsFromDiagnosticReports = (
       ? options.crashArtifactWriter.persistArtifact({
           artifactKind: 'ios-crash-report',
           source: { kind: 'file', path },
+          testFilePath: lookup?.testFilePath,
         })
       : path;
 
@@ -290,7 +315,7 @@ const collectCrashArtifactsFromDiagnosticReports = (
       occurredAt: parsed.occurredAt,
     };
 
-    artifact.score = scoreCrashArtifact({ artifact, options });
+    artifact.score = scoreCrashArtifact({ artifact, options, lookup });
     artifacts.push(artifact);
   }
 
@@ -303,13 +328,16 @@ const collectCrashArtifactsFromDiagnosticReports = (
   });
 };
 
-const collectPhysicalCrashArtifacts = async ({
-  targetId,
-  processNames,
-  bundleId,
-  crashArtifactWriter,
-  minOccurredAt,
-}: CollectPhysicalCrashArtifactsOptions) => {
+const collectPhysicalCrashArtifacts = async (
+  {
+    targetId,
+    processNames,
+    bundleId,
+    crashArtifactWriter,
+    minOccurredAt,
+  }: CollectPhysicalCrashArtifactsOptions,
+  lookup?: CrashDetailsLookupOptions
+) => {
   const crashLogsDir = createTempDirectory('rn-harness-devicectl-crash-logs');
 
   try {
@@ -318,7 +346,7 @@ const collectPhysicalCrashArtifacts = async ({
       recursive: true,
     });
     const filteredCrashLogPaths = remoteCrashLogPaths.filter((remotePath) =>
-      processNames.some((processName) => remotePath.includes(processName)),
+      processNames.some((processName) => remotePath.includes(processName))
     );
 
     if (filteredCrashLogPaths.length > 0) {
@@ -338,6 +366,7 @@ const collectPhysicalCrashArtifacts = async ({
 
       const copiedArtifacts = parseCrashArtifacts({
         rootDir: crashLogsDir,
+        lookup,
         options: {
           targetId,
           targetType: 'device',
@@ -356,18 +385,22 @@ const collectPhysicalCrashArtifacts = async ({
     fs.rmSync(crashLogsDir, { recursive: true, force: true });
   }
 
-  return collectCrashArtifactsFromDiagnosticReports({
-    targetId,
-    targetType: 'device',
-    processNames,
-    bundleId,
-    crashArtifactWriter,
-    minOccurredAt,
-  });
+  return collectCrashArtifactsFromDiagnosticReports(
+    {
+      targetId,
+      targetType: 'device',
+      processNames,
+      bundleId,
+      crashArtifactWriter,
+      minOccurredAt,
+    },
+    lookup
+  );
 };
 
 export const collectCrashArtifacts = async (
   options: CollectCrashArtifactsOptions,
+  lookup?: CrashDetailsLookupOptions
 ): Promise<DiagnosedCrashArtifact[]> => {
   crashDiagnosticsLogger.debug('collecting crash artifacts: %o', {
     targetId: options.targetId,
@@ -377,10 +410,10 @@ export const collectCrashArtifacts = async (
   });
 
   if (options.targetType === 'simulator') {
-    return collectSimulatorCrashArtifacts(options);
+    return collectSimulatorCrashArtifacts(options, lookup);
   }
 
-  return collectPhysicalCrashArtifacts(options);
+  return collectPhysicalCrashArtifacts(options, lookup);
 };
 
 export const waitForCrashArtifact = async ({
@@ -393,7 +426,7 @@ export const waitForCrashArtifact = async ({
   let fallbackArtifact = getFallbackArtifact();
 
   while (Date.now() < deadline) {
-    const artifacts = await collectCrashArtifacts(options);
+    const artifacts = await collectCrashArtifacts(options, lookup);
 
     for (const artifact of artifacts) {
       recordArtifact(artifact);
@@ -416,7 +449,7 @@ export const waitForCrashArtifact = async ({
     }
 
     await new Promise((resolve) =>
-      setTimeout(resolve, CRASH_ARTIFACT_POLL_INTERVAL_MS),
+      setTimeout(resolve, CRASH_ARTIFACT_POLL_INTERVAL_MS)
     );
   }
 

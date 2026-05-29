@@ -1,3 +1,18 @@
+export type CrashArtifactKind =
+  | 'logcat'
+  | 'ios-crash-report'
+  | 'dropbox-crash'
+  | 'dropbox-native-crash'
+  | 'exit-info';
+
+export type CrashEnrichmentArtifact = {
+  artifactType: Exclude<
+    CrashArtifactKind,
+    'logcat' | 'ios-crash-report'
+  >;
+  artifactPath: string;
+};
+
 export type AppCrashDetails = {
   source?: 'polling' | 'logs' | 'bridge';
   summary?: string;
@@ -7,8 +22,9 @@ export type AppCrashDetails = {
   pid?: number;
   stackTrace?: string[];
   rawLines?: string[];
-  artifactType?: 'logcat' | 'ios-crash-report';
+  artifactType?: CrashArtifactKind;
   artifactPath?: string;
+  enrichmentArtifacts?: CrashEnrichmentArtifact[];
 };
 
 export type CrashArtifactSource =
@@ -27,6 +43,7 @@ export type CrashArtifactWriter = {
   persistArtifact: (options: {
     artifactKind: string;
     source: CrashArtifactSource;
+    testFilePath?: string;
   }) => string;
 };
 
@@ -38,6 +55,7 @@ export type CrashDetailsLookupOptions = {
   processName?: string;
   pid?: number;
   occurredAt: number;
+  testFilePath?: string;
 };
 
 export type AppMonitorEvent =
@@ -108,6 +126,9 @@ export type AppSession = {
   dispose: () => Promise<void>;
   getState: () => Promise<AppSessionState>;
   getLogs: () => AppSessionLog[];
+  getCrashDetails?: (
+    options: CrashDetailsLookupOptions
+  ) => Promise<AppCrashDetails | null>;
   addListener: (listener: AppSessionListener) => void;
   removeListener: (listener: AppSessionListener) => void;
 };
@@ -146,6 +167,7 @@ export type HarnessPlatformRunner = {
 
 export type HarnessPlatformInitOptions = {
   signal: AbortSignal;
+  crashArtifactWriter?: CrashArtifactWriter;
 };
 
 export type HarnessCliCommandContext = {
@@ -156,10 +178,7 @@ export type HarnessCliCommandContext = {
 export type HarnessCliCommand = {
   name: string;
   aliases?: string[];
-  run: (
-    args: string[],
-    context: HarnessCliCommandContext
-  ) => Promise<void>;
+  run: (args: string[], context: HarnessCliCommandContext) => Promise<void>;
 };
 
 export type HarnessCliModule = {

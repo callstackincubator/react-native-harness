@@ -66,7 +66,7 @@ const getOptionalHarnessAppPath = (): string | undefined => {
 const configureAndroidRuntime = async (
   adbId: string,
   config: AndroidPlatformConfig,
-  harnessConfig: HarnessConfig,
+  harnessConfig: HarnessConfig
 ): Promise<number> => {
   const metroPort = harnessConfig.metroPort;
 
@@ -143,14 +143,14 @@ const prepareCachedAvd = async ({
       hasExistingAvd
         ? 'Recreating incompatible Android emulator %s...'
         : 'Creating Android emulator %s...',
-      emulatorName,
+      emulatorName
     );
 
     if (hasExistingAvd && !compatibility.compatible) {
       androidInstanceLogger.debug(
         'Android AVD %s is not reusable: %s',
         emulatorName,
-        compatibility.reason,
+        compatibility.reason
       );
       await adb.deleteAvd(emulatorName);
     }
@@ -180,7 +180,7 @@ const prepareCachedAvd = async ({
 export const getAndroidEmulatorPlatformInstance = async (
   config: AndroidPlatformConfig,
   harnessConfig: HarnessConfig,
-  init: HarnessPlatformInitOptions,
+  init: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDeviceEmulator(config.device);
   const permissionsEnabled = harnessConfig.permissions ?? false;
@@ -198,7 +198,7 @@ export const getAndroidEmulatorPlatformInstance = async (
   androidInstanceLogger.debug(
     'resolved Android emulator %s with adb id %s',
     emulatorConfig.name,
-    adbId ?? 'not-found',
+    adbId ?? 'not-found'
   );
 
   if (!adbId) {
@@ -218,7 +218,7 @@ export const getAndroidEmulatorPlatformInstance = async (
             logger.info('Creating Android emulator %s...', emulatorName);
             androidInstanceLogger.debug(
               'creating Android AVD %s before startup',
-              emulatorConfig.name,
+              emulatorConfig.name
             );
             await recreateAvd({ emulatorConfig });
           } else {
@@ -227,7 +227,7 @@ export const getAndroidEmulatorPlatformInstance = async (
 
           androidInstanceLogger.debug(
             'starting Android emulator %s',
-            emulatorConfig.name,
+            emulatorConfig.name
           );
           return startAndWaitForBoot({
             emulatorName: emulatorConfig.name,
@@ -240,7 +240,7 @@ export const getAndroidEmulatorPlatformInstance = async (
     androidInstanceLogger.debug(
       'Android emulator %s connected as %s',
       emulatorConfig.name,
-      adbId,
+      adbId
     );
   }
 
@@ -250,7 +250,7 @@ export const getAndroidEmulatorPlatformInstance = async (
 
   androidInstanceLogger.debug(
     'waiting for Android emulator %s to finish booting',
-    adbId,
+    adbId
   );
 
   const isInstalled = await adb.isAppInstalled(adbId, config.bundleId);
@@ -285,12 +285,15 @@ export const getAndroidEmulatorPlatformInstance = async (
             adbId,
             config.bundleId,
             config.activityName,
-            launchOptions,
+            launchOptions
           ),
         stopApp: () => adb.stopApp(adbId, config.bundleId),
         getAppPid: () => adb.getAppPid(adbId, config.bundleId),
         getLogcatTimestamp: () => adb.getLogcatTimestamp(adbId),
         startLogcat: (args) => adb.startLogcat(adbId, args),
+        getDropboxOutput: () => adb.getDropboxPrint(adbId),
+        getExitInfo: () => adb.getActivityExitInfo(adbId, config.bundleId),
+        crashArtifactWriter: init.crashArtifactWriter,
       });
     },
     dispose: async () => {
@@ -309,6 +312,7 @@ export const getAndroidEmulatorPlatformInstance = async (
 export const getAndroidPhysicalDevicePlatformInstance = async (
   config: AndroidPlatformConfig,
   harnessConfig: HarnessConfig,
+  init?: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDevicePhysical(config.device);
   const permissionsEnabled = harnessConfig.permissions ?? false;
@@ -324,7 +328,7 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
   if (!isInstalled) {
     throw new AppNotInstalledError(
       config.bundleId,
-      getDeviceName(config.device),
+      getDeviceName(config.device)
     );
   }
 
@@ -349,12 +353,15 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
             adbId,
             config.bundleId,
             config.activityName,
-            launchOptions,
+            launchOptions
           ),
         stopApp: () => adb.stopApp(adbId, config.bundleId),
         getAppPid: () => adb.getAppPid(adbId, config.bundleId),
         getLogcatTimestamp: () => adb.getLogcatTimestamp(adbId),
         startLogcat: (args) => adb.startLogcat(adbId, args),
+        getDropboxOutput: () => adb.getDropboxPrint(adbId),
+        getExitInfo: () => adb.getActivityExitInfo(adbId, config.bundleId),
+        crashArtifactWriter: init?.crashArtifactWriter,
       });
     },
     dispose: async () => {

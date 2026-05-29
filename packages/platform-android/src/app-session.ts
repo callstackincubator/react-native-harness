@@ -3,18 +3,19 @@ import {
   createBoundedLogBuffer,
   type AppSession,
   type AppSessionState,
+  type CrashArtifactWriter,
 } from '@react-native-harness/platforms';
 import {
   escapeRegExp,
   logger,
   type Subprocess,
 } from '@react-native-harness/tools';
+import { createAndroidCrashReporter } from './crash-reporter.js';
 
 const androidAppSessionLogger = logger.child('android-app-session');
 const APP_EXIT_POLL_INTERVAL_MS = 1000;
 
-const sleep = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const getLogcatArgs = (appUid: number, fromTime: string) =>
   [
@@ -36,8 +37,10 @@ const getStartProcPattern = (bundleId: string) =>
 
 const getProcessDiedPattern = (bundleId: string) =>
   new RegExp(
-    `Process\\s+${escapeRegExp(bundleId)}\\s+\\(pid\\s+(\\d+)\\)\\s+has\\s+died`,
-    'i',
+    `Process\\s+${escapeRegExp(
+      bundleId
+    )}\\s+\\(pid\\s+(\\d+)\\)\\s+has\\s+died`,
+    'i'
   );
 
 const getObservedPid = (line: string, bundleId: string): number | undefined => {
@@ -54,7 +57,8 @@ const isCrashSignal = (line: string, bundleId: string): boolean => {
     getProcessPattern(bundleId).test(line) ||
     new RegExp(`>>>\\s*${escapeRegExp(bundleId)}\\s*<<<`).test(line) ||
     getProcessDiedPattern(bundleId).test(line) ||
-    (line.includes(bundleId) && /fatal|crash|signal 11|signal 6|backtrace/i.test(line))
+    (line.includes(bundleId) &&
+      /fatal|crash|signal 11|signal 6|backtrace/i.test(line))
   );
 };
 
@@ -67,7 +71,7 @@ const stopSubprocess = async (child: Subprocess) => {
 };
 
 const isExitedState = (
-  state: AppSessionState,
+  state: AppSessionState
 ): state is Extract<AppSessionState, { status: 'exited' }> =>
   state.status === 'exited';
 
@@ -79,6 +83,9 @@ type CreateAndroidAppSessionOptions = {
   getAppPid: () => Promise<number | null>;
   getLogcatTimestamp: () => Promise<string>;
   startLogcat: (args: readonly string[]) => Subprocess;
+  getDropboxOutput?: () => Promise<string>;
+  getExitInfo?: () => Promise<string>;
+  crashArtifactWriter?: CrashArtifactWriter;
 };
 
 export const createAndroidAppSession = async ({
@@ -89,6 +96,9 @@ export const createAndroidAppSession = async ({
   getAppPid,
   getLogcatTimestamp,
   startLogcat,
+  getDropboxOutput,
+  getExitInfo,
+  crashArtifactWriter,
 }: CreateAndroidAppSessionOptions): Promise<AppSession> => {
   const emitter = createAppSessionEmitter();
   const logBuffer = createBoundedLogBuffer();
@@ -111,7 +121,8 @@ export const createAndroidAppSession = async ({
       hasObservedProcess = true;
     }
 
-    state = pid === undefined ? { status: 'running' } : { status: 'running', pid };
+    state =
+      pid === undefined ? { status: 'running' } : { status: 'running', pid };
   };
 
   const scheduleExitNotification = () => {
@@ -152,7 +163,7 @@ export const createAndroidAppSession = async ({
 
   const setExited = (
     reason: 'observed-exit' | 'process-gone',
-    pid?: number,
+    pid?: number
   ) => {
     if (disposed || state.status === 'disposed' || state.status === 'exited') {
       return;
@@ -181,7 +192,16 @@ export const createAndroidAppSession = async ({
   };
 
   const logcatTimestamp = await getLogcatTimestamp();
+  const sessionStartedAt = Date.now();
   const logcatProcess = startLogcat(getLogcatArgs(appUid, logcatTimestamp));
+  const crashReporter = createAndroidCrashReporter({
+    bundleId,
+    crashArtifactWriter,
+    getLogs: () => logBuffer.getLogs(),
+    getDropboxOutput,
+    getExitInfo,
+    minOccurredAt: sessionStartedAt,
+  });
 
   const logTask = (async () => {
     try {
@@ -273,6 +293,7 @@ export const createAndroidAppSession = async ({
     },
     getState: async () => state,
     getLogs: () => logBuffer.getLogs(),
+    getCrashDetails: crashReporter.getCrashDetails,
     addListener: emitter.addListener,
     removeListener: emitter.removeListener,
   };

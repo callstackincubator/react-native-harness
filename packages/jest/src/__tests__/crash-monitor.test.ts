@@ -19,6 +19,7 @@ const waitForClassification = () =>
 const createAppSessionMock = (
   initialState: AppSessionState = { status: 'running' },
   logs: AppSessionLog[] = [],
+  getCrashDetails?: AppSession['getCrashDetails']
 ) => {
   let state = initialState;
   let listener: AppSessionListener | null = null;
@@ -34,6 +35,10 @@ const createAppSessionMock = (
       if (listener === l) listener = null;
     }),
   };
+
+  if (getCrashDetails) {
+    session.getCrashDetails = getCrashDetails;
+  }
 
   return {
     session,
@@ -82,7 +87,11 @@ describe('createCrashMonitor', () => {
     watch.promise.catch(noop);
 
     cm.handleBridgeDisconnect();
-    setState({ status: 'exited', occurredAt: Date.now(), reason: 'process-gone' });
+    setState({
+      status: 'exited',
+      occurredAt: Date.now(),
+      reason: 'process-gone',
+    });
 
     await expect(watch.promise).rejects.toBeInstanceOf(NativeCrashError);
   });
@@ -104,7 +113,10 @@ describe('createCrashMonitor', () => {
       { line: 'ordinary app log', occurredAt },
       { line: 'MyApp[123] fatal error: boom', occurredAt },
     ];
-    const { session, setState } = createAppSessionMock({ status: 'running' }, logs);
+    const { session, setState } = createAppSessionMock(
+      { status: 'running' },
+      logs
+    );
     const cm = createCrashMonitor({ appSession: session });
     const watch = cm.watch('test.ts', 'execution');
     watch.promise.catch(noop);
@@ -117,13 +129,79 @@ describe('createCrashMonitor', () => {
     expect(error.details.rawLines).toEqual(['MyApp[123] fatal error: boom']);
   });
 
+  it('asks the app session to extract native crash details for the current test', async () => {
+    const occurredAt = Date.now();
+    const getCrashDetails = vi.fn(async () => ({
+      artifactType: 'logcat' as const,
+      artifactPath: '/tmp/.harness/crash-reports/crash-logcat.txt',
+      processName: 'com.harnessplayground',
+      pid: 7777,
+    }));
+    const { session, setState } = createAppSessionMock(
+      { status: 'running' },
+      [],
+      getCrashDetails
+    );
+    const cm = createCrashMonitor({ appSession: session });
+    const watch = cm.watch('/test/example.ts', 'execution');
+    watch.promise.catch(noop);
+
+    cm.handleBridgeDisconnect();
+    setState({
+      status: 'exited',
+      occurredAt,
+      pid: 7777,
+      reason: 'process-gone',
+    });
+
+    const error = await watch.promise.catch((err: NativeCrashError) => err);
+
+    expect(getCrashDetails).toHaveBeenCalledWith({
+      occurredAt: expect.any(Number),
+      pid: 7777,
+      processName: undefined,
+      testFilePath: '/test/example.ts',
+    });
+    expect(error.details.artifactPath).toBe(
+      '/tmp/.harness/crash-reports/crash-logcat.txt'
+    );
+    expect(error.message).toContain(
+      'Harness extracted the crash log: /tmp/.harness/crash-reports/crash-logcat.txt'
+    );
+  });
+
+  it('falls back to log details when native crash extraction fails', async () => {
+    const occurredAt = Date.now();
+    const getCrashDetails = vi.fn(async () => {
+      throw new Error('copy failed');
+    });
+    const { session, setState } = createAppSessionMock(
+      { status: 'running' },
+      [{ line: 'MyApp[123] fatal error: boom', occurredAt }],
+      getCrashDetails
+    );
+    const cm = createCrashMonitor({ appSession: session });
+    const watch = cm.watch('/test/example.ts', 'execution');
+    watch.promise.catch(noop);
+
+    cm.handleBridgeDisconnect();
+    setState({ status: 'exited', occurredAt, reason: 'process-gone' });
+
+    const error = await watch.promise.catch((err: NativeCrashError) => err);
+
+    expect(error.details.rawLines).toEqual(['MyApp[123] fatal error: boom']);
+    expect(error.message).toContain("Harness couldn't extract the crash log.");
+  });
+
   it('settles the promise with CrashWatchCancelledError on cancel()', async () => {
     const cm = createCrashMonitor();
     const watch = cm.watch('test.ts', 'execution');
 
     watch.cancel();
 
-    await expect(watch.promise).rejects.toBeInstanceOf(CrashWatchCancelledError);
+    await expect(watch.promise).rejects.toBeInstanceOf(
+      CrashWatchCancelledError
+    );
   });
 
   it('ignores session events while stopped', async () => {

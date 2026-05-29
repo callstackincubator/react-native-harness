@@ -20,7 +20,7 @@ import {
 const getAndroidRunner = async (
   config: AndroidPlatformConfig,
   harnessConfig: HarnessConfig,
-  init: HarnessPlatformInitOptions,
+  init: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   const parsedConfig = AndroidPlatformConfigSchema.parse(config);
 
@@ -32,11 +32,15 @@ const getAndroidRunner = async (
     return getAndroidEmulatorPlatformInstance(
       parsedConfig,
       harnessConfig,
-      init,
+      init
     );
   }
 
-  return getAndroidPhysicalDevicePlatformInstance(parsedConfig, harnessConfig);
+  return getAndroidPhysicalDevicePlatformInstance(
+    parsedConfig,
+    harnessConfig,
+    init
+  );
 };
 
 export default getAndroidRunner;

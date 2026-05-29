@@ -59,7 +59,42 @@ describe('createCrashArtifactWriter', () => {
     });
 
     expect(fs.existsSync(artifactRoot)).toBe(true);
-    expect(fs.readFileSync(persistedPath, 'utf8')).toContain('RuntimeException');
+    expect(fs.readFileSync(persistedPath, 'utf8')).toContain(
+      'RuntimeException'
+    );
+  });
+
+  it('includes the absolute test path when one is provided', () => {
+    const sourcePath = path.join(rootDir, 'Harness Playground 01.crash');
+    const testFilePath = path.join(rootDir, 'tests', 'native crash.test.ts');
+    fs.writeFileSync(sourcePath, 'crash data', 'utf8');
+
+    const writer = createCrashArtifactWriter({
+      runnerName: 'ios simulator',
+      platformId: 'ios',
+      rootDir,
+      runTimestamp: '2026-03-12T11-35-08-000Z',
+    });
+
+    const persistedPath = writer.persistArtifact({
+      artifactKind: 'ios-crash-report',
+      testFilePath,
+      source: {
+        kind: 'file',
+        path: sourcePath,
+      },
+    });
+
+    expect(path.basename(persistedPath)).toBe(
+      `2026-03-12T11-35-08-000Z--ios-simulator--${path
+        .resolve(testFilePath)
+        .replace(/[^a-zA-Z0-9._-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(
+          /^-|-$/g,
+          ''
+        )}--ios--ios-crash-report--Harness-Playground-01.crash`
+    );
   });
 
   it('deduplicates repeated persistence requests within one run', () => {
@@ -90,5 +125,37 @@ describe('createCrashArtifactWriter', () => {
 
     expect(firstPath).toBe(secondPath);
     expect(fs.readdirSync(rootDir)).toHaveLength(2);
+  });
+
+  it('keeps artifacts for different test files separate', () => {
+    const sourcePath = path.join(rootDir, 'duplicate.crash');
+    fs.writeFileSync(sourcePath, 'same crash', 'utf8');
+
+    const writer = createCrashArtifactWriter({
+      runnerName: 'ios',
+      platformId: 'ios',
+      rootDir,
+      runTimestamp: '2026-03-12T11-35-08-000Z',
+    });
+
+    const firstPath = writer.persistArtifact({
+      artifactKind: 'ios-crash-report',
+      testFilePath: '/tmp/a.test.ts',
+      source: {
+        kind: 'file',
+        path: sourcePath,
+      },
+    });
+    const secondPath = writer.persistArtifact({
+      artifactKind: 'ios-crash-report',
+      testFilePath: '/tmp/b.test.ts',
+      source: {
+        kind: 'file',
+        path: sourcePath,
+      },
+    });
+
+    expect(firstPath).not.toBe(secondPath);
+    expect(fs.readdirSync(rootDir)).toHaveLength(3);
   });
 });

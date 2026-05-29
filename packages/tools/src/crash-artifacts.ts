@@ -21,12 +21,14 @@ const getTargetFileName = ({
   runnerName,
   platformId,
   artifactKind,
+  testFilePath,
   source,
 }: {
   runTimestamp: string;
   runnerName: string;
   platformId: string;
   artifactKind: string;
+  testFilePath?: string;
   source:
     | {
         kind: 'file';
@@ -43,6 +45,7 @@ const getTargetFileName = ({
   return [
     sanitizePathSegment(runTimestamp),
     sanitizePathSegment(runnerName),
+    ...(testFilePath ? [sanitizePathSegment(path.resolve(testFilePath))] : []),
     sanitizePathSegment(platformId),
     sanitizePathSegment(artifactKind),
     sanitizePathSegment(originalName),
@@ -52,10 +55,12 @@ const getTargetFileName = ({
 const getDeduplicationKey = ({
   platformId,
   artifactKind,
+  testFilePath,
   source,
 }: {
   platformId: string;
   artifactKind: string;
+  testFilePath?: string;
   source:
     | {
         kind: 'file';
@@ -68,10 +73,14 @@ const getDeduplicationKey = ({
       };
 }) => {
   if (source.kind === 'file') {
-    return `file:${platformId}:${artifactKind}:${path.resolve(source.path)}`;
+    return `file:${platformId}:${artifactKind}:${
+      testFilePath ?? ''
+    }:${path.resolve(source.path)}`;
   }
 
-  return `text:${platformId}:${artifactKind}:${source.fileName}:${source.text}`;
+  return `text:${platformId}:${artifactKind}:${testFilePath ?? ''}:${
+    source.fileName
+  }:${source.text}`;
 };
 
 export const createCrashArtifactWriter = ({
@@ -91,6 +100,7 @@ export const createCrashArtifactWriter = ({
     runTimestamp,
     persistArtifact: (options: {
       artifactKind: string;
+      testFilePath?: string;
       source:
         | {
             kind: 'file';
@@ -105,6 +115,7 @@ export const createCrashArtifactWriter = ({
       const deduplicationKey = getDeduplicationKey({
         platformId,
         artifactKind: options.artifactKind,
+        testFilePath: options.testFilePath,
         source: options.source,
       });
       const existingPath = persistedArtifacts.get(deduplicationKey);
@@ -122,6 +133,7 @@ export const createCrashArtifactWriter = ({
           runnerName,
           platformId,
           artifactKind: options.artifactKind,
+          testFilePath: options.testFilePath,
           source: options.source,
         })
       );

@@ -1,8 +1,10 @@
 import {
+  type AppCrashDetails,
   type AppSession,
   type AppSessionEvent,
   type AppSessionListener,
   type AppSessionLog,
+  type AppSessionState,
 } from '@react-native-harness/platforms';
 import {
   NativeCrashError,
@@ -51,27 +53,28 @@ type PendingCrash = {
   occurredAt: number;
 };
 
-const sleep = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const isCrashIndicator = (line: string) =>
   /uncaught exception|terminating app due to|fatal error|EXC_[A-Z_]+|termination reason|crash|abort/i.test(
-    line,
+    line
   ) || /\bSIG[A-Z]{2,}\b/.test(line);
 
 const getMatchingCrashLines = (
   logs: AppSessionLog[],
-  occurredAt: number,
+  occurredAt: number
 ): string[] =>
   logs
-    .filter((log) => Math.abs(log.occurredAt - occurredAt) <= CRASH_LOG_WINDOW_MS)
+    .filter(
+      (log) => Math.abs(log.occurredAt - occurredAt) <= CRASH_LOG_WINDOW_MS
+    )
     .map((log) => log.line)
     .filter(isCrashIndicator);
 
 const buildNativeCrashDetails = (
   phase: NativeCrashPhase,
   rawLines: string[],
-  summary: string,
+  summary: string
 ): NativeCrashDetails => ({
   phase,
   source: rawLines.length > 0 ? 'logs' : 'bridge',
@@ -79,9 +82,35 @@ const buildNativeCrashDetails = (
   rawLines: rawLines.length > 0 ? rawLines : undefined,
 });
 
+const getStatePid = (state: AppSessionState | undefined) => {
+  if (state && 'pid' in state) {
+    return state.pid;
+  }
+
+  return undefined;
+};
+
+const mergeCrashDetails = (
+  fallback: NativeCrashDetails,
+  extracted: AppCrashDetails | null
+): NativeCrashDetails => {
+  if (!extracted) {
+    return fallback;
+  }
+
+  return {
+    ...fallback,
+    ...extracted,
+    phase: fallback.phase,
+    source: extracted.source ?? fallback.source,
+    summary: extracted.summary ?? fallback.summary,
+    rawLines: extracted.rawLines ?? fallback.rawLines,
+  };
+};
+
 const buildRuntimeDisconnectDetails = (
   phase: NativeCrashPhase,
-  rawLines: string[],
+  rawLines: string[]
 ): RuntimeDisconnectDetails => ({
   phase,
   source: 'bridge',
@@ -119,7 +148,7 @@ export const createCrashMonitor = ({
 
   const classify = async (
     pending: PendingCrash,
-    trigger: 'bridge-disconnect' | 'app-exit',
+    trigger: 'bridge-disconnect' | 'app-exit'
   ) => {
     if (disposed || !monitoring || isResolvingCrash) {
       return;
@@ -134,12 +163,14 @@ export const createCrashMonitor = ({
       const rawLines = getMatchingCrashLines(logs, pending.occurredAt);
 
       if (state?.status === 'running' && trigger === 'bridge-disconnect') {
-        crashLogger.debug('runtime bridge disconnected without confirmed app death');
+        crashLogger.debug(
+          'runtime bridge disconnected without confirmed app death'
+        );
         notifyFailure(
           new RuntimeDisconnectError(
             pending.testFilePath,
-            buildRuntimeDisconnectDetails(pending.phase, rawLines),
-          ),
+            buildRuntimeDisconnectDetails(pending.phase, rawLines)
+          )
         );
         return;
       }
@@ -157,9 +188,30 @@ export const createCrashMonitor = ({
       const details = buildNativeCrashDetails(
         pending.phase,
         rawLines,
-        fallbackSummary,
+        fallbackSummary
       );
-      notifyFailure(new NativeCrashError(pending.testFilePath, details));
+      const extractedDetails = session?.getCrashDetails
+        ? await session
+            .getCrashDetails({
+              occurredAt: pending.occurredAt,
+              pid: getStatePid(state),
+              processName: details.processName,
+              testFilePath: pending.testFilePath,
+            })
+            .catch((error) => {
+              crashLogger.warn(
+                'failed to extract native crash details: %s',
+                error
+              );
+              return null;
+            })
+        : null;
+      notifyFailure(
+        new NativeCrashError(
+          pending.testFilePath,
+          mergeCrashDetails(details, extractedDetails)
+        )
+      );
     } finally {
       isResolvingCrash = false;
       pendingTimer = null;
@@ -178,9 +230,12 @@ export const createCrashMonitor = ({
       occurredAt: Date.now(),
     };
 
-    pendingTimer = setTimeout(() => {
-      void classify(pending, trigger);
-    }, trigger === 'bridge-disconnect' ? CRASH_CLASSIFICATION_SETTLE_MS : 0);
+    pendingTimer = setTimeout(
+      () => {
+        void classify(pending, trigger);
+      },
+      trigger === 'bridge-disconnect' ? CRASH_CLASSIFICATION_SETTLE_MS : 0
+    );
   };
 
   const appSessionListener: AppSessionListener = (event: AppSessionEvent) => {

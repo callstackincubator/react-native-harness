@@ -10,6 +10,43 @@ describe('PlatformReadyTimeoutError', () => {
 });
 
 describe('NativeCrashError', () => {
+  it('reports the extracted crash log path when available', () => {
+    const error = new NativeCrashError('/tmp/crash.harness.ts', {
+      phase: 'execution',
+      artifactPath: '/tmp/.harness/crash-reports/crash.ips',
+    });
+
+    expect(error.message).toContain(
+      'Harness extracted the crash log: /tmp/.harness/crash-reports/crash.ips'
+    );
+  });
+
+  it('lists enrichment artifact paths when available', () => {
+    const error = new NativeCrashError('/tmp/crash.harness.ts', {
+      phase: 'execution',
+      artifactPath: '/tmp/.harness/crash-reports/logcat.txt',
+      enrichmentArtifacts: [
+        {
+          artifactType: 'dropbox-native-crash',
+          artifactPath: '/tmp/.harness/crash-reports/dropbox-native-crash.txt',
+        },
+      ],
+    });
+
+    expect(error.message).toContain('Additional crash artifacts:');
+    expect(error.message).toContain(
+      '/tmp/.harness/crash-reports/dropbox-native-crash.txt'
+    );
+  });
+
+  it('reports crash log extraction failure when no artifact was pulled', () => {
+    const error = new NativeCrashError('/tmp/crash.harness.ts', {
+      phase: 'execution',
+    });
+
+    expect(error.message).toContain("Harness couldn't extract the crash log.");
+  });
+
   it('formats the extracted stack trace in the error message', () => {
     const error = new NativeCrashError('/tmp/crash.harness.ts', {
       phase: 'execution',

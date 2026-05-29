@@ -24,7 +24,11 @@ const getAppleRunner = async (
     return getAppleSimulatorPlatformInstance(parsedConfig, harnessConfig, init);
   }
 
-  return getApplePhysicalDevicePlatformInstance(parsedConfig, harnessConfig);
+  return getApplePhysicalDevicePlatformInstance(
+    parsedConfig,
+    harnessConfig,
+    init
+  );
 };
 
 export default getAppleRunner;

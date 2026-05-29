@@ -14,7 +14,7 @@ describe('collectCrashArtifacts', () => {
 
   it('collects simulator crash artifacts from simctl diagnose output', async () => {
     const outputRoot = fs.mkdtempSync(
-      join(tmpdir(), 'rn-harness-simctl-diagnose-'),
+      join(tmpdir(), 'rn-harness-simctl-diagnose-')
     );
     const crashPath = join(outputRoot, 'HarnessPlayground.ips');
     fs.writeFileSync(
@@ -36,14 +36,14 @@ describe('collectCrashArtifacts', () => {
           },
         }),
       ].join('\n'),
-      'utf8',
+      'utf8'
     );
 
     vi.spyOn(simctl, 'diagnose').mockImplementation(
       async (_udid, outputDir) => {
         fs.mkdirSync(outputDir, { recursive: true });
         fs.copyFileSync(crashPath, join(outputDir, 'HarnessPlayground.ips'));
-      },
+      }
     );
 
     const artifacts = await collectCrashArtifacts({
@@ -67,7 +67,7 @@ describe('collectCrashArtifacts', () => {
 
   it('collects device crash artifacts from systemCrashLogs', async () => {
     const outputRoot = fs.mkdtempSync(
-      join(tmpdir(), 'rn-harness-devicectl-crash-logs-'),
+      join(tmpdir(), 'rn-harness-devicectl-crash-logs-')
     );
     const crashPath = join(outputRoot, 'HarnessPlayground.crash');
     fs.writeFileSync(
@@ -78,7 +78,7 @@ describe('collectCrashArtifacts', () => {
         'Date/Time:             2026-03-12 11:35:08 +0000',
         'Exception Type:        EXC_CRASH (SIGABRT)',
       ].join('\n'),
-      'utf8',
+      'utf8'
     );
 
     vi.spyOn(devicectl, 'listFiles').mockResolvedValue([
@@ -87,7 +87,7 @@ describe('collectCrashArtifacts', () => {
     vi.spyOn(devicectl, 'copyFileFrom').mockImplementation(
       async (_deviceId, options) => {
         fs.copyFileSync(crashPath, options.destination);
-      },
+      }
     );
     const artifacts = await collectCrashArtifacts({
       targetId: 'device-udid',
@@ -108,7 +108,7 @@ describe('collectCrashArtifacts', () => {
 
   it('persists matched crash artifacts with the provided writer', async () => {
     const sourceRoot = fs.mkdtempSync(
-      join(tmpdir(), 'rn-harness-crash-diagnostics-'),
+      join(tmpdir(), 'rn-harness-crash-diagnostics-')
     );
     const sourcePath = join(sourceRoot, 'HarnessPlayground.ips');
     fs.writeFileSync(
@@ -130,14 +130,14 @@ describe('collectCrashArtifacts', () => {
           },
         }),
       ].join('\n'),
-      'utf8',
+      'utf8'
     );
 
     vi.spyOn(simctl, 'diagnose').mockImplementation(
       async (_udid, outputDir) => {
         fs.mkdirSync(outputDir, { recursive: true });
         fs.copyFileSync(sourcePath, join(outputDir, 'HarnessPlayground.ips'));
-      },
+      }
     );
 
     const writer = createCrashArtifactWriter({
@@ -147,15 +147,22 @@ describe('collectCrashArtifacts', () => {
       runTimestamp: '2026-03-12T11-35-08-000Z',
     });
 
-    const artifacts = await collectCrashArtifacts({
-      targetId: 'sim-udid',
-      targetType: 'simulator',
-      processNames: ['HarnessPlayground'],
-      bundleId: 'com.harnessplayground',
-      crashArtifactWriter: writer,
-    });
+    const artifacts = await collectCrashArtifacts(
+      {
+        targetId: 'sim-udid',
+        targetType: 'simulator',
+        processNames: ['HarnessPlayground'],
+        bundleId: 'com.harnessplayground',
+        crashArtifactWriter: writer,
+      },
+      {
+        occurredAt: Date.parse('2026-03-12T11:35:08.000Z'),
+        testFilePath: '/test/native crash.test.ts',
+      }
+    );
 
     expect(artifacts[0]?.artifactPath).toContain('/.harness/crash-reports/');
+    expect(artifacts[0]?.artifactPath).toContain('test-native-crash.test.ts');
     expect(fs.existsSync(artifacts[0]?.artifactPath ?? '')).toBe(true);
   });
 });

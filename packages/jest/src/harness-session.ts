@@ -34,6 +34,7 @@ import {
   type HarnessRunSummary,
 } from '@react-native-harness/plugins';
 import {
+  createCrashArtifactWriter,
   logger,
   getTimeoutSignal,
   raceAbortSignals,
@@ -45,6 +46,7 @@ import {
 } from '@react-native-harness/config';
 import type { Config as JestConfig } from 'jest-runner';
 import { preRunMessage } from 'jest-util';
+import path from 'node:path';
 import { PlatformReadyTimeoutError } from './errors.js';
 import { NoRunnerSpecifiedError, RunnerNotFoundError } from './errors.js';
 import { createCrashMonitor, type CrashMonitor } from './crash-monitor.js';
@@ -453,6 +455,11 @@ export const createHarnessSession = async (
     const clientLogCollector = createClientLogCollector();
 
     const context: HarnessContext = { platform };
+    const crashArtifactWriter = createCrashArtifactWriter({
+      runnerName: platform.name,
+      platformId: platform.platformId,
+      rootDir: path.join(projectRoot, '.harness', 'crash-reports'),
+    });
 
     const bridge = await createHarnessBridge({
       noServer: true,
@@ -486,6 +493,7 @@ export const createHarnessSession = async (
             return await import(platform.runner).then((module) =>
               module.default(platform.config, runtimeConfig, {
                 signal,
+                crashArtifactWriter,
               } satisfies HarnessPlatformInitOptions),
             ).then((instance) => {
               sessionLogger.debug('platform runner initialized');

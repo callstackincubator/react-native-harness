@@ -791,6 +791,45 @@ export const startLogcat = (
     stderr: 'pipe',
   });
 
+export const DROPBOX_CRASH_TAGS = [
+  'data_app_crash',
+  'data_app_native_crash',
+] as const;
+
+export const getDropboxPrint = async (
+  adbId: string,
+  tags: readonly string[] = DROPBOX_CRASH_TAGS,
+): Promise<string> => {
+  const { stdout } = await spawn(getAdbBinaryPath(), [
+    '-s',
+    adbId,
+    'shell',
+    'dumpsys',
+    'dropbox',
+    '--print',
+    ...tags,
+  ]);
+
+  return stdout;
+};
+
+export const getActivityExitInfo = async (
+  adbId: string,
+  bundleId: string,
+): Promise<string> => {
+  const { stdout } = await spawn(getAdbBinaryPath(), [
+    '-s',
+    adbId,
+    'shell',
+    'dumpsys',
+    'activity',
+    'exit-info',
+    bundleId,
+  ]);
+
+  return stdout;
+};
+
 export const getAvds = async (): Promise<string[]> => {
   try {
     const emulatorBinaryPath = await ensureEmulatorInstalled();
