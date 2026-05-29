@@ -31,19 +31,27 @@ export const createPlatformSkippedTestResult = (
   testPath: string,
 ): JestTestResult => {
   const now = Date.now();
+  const title = path.basename(testPath);
 
   return toTestResult({
     stats: {
       failures: 0,
       passes: 0,
-      pending: 0,
+      pending: 1,
       todo: 0,
       start: now,
       end: now,
     },
     skipped: true,
     errorMessage: null,
-    tests: [],
+    tests: [
+      {
+        status: 'skipped',
+        title,
+        fullName: title,
+        testPath,
+      },
+    ],
     jestTestPath: testPath,
   });
 };

@@ -2,6 +2,7 @@ import { run, yargsOptions } from 'jest-cli';
 import { getConfig } from '@react-native-harness/config';
 import { runInitWizard } from './wizard/index.js';
 import { runPlatformCommand } from './platform-commands.js';
+import { addJestPlatformIgnorePatternArg } from './jest-platform-ignore-pattern.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -236,6 +237,11 @@ const main = async () => {
       );
     }
   }
+
+  await addJestPlatformIgnorePatternArg({
+    argv: process.argv,
+    cwd: process.cwd(),
+  });
 
   await checkForOldConfig();
   run();

@@ -69,7 +69,15 @@ describe('createPlatformSkippedTestResult', () => {
     expect(result.skipped).toBe(true);
     expect(result.numPassingTests).toBe(0);
     expect(result.numFailingTests).toBe(0);
-    expect(result.testResults).toEqual([]);
+    expect(result.numPendingTests).toBe(1);
+    expect(result.testResults).toHaveLength(1);
+    expect(result.testResults[0]).toEqual(
+      expect.objectContaining({
+        status: 'skipped',
+        title: 'swift.ios.harness.ts',
+        fullName: 'swift.ios.harness.ts',
+      }),
+    );
     expect(result.testFilePath).toBe('/tests/swift.ios.harness.ts');
   });
 });
