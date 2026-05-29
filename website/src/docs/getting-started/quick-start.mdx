@@ -181,6 +181,8 @@ describe('My First Harness Test', () => {
 });
 ```
 
+To keep platform-specific checks next to shared tests, add the runner platform ID before `.harness`. For example, `only-ios.ios.harness.ts` runs only when the selected runner has `platformId: 'ios'`, while `only-android.android.harness.ts` runs only for Android runners. Regular files like `MyComponent.harness.ts` continue to run on every platform.
+
 ## Available Testing APIs
 
 React Native Harness provides Jest-compatible APIs through `react-native-harness`.

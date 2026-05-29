@@ -32,6 +32,20 @@ type TestFn = (context: HarnessTestContext) => void | Promise<void>
 
 When a test function returns a promise, the runner will wait until it is resolved to collect async expectations. If the promise is rejected, the test will fail.
 
+## Platform-Specific Test Files
+
+Harness test files normally run on every selected runner. If a file should only run on one platform, add the runner platform ID before `.harness`:
+
+```text
+src/__tests__/only-ios.ios.harness.ts
+src/__tests__/only-android.android.harness.ts
+src/__tests__/browser.web.harness.ts
+```
+
+When you run Harness with `--harnessRunner ios`, files such as `*.android.harness.ts` and `*.web.harness.ts` are filtered out before Jest schedules them. Shared files such as `smoke.harness.ts` still run on every platform.
+
+The platform segment is recognized only when it matches a `platformId` from one of your configured runners. Unknown segments are treated as part of the regular file name, so `custom.foo.harness.ts` still behaves like a shared Harness test unless `foo` is a configured platform ID.
+
 ## Test Functions
 
 ### test
