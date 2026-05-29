@@ -17,18 +17,12 @@ const formatRunTimestamp = (value: Date) =>
   value.toISOString().replace(/[:.]/g, '-');
 
 const getTargetFileName = ({
-  runTimestamp,
-  runnerName,
   platformId,
   artifactKind,
-  testFilePath,
   source,
 }: {
-  runTimestamp: string;
-  runnerName: string;
   platformId: string;
   artifactKind: string;
-  testFilePath?: string;
   source:
     | {
         kind: 'file';
@@ -43,13 +37,29 @@ const getTargetFileName = ({
     source.kind === 'file' ? path.basename(source.path) : source.fileName;
 
   return [
-    sanitizePathSegment(runTimestamp),
-    sanitizePathSegment(runnerName),
-    ...(testFilePath ? [sanitizePathSegment(path.resolve(testFilePath))] : []),
     sanitizePathSegment(platformId),
     sanitizePathSegment(artifactKind),
     sanitizePathSegment(originalName),
   ].join('--');
+};
+
+const getTestFileSegment = (testFilePath?: string) => {
+  if (!testFilePath) {
+    return 'unscoped';
+  }
+
+  const resolvedTestFilePath = path.resolve(testFilePath);
+  const relativeTestFilePath = path.relative(
+    process.cwd(),
+    resolvedTestFilePath
+  );
+
+  return sanitizePathSegment(
+    relativeTestFilePath.startsWith('..') ||
+      path.isAbsolute(relativeTestFilePath)
+      ? resolvedTestFilePath
+      : relativeTestFilePath
+  );
 };
 
 const getDeduplicationKey = ({
@@ -126,17 +136,22 @@ export const createCrashArtifactWriter = ({
 
       fs.mkdirSync(rootDir, { recursive: true });
 
-      const targetPath = path.join(
+      const targetDir = path.join(
         rootDir,
+        sanitizePathSegment(runTimestamp),
+        sanitizePathSegment(runnerName),
+        getTestFileSegment(options.testFilePath)
+      );
+      const targetPath = path.join(
+        targetDir,
         getTargetFileName({
-          runTimestamp,
-          runnerName,
           platformId,
           artifactKind: options.artifactKind,
-          testFilePath: options.testFilePath,
           source: options.source,
         })
       );
+
+      fs.mkdirSync(targetDir, { recursive: true });
 
       if (options.source.kind === 'file') {
         fs.copyFileSync(options.source.path, targetPath);
