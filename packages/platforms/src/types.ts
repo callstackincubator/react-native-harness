@@ -47,54 +47,11 @@ export type CrashArtifactWriter = {
   }) => string;
 };
 
-export type CreateAppMonitorOptions = {
-  crashArtifactWriter?: CrashArtifactWriter;
-};
-
 export type CrashDetailsLookupOptions = {
   processName?: string;
   pid?: number;
   occurredAt: number;
   testFilePath?: string;
-};
-
-export type AppMonitorEvent =
-  | {
-      type: 'app_started';
-      pid?: number;
-      source?: 'polling' | 'logs';
-      line?: string;
-    }
-  | {
-      type: 'app_exited';
-      pid?: number;
-      source?: 'polling' | 'logs';
-      line?: string;
-      isConfirmed?: boolean;
-      crashDetails?: AppCrashDetails;
-    }
-  | {
-      type: 'possible_crash';
-      pid?: number;
-      source?: 'polling' | 'logs';
-      line?: string;
-      isConfirmed?: boolean;
-      crashDetails?: AppCrashDetails;
-    }
-  | {
-      type: 'log';
-      source?: 'polling' | 'logs';
-      line: string;
-    };
-
-export type AppMonitorListener = (event: AppMonitorEvent) => void;
-
-export type AppMonitor = {
-  start: () => Promise<void>;
-  stop: () => Promise<void>;
-  dispose: () => Promise<void>;
-  addListener: (listener: AppMonitorListener) => void;
-  removeListener: (listener: AppMonitorListener) => void;
 };
 
 export type AppSessionLog = {
