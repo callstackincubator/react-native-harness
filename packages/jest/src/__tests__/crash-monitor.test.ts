@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import path from 'node:path';
 import type {
   AppSession,
   AppSessionEvent,
@@ -166,7 +167,10 @@ describe('createCrashMonitor', () => {
       '/tmp/.harness/crash-reports/crash-logcat.txt'
     );
     expect(error.message).toContain(
-      'Harness extracted the crash log: /tmp/.harness/crash-reports/crash-logcat.txt'
+      `Harness extracted the crash log: ${path.relative(
+        process.cwd(),
+        '/tmp/.harness/crash-reports/crash-logcat.txt'
+      )}`
     );
   });
 

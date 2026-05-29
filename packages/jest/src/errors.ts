@@ -1,4 +1,4 @@
-import { HarnessError } from '@react-native-harness/tools';
+import { formatPath, HarnessError } from '@react-native-harness/tools';
 import type { AppCrashDetails } from '@react-native-harness/platforms';
 export {
   StartupStallError,
@@ -79,14 +79,14 @@ const buildNativeCrashMessage = ({
 
   lines.push(
     artifactPath
-      ? `Harness extracted the crash log: ${artifactPath}`
+      ? `Harness extracted the crash log: ${formatPath(artifactPath)}`
       : "Harness couldn't extract the crash log."
   );
 
   if (enrichmentArtifacts && enrichmentArtifacts.length > 0) {
     lines.push('Additional crash artifacts:');
     for (const artifact of enrichmentArtifacts) {
-      lines.push(`  - ${artifact.artifactPath}`);
+      lines.push(`  - ${formatPath(artifact.artifactPath)}`);
     }
   }
 

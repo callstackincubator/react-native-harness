@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import path from 'node:path';
 import { NativeCrashError, PlatformReadyTimeoutError } from '../errors.js';
 
 describe('PlatformReadyTimeoutError', () => {
@@ -13,29 +14,48 @@ describe('NativeCrashError', () => {
   it('reports the extracted crash log path when available', () => {
     const error = new NativeCrashError('/tmp/crash.harness.ts', {
       phase: 'execution',
-      artifactPath: '/tmp/.harness/crash-reports/crash.ips',
+      artifactPath: path.join(
+        process.cwd(),
+        '.harness',
+        'crash-reports',
+        'crash.ips'
+      ),
     });
 
     expect(error.message).toContain(
-      'Harness extracted the crash log: /tmp/.harness/crash-reports/crash.ips'
+      `Harness extracted the crash log: ${path.join(
+        '.harness',
+        'crash-reports',
+        'crash.ips'
+      )}`
     );
   });
 
   it('lists enrichment artifact paths when available', () => {
     const error = new NativeCrashError('/tmp/crash.harness.ts', {
       phase: 'execution',
-      artifactPath: '/tmp/.harness/crash-reports/logcat.txt',
+      artifactPath: path.join(
+        process.cwd(),
+        '.harness',
+        'crash-reports',
+        'logcat.txt'
+      ),
       enrichmentArtifacts: [
         {
           artifactType: 'dropbox-native-crash',
-          artifactPath: '/tmp/.harness/crash-reports/dropbox-native-crash.txt',
+          artifactPath: path.join(
+            process.cwd(),
+            '.harness',
+            'crash-reports',
+            'dropbox-native-crash.txt'
+          ),
         },
       ],
     });
 
     expect(error.message).toContain('Additional crash artifacts:');
     expect(error.message).toContain(
-      '/tmp/.harness/crash-reports/dropbox-native-crash.txt'
+      path.join('.harness', 'crash-reports', 'dropbox-native-crash.txt')
     );
   });
 

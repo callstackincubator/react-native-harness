@@ -633,8 +633,8 @@ function getErrorMap() {
 
 // ../../node_modules/zod/dist/esm/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path7, errorMaps, issueData } = params;
-  const fullPath = [...path7, ...issueData.path || []];
+  const { data, path: path8, errorMaps, issueData } = params;
+  const fullPath = [...path8, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -750,11 +750,11 @@ var errorUtil;
 
 // ../../node_modules/zod/dist/esm/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path7, key) {
+  constructor(parent, value, path8, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path7;
+    this._path = path8;
     this._key = key;
   }
   get path() {
@@ -4345,14 +4345,17 @@ var HarnessError = class extends Error {
 var import_node_path3 = __toESM(require("path"), 1);
 var import_node_fs3 = __toESM(require("fs"), 1);
 
+// ../tools/dist/path.js
+var import_node_path4 = __toESM(require("path"), 1);
+
 // ../tools/dist/crash-artifacts.js
 var import_node_fs4 = __toESM(require("fs"), 1);
-var import_node_path4 = __toESM(require("path"), 1);
-var DEFAULT_ARTIFACT_ROOT = import_node_path4.default.join(process.cwd(), ".harness", "crash-reports");
+var import_node_path5 = __toESM(require("path"), 1);
+var DEFAULT_ARTIFACT_ROOT = import_node_path5.default.join(process.cwd(), ".harness", "crash-reports");
 
 // ../tools/dist/harness-artifacts.js
 var import_node_fs5 = __toESM(require("fs"), 1);
-var import_node_path5 = __toESM(require("path"), 1);
+var import_node_path6 = __toESM(require("path"), 1);
 
 // ../plugins/dist/utils.js
 var isHookTree = (value) => {
@@ -4512,13 +4515,13 @@ var ConfigLoadError = class extends HarnessError {
 };
 
 // ../config/dist/reader.js
-var import_node_path6 = __toESM(require("path"), 1);
+var import_node_path7 = __toESM(require("path"), 1);
 var import_node_fs6 = __toESM(require("fs"), 1);
 var import_node_module2 = require("module");
 var import_meta = {};
 var extensions = [".js", ".mjs", ".cjs", ".json"];
 var importUp = async (dir, name) => {
-  const filePath = import_node_path6.default.join(dir, name);
+  const filePath = import_node_path7.default.join(dir, name);
   for (const ext of extensions) {
     const filePathWithExt = `${filePath}${ext}`;
     if (import_node_fs6.default.existsSync(filePathWithExt)) {
@@ -4539,8 +4542,8 @@ var importUp = async (dir, name) => {
       } catch (error) {
         if (error instanceof ZodError) {
           const validationErrors = error.errors.map((err) => {
-            const path7 = err.path.length > 0 ? ` at "${err.path.join(".")}"` : "";
-            return `${err.message}${path7}`;
+            const path8 = err.path.length > 0 ? ` at "${err.path.join(".")}"` : "";
+            return `${err.message}${path8}`;
           });
           throw new ConfigValidationError(filePathWithExt, validationErrors);
         }
@@ -4548,7 +4551,7 @@ var importUp = async (dir, name) => {
       }
     }
   }
-  const parentDir = import_node_path6.default.dirname(dir);
+  const parentDir = import_node_path7.default.dirname(dir);
   if (parentDir === dir) {
     throw new ConfigNotFoundError(dir);
   }
@@ -4563,7 +4566,7 @@ var getConfig = async (dir) => {
 };
 
 // src/shared/index.ts
-var import_node_path7 = __toESM(require("path"));
+var import_node_path8 = __toESM(require("path"));
 var import_node_fs7 = __toESM(require("fs"));
 var getHostAndroidSystemImageArch = () => {
   switch (process.arch) {
@@ -4632,7 +4635,7 @@ var run = async () => {
     if (!runnerInput) {
       throw new Error("Runner input is required");
     }
-    const projectRoot = projectRootInput ? import_node_path7.default.resolve(projectRootInput) : process.cwd();
+    const projectRoot = projectRootInput ? import_node_path8.default.resolve(projectRootInput) : process.cwd();
     console.info(`Loading React Native Harness config from: ${projectRoot}`);
     const { config, projectRoot: resolvedProjectRoot } = await getConfig(
       projectRoot
@@ -4646,7 +4649,7 @@ var run = async () => {
       throw new Error("GITHUB_OUTPUT environment variable is not set");
     }
     const resolvedRunner = getResolvedRunner(runner);
-    const relativeProjectRoot = import_node_path7.default.relative(process.cwd(), resolvedProjectRoot) || ".";
+    const relativeProjectRoot = import_node_path8.default.relative(process.cwd(), resolvedProjectRoot) || ".";
     const output = `config=${JSON.stringify(
       resolvedRunner
     )}
