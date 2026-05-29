@@ -154,8 +154,6 @@ export type BinaryDataReference = {
 export type ScreenshotData = BinaryDataReference;
 
 export type BridgeServerFunctions = {
-  reportReady: (device: DeviceDescriptor) => void;
-  emitEvent: (event: BridgeEvents['type'], data: BridgeEvents) => void;
   'device.screenshot.receive': (
     reference: BinaryDataReference,
     metadata: { width: number; height: number }

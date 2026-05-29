@@ -111,6 +111,7 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
         ? `${errorMessage}${codeFrame ? `\n\n${codeFrame.content}` : ''}`
         : undefined,
       title: test.name,
+      fullName: test.fullName,
       status: test.status,
       location: codeFrame?.location
         ? { column: codeFrame.location.column, line: codeFrame.location.row }

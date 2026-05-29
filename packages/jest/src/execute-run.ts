@@ -1,10 +1,8 @@
 import type {
-  OnTestFailure,
-  OnTestStart,
-  OnTestSuccess,
   Test,
   TestWatcher,
   Config,
+  TestEvents,
 } from 'jest-runner';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -15,7 +13,21 @@ import {
   RuntimeDisconnectError,
   StartupStallError,
 } from './errors.js';
-import { DeviceNotRespondingError } from '@react-native-harness/bridge/server';
+import {
+  AppBridgeDisconnectedError,
+  DeviceNotRespondingError,
+} from '@react-native-harness/bridge/server';
+import type { TestCaseResult } from '@jest/test-result';
+import type {
+  TestRunnerEvents,
+  TestRunnerTestFinishedEvent,
+  TestRunnerTestStartedEvent,
+} from '@react-native-harness/bridge';
+
+type EmitTestEvent = <Name extends keyof TestEvents>(
+  eventName: Name,
+  ...eventData: TestEvents[Name]
+) => Promise<void>;
 
 const createRunSummary = () => ({ passed: 0, failed: 0, skipped: 0, todo: 0 });
 
@@ -41,6 +53,7 @@ const buildTestFailure = (err: unknown): { message: string; stack: string } => {
     err instanceof NativeCrashError ||
     err instanceof RuntimeDisconnectError ||
     err instanceof StartupStallError ||
+    err instanceof AppBridgeDisconnectedError ||
     err instanceof DeviceNotRespondingError
   ) {
     return { message: (err as Error).message, stack: '' };
@@ -48,13 +61,60 @@ const buildTestFailure = (err: unknown): { message: string; stack: string } => {
   return err as { message: string; stack: string };
 };
 
+const toJestMode = (
+  declarationMode?: 'only' | 'skip' | 'todo',
+): 'only' | 'skip' | 'todo' | undefined => declarationMode;
+
+const emitHarnessTestStarted = async (
+  emitEvent: EmitTestEvent,
+  event: TestRunnerTestStartedEvent,
+): Promise<void> => {
+  await emitEvent('test-case-start', event.file, {
+    ancestorTitles: event.ancestorTitles,
+    fullName: event.fullName,
+    mode: toJestMode(event.declarationMode),
+    title: event.name,
+    startedAt: event.startedAt,
+  });
+};
+
+const emitHarnessTestFinished = async (
+  emitEvent: EmitTestEvent,
+  event: TestRunnerTestFinishedEvent,
+): Promise<void> => {
+  const failureMessage = event.error?.message;
+  const codeFrame = event.error?.codeFrame;
+  const location = codeFrame?.location
+    ? { column: codeFrame.location.column, line: codeFrame.location.row }
+    : null;
+  const testCaseResult: TestCaseResult = {
+    ancestorTitles: event.ancestorTitles,
+    duration: event.duration,
+    failureDetails: [],
+    failureMessages: failureMessage
+      ? [`${failureMessage}${codeFrame ? `\n\n${codeFrame.content}` : ''}`]
+      : [],
+    fullName: event.fullName,
+    location,
+    numPassingAsserts: event.status === 'passed' ? 1 : 0,
+    startedAt: event.startedAt,
+    status: event.status,
+    title: event.name,
+  };
+
+  await emitEvent('test-case-result', event.file, testCaseResult);
+};
+
+const isHarnessCaseEvent = (
+  event: TestRunnerEvents,
+): event is TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent =>
+  event.type === 'test-started' || event.type === 'test-finished';
+
 export const executeRun = async (
   session: HarnessSession,
   tests: Array<Test>,
   watcher: TestWatcher,
-  onStart: OnTestStart,
-  onResult: OnTestSuccess,
-  onFailure: OnTestFailure,
+  emitEvent: EmitTestEvent,
   globalConfig: Config.GlobalConfig,
 ): Promise<void> => {
   const runId = randomUUID();
@@ -63,6 +123,16 @@ export const executeRun = async (
   const rootDir = globalConfig.rootDir ?? process.cwd();
   const testFiles = tests.map((t) => path.relative(rootDir, t.path));
   const summary = createRunSummary();
+  let caseEventChain = Promise.resolve();
+  const unsubscribe = session.onTestRunnerEvent((event) => {
+    if (isHarnessCaseEvent(event)) {
+      caseEventChain = caseEventChain.then(() =>
+        event.type === 'test-started'
+          ? emitHarnessTestStarted(emitEvent, event)
+          : emitHarnessTestFinished(emitEvent, event),
+      );
+    }
+  });
 
   const updateRunState = (overrides: Partial<HarnessRunState> = {}) => {
     const state: HarnessRunState = {
@@ -130,7 +200,7 @@ export const executeRun = async (
         isFirstTest = false;
 
         session.flushClientLogs();
-        await onStart(test);
+        await emitEvent('test-file-start', test);
         await session.ensureAppReady(test.path);
 
         // Crash detection is handled inside session.runTestFile; NativeCrashError
@@ -153,7 +223,8 @@ export const executeRun = async (
           duration: result.duration,
           result: result.harnessResult,
         });
-        await onResult(test, result.jestResult);
+        await caseEventChain;
+        await emitEvent('test-file-success', test, result.jestResult);
       } catch (err) {
         if (!emittedTestFileFinished) {
           await emitTestFileFinished({
@@ -167,6 +238,7 @@ export const executeRun = async (
           err instanceof NativeCrashError ||
           err instanceof RuntimeDisconnectError ||
           err instanceof StartupStallError ||
+          err instanceof AppBridgeDisconnectedError ||
           err instanceof DeviceNotRespondingError;
 
         if (isRuntimeFailure) {
@@ -179,7 +251,8 @@ export const executeRun = async (
         }
 
         updateRunState({ error: isRuntimeFailure ? undefined : err });
-        onFailure(test, buildTestFailure(err));
+        await caseEventChain;
+        await emitEvent('test-file-failure', test, buildTestFailure(err));
       }
     }
   } catch (err) {
@@ -198,5 +271,7 @@ export const executeRun = async (
       status: runState.status ?? (runError != null ? 'failed' : 'passed'),
       ...(runError != null ? { error: runError } : {}),
     });
+    await caseEventChain;
+    unsubscribe();
   }
 };

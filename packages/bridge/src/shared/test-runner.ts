@@ -1,3 +1,5 @@
+import type { TestDeclarationMode } from './test-collector.js';
+
 export type CodeFrame = {
   content: string;
   location?: {
@@ -37,6 +39,10 @@ export type TestRunnerTestStartedEvent = {
   name: string;
   suite: string;
   file: string;
+  ancestorTitles: string[];
+  fullName: string;
+  startedAt: number;
+  declarationMode?: TestDeclarationMode;
 };
 
 export type TestRunnerTestFinishedEvent = {
@@ -44,6 +50,10 @@ export type TestRunnerTestFinishedEvent = {
   name: string;
   suite: string;
   file: string;
+  ancestorTitles: string[];
+  fullName: string;
+  startedAt: number;
+  declarationMode?: TestDeclarationMode;
   duration: number;
   error?: SerializedError;
   status: TestResultStatus;
@@ -71,6 +81,10 @@ export type TestResult = {
   status: TestResultStatus;
   error?: SerializedError;
   duration: number;
+  ancestorTitles?: string[];
+  fullName?: string;
+  startedAt?: number;
+  declarationMode?: TestDeclarationMode;
 };
 
 export type TestSuiteResult = {

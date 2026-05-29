@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { Config, Test, TestRunnerOptions, TestWatcher } from 'jest-runner';
+import type { Config, Test, TestEvents, TestRunnerOptions, TestWatcher } from 'jest-runner';
 import type { TestSuiteResult } from '@react-native-harness/bridge';
 import type { HarnessSession } from '../harness-session.js';
+import type { executeRun as ExecuteRun } from '../execute-run.js';
 import { HarnessError } from '@react-native-harness/tools';
 import JestHarness from '../index.js';
 
@@ -14,6 +15,7 @@ const resolveUndefined = async () => undefined;
 const mockSession: HarnessSession = {
   config: { metroPort: 8081 } as HarnessSession['config'],
   context: {} as HarnessSession['context'],
+  onTestRunnerEvent: vi.fn(() => () => undefined),
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async (): Promise<TestSuiteResult> => ({
     name: '',
@@ -55,6 +57,41 @@ const makeTest = (): Test => ({
 const makeGlobalConfig = (overrides: Partial<Config.GlobalConfig> = {}): Config.GlobalConfig =>
   ({ rootDir: '/project', watch: false, watchAll: false, collectCoverage: false, ...overrides } as Config.GlobalConfig);
 
+type ExecuteRunMock = typeof ExecuteRun;
+type TypedExecuteRunMock = typeof mockExecuteRun & {
+  mockImplementationOnce: (implementation: ExecuteRunMock) => typeof mockExecuteRun;
+  mockResolvedValue: (value: Awaited<ReturnType<ExecuteRunMock>>) => typeof mockExecuteRun;
+};
+type ExecuteRunParams = Parameters<ExecuteRunMock>;
+
+const typedMockExecuteRun = mockExecuteRun as TypedExecuteRunMock;
+
+const makeTestCaseStartPayload = (): TestEvents['test-case-start'] => [
+  '/test/example.ts',
+  {
+    ancestorTitles: [],
+    fullName: 'suite case',
+    mode: undefined,
+    title: 'case',
+    startedAt: 1,
+  },
+];
+
+const makeTestCaseResultPayload = (): TestEvents['test-case-result'] => [
+  '/test/example.ts',
+  {
+    ancestorTitles: [],
+    duration: 1,
+    failureDetails: [],
+    failureMessages: [],
+    fullName: 'suite case',
+    numPassingAsserts: 1,
+    startedAt: 1,
+    status: 'passed',
+    title: 'case',
+  },
+];
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -62,7 +99,7 @@ const makeGlobalConfig = (overrides: Partial<Config.GlobalConfig> = {}): Config.
 beforeEach(() => {
   vi.clearAllMocks();
   (mockSession.dispose as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-  mockExecuteRun.mockResolvedValue(undefined);
+  typedMockExecuteRun.mockResolvedValue(undefined);
   mockCreateHarnessSession.mockResolvedValue(mockSession);
 });
 
@@ -71,7 +108,7 @@ describe('JestHarness', () => {
     it('creates a session on the first run', async () => {
       const runner = new JestHarness(makeGlobalConfig());
 
-      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
+      await runner.runTests([makeTest()], makeWatcher(), makeOptions());
 
       expect(mockCreateHarnessSession).toHaveBeenCalledOnce();
     });
@@ -79,8 +116,8 @@ describe('JestHarness', () => {
     it('reuses the session across runs in watch mode', async () => {
       const runner = new JestHarness(makeGlobalConfig({ watch: true }));
 
-      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
-      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
+      await runner.runTests([makeTest()], makeWatcher(), makeOptions());
+      await runner.runTests([makeTest()], makeWatcher(), makeOptions());
 
       expect(mockCreateHarnessSession).toHaveBeenCalledOnce();
       expect(mockSession.dispose).not.toHaveBeenCalled();
@@ -89,7 +126,7 @@ describe('JestHarness', () => {
     it('disposes the session after each run in normal mode', async () => {
       const runner = new JestHarness(makeGlobalConfig());
 
-      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
+      await runner.runTests([makeTest()], makeWatcher(), makeOptions());
 
       expect(mockSession.dispose).toHaveBeenCalledOnce();
     });
@@ -97,10 +134,51 @@ describe('JestHarness', () => {
     it('creates a fresh session for each run in normal mode', async () => {
       const runner = new JestHarness(makeGlobalConfig());
 
-      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
-      await runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions());
+      await runner.runTests([makeTest()], makeWatcher(), makeOptions());
+      await runner.runTests([makeTest()], makeWatcher(), makeOptions());
 
       expect(mockCreateHarnessSession).toHaveBeenCalledTimes(2);
+    });
+
+    it('emits registered Jest events', async () => {
+      const runner = new JestHarness(makeGlobalConfig());
+      const listener = vi.fn();
+      const eventPayload = makeTestCaseStartPayload();
+
+      runner.on('test-case-start', listener);
+      typedMockExecuteRun.mockImplementationOnce(async (
+        _session: ExecuteRunParams[0],
+        _tests: ExecuteRunParams[1],
+        _watcher: ExecuteRunParams[2],
+        emitEvent: ExecuteRunParams[3],
+      ) => {
+        await emitEvent('test-case-start', ...eventPayload);
+      });
+
+      await runner.runTests([makeTest()], makeWatcher(), makeOptions());
+
+      expect(listener).toHaveBeenCalledWith(eventPayload);
+    });
+
+    it('stops emitting after listener unsubscribe', async () => {
+      const runner = new JestHarness(makeGlobalConfig());
+      const listener = vi.fn();
+      const unsubscribe = runner.on('test-case-result', listener);
+      const eventPayload = makeTestCaseResultPayload();
+
+      unsubscribe();
+      typedMockExecuteRun.mockImplementationOnce(async (
+        _session: ExecuteRunParams[0],
+        _tests: ExecuteRunParams[1],
+        _watcher: ExecuteRunParams[2],
+        emitEvent: ExecuteRunParams[3],
+      ) => {
+        await emitEvent('test-case-result', ...eventPayload);
+      });
+
+      await runner.runTests([makeTest()], makeWatcher(), makeOptions());
+
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 
@@ -115,7 +193,7 @@ describe('JestHarness', () => {
       const runner = new JestHarness(makeGlobalConfig());
 
       await expect(
-        runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions()),
+        runner.runTests([makeTest()], makeWatcher(), makeOptions()),
       ).rejects.toBeTypeOf('string');
     });
 
@@ -126,7 +204,7 @@ describe('JestHarness', () => {
       const runner = new JestHarness(makeGlobalConfig());
 
       await expect(
-        runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), makeOptions()),
+        runner.runTests([makeTest()], makeWatcher(), makeOptions()),
       ).rejects.toBe(cause);
     });
 
@@ -134,7 +212,7 @@ describe('JestHarness', () => {
       const runner = new JestHarness(makeGlobalConfig());
 
       await expect(
-        runner.runTests([makeTest()], makeWatcher(), vi.fn(), vi.fn(), vi.fn(), { serial: false }),
+        runner.runTests([makeTest()], makeWatcher(), { serial: false }),
       ).rejects.toThrow('Parallel test running is not supported');
     });
   });

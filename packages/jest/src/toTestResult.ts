@@ -16,6 +16,7 @@ export type Options = {
     errorMessage?: string;
     testPath?: string;
     title?: string;
+    fullName?: string;
     status: Status;
     location?: {
       column: number;
@@ -72,8 +73,8 @@ const getTestResults = ({
       duration: test.duration,
       failureDetails: [],
       failureMessages: actualErrorMessage ? [actualErrorMessage] : [],
-      fullName: jestTestPath || test.testPath || '',
-      numPassingAsserts: test.errorMessage ? 1 : 0,
+      fullName: test.fullName || test.testPath || jestTestPath || '',
+      numPassingAsserts: test.status === 'passed' ? 1 : 0,
       status: test.status,
       title: test.title || '',
       location: test.location,
