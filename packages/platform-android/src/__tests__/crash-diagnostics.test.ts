@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collectDropboxArtifacts,
   filterExitInfo,
   getBestDropboxArtifact,
   parseDropboxOutput,
@@ -27,6 +28,38 @@ Abort message: 'JNI DETECTED ERROR IN APPLICATION'
 backtrace:
       #00 pc 00001234  /data/app/lib/libapp.so
 `;
+
+const deviceJavaCrashDropbox = `
+Drop box contents: 8 entries
+Searching for: data_app_crash
+
+========================================
+2026-05-29 10:22:34 data_app_crash (text, 1328 bytes)
+SystemUptimeMs: 79467172
+Process: com.harnessplayground
+PID: 586
+Package: com.harnessplayground v1 (1.0)
+java.lang.RuntimeException: Intentional asynchronous Kotlin crash
+\tat com.harnessplayground.PlaygroundCrashModule.crashFromKotlinAsync(PlaygroundCrashModule.kt:44)
+`;
+
+describe('collectDropboxArtifacts', () => {
+  it('matches harness playground crashes from merged per-tag dropbox output', async () => {
+    const artifacts = await collectDropboxArtifacts({
+      bundleId: 'com.harnessplayground',
+      getDropboxOutput: async () => deviceJavaCrashDropbox,
+      occurredAt: Date.now(),
+      pid: 586,
+    });
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]).toMatchObject({
+      artifactType: 'dropbox-crash',
+      pid: 586,
+      processName: 'com.harnessplayground',
+    });
+  });
+});
 
 describe('parseDropboxOutput', () => {
   it('parses java and native dropbox entries', () => {

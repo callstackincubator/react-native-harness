@@ -800,17 +800,25 @@ export const getDropboxPrint = async (
   adbId: string,
   tags: readonly string[] = DROPBOX_CRASH_TAGS,
 ): Promise<string> => {
-  const { stdout } = await spawn(getAdbBinaryPath(), [
-    '-s',
-    adbId,
-    'shell',
-    'dumpsys',
-    'dropbox',
-    '--print',
-    ...tags,
-  ]);
+  // Android treats multiple args after --print as one search string, so each
+  // tag must be queried separately and merged on the host.
+  const outputs = await Promise.all(
+    tags.map(async (tag) => {
+      const { stdout } = await spawn(getAdbBinaryPath(), [
+        '-s',
+        adbId,
+        'shell',
+        'dumpsys',
+        'dropbox',
+        '--print',
+        tag,
+      ]);
 
-  return stdout;
+      return stdout;
+    }),
+  );
+
+  return outputs.join('\n');
 };
 
 export const getActivityExitInfo = async (
