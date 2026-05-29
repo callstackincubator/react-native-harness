@@ -59,6 +59,17 @@ describe('collectDropboxArtifacts', () => {
       processName: 'com.harnessplayground',
     });
   });
+
+  it('ignores Dropbox entries older than the session start time', async () => {
+    const artifacts = await collectDropboxArtifacts({
+      bundleId: 'com.harnessplayground',
+      getDropboxOutput: async () => deviceJavaCrashDropbox,
+      minOccurredAt: Date.parse('2026-05-29T10:22:35.000Z'),
+      occurredAt: Date.parse('2026-05-29T10:22:36.000Z'),
+    });
+
+    expect(artifacts).toHaveLength(0);
+  });
 });
 
 describe('parseDropboxOutput', () => {

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppConnection } from '@react-native-harness/bridge/server';
-import { waitForBridgeDisconnectOrTimeout } from '../harness-session.js';
+import {
+  waitForBridgeDisconnectOrTimeout,
+  waitForStartupCrash,
+} from '../harness-session.js';
+import type { CrashMonitor } from '../crash-monitor.js';
 
 const createConnection = (): AppConnection => ({
   device: {
@@ -64,5 +68,26 @@ describe('waitForBridgeDisconnectOrTimeout', () => {
         timeoutMs: 10,
       }),
     ).resolves.toBe(false);
+  });
+});
+
+describe('waitForStartupCrash', () => {
+  it('does not install a startup crash watch when native crash detection is disabled', async () => {
+    const watch = vi.fn();
+    const crashMonitor = {
+      watch,
+    } as unknown as CrashMonitor;
+    const controller = new AbortController();
+    const waitPromise = waitForStartupCrash({
+      crashMonitor,
+      detectNativeCrashes: false,
+      testFilePath: '/test.harness.ts',
+      signal: controller.signal,
+    });
+
+    controller.abort(new DOMException('Aborted', 'AbortError'));
+
+    await expect(waitPromise).rejects.toThrow('Aborted');
+    expect(watch).not.toHaveBeenCalled();
   });
 });

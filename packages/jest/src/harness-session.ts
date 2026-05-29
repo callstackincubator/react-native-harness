@@ -196,7 +196,32 @@ type AppReadyOptions = {
   readyTimeout: number;
   maxAppRestarts: number;
   crashMonitor: CrashMonitor;
+  detectNativeCrashes: boolean;
   restartAppSession: () => Promise<AppSession>;
+};
+
+export const waitForStartupCrash = async ({
+  crashMonitor,
+  detectNativeCrashes,
+  testFilePath,
+  signal,
+}: {
+  crashMonitor: CrashMonitor;
+  detectNativeCrashes: boolean;
+  testFilePath: string;
+  signal: AbortSignal;
+}) => {
+  if (!detectNativeCrashes) {
+    return await waitForAbort(signal);
+  }
+
+  const watch = crashMonitor.watch(testFilePath, 'startup');
+  watch.promise.catch(ignorePromiseRejection); // suppress unhandled-rejection when abort wins race
+  try {
+    return await Promise.race([watch.promise, waitForAbort(signal)]);
+  } finally {
+    watch.cancel();
+  }
 };
 
 const waitForAppReady = async (
@@ -211,6 +236,7 @@ const waitForAppReady = async (
     readyTimeout,
     maxAppRestarts,
     crashMonitor,
+    detectNativeCrashes,
     restartAppSession,
   } = base;
 
@@ -250,14 +276,13 @@ const waitForAppReady = async (
       logWait('runtime ready received');
     },
     waitForCrash: async (signal) => {
-      const watch = crashMonitor.watch(testFilePath, 'startup');
-      watch.promise.catch(ignorePromiseRejection); // suppress unhandled-rejection when abort wins race
-      try {
-        logWait('waiting for crash or runtime ready');
-        return await Promise.race([watch.promise, waitForAbort(signal)]);
-      } finally {
-        watch.cancel();
-      }
+      logWait('waiting for crash or runtime ready');
+      return await waitForStartupCrash({
+        crashMonitor,
+        detectNativeCrashes,
+        testFilePath,
+        signal,
+      });
     },
     onAttemptStart: () => {
       logWait('beginning launch attempt for %s', testFilePath);
@@ -542,6 +567,7 @@ export const createHarnessSession = async (
       readyTimeout: runtimeConfig.bridgeTimeout,
       maxAppRestarts: runtimeConfig.maxAppRestarts ?? 2,
       crashMonitor,
+      detectNativeCrashes: runtimeConfig.detectNativeCrashes !== false,
       restartAppSession,
     };
 

@@ -249,6 +249,7 @@ const getMatchingDropboxEntries = ({
   bundleId,
   pid,
   occurredAt,
+  minOccurredAt,
 }: {
   output: string;
   bundleId: string;
@@ -258,12 +259,21 @@ const getMatchingDropboxEntries = ({
 }) =>
   parseDropboxOutput(output)
     .filter((entry) => matchesDropboxEntry({ entry, bundleId, pid }))
+    .filter((entry) => {
+      const entryOccurredAt = parseDropboxTimestamp(entry.timestamp);
+
+      return (
+        minOccurredAt === undefined ||
+        entryOccurredAt === 0 ||
+        entryOccurredAt >= minOccurredAt
+      );
+    })
     .map((entry) =>
       toDropboxCrashArtifact({
         entry,
         bundleId,
         pid,
-        occurredAt,
+        occurredAt: parseDropboxTimestamp(entry.timestamp) || occurredAt,
       })
     )
     .sort((left, right) => {
@@ -328,6 +338,7 @@ export const collectDropboxArtifacts = async ({
     bundleId,
     pid: lookup.pid,
     occurredAt: lookup.occurredAt,
+    minOccurredAt,
   }).map((artifact) =>
     persistDropboxArtifact({
       artifact,

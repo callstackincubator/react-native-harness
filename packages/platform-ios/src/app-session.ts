@@ -33,6 +33,7 @@ export const createIosAppSession = async ({
   let state: AppSessionState = { status: 'running' };
   let disposed = false;
   let stopPolling = false;
+  let hasObservedRunning = false;
 
   const setExited = (reason: 'observed-exit' | 'process-gone') => {
     if (disposed || state.status !== 'running') {
@@ -74,7 +75,9 @@ export const createIosAppSession = async ({
   const pollTask = (async () => {
     while (!stopPolling) {
       try {
-        if (!(await isAppRunning())) {
+        if (await isAppRunning()) {
+          hasObservedRunning = true;
+        } else if (hasObservedRunning) {
           setExited('process-gone');
           return;
         }
