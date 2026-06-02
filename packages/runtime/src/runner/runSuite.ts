@@ -13,7 +13,10 @@ import { flushExpectTestState } from '../expect/errors.js';
 import { runHooks } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
 import { ActiveTestContext, TestRunnerContext } from './types.js';
-import { withPromiseTrackerTestContext } from '../promise-tracker.js';
+import {
+  runWithoutPromiseTracking,
+  withPromiseTrackerTestContext,
+} from '../promise-tracker.js';
 import {
   createTestContext,
   createTestLifecycleState,
@@ -43,6 +46,59 @@ const getAncestorTitles = (suite: TestSuite): string[] => {
 const getFullName = (ancestorTitles: string[], testName: string): string =>
   [...ancestorTitles, testName].join(' ');
 
+const DEFAULT_TEST_TIMEOUT_MS = 5_000;
+
+export class TestCaseTimeoutError extends Error {
+  constructor(
+    public readonly testName: string,
+    public readonly timeout: number,
+  ) {
+    super(`Test timed out after ${timeout}ms: ${testName}`);
+    this.name = 'TestCaseTimeoutError';
+  }
+}
+
+type RunSuiteState = {
+  interruptedByTimeout: boolean;
+};
+
+const getTestTimeout = (context: TestRunnerContext): number => {
+  const timeout = context.testTimeout ?? DEFAULT_TEST_TIMEOUT_MS;
+  return Number.isFinite(timeout) && timeout > 0
+    ? timeout
+    : DEFAULT_TEST_TIMEOUT_MS;
+};
+
+const withTestTimeout = async <T>(
+  work: () => Promise<T>,
+  options: {
+    fullName: string;
+    timeout: number;
+  },
+): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const timeoutPromise = runWithoutPromiseTracking(
+    () =>
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new TestCaseTimeoutError(options.fullName, options.timeout));
+        }, options.timeout);
+      }),
+  );
+  const workPromise = work();
+
+  try {
+    return await runWithoutPromiseTracking(() =>
+      Promise.race([workPromise, timeoutPromise]),
+    );
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
 const emitTestFinished = (
   context: TestRunnerContext,
   options: {
@@ -71,6 +127,85 @@ const emitTestFinished = (
   });
 };
 
+const createSkippedTestResult = (
+  test: TestCase,
+  suite: TestSuite,
+  context: TestRunnerContext,
+): TestResult => {
+  const startedAt = Date.now();
+  const ancestorTitles = getAncestorTitles(suite);
+  const fullName = getFullName(ancestorTitles, test.name);
+  const status: TestResult['status'] =
+    test.status === 'todo' ? 'todo' : 'skipped';
+
+  context.events.emit({
+    type: 'test-started',
+    name: test.name,
+    suite: suite.name,
+    file: context.testFilePath,
+    ancestorTitles,
+    fullName,
+    startedAt,
+    declarationMode: test.declarationMode,
+  });
+
+  const result = {
+    name: test.name,
+    status,
+    duration: 0,
+    ancestorTitles,
+    fullName,
+    startedAt,
+    declarationMode: test.declarationMode,
+  };
+
+  emitTestFinished(context, {
+    test,
+    suite,
+    startedAt,
+    duration: 0,
+    status,
+  });
+
+  return result;
+};
+
+const createSkippedSuiteResult = (
+  suite: TestSuite,
+  context: TestRunnerContext,
+): TestSuiteResult => {
+  context.events.emit({
+    type: 'suite-started',
+    name: suite.name,
+    file: context.testFilePath,
+  });
+
+  const testResults = suite.tests.map((test) =>
+    createSkippedTestResult(test, suite, context),
+  );
+  const suiteResults = suite.suites.map((childSuite) =>
+    createSkippedSuiteResult(childSuite, context),
+  );
+
+  const result = {
+    name: suite.name,
+    tests: testResults,
+    suites: suiteResults,
+    status: 'skipped' as const,
+    duration: 0,
+  };
+
+  context.events.emit({
+    type: 'suite-finished',
+    file: context.testFilePath,
+    name: suite.name,
+    duration: 0,
+    status: 'skipped',
+  });
+
+  return result;
+};
+
 declare global {
   var HARNESS_TEST_PATH: string;
 }
@@ -78,7 +213,8 @@ declare global {
 const runTest = async (
   test: TestCase,
   suite: TestSuite,
-  context: TestRunnerContext
+  context: TestRunnerContext,
+  state: RunSuiteState
 ): Promise<TestResult> => {
   const startedAt = Date.now();
   const task: HarnessTaskContext = {
@@ -169,31 +305,44 @@ const runTest = async (
       const fullName = getFullName(ancestorTitles, test.name);
       let didSkip = false;
 
-      await withPromiseTrackerTestContext(
-        {
-          file: context.testFilePath,
-          suite: suite.name,
-          name: test.name,
-          fullName,
-        },
+      await withTestTimeout(
         async () => {
-          try {
-            // Run all beforeEach hooks from the current suite and its parents
-            await runHooks(suite, 'beforeEach', activeTestContext);
+          await withPromiseTrackerTestContext(
+            {
+              file: context.testFilePath,
+              suite: suite.name,
+              name: test.name,
+              fullName,
+            },
+            async () => {
+              try {
+                // Run all beforeEach hooks from the current suite and its parents
+                await runHooks(suite, 'beforeEach', activeTestContext);
 
-            // Run the actual test
-            await test.fn(activeTestContext);
-          } catch (error) {
-            if (!isSkipTestError(error)) {
-              throw error;
+                // Run the actual test
+                await test.fn(activeTestContext);
+              } catch (error) {
+                if (!isSkipTestError(error)) {
+                  throw error;
+                }
+
+                didSkip = true;
+              } finally {
+                // Run all afterEach hooks from the current suite and its parents
+                await runHooks(suite, 'afterEach', activeTestContext);
+              }
             }
+          );
 
-            didSkip = true;
-          } finally {
-            // Run all afterEach hooks from the current suite and its parents
-            await runHooks(suite, 'afterEach', activeTestContext);
+          if (!didSkip) {
+            await flushExpectTestState(expectTestState);
+            await runOnTestFinished(lifecycleState);
           }
-        }
+        },
+        {
+          fullName,
+          timeout: getTestTimeout(context),
+        },
       );
 
       if (didSkip) {
@@ -222,8 +371,6 @@ const runTest = async (
         return result;
       }
 
-      await flushExpectTestState(expectTestState);
-      await runOnTestFinished(lifecycleState);
     } finally {
       setCurrentExpectTestState(undefined);
     }
@@ -250,6 +397,10 @@ const runTest = async (
 
     return result;
   } catch (error) {
+    if (error instanceof TestCaseTimeoutError) {
+      state.interruptedByTimeout = true;
+    }
+
     await runOnTestFailed(lifecycleState);
     await runOnTestFinished(lifecycleState);
 
@@ -287,7 +438,8 @@ const runTest = async (
 
 export const runSuite = async (
   suite: TestSuite,
-  context: TestRunnerContext
+  context: TestRunnerContext,
+  state: RunSuiteState = { interruptedByTimeout: false }
 ): Promise<TestSuiteResult> => {
   const startTime = Date.now();
 
@@ -302,12 +454,12 @@ export const runSuite = async (
   if (suite.status === 'skipped') {
     const testResults = await Promise.all(
       suite.tests.map((test) =>
-        runTest({ ...test, status: 'skipped' }, suite, context)
+        runTest({ ...test, status: 'skipped' }, suite, context, state)
       )
     );
     const suiteResults = await Promise.all(
       suite.suites.map((childSuite) =>
-        runSuite({ ...childSuite, status: 'skipped' }, context)
+        runSuite({ ...childSuite, status: 'skipped' }, context, state)
       )
     );
 
@@ -360,18 +512,24 @@ export const runSuite = async (
 
   // Run all tests in the current suite
   for (const test of suite.tests) {
-    const result = await runTest(test, suite, context);
+    const result = state.interruptedByTimeout
+      ? createSkippedTestResult(test, suite, context)
+      : await runTest(test, suite, context, state);
     testResults.push(result);
   }
 
   // Run all child suites
   for (const childSuite of suite.suites) {
-    const result = await runSuite(childSuite, context);
+    const result = state.interruptedByTimeout
+      ? createSkippedSuiteResult(childSuite, context)
+      : await runSuite(childSuite, context, state);
     suiteResults.push(result);
   }
 
   // Run afterAll hooks
-  await runHooks(suite, 'afterAll');
+  if (!state.interruptedByTimeout) {
+    await runHooks(suite, 'afterAll');
+  }
 
   const duration = Date.now() - startTime;
 

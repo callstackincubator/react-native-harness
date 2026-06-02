@@ -168,6 +168,31 @@ describe('rpc-peer', () => {
     await expect(pending).rejects.toThrow('timed out');
   });
 
+  it('does not time out calls when method-specific timeout returns undefined', async () => {
+    const peer = createRpcPeer<
+      Record<string, never>,
+      { runTests: (path: string, options: { runner: string }) => Promise<void> },
+      BridgeEvents
+    >({
+      localMethods: {},
+      transport: createMockTransport(),
+      callTimeoutMs: () => undefined,
+      createTimeoutError: () => new Error('timed out'),
+    });
+
+    let rejected = false;
+    const pending = peer.invoke('runTests', 'example.ts', { runner: '/runner.js' });
+    pending.catch(() => {
+      rejected = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(rejected).toBe(false);
+    peer.close(new Error('closed'));
+    await expect(pending).rejects.toThrow('closed');
+  });
+
   it('throws on malformed messages', async () => {
     const peer = createRpcPeer<Record<string, never>, Record<string, never>, BridgeEvents>({
       localMethods: {},

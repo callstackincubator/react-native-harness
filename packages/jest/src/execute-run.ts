@@ -22,6 +22,7 @@ import type {
   TestRunnerEvents,
   TestRunnerTestFinishedEvent,
   TestRunnerTestStartedEvent,
+  TestSuiteResult,
 } from '@react-native-harness/bridge';
 import {
   createPlatformSkippedTestResult,
@@ -114,6 +115,10 @@ const isHarnessCaseEvent = (
 ): event is TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent =>
   event.type === 'test-started' || event.type === 'test-finished';
 
+const hasTestCaseTimeout = (result: TestSuiteResult): boolean =>
+  result.tests.some((test) => test.error?.name === 'TestCaseTimeoutError') ||
+  result.suites.some(hasTestCaseTimeout);
+
 export const executeRun = async (
   session: HarnessSession,
   tests: Array<Test>,
@@ -174,6 +179,7 @@ export const executeRun = async (
     session.config.runners.map((runner) => runner.platformId),
   );
   let isFirstTest = true;
+  let shouldRestartAfterTimeout = false;
   let runError: unknown;
 
   try {
@@ -230,8 +236,9 @@ export const executeRun = async (
       }
 
       try {
-        if (shouldResetEnv && !isFirstTest) {
+        if ((shouldResetEnv && !isFirstTest) || shouldRestartAfterTimeout) {
           await session.restartApp(test.path);
+          shouldRestartAfterTimeout = false;
         }
         isFirstTest = false;
 
@@ -259,6 +266,7 @@ export const executeRun = async (
           duration: result.duration,
           result: result.harnessResult,
         });
+        shouldRestartAfterTimeout = hasTestCaseTimeout(result.harnessResult);
         await caseEventChain;
         await emitEvent('test-file-success', test, result.jestResult);
       } catch (err) {

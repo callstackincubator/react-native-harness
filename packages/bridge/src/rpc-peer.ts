@@ -40,7 +40,7 @@ export type CreateRpcPeerOptions<
   localMethods: Local;
   transport: RpcTransport;
   onEvent?: (event: Event) => void;
-  callTimeoutMs?: number;
+  callTimeoutMs?: number | ((method: string, args: unknown[]) => number | undefined);
   createTimeoutError?: (method: string, args: unknown[]) => Error;
 };
 
@@ -107,14 +107,19 @@ export const createRpcPeer = <
           timeout: null,
         };
 
-        if (options.callTimeoutMs !== undefined) {
+        const callTimeoutMs =
+          typeof options.callTimeoutMs === 'function'
+            ? options.callTimeoutMs(methodName, args)
+            : options.callTimeoutMs;
+
+        if (callTimeoutMs !== undefined) {
           invocation.timeout = setTimeout(() => {
             pendingInvocations.delete(id);
             reject(
               options.createTimeoutError?.(methodName, args) ??
                 new Error(`RPC call timed out: ${methodName}`),
             );
-          }, options.callTimeoutMs);
+          }, callTimeoutMs);
         }
 
         pendingInvocations.set(id, invocation);

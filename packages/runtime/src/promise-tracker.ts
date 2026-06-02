@@ -24,6 +24,7 @@ const pendingPromises = new Map<number, TrackedPromiseRecord>();
 let originalPromise: PromiseConstructor | null = null;
 let nextPromiseId = 1;
 let currentTestContext: PromiseTrackerTestContext | undefined;
+let trackingDisabledDepth = 0;
 
 const getOriginalPromise = (): PromiseConstructor =>
   originalPromise ?? globalThis.Promise;
@@ -36,7 +37,11 @@ const createPromiseStack = (): string | undefined => {
   }
 };
 
-const registerPromise = (): number => {
+const registerPromise = (): number | null => {
+  if (trackingDisabledDepth > 0) {
+    return null;
+  }
+
   const id = nextPromiseId++;
 
   pendingPromises.set(id, {
@@ -49,7 +54,11 @@ const registerPromise = (): number => {
   return id;
 };
 
-const markPromiseSettled = (id: number) => {
+const markPromiseSettled = (id: number | null) => {
+  if (id === null) {
+    return;
+  }
+
   pendingPromises.delete(id);
 };
 
@@ -135,5 +144,15 @@ export const withPromiseTrackerTestContext = async <T>(
     return await work();
   } finally {
     currentTestContext = previousContext;
+  }
+};
+
+export const runWithoutPromiseTracking = <T>(work: () => T): T => {
+  trackingDisabledDepth += 1;
+
+  try {
+    return work();
+  } finally {
+    trackingDisabledDepth -= 1;
   }
 };

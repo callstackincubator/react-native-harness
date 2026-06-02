@@ -585,4 +585,79 @@ describe('runner task context', () => {
       runner.dispose();
     }
   });
+
+  it('fails the timed-out test and skips the rest of the file', async () => {
+    const calls: string[] = [];
+    const events: Array<{ type: string; name?: string; status?: string }> = [];
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+    runner.events.addListener((event) => {
+      if (event.type === 'test-finished') {
+        events.push({
+          type: event.type,
+          name: event.name,
+          status: event.status,
+        });
+      }
+    });
+
+    try {
+      const collection = await collector.collect(() => {
+        harnessDescribe('Timeout Suite', () => {
+          harnessIt('hangs', async () => {
+            calls.push('hangs');
+            await new Promise(() => undefined);
+          });
+
+          harnessIt('does not run', () => {
+            calls.push('does not run');
+          });
+
+          harnessIt.todo('keeps todo status');
+
+          harnessDescribe('Nested Suite', () => {
+            harnessIt('also does not run', () => {
+              calls.push('nested');
+            });
+          });
+        });
+      }, 'runtime/timeout.test.ts');
+
+      const result = await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/timeout.test.ts',
+        runner: 'ios',
+        testTimeout: 10,
+      });
+
+      expect(result.status).toBe('failed');
+      expect(result.suites[0].tests).toMatchObject([
+        {
+          name: 'hangs',
+          status: 'failed',
+          error: {
+            name: 'TestCaseTimeoutError',
+            message: expect.stringContaining('Timeout Suite hangs'),
+          },
+        },
+        { name: 'does not run', status: 'skipped' },
+        { name: 'keeps todo status', status: 'todo' },
+      ]);
+      expect(result.suites[0].suites[0]).toMatchObject({
+        name: 'Nested Suite',
+        status: 'skipped',
+        tests: [{ name: 'also does not run', status: 'skipped' }],
+      });
+      expect(calls).toEqual(['hangs']);
+      expect(events).toEqual([
+        { type: 'test-finished', name: 'hangs', status: 'failed' },
+        { type: 'test-finished', name: 'does not run', status: 'skipped' },
+        { type: 'test-finished', name: 'keeps todo status', status: 'todo' },
+        { type: 'test-finished', name: 'also does not run', status: 'skipped' },
+      ]);
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
 });

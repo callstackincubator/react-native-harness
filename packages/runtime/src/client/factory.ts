@@ -85,6 +85,7 @@ export const getClient = async (): Promise<HarnessHandle> => {
           testSuite: processedTestSuite,
           testFilePath: path,
           runner: options.runner,
+          testTimeout: options.testTimeout,
         });
       } finally {
         collector?.dispose();

@@ -192,7 +192,7 @@ describe('executeRun', () => {
       const session = makeSession({
         ensureAppReady: vi.fn(async () => { order.push('ensureAppReady'); }),
       });
-      const emitEvent: EmitEvent = (async (eventName, ..._eventData) => {
+      const emitEvent: EmitEvent = (async (eventName) => {
         if (eventName === 'test-file-start') {
           order.push('test-file-start');
         }
@@ -460,6 +460,52 @@ describe('executeRun', () => {
 
       // restartApp should be called for tests 2 and 3, not test 1.
       expect(session.restartApp).toHaveBeenCalledTimes(2);
+    });
+
+    it('restarts before the next runnable file after a test case timeout', async () => {
+      const timedOutResult = makeHarnessResult('failed');
+      timedOutResult.tests = [
+        {
+          name: 'hangs',
+          status: 'failed',
+          duration: 10,
+          error: {
+            name: 'TestCaseTimeoutError',
+            message: 'Test timed out after 10ms: hangs',
+          },
+        },
+      ];
+      mockRunHarnessTestFile
+        .mockResolvedValueOnce(makeFileRunResult({
+          harnessResult: timedOutResult,
+          jestResult: makeJestResult({
+            numFailingTests: 1,
+            numPassingTests: 0,
+          }),
+        }))
+        .mockResolvedValueOnce(makeFileRunResult());
+      const session = makeSession({
+        config: {
+          metroPort: 8081,
+          resetEnvironmentBetweenTestFiles: false,
+          detectNativeCrashes: false,
+          runners: [
+            { platformId: 'android', name: 'android' },
+            { platformId: 'ios', name: 'ios' },
+          ],
+        } as HarnessSession['config'],
+      });
+
+      await executeRun(
+        session,
+        [makeTest('/a.ts'), makeTest('/b.ts')],
+        makeWatcher(),
+        makeEmitEvent().emitEvent,
+        makeGlobalConfig(),
+      );
+
+      expect(session.restartApp).toHaveBeenCalledTimes(1);
+      expect(session.restartApp).toHaveBeenCalledWith('/b.ts');
     });
   });
 

@@ -9,7 +9,7 @@ export const getTestRunner = (): TestRunner => {
 
   return {
     events,
-    run: async ({ testSuite, testFilePath, runner }) => {
+    run: async ({ testSuite, testFilePath, runner, testTimeout }) => {
       setHarnessContext({
         testFilePath,
         runner,
@@ -18,6 +18,7 @@ export const getTestRunner = (): TestRunner => {
       const result = await runSuite(testSuite, {
         events,
         testFilePath,
+        testTimeout,
       });
 
       // If coverage is enabled, there will be a global variable called __coverage__

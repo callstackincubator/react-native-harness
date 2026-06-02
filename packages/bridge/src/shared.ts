@@ -134,6 +134,7 @@ export type TestExecutionOptions = {
   testNamePattern?: string;
   setupFiles?: string[];
   setupFilesAfterEnv?: string[];
+  testTimeout?: number;
   runner: string;
 };
 
