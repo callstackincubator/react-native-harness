@@ -365,6 +365,46 @@ describe('executeRun', () => {
       ]);
     });
 
+    it('includes the last active test when the device stops responding during a test', async () => {
+      let testRunnerListener:
+        | ((event: TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent) => void)
+        | undefined;
+      const { emitEvent, calls } = makeEmitEvent();
+      const session = makeSession({
+        onTestRunnerEvent: vi.fn((listener) => {
+          testRunnerListener = listener as typeof testRunnerListener;
+          return () => undefined;
+        }),
+      });
+
+      mockRunHarnessTestFile.mockImplementation(async () => {
+        testRunnerListener?.({
+          type: 'test-started',
+          file: 'example.ts',
+          suite: 'VisionCamera - Controller',
+          name: 'runs a zoom animation',
+          ancestorTitles: ['VisionCamera - Controller'],
+          fullName: 'VisionCamera - Controller runs a zoom animation',
+          startedAt: 10,
+        });
+
+        throw new DeviceNotRespondingError('runTests', []);
+      });
+
+      await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
+
+      expect(calls).toContainEqual([
+        'test-file-failure',
+        expect.anything(),
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'Last active test: VisionCamera - Controller runs a zoom animation',
+          ),
+          stack: '',
+        }),
+      ]);
+    });
+
     it('passes AppBridgeDisconnectedError to onFailure with an empty stack', async () => {
       const { emitEvent, calls } = makeEmitEvent();
       const session = makeSession({

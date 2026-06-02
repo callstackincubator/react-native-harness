@@ -52,7 +52,18 @@ class CancelRun extends Error {
   }
 }
 
-const buildTestFailure = (err: unknown): { message: string; stack: string } => {
+const isSameTestRun = (
+  started: TestRunnerTestStartedEvent,
+  finished: TestRunnerTestFinishedEvent,
+): boolean =>
+  started.file === finished.file &&
+  started.fullName === finished.fullName &&
+  started.startedAt === finished.startedAt;
+
+const buildTestFailure = (
+  err: unknown,
+  activeTest?: TestRunnerTestStartedEvent | null,
+): { message: string; stack: string } => {
   if (
     err instanceof NativeCrashError ||
     err instanceof RuntimeDisconnectError ||
@@ -60,7 +71,13 @@ const buildTestFailure = (err: unknown): { message: string; stack: string } => {
     err instanceof AppBridgeDisconnectedError ||
     err instanceof DeviceNotRespondingError
   ) {
-    return { message: (err as Error).message, stack: '' };
+    let message = (err as Error).message;
+
+    if (err instanceof DeviceNotRespondingError && activeTest) {
+      message += `\nLast active test: ${activeTest.fullName}`;
+    }
+
+    return { message, stack: '' };
   }
   return err as { message: string; stack: string };
 };
@@ -128,8 +145,15 @@ export const executeRun = async (
   const testFiles = tests.map((t) => path.relative(rootDir, t.path));
   const summary = createRunSummary();
   let caseEventChain = Promise.resolve();
+  let activeTest: TestRunnerTestStartedEvent | null = null;
   const unsubscribe = session.onTestRunnerEvent((event) => {
     if (isHarnessCaseEvent(event)) {
+      if (event.type === 'test-started') {
+        activeTest = event;
+      } else if (activeTest && isSameTestRun(activeTest, event)) {
+        activeTest = null;
+      }
+
       caseEventChain = caseEventChain.then(() =>
         event.type === 'test-started'
           ? emitHarnessTestStarted(emitEvent, event)
@@ -183,6 +207,7 @@ export const executeRun = async (
       const relativeTestPath = path.relative(rootDir, test.path);
       const fileStartedAt = Date.now();
       let emittedTestFileFinished = false;
+      activeTest = null;
 
       const emitTestFileFinished = async (options: {
         status: 'passed' | 'failed' | 'skipped' | 'todo';
@@ -224,7 +249,11 @@ export const executeRun = async (
             });
           }
           updateRunState({ error: err });
-          await emitEvent('test-file-failure', test, buildTestFailure(err));
+          await emitEvent(
+            'test-file-failure',
+            test,
+            buildTestFailure(err, activeTest),
+          );
         }
         continue;
       }
@@ -288,7 +317,11 @@ export const executeRun = async (
 
         updateRunState({ error: isRuntimeFailure ? undefined : err });
         await caseEventChain;
-        await emitEvent('test-file-failure', test, buildTestFailure(err));
+        await emitEvent(
+          'test-file-failure',
+          test,
+          buildTestFailure(err, activeTest),
+        );
       }
     }
   } catch (err) {
