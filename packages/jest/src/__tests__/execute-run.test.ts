@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Config, Test, TestWatcher } from 'jest-runner';
 import type { TestResult as JestTestResult } from '@jest/test-result';
 import type {
+  TestRunnerEvents,
   TestRunnerTestFinishedEvent,
   TestRunnerTestStartedEvent,
   TestSuiteResult,
@@ -263,7 +264,9 @@ describe('executeRun', () => {
 
     it('emits test-case events before file success', async () => {
       let testRunnerListener:
-        | ((event: TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent) => void)
+        | ((
+            event: TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent
+          ) => void)
         | undefined;
       const { emitEvent, calls: emittedEvents } = makeEmitEvent();
       const session = makeSession({
@@ -362,6 +365,92 @@ describe('executeRun', () => {
         'test-file-failure',
         expect.anything(),
         expect.objectContaining({ stack: '' }),
+      ]);
+    });
+
+    it('includes the active harness test when a file run stops responding', async () => {
+      let testRunnerListener: ((event: TestRunnerEvents) => void) | undefined;
+      const { emitEvent, calls } = makeEmitEvent();
+      const session = makeSession({
+        onTestRunnerEvent: vi.fn((listener) => {
+          testRunnerListener = listener as typeof testRunnerListener;
+          return () => undefined;
+        }),
+      });
+
+      mockRunHarnessTestFile.mockImplementation(async () => {
+        testRunnerListener?.({
+          type: 'test-started',
+          file: 'example.ts',
+          suite: 'suite',
+          name: 'hangs',
+          ancestorTitles: ['suite'],
+          fullName: 'suite hangs',
+          startedAt: 10,
+        });
+        throw new DeviceNotRespondingError('runTests', []);
+      });
+
+      await executeRun(
+        session,
+        [makeTest('/project/example.ts')],
+        makeWatcher(),
+        emitEvent,
+        makeGlobalConfig(),
+      );
+
+      expect(calls).toContainEqual([
+        'test-file-failure',
+        expect.objectContaining({ path: '/project/example.ts' }),
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'Last started test before the device stopped responding: suite hangs',
+          ),
+          stack: '',
+        }),
+      ]);
+    });
+
+    it('includes the active harness suite when a file stops responding before a test starts', async () => {
+      let testRunnerListener: ((event: TestRunnerEvents) => void) | undefined;
+      const { emitEvent, calls } = makeEmitEvent();
+      const session = makeSession({
+        onTestRunnerEvent: vi.fn((listener) => {
+          testRunnerListener = listener as typeof testRunnerListener;
+          return () => undefined;
+        }),
+      });
+
+      mockRunHarnessTestFile.mockImplementation(async () => {
+        testRunnerListener?.({
+          type: 'file-started',
+          file: 'example.ts',
+        });
+        testRunnerListener?.({
+          type: 'suite-started',
+          file: 'example.ts',
+          name: 'suite',
+        });
+        throw new DeviceNotRespondingError('runTests', []);
+      });
+
+      await executeRun(
+        session,
+        [makeTest('/project/example.ts')],
+        makeWatcher(),
+        emitEvent,
+        makeGlobalConfig(),
+      );
+
+      expect(calls).toContainEqual([
+        'test-file-failure',
+        expect.objectContaining({ path: '/project/example.ts' }),
+        expect.objectContaining({
+          message: expect.stringContaining(
+            'Last started suite before the device stopped responding: suite',
+          ),
+          stack: '',
+        }),
       ]);
     });
 
