@@ -238,6 +238,17 @@ const runTest = async (
     task,
     lifecycleState
   );
+  let timedOut = false;
+  let onTestFinishedRan = false;
+
+  const runTestFinishedOnce = async (): Promise<void> => {
+    if (onTestFinishedRan) {
+      return;
+    }
+
+    onTestFinishedRan = true;
+    await runOnTestFinished(lifecycleState);
+  };
 
   // Emit test-started event
   const ancestorTitles = getAncestorTitles(suite);
@@ -336,7 +347,9 @@ const runTest = async (
 
           if (!didSkip) {
             await flushExpectTestState(expectTestState);
-            await runOnTestFinished(lifecycleState);
+            if (!timedOut) {
+              await runTestFinishedOnce();
+            }
           }
         },
         {
@@ -348,7 +361,7 @@ const runTest = async (
       if (didSkip) {
         const duration = Date.now() - startedAt;
 
-        await runOnTestFinished(lifecycleState);
+        await runTestFinishedOnce();
 
         const result = {
           name: test.name,
@@ -399,10 +412,11 @@ const runTest = async (
   } catch (error) {
     if (error instanceof TestCaseTimeoutError) {
       state.interruptedByTimeout = true;
+      timedOut = true;
     }
 
     await runOnTestFailed(lifecycleState);
-    await runOnTestFinished(lifecycleState);
+    await runTestFinishedOnce();
 
     const testError = await getTestExecutionError(
       error,

@@ -660,4 +660,45 @@ describe('runner task context', () => {
       runner.dispose();
     }
   });
+
+  it('runs onTestFinished only once when a timed-out test eventually resumes', async () => {
+    const calls: string[] = [];
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+
+    try {
+      const collection = await collector.collect(() => {
+        harnessDescribe('Timeout Resume Suite', () => {
+          harnessIt(
+            'times out then resumes',
+            async (context: HarnessTestContext) => {
+              context.onTestFinished(() => {
+                calls.push('onTestFinished');
+              });
+
+              await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+          );
+        });
+      }, 'runtime/timeout-resume.test.ts');
+
+      const result = await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/timeout-resume.test.ts',
+        runner: 'ios',
+        testTimeout: 10,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      expect(result.suites[0].tests[0]).toMatchObject({
+        status: 'failed',
+        error: { name: 'TestCaseTimeoutError' },
+      });
+      expect(calls).toEqual(['onTestFinished']);
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
 });

@@ -266,9 +266,14 @@ export const executeRun = async (
           duration: result.duration,
           result: result.harnessResult,
         });
-        shouldRestartAfterTimeout = hasTestCaseTimeout(result.harnessResult);
+        const didTestCaseTimeout = hasTestCaseTimeout(result.harnessResult);
+        shouldRestartAfterTimeout = didTestCaseTimeout;
         await caseEventChain;
         await emitEvent('test-file-success', test, result.jestResult);
+        if (didTestCaseTimeout) {
+          await session.restartApp(test.path);
+          shouldRestartAfterTimeout = false;
+        }
       } catch (err) {
         if (!emittedTestFileFinished) {
           await emitTestFileFinished({

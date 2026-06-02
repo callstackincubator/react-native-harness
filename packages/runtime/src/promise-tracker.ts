@@ -62,37 +62,43 @@ const markPromiseSettled = (id: number | null) => {
   pendingPromises.delete(id);
 };
 
+const isThenable = <T>(value: T | PromiseLike<T>): value is PromiseLike<T> =>
+  value != null &&
+  typeof value === 'object' &&
+  'then' in value &&
+  typeof value.then === 'function';
+
 const createTrackedPromiseConstructor = (): PromiseConstructor => {
   const NativePromise = getOriginalPromise();
 
   class TrackedPromise<T> extends NativePromise<T> {
     constructor(executor: PromiseExecutor<T>) {
       const id = registerPromise();
-      let settled = false;
-
-      const settle = () => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        markPromiseSettled(id);
-      };
 
       super((resolve, reject) => {
         try {
           executor(
             (value: T | PromiseLike<T>) => {
-              settle();
+              if (isThenable(value)) {
+                runWithoutPromiseTracking(() => {
+                  NativePromise.resolve(value).then(
+                    () => markPromiseSettled(id),
+                    () => markPromiseSettled(id)
+                  );
+                });
+              } else {
+                markPromiseSettled(id);
+              }
+
               resolve(value);
             },
             (reason?: unknown) => {
-              settle();
+              markPromiseSettled(id);
               reject(reason);
             }
           );
         } catch (error) {
-          settle();
+          markPromiseSettled(id);
           throw error;
         }
       });

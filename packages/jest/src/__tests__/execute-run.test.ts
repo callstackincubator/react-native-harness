@@ -462,7 +462,7 @@ describe('executeRun', () => {
       expect(session.restartApp).toHaveBeenCalledTimes(2);
     });
 
-    it('restarts before the next runnable file after a test case timeout', async () => {
+    it('restarts after a test case timeout before the next runnable file', async () => {
       const timedOutResult = makeHarnessResult('failed');
       timedOutResult.tests = [
         {
@@ -505,7 +505,51 @@ describe('executeRun', () => {
       );
 
       expect(session.restartApp).toHaveBeenCalledTimes(1);
-      expect(session.restartApp).toHaveBeenCalledWith('/b.ts');
+      expect(session.restartApp).toHaveBeenCalledWith('/a.ts');
+    });
+
+    it('restarts after a timeout in the last runnable file', async () => {
+      const timedOutResult = makeHarnessResult('failed');
+      timedOutResult.tests = [
+        {
+          name: 'hangs',
+          status: 'failed',
+          duration: 10,
+          error: {
+            name: 'TestCaseTimeoutError',
+            message: 'Test timed out after 10ms: hangs',
+          },
+        },
+      ];
+      mockRunHarnessTestFile.mockResolvedValueOnce(makeFileRunResult({
+        harnessResult: timedOutResult,
+        jestResult: makeJestResult({
+          numFailingTests: 1,
+          numPassingTests: 0,
+        }),
+      }));
+      const session = makeSession({
+        config: {
+          metroPort: 8081,
+          resetEnvironmentBetweenTestFiles: false,
+          detectNativeCrashes: false,
+          runners: [
+            { platformId: 'android', name: 'android' },
+            { platformId: 'ios', name: 'ios' },
+          ],
+        } as HarnessSession['config'],
+      });
+
+      await executeRun(
+        session,
+        [makeTest('/a.ts')],
+        makeWatcher(),
+        makeEmitEvent().emitEvent,
+        makeGlobalConfig({ watch: true }),
+      );
+
+      expect(session.restartApp).toHaveBeenCalledTimes(1);
+      expect(session.restartApp).toHaveBeenCalledWith('/a.ts');
     });
   });
 

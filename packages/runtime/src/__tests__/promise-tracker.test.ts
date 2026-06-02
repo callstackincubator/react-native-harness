@@ -34,6 +34,15 @@ describe('promise tracker', () => {
     expect(getPendingPromises()).toHaveLength(0);
   });
 
+  it('keeps promises pending while their resolved thenable is pending', () => {
+    installPromiseTracker();
+
+    const pendingThenable = new Promise(() => undefined);
+    void new Promise((resolve) => resolve(pendingThenable));
+
+    expect(getPendingPromises()).toHaveLength(2);
+  });
+
   it('removes promises when they reject', async () => {
     installPromiseTracker();
 
