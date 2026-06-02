@@ -7,7 +7,12 @@ import {
 } from '../collector/index.js';
 import type { HarnessTestContext } from '@react-native-harness/bridge';
 import { getTestRunner } from '../runner/index.js';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach as vitestAfterEach, describe, expect, it, vi } from 'vitest';
+import {
+  getPendingPromises,
+  installPromiseTracker,
+  uninstallPromiseTracker,
+} from '../promise-tracker.js';
 
 vi.mock('../symbolicate.js', async () => {
   return {
@@ -24,6 +29,10 @@ const getTaskContext = (context: HarnessTestContext) => {
 };
 
 describe('runner task context', () => {
+  vitestAfterEach(() => {
+    uninstallPromiseTracker();
+  });
+
   it('passes minimal task metadata to tests and per-test hooks', async () => {
     const observedTasks: Array<{
       source: 'beforeEach' | 'test' | 'afterEach';
@@ -42,7 +51,10 @@ describe('runner task context', () => {
       const collection = await collector.collect(() => {
         harnessDescribe('Task Context Suite', () => {
           beforeEach((context: HarnessTestContext) => {
-            observedTasks.push({ source: 'beforeEach', task: getTask(context) });
+            observedTasks.push({
+              source: 'beforeEach',
+              task: getTask(context),
+            });
           });
 
           afterEach((context: HarnessTestContext) => {
@@ -97,6 +109,44 @@ describe('runner task context', () => {
             suite: { name: 'Task Context Suite' },
           },
         },
+      ]);
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
+
+  it('tags pending promises with the currently running test', async () => {
+    installPromiseTracker();
+
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+
+    try {
+      const collection = await collector.collect(() => {
+        harnessDescribe('Promise Suite', () => {
+          harnessIt('leaves promise pending', () => {
+            void new Promise(() => undefined);
+          });
+        });
+      }, 'runtime/promises.test.ts');
+
+      const result = await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/promises.test.ts',
+        runner: 'ios',
+      });
+
+      expect(result.suites[0].tests[0]).toMatchObject({ status: 'passed' });
+      expect(getPendingPromises()).toEqual([
+        expect.objectContaining({
+          test: {
+            file: 'runtime/promises.test.ts',
+            suite: 'Promise Suite',
+            name: 'leaves promise pending',
+            fullName: 'Promise Suite leaves promise pending',
+          },
+        }),
       ]);
     } finally {
       collector.dispose();
@@ -196,13 +246,16 @@ describe('runner task context', () => {
     try {
       const collection = await collector.collect(() => {
         harnessDescribe('Conditional Skip Suite', () => {
-          harnessIt('continues when condition is false', (context: HarnessTestContext) => {
-            const { skip } = getTaskContext(context);
+          harnessIt(
+            'continues when condition is false',
+            (context: HarnessTestContext) => {
+              const { skip } = getTaskContext(context);
 
-            calls.push('before');
-            skip(false, 'do not skip');
-            calls.push('after');
-          });
+              calls.push('before');
+              skip(false, 'do not skip');
+              calls.push('after');
+            }
+          );
         });
       }, 'runtime/conditional-skip.test.ts');
 
@@ -232,18 +285,21 @@ describe('runner task context', () => {
             calls.push('afterEach');
           });
 
-          harnessIt('runs finished callbacks', (context: HarnessTestContext) => {
-            const { onTestFinished } = getTaskContext(context);
+          harnessIt(
+            'runs finished callbacks',
+            (context: HarnessTestContext) => {
+              const { onTestFinished } = getTaskContext(context);
 
-            onTestFinished(() => {
-              calls.push('onTestFinished:first');
-            });
-            onTestFinished(() => {
-              calls.push('onTestFinished:second');
-            });
+              onTestFinished(() => {
+                calls.push('onTestFinished:first');
+              });
+              onTestFinished(() => {
+                calls.push('onTestFinished:second');
+              });
 
-            calls.push('test');
-          });
+              calls.push('test');
+            }
+          );
         });
       }, 'runtime/on-test-finished-pass.test.ts');
 
@@ -283,13 +339,13 @@ describe('runner task context', () => {
             (context: HarnessTestContext) => {
               const { onTestFinished, skip } = getTaskContext(context);
 
-            onTestFinished(() => {
-              calls.push('onTestFinished');
-            });
+              onTestFinished(() => {
+                calls.push('onTestFinished');
+              });
 
-            calls.push('before-skip');
-            skip();
-            },
+              calls.push('before-skip');
+              skip();
+            }
           );
         });
       }, 'runtime/on-test-finished-skip.test.ts');
@@ -325,13 +381,13 @@ describe('runner task context', () => {
             (context: HarnessTestContext) => {
               const { onTestFinished } = getTaskContext(context);
 
-            onTestFinished(() => {
-              calls.push('onTestFinished');
-            });
+              onTestFinished(() => {
+                calls.push('onTestFinished');
+              });
 
-            calls.push('test');
-            throw new Error('expected failure');
-            },
+              calls.push('test');
+              throw new Error('expected failure');
+            }
           );
         });
       }, 'runtime/on-test-finished-failure.test.ts');
@@ -414,13 +470,13 @@ describe('runner task context', () => {
             (context: HarnessTestContext) => {
               const { onTestFailed, skip } = getTaskContext(context);
 
-            onTestFailed(() => {
-              calls.push('onTestFailed');
-            });
+              onTestFailed(() => {
+                calls.push('onTestFailed');
+              });
 
-            calls.push('before-skip');
-            skip();
-            },
+              calls.push('before-skip');
+              skip();
+            }
           );
         });
       }, 'runtime/on-test-failed-skip.test.ts');
@@ -506,12 +562,12 @@ describe('runner task context', () => {
             (context: HarnessTestContext) => {
               const { onTestFailed } = getTaskContext(context);
 
-            onTestFailed(() => {
-              calls.push('onTestFailed');
-            });
+              onTestFailed(() => {
+                calls.push('onTestFailed');
+              });
 
-            calls.push('test');
-            },
+              calls.push('test');
+            }
           );
         });
       }, 'runtime/on-test-failed-after-each.test.ts');

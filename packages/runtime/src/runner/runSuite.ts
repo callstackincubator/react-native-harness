@@ -13,6 +13,7 @@ import { flushExpectTestState } from '../expect/errors.js';
 import { runHooks } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
 import { ActiveTestContext, TestRunnerContext } from './types.js';
+import { withPromiseTrackerTestContext } from '../promise-tracker.js';
 import {
   createTestContext,
   createTestLifecycleState,
@@ -51,7 +52,7 @@ const emitTestFinished = (
     duration: number;
     status: 'passed' | 'failed' | 'skipped' | 'todo';
     error?: TestResult['error'];
-  },
+  }
 ) => {
   const ancestorTitles = getAncestorTitles(options.suite);
 
@@ -77,7 +78,7 @@ declare global {
 const runTest = async (
   test: TestCase,
   suite: TestSuite,
-  context: TestRunnerContext,
+  context: TestRunnerContext
 ): Promise<TestResult> => {
   const startedAt = Date.now();
   const task: HarnessTaskContext = {
@@ -87,8 +88,8 @@ const runTest = async (
       test.status === 'active'
         ? 'run'
         : test.status === 'skipped'
-          ? 'skip'
-          : 'todo',
+        ? 'skip'
+        : 'todo',
     file: {
       name: context.testFilePath,
     },
@@ -99,7 +100,7 @@ const runTest = async (
   const lifecycleState = createTestLifecycleState();
   const activeTestContext: ActiveTestContext = createTestContext(
     task,
-    lifecycleState,
+    lifecycleState
   );
 
   // Emit test-started event
@@ -165,24 +166,35 @@ const runTest = async (
     setCurrentExpectTestState(expectTestState);
 
     try {
+      const fullName = getFullName(ancestorTitles, test.name);
       let didSkip = false;
 
-      try {
-        // Run all beforeEach hooks from the current suite and its parents
-        await runHooks(suite, 'beforeEach', activeTestContext);
+      await withPromiseTrackerTestContext(
+        {
+          file: context.testFilePath,
+          suite: suite.name,
+          name: test.name,
+          fullName,
+        },
+        async () => {
+          try {
+            // Run all beforeEach hooks from the current suite and its parents
+            await runHooks(suite, 'beforeEach', activeTestContext);
 
-        // Run the actual test
-        await test.fn(activeTestContext);
-      } catch (error) {
-        if (!isSkipTestError(error)) {
-          throw error;
+            // Run the actual test
+            await test.fn(activeTestContext);
+          } catch (error) {
+            if (!isSkipTestError(error)) {
+              throw error;
+            }
+
+            didSkip = true;
+          } finally {
+            // Run all afterEach hooks from the current suite and its parents
+            await runHooks(suite, 'afterEach', activeTestContext);
+          }
         }
-
-        didSkip = true;
-      } finally {
-        // Run all afterEach hooks from the current suite and its parents
-        await runHooks(suite, 'afterEach', activeTestContext);
-      }
+      );
 
       if (didSkip) {
         const duration = Date.now() - startedAt;
@@ -245,7 +257,7 @@ const runTest = async (
       error,
       context.testFilePath,
       suite.name,
-      test.name,
+      test.name
     );
     const duration = Date.now() - startedAt;
 
@@ -275,7 +287,7 @@ const runTest = async (
 
 export const runSuite = async (
   suite: TestSuite,
-  context: TestRunnerContext,
+  context: TestRunnerContext
 ): Promise<TestSuiteResult> => {
   const startTime = Date.now();
 
@@ -289,12 +301,14 @@ export const runSuite = async (
   // Check if suite should be skipped or is todo
   if (suite.status === 'skipped') {
     const testResults = await Promise.all(
-      suite.tests.map((test) => runTest({ ...test, status: 'skipped' }, suite, context)),
+      suite.tests.map((test) =>
+        runTest({ ...test, status: 'skipped' }, suite, context)
+      )
     );
     const suiteResults = await Promise.all(
       suite.suites.map((childSuite) =>
-        runSuite({ ...childSuite, status: 'skipped' }, context),
-      ),
+        runSuite({ ...childSuite, status: 'skipped' }, context)
+      )
     );
 
     const result = {
@@ -366,10 +380,10 @@ export const runSuite = async (
 
   // Check if any tests or child suites failed
   const hasFailedTests = testResults.some(
-    (result) => result.status === 'failed',
+    (result) => result.status === 'failed'
   );
   const hasFailedSuites = suiteResults.some(
-    (result) => result.status === 'failed',
+    (result) => result.status === 'failed'
   );
 
   if (hasFailedTests || hasFailedSuites) {
