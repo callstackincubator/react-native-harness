@@ -8,6 +8,7 @@ import type {
 import type { HarnessSession } from './harness-session.js';
 import { formatResultsErrors } from 'jest-message-util';
 import { toTestResult } from './toTestResult.js';
+import { formatHarnessErrorMessage } from './format-harness-error.js';
 
 // Helper function to flatten nested test suites into a flat array of tests with hierarchy
 const flattenTests = (
@@ -108,14 +109,14 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
 
   // Convert TestResult[] to the format expected by toTestResult
   const tests = allTests.map((test) => {
-    const errorMessage = test.error?.message;
     const codeFrame = test.error?.codeFrame;
+    const errorMessage = formatHarnessErrorMessage(test.error, {
+      testStartedAt: test.startedAt,
+    });
 
     return {
       duration: test.duration,
-      errorMessage: errorMessage
-        ? `${errorMessage}${codeFrame ? `\n\n${codeFrame.content}` : ''}`
-        : undefined,
+      errorMessage,
       title: test.name,
       fullName: test.fullName,
       status: test.status,

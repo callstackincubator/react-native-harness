@@ -14,7 +14,9 @@ import { runHooks } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
 import { ActiveTestContext, TestRunnerContext } from './types.js';
 import {
+  getPendingPromises,
   runWithoutPromiseTracking,
+  type TrackedPromiseRecord,
   withPromiseTrackerTestContext,
 } from '../promise-tracker.js';
 import {
@@ -47,14 +49,39 @@ const getFullName = (ancestorTitles: string[], testName: string): string =>
   [...ancestorTitles, testName].join(' ');
 
 const DEFAULT_TEST_TIMEOUT_MS = 5_000;
+const MAX_PENDING_PROMISE_DIAGNOSTICS = 10;
+
+type PendingPromiseDiagnostics = {
+  total: number;
+  items: Array<{
+    id: number;
+    createdAt: number;
+    stack?: string;
+  }>;
+};
+
+const getPendingPromiseDiagnostics = (
+  promises: TrackedPromiseRecord[],
+): PendingPromiseDiagnostics => ({
+  total: promises.length,
+  items: promises
+    .slice(0, MAX_PENDING_PROMISE_DIAGNOSTICS)
+    .map(({ id, createdAt, stack }) => ({ id, createdAt, stack })),
+});
 
 export class TestCaseTimeoutError extends Error {
+  diagnostics?: {
+    pendingPromises?: PendingPromiseDiagnostics;
+  };
+
   constructor(
     public readonly testName: string,
     public readonly timeout: number,
+    diagnostics?: TestCaseTimeoutError['diagnostics'],
   ) {
     super(`Test timed out after ${timeout}ms: ${testName}`);
     this.name = 'TestCaseTimeoutError';
+    this.diagnostics = diagnostics;
   }
 }
 
@@ -72,6 +99,7 @@ const getTestTimeout = (context: TestRunnerContext): number => {
 const withTestTimeout = async <T>(
   work: () => Promise<T>,
   options: {
+    file: string;
     fullName: string;
     timeout: number;
   },
@@ -82,7 +110,17 @@ const withTestTimeout = async <T>(
     () =>
       new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
-          reject(new TestCaseTimeoutError(options.fullName, options.timeout));
+          const pendingPromises = getPendingPromises().filter(
+            (promise) =>
+              promise.test?.file === options.file &&
+              promise.test.fullName === options.fullName,
+          );
+
+          reject(
+            new TestCaseTimeoutError(options.fullName, options.timeout, {
+              pendingPromises: getPendingPromiseDiagnostics(pendingPromises),
+            }),
+          );
         }, options.timeout);
       }),
   );
@@ -353,6 +391,7 @@ const runTest = async (
           }
         },
         {
+          file: context.testFilePath,
           fullName,
           timeout: getTestTimeout(context),
         },

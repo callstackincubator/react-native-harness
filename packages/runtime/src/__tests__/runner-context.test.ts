@@ -587,6 +587,8 @@ describe('runner task context', () => {
   });
 
   it('fails the timed-out test and skips the rest of the file', async () => {
+    installPromiseTracker();
+
     const calls: string[] = [];
     const events: Array<{ type: string; name?: string; status?: string }> = [];
     const collector = getTestCollector();
@@ -638,6 +640,16 @@ describe('runner task context', () => {
           error: {
             name: 'TestCaseTimeoutError',
             message: expect.stringContaining('Timeout Suite hangs'),
+            diagnostics: {
+              pendingPromises: {
+                total: expect.any(Number),
+                items: expect.arrayContaining([
+                  expect.objectContaining({
+                    stack: expect.stringContaining('Promise created'),
+                  }),
+                ]),
+              },
+            },
           },
         },
         { name: 'does not run', status: 'skipped' },

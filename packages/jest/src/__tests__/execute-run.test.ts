@@ -330,6 +330,65 @@ describe('executeRun', () => {
         ['test-file-success', expect.anything(), expect.anything()],
       ]);
     });
+
+    it('includes pending promise diagnostics in live test-case failures', async () => {
+      let testRunnerListener:
+        | ((event: TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent) => void)
+        | undefined;
+      const { emitEvent, calls: emittedEvents } = makeEmitEvent();
+      const session = makeSession({
+        onTestRunnerEvent: vi.fn((listener) => {
+          testRunnerListener = listener as typeof testRunnerListener;
+          return () => undefined;
+        }),
+      });
+
+      mockRunHarnessTestFile.mockImplementation(async () => {
+        testRunnerListener?.({
+          type: 'test-finished',
+          file: 'example.ts',
+          suite: 'suite',
+          name: 'hangs',
+          ancestorTitles: ['suite'],
+          fullName: 'suite hangs',
+          startedAt: 100,
+          duration: 50,
+          status: 'failed',
+          error: {
+            name: 'TestCaseTimeoutError',
+            message: 'Test timed out after 50ms: suite hangs',
+            diagnostics: {
+              pendingPromises: {
+                total: 1,
+                items: [
+                  {
+                    id: 7,
+                    createdAt: 110,
+                    stack: 'Error: Promise created\n    at hangs (example.ts:10:5)',
+                  },
+                ],
+              },
+            },
+          },
+        });
+
+        return makeFileRunResult();
+      });
+
+      await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
+
+      expect(emittedEvents).toContainEqual([
+        'test-case-result',
+        'example.ts',
+        expect.objectContaining({
+          failureMessages: [
+            expect.stringContaining(
+              'Pending promises at timeout: 1\n\nPromise #7, created 10ms after test start:',
+            ),
+          ],
+        }),
+      ]);
+    });
   });
 
   describe('runtime failures', () => {

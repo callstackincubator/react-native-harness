@@ -28,6 +28,7 @@ import {
   createPlatformSkippedTestResult,
   shouldRunHarnessTestFile,
 } from './test-file-platform-filter.js';
+import { formatHarnessErrorMessage } from './format-harness-error.js';
 
 type EmitTestEvent = <Name extends keyof TestEvents>(
   eventName: Name,
@@ -87,8 +88,10 @@ const emitHarnessTestFinished = async (
   emitEvent: EmitTestEvent,
   event: TestRunnerTestFinishedEvent,
 ): Promise<void> => {
-  const failureMessage = event.error?.message;
   const codeFrame = event.error?.codeFrame;
+  const failureMessage = formatHarnessErrorMessage(event.error, {
+    testStartedAt: event.startedAt,
+  });
   const location = codeFrame?.location
     ? { column: codeFrame.location.column, line: codeFrame.location.row }
     : null;
@@ -96,9 +99,7 @@ const emitHarnessTestFinished = async (
     ancestorTitles: event.ancestorTitles,
     duration: event.duration,
     failureDetails: [],
-    failureMessages: failureMessage
-      ? [`${failureMessage}${codeFrame ? `\n\n${codeFrame.content}` : ''}`]
-      : [],
+    failureMessages: failureMessage ? [failureMessage] : [],
     fullName: event.fullName,
     location,
     numPassingAsserts: event.status === 'passed' ? 1 : 0,

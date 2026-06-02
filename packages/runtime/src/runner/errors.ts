@@ -29,11 +29,18 @@ export class TestExecutionError extends Error {
     const causeMessage =
       this.cause instanceof Error ? this.cause.message : 'Unknown message';
     const causeCodeFrame = this.codeFrame;
+    const causeDiagnostics =
+      this.cause instanceof Error &&
+      'diagnostics' in this.cause &&
+      typeof this.cause.diagnostics === 'object'
+        ? (this.cause.diagnostics as SerializedError['diagnostics'])
+        : undefined;
 
     return {
       name: causeName,
       message: causeMessage,
       codeFrame: causeCodeFrame,
+      diagnostics: causeDiagnostics,
     };
   }
 }
