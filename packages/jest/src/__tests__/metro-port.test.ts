@@ -27,6 +27,7 @@ const createConfig = (overrides: Partial<HarnessConfig> = {}): HarnessConfig =>
     platformReadyTimeout: 300_000,
     resetEnvironmentBetweenTestFiles: true,
     runners: [],
+    testTimeout: 5_000,
     unstable__enableMetroCache: false,
     unstable__skipAlreadyIncludedModules: false,
     ...overrides,

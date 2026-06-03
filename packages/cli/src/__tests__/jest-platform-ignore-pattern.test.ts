@@ -33,6 +33,7 @@ const makeConfig = (): Config => ({
   metroPort: 8081,
   webSocketPort: undefined,
   bridgeTimeout: 60000,
+  testTimeout: 5000,
   platformReadyTimeout: 300000,
   bundleStartTimeout: 60000,
   maxAppRestarts: 2,

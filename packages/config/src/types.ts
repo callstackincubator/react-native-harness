@@ -53,6 +53,11 @@ export const ConfigSchema = z
       .min(1000, 'Bridge timeout must be at least 1 second')
       .default(60000),
 
+    testTimeout: z
+      .number()
+      .min(1000, 'Test timeout must be at least 1 second')
+      .default(5000),
+
     platformReadyTimeout: z
       .number()
       .min(1000, 'Platform ready timeout must be at least 1 second')
