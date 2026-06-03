@@ -9,7 +9,7 @@ export type XCTestAgentPermissionsConfiguration = {
 
 type XCTestAgentHealthResponse = {
   permissions: XCTestAgentPermissionsConfiguration;
-  status: 'ok';
+  status: 'ok' | 'shutting-down';
 };
 
 type XCTestAgentPermissionsResponse = {
@@ -23,6 +23,7 @@ export type XCTestAgentClient = {
   dispose: () => Promise<void>;
   getPermissionsConfig: () => Promise<XCTestAgentPermissionsConfiguration>;
   health: () => Promise<XCTestAgentHealthResponse>;
+  shutdown: () => Promise<void>;
 };
 
 export const createXCTestAgentClient = (
@@ -66,6 +67,12 @@ export const createXCTestAgentClient = (
       });
 
       return response.permissions;
+    },
+    shutdown: async () => {
+      await requestJson<XCTestAgentHealthResponse>({
+        method: 'POST',
+        path: '/shutdown',
+      });
     },
     dispose: async () => {
       await transport.dispose();

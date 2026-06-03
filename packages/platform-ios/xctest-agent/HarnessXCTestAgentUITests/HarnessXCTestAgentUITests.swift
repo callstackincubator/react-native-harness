@@ -4,6 +4,7 @@ import Network
 final class HarnessXCTestAgentState {
   private let lock = NSLock()
   private var _permissions: PermissionPromptConfiguration
+  private var _shouldShutdown = false
 
   init(permissions: PermissionPromptConfiguration) {
     _permissions = permissions
@@ -18,6 +19,18 @@ final class HarnessXCTestAgentState {
   func updatePermissions(_ permissions: PermissionPromptConfiguration) {
     lock.lock()
     _permissions = permissions
+    lock.unlock()
+  }
+
+  var shouldShutdown: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return _shouldShutdown
+  }
+
+  func requestShutdown() {
+    lock.lock()
+    _shouldShutdown = true
     lock.unlock()
   }
 }
@@ -264,6 +277,15 @@ final class HarnessXCTestAgentUITests: XCTestCase {
       return jsonResponse(XCTestAgentPermissionsResponse(permissions: state.permissions))
     case ("GET", "/permissions"):
       return jsonResponse(XCTestAgentPermissionsResponse(permissions: state.permissions))
+    case ("POST", "/shutdown"):
+      log("shutdown requested")
+      state.requestShutdown()
+      return jsonResponse(
+        XCTestAgentHealthResponse(
+          permissions: state.permissions,
+          status: "shutting-down"
+        )
+      )
     default:
       return XCTestAgentResponse(body: Data("{\"error\":\"not found\"}".utf8), statusCode: 404)
     }
@@ -315,7 +337,7 @@ final class HarnessXCTestAgentUITests: XCTestCase {
 
     let sessionDeadline = Date().addingTimeInterval(Constants.defaultSessionDuration)
 
-    while Date() < sessionDeadline {
+    while Date() < sessionDeadline && !state.shouldShutdown {
       observeTargetApplication()
 
       for capability in capabilities {
@@ -327,6 +349,6 @@ final class HarnessXCTestAgentUITests: XCTestCase {
       )
     }
 
-    log("testAgentSession completed")
+    log("testAgentSession completed (shutdownRequested=\(state.shouldShutdown))")
   }
 }

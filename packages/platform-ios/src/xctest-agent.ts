@@ -33,7 +33,7 @@ const XCTEST_AGENT_XCTESTRUN_FILE_ENV = 'HARNESS_IOS_XCTESTRUN_FILE';
 const XCTEST_AGENT_DERIVED_DATA_PATH_ENV =
   'HARNESS_IOS_XCTEST_DERIVED_DATA_PATH';
 const XCTEST_AGENT_STARTUP_TIMEOUT_MS = 120_000;
-const XCTEST_AGENT_SHUTDOWN_TIMEOUT_MS = 5_000;
+const XCTEST_AGENT_SHUTDOWN_TIMEOUT_MS = 30_000;
 const XCTEST_AGENT_STARTUP_POLL_INTERVAL_MS = 250;
 const HARNESS_DIRNAME = '.harness';
 const XCTEST_AGENT_BUILD_DIRNAME = 'xctest-agent';
@@ -778,6 +778,36 @@ const waitForShutdown = async (options: {
   return result !== timedOut;
 };
 
+const waitForGracefulShutdown = async (options: {
+  client: ReturnType<typeof createXCTestAgentClient>;
+  processTask: Promise<void> | null;
+  shutdownTimeoutMs: number;
+}): Promise<{ didStop: boolean; requestError: unknown | null }> => {
+  let requestError: unknown | null = null;
+  const timedOut = Symbol('timedOut');
+
+  const result = await Promise.race([
+    (async () => {
+      try {
+        await options.client.shutdown();
+      } catch (error) {
+        requestError = error;
+      }
+
+      return await waitForShutdown({
+        processTask: options.processTask,
+        shutdownTimeoutMs: options.shutdownTimeoutMs,
+      });
+    })(),
+    delay(options.shutdownTimeoutMs).then(() => timedOut),
+  ]);
+
+  return {
+    didStop: result !== timedOut && result === true,
+    requestError,
+  };
+};
+
 const waitForChildProcessExit = async (subprocess: Subprocess) => {
   const childProcess = await subprocess.nodeChildProcess;
 
@@ -1121,6 +1151,50 @@ export const createXCTestAgentController = (options: {
       'Stopping XCTest agent session for %s target',
       target.kind
     );
+
+    if (currentClient) {
+      try {
+        xctestAgentLogger.info(
+          'Requesting XCTest agent graceful shutdown for %s target',
+          target.kind,
+        );
+
+        const gracefulShutdown = await waitForGracefulShutdown({
+          client: currentClient,
+          processTask: currentProcessTask,
+          shutdownTimeoutMs,
+        });
+
+        if (gracefulShutdown.didStop) {
+          xctestAgentLogger.info(
+            'XCTest agent session for %s target stopped gracefully',
+            target.kind,
+          );
+          await currentClient.dispose();
+          return;
+        }
+
+        if (gracefulShutdown.requestError) {
+          xctestAgentLogger.warn(
+            'XCTest agent graceful shutdown request failed for %s: %s',
+            target.kind,
+            getErrorMessage(gracefulShutdown.requestError),
+          );
+        }
+
+        xctestAgentLogger.warn(
+          'XCTest agent session for %s target did not stop gracefully after %dms; terminating xcodebuild',
+          target.kind,
+          shutdownTimeoutMs,
+        );
+      } catch (error) {
+        xctestAgentLogger.warn(
+          'XCTest agent graceful shutdown failed for %s: %s',
+          target.kind,
+          getErrorMessage(error),
+        );
+      }
+    }
 
     await currentClient?.dispose();
     await stopProcess({

@@ -33,6 +33,16 @@ describe('xctest-agent client', () => {
         }),
         headers: {},
         statusCode: 200,
+      })
+      .mockResolvedValueOnce({
+        body: JSON.stringify({
+          permissions: {
+            autoAcceptPermissions: true,
+          },
+          status: 'shutting-down',
+        }),
+        headers: {},
+        statusCode: 200,
       });
     const dispose = vi.fn(async () => undefined);
     const client = createXCTestAgentClient({
@@ -56,6 +66,7 @@ describe('xctest-agent client', () => {
     await expect(client.getPermissionsConfig()).resolves.toEqual({
       autoAcceptPermissions: true,
     });
+    await expect(client.shutdown()).resolves.toBeUndefined();
 
     expect(request).toHaveBeenNthCalledWith(1, {
       method: 'GET',
@@ -72,6 +83,11 @@ describe('xctest-agent client', () => {
     expect(request).toHaveBeenNthCalledWith(3, {
       method: 'GET',
       path: '/permissions',
+      body: undefined,
+    });
+    expect(request).toHaveBeenNthCalledWith(4, {
+      method: 'POST',
+      path: '/shutdown',
       body: undefined,
     });
     await client.dispose();

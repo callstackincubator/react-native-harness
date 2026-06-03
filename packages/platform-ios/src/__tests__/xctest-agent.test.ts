@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     status: 'ok',
   })),
   kill: vi.fn(),
+  shutdown: vi.fn(async () => undefined),
   spawn: vi.fn(),
 }));
 
@@ -38,6 +39,7 @@ vi.mock('../xctest-agent-client.js', () => ({
     dispose: mocks.disposeClient,
     getPermissionsConfig: vi.fn(),
     health: mocks.health,
+    shutdown: mocks.shutdown,
   })),
 }));
 
@@ -148,6 +150,11 @@ describe('xctest-agent orchestration', () => {
     deviceBuildRoot = path.join(tempProjectRoot, '.harness', 'xctest-agent');
     rmBuildRoot();
     mocks.activeAgentStops.length = 0;
+    mocks.shutdown.mockImplementation(async () => {
+      for (const stop of mocks.activeAgentStops) {
+        stop();
+      }
+    });
     mocks.spawn.mockImplementation((file: string, args?: string[]) => {
       if (file === 'xcodebuild' && args?.join(' ') === '-version') {
         return Promise.resolve({ stdout: xcodeVersion });
@@ -466,7 +473,8 @@ describe('xctest-agent orchestration', () => {
 
     await controller.dispose();
 
-    expect(mocks.kill).toHaveBeenCalledTimes(1);
+    expect(mocks.shutdown).toHaveBeenCalledTimes(1);
+    expect(mocks.kill).not.toHaveBeenCalled();
     expect(mocks.disposeClient).toHaveBeenCalledTimes(1);
   });
 
@@ -488,7 +496,48 @@ describe('xctest-agent orchestration', () => {
     });
   });
 
-  it('kills the agent process during disposal', async () => {
+  it('requests graceful shutdown during disposal', async () => {
+    const controller = createXCTestAgentController({
+      port: 49154,
+      shutdownTimeoutMs: 100,
+      target: {
+        kind: 'simulator',
+        id: 'sim-timeout',
+      },
+    });
+
+    await controller.ensureStarted();
+    await controller.dispose();
+
+    expect(mocks.shutdown).toHaveBeenCalledTimes(1);
+    expect(mocks.disposeClient).toHaveBeenCalledTimes(1);
+    expect(mocks.kill).not.toHaveBeenCalled();
+  });
+
+  it('kills the agent process when graceful shutdown times out', async () => {
+    mocks.shutdown.mockResolvedValue(undefined);
+
+    const controller = createXCTestAgentController({
+      port: 49154,
+      shutdownTimeoutMs: 1,
+      target: {
+        kind: 'simulator',
+        id: 'sim-timeout',
+      },
+    });
+
+    await controller.ensureStarted();
+    await controller.dispose();
+
+    expect(mocks.kill).toHaveBeenCalledTimes(1);
+    expect(mocks.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('kills the agent process when the graceful shutdown request hangs', async () => {
+    mocks.shutdown.mockImplementation(
+      () => new Promise<undefined>(() => undefined)
+    );
+
     const controller = createXCTestAgentController({
       port: 49154,
       shutdownTimeoutMs: 1,
@@ -506,6 +555,8 @@ describe('xctest-agent orchestration', () => {
   });
 
   it('force kills the agent process when graceful shutdown times out', async () => {
+    mocks.shutdown.mockResolvedValue(undefined);
+
     mocks.spawn.mockImplementation((file: string, args?: string[]) => {
       if (file === 'xcodebuild' && args?.join(' ') === '-version') {
         return Promise.resolve({ stdout: xcodeVersion });
