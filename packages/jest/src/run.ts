@@ -101,11 +101,11 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
     (setupFile) => path.relative(globalConfig.rootDir, setupFile)
   );
   const testTimeout =
+    session.config.testTimeout ??
     (projectConfig as JestConfig.ProjectConfig & { testTimeout?: number })
       .testTimeout ??
     (globalConfig as JestConfig.GlobalConfig & { testTimeout?: number })
-      .testTimeout ??
-    session.config.testTimeout;
+      .testTimeout;
 
   const harnessResult = await session.runTestFile(relativeTestPath, {
     testNamePattern: globalConfig.testNamePattern,

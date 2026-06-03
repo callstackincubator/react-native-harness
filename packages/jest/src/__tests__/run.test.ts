@@ -56,7 +56,7 @@ describe('runHarnessTestFile', () => {
     );
   });
 
-  it('keeps Jest project testTimeout above Harness config testTimeout', async () => {
+  it('keeps Harness config testTimeout above Jest config testTimeout', async () => {
     const session = createSession(15000);
 
     await runHarnessTestFile({
@@ -68,7 +68,7 @@ describe('runHarnessTestFile', () => {
 
     expect(session.runTestFile).toHaveBeenCalledWith(
       'example.harness.ts',
-      expect.objectContaining({ testTimeout: 30000 }),
+      expect.objectContaining({ testTimeout: 15000 }),
     );
   });
 });
