@@ -15,6 +15,7 @@ import { getTestExecutionError } from './errors.js';
 import { ActiveTestContext, TestRunnerContext } from './types.js';
 import {
   getPendingPromises,
+  omitPromiseFromTracking,
   runWithoutPromiseTracking,
   type TrackedPromiseRecord,
   withPromiseTrackerTestContext,
@@ -156,7 +157,9 @@ const withTestTimeout = async <T>(
       (promise) =>
         promise.test?.file === options.file &&
         promise.test.fullName === options.fullName &&
-        promise.test.phase === 'test',
+        (promise.test.phase === 'beforeEach' ||
+          promise.test.phase === 'test' ||
+          promise.test.phase === 'afterEach'),
     );
 
   return await withRuntimeTimeout(work, {
@@ -188,17 +191,7 @@ const withSuiteHookTimeout = async (
     );
 
   return await withRuntimeTimeout(
-    () =>
-      withPromiseTrackerTestContext(
-        {
-          file: options.file,
-          suite: options.suiteName,
-          name: options.hookType,
-          fullName: `${options.suiteName} ${options.hookType}`,
-          phase: options.hookType,
-        },
-        work,
-      ),
+    work,
     {
       timeout: options.timeout,
       createTimeoutError: () =>
@@ -435,33 +428,62 @@ const runTest = async (
 
       await withTestTimeout(
         async () => {
-          await withPromiseTrackerTestContext(
-            {
-              file: context.testFilePath,
-              suite: suite.name,
-              name: test.name,
-              fullName,
-              phase: 'test',
-            },
-            async () => {
-              try {
-                // Run all beforeEach hooks from the current suite and its parents
-                await runHooks(suite, 'beforeEach', activeTestContext);
+          try {
+            // Run all beforeEach hooks from the current suite and its parents
+            await runHooks(suite, 'beforeEach', activeTestContext, {
+              wrapHook: (runHook) =>
+                withPromiseTrackerTestContext(
+                  {
+                    file: context.testFilePath,
+                    suite: suite.name,
+                    name: test.name,
+                    fullName,
+                    phase: 'beforeEach',
+                  },
+                  runHook,
+                  { omitReturnedPromise: true },
+                ),
+            });
 
-                // Run the actual test
-                await test.fn(activeTestContext);
-              } catch (error) {
-                if (!isSkipTestError(error)) {
-                  throw error;
-                }
-
-                didSkip = true;
-              } finally {
-                // Run all afterEach hooks from the current suite and its parents
-                await runHooks(suite, 'afterEach', activeTestContext);
-              }
+            // Run the actual test
+            await withPromiseTrackerTestContext(
+              {
+                file: context.testFilePath,
+                suite: suite.name,
+                name: test.name,
+                fullName,
+                phase: 'test',
+              },
+              async () => {
+                const result = test.fn(activeTestContext);
+                omitPromiseFromTracking(result);
+                await result;
+              },
+              { omitReturnedPromise: true },
+            );
+          } catch (error) {
+            if (!isSkipTestError(error)) {
+              throw error;
             }
-          );
+
+            didSkip = true;
+          } finally {
+            // Run all afterEach hooks from the current suite and its parents
+            await runHooks(suite, 'afterEach', activeTestContext, {
+              wrapHook: (runHook) =>
+                withPromiseTrackerTestContext(
+                  {
+                    file: context.testFilePath,
+                    suite: suite.name,
+                    name: test.name,
+                    fullName,
+                    phase: 'afterEach',
+                  },
+                  runHook,
+                  { omitReturnedPromise: true },
+                ),
+            });
+          }
 
           if (!didSkip) {
             await flushExpectTestState(expectTestState);
@@ -643,7 +665,21 @@ export const runSuite = async (
   // Run beforeAll hooks
   try {
     await withSuiteHookTimeout(
-      () => runHooks(suite, 'beforeAll'),
+      () =>
+        runHooks(suite, 'beforeAll', undefined, {
+          wrapHook: (runHook) =>
+            withPromiseTrackerTestContext(
+              {
+                file: context.testFilePath,
+                suite: suite.name,
+                name: 'beforeAll',
+                fullName: `${suite.name} beforeAll`,
+                phase: 'beforeAll',
+              },
+              runHook,
+              { omitReturnedPromise: true },
+            ),
+        }),
       {
         file: context.testFilePath,
         hookType: 'beforeAll',
@@ -713,7 +749,21 @@ export const runSuite = async (
   if (!state.interruptedByTimeout) {
     try {
       await withSuiteHookTimeout(
-        () => runHooks(suite, 'afterAll'),
+        () =>
+          runHooks(suite, 'afterAll', undefined, {
+            wrapHook: (runHook) =>
+              withPromiseTrackerTestContext(
+                {
+                  file: context.testFilePath,
+                  suite: suite.name,
+                  name: 'afterAll',
+                  fullName: `${suite.name} afterAll`,
+                  phase: 'afterAll',
+                },
+                runHook,
+                { omitReturnedPromise: true },
+              ),
+          }),
         {
           file: context.testFilePath,
           hookType: 'afterAll',

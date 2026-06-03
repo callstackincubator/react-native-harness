@@ -3,6 +3,7 @@ import {
   clearTrackedPromises,
   getPendingPromises,
   installPromiseTracker,
+  type PromiseTrackerTestContext,
   uninstallPromiseTracker,
   withPromiseTrackerTestContext,
 } from '../promise-tracker.js';
@@ -10,6 +11,14 @@ import {
 afterEach(() => {
   uninstallPromiseTracker();
 });
+
+const testContext: PromiseTrackerTestContext = {
+  file: 'example.harness.ts',
+  suite: 'Example suite',
+  name: 'waits forever',
+  fullName: 'Example suite waits forever',
+  phase: 'test',
+};
 
 describe('promise tracker', () => {
   it('tracks pending promises created through the global Promise constructor', () => {
@@ -65,13 +74,7 @@ describe('promise tracker', () => {
     installPromiseTracker();
 
     await withPromiseTrackerTestContext(
-      {
-        file: 'example.harness.ts',
-        suite: 'Example suite',
-        name: 'waits forever',
-        fullName: 'Example suite waits forever',
-        phase: 'test',
-      },
+      testContext,
       async () => {
         void new Promise(() => undefined);
       }
@@ -79,13 +82,70 @@ describe('promise tracker', () => {
 
     expect(getPendingPromises().filter((promise) => promise.test)).toEqual([
       expect.objectContaining({
-        test: {
-          file: 'example.harness.ts',
-          suite: 'Example suite',
-          name: 'waits forever',
-          fullName: 'Example suite waits forever',
-          phase: 'test',
-        },
+        test: testContext,
+      }),
+    ]);
+  });
+
+  it('propagates test context to promises created in then callbacks', async () => {
+    installPromiseTracker();
+
+    let parent!: Promise<string>;
+
+    await withPromiseTrackerTestContext(testContext, async () => {
+      parent = Promise.resolve('ready');
+    });
+
+    void parent.then(() => {
+      void new Promise(() => undefined);
+    });
+    await Promise.resolve();
+
+    expect(getPendingPromises().filter((promise) => promise.test)).toEqual([
+      expect.objectContaining({
+        test: testContext,
+      }),
+    ]);
+  });
+
+  it('propagates test context to promises created in catch callbacks', async () => {
+    installPromiseTracker();
+
+    let parent!: Promise<string>;
+
+    await withPromiseTrackerTestContext(testContext, async () => {
+      parent = Promise.reject(new Error('failed'));
+    });
+
+    void parent.catch(() => {
+      void new Promise(() => undefined);
+    });
+    await Promise.resolve();
+
+    expect(getPendingPromises().filter((promise) => promise.test)).toEqual([
+      expect.objectContaining({
+        test: testContext,
+      }),
+    ]);
+  });
+
+  it('propagates test context to promises created in finally callbacks', async () => {
+    installPromiseTracker();
+
+    let parent!: Promise<string>;
+
+    await withPromiseTrackerTestContext(testContext, async () => {
+      parent = Promise.resolve('ready');
+    });
+
+    void parent.finally(() => {
+      void new Promise(() => undefined);
+    });
+    await Promise.resolve();
+
+    expect(getPendingPromises().filter((promise) => promise.test)).toEqual([
+      expect.objectContaining({
+        test: testContext,
       }),
     ]);
   });
