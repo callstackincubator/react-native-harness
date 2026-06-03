@@ -212,9 +212,9 @@ Increase this value if you experience startup failures while:
 
 ## Bridge Timeout
 
-The bridge timeout controls the app-side bridge readiness window after Harness launches the app. It does not include simulator or emulator boot time, and it no longer limits the full `runTests` call for a test file. Once the runtime is connected, Harness keeps long-running test execution alive through heartbeat traffic and applies Jest's configured test timeout to each individual test case.
+The bridge timeout controls the app-side bridge readiness window after Harness launches the app. It does not include simulator or emulator boot time. Once the runtime is connected, Harness keeps test execution alive through heartbeat traffic and applies Jest's configured test timeout to each individual test case.
 
-Harness still uses `bridgeTimeout` while waiting for the app runtime to connect, and as the timeout for shorter bridge RPCs such as screenshots or image snapshot matching.
+Harness uses `bridgeTimeout` while waiting for the app runtime to connect, and as the timeout for shorter bridge RPCs such as screenshots or image snapshot matching.
 
 ```javascript
 {
