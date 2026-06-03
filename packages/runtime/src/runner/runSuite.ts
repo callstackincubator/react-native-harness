@@ -10,7 +10,7 @@ import {
   type HarnessExpectTestState,
 } from '../expect/context.js';
 import { flushExpectTestState } from '../expect/errors.js';
-import { runHooks } from './hooks.js';
+import { runHooks, type HookType } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
 import { ActiveTestContext, TestRunnerContext } from './types.js';
 import {
@@ -85,6 +85,23 @@ export class TestCaseTimeoutError extends Error {
   }
 }
 
+export class SuiteHookTimeoutError extends Error {
+  diagnostics?: {
+    pendingPromises?: PendingPromiseDiagnostics;
+  };
+
+  constructor(
+    public readonly hookType: Extract<HookType, 'beforeAll' | 'afterAll'>,
+    public readonly suiteName: string,
+    public readonly timeout: number,
+    diagnostics?: SuiteHookTimeoutError['diagnostics'],
+  ) {
+    super(`${hookType} hook timed out after ${timeout}ms in suite: ${suiteName}`);
+    this.name = 'SuiteHookTimeoutError';
+    this.diagnostics = diagnostics;
+  }
+}
+
 type RunSuiteState = {
   interruptedByTimeout: boolean;
 };
@@ -96,11 +113,10 @@ const getTestTimeout = (context: TestRunnerContext): number => {
     : DEFAULT_TEST_TIMEOUT_MS;
 };
 
-const withTestTimeout = async <T>(
+const withRuntimeTimeout = async <T>(
   work: () => Promise<T>,
   options: {
-    file: string;
-    fullName: string;
+    createTimeoutError: () => Error;
     timeout: number;
   },
 ): Promise<T> => {
@@ -110,17 +126,7 @@ const withTestTimeout = async <T>(
     () =>
       new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
-          const pendingPromises = getPendingPromises().filter(
-            (promise) =>
-              promise.test?.file === options.file &&
-              promise.test.fullName === options.fullName,
-          );
-
-          reject(
-            new TestCaseTimeoutError(options.fullName, options.timeout, {
-              pendingPromises: getPendingPromiseDiagnostics(pendingPromises),
-            }),
-          );
+          reject(options.createTimeoutError());
         }, options.timeout);
       }),
   );
@@ -135,6 +141,79 @@ const withTestTimeout = async <T>(
       clearTimeout(timeoutId);
     }
   }
+};
+
+const withTestTimeout = async <T>(
+  work: () => Promise<T>,
+  options: {
+    file: string;
+    fullName: string;
+    timeout: number;
+  },
+): Promise<T> => {
+  const getMatchingPendingPromises = () =>
+    getPendingPromises().filter(
+      (promise) =>
+        promise.test?.file === options.file &&
+        promise.test.fullName === options.fullName &&
+        promise.test.phase === 'test',
+    );
+
+  return await withRuntimeTimeout(work, {
+    timeout: options.timeout,
+    createTimeoutError: () =>
+      new TestCaseTimeoutError(options.fullName, options.timeout, {
+        pendingPromises: getPendingPromiseDiagnostics(
+          getMatchingPendingPromises(),
+        ),
+      }),
+  });
+};
+
+const withSuiteHookTimeout = async (
+  work: () => Promise<void>,
+  options: {
+    file: string;
+    hookType: Extract<HookType, 'beforeAll' | 'afterAll'>;
+    suiteName: string;
+    timeout: number;
+  },
+): Promise<void> => {
+  const getMatchingPendingPromises = () =>
+    getPendingPromises().filter(
+      (promise) =>
+        promise.test?.file === options.file &&
+        promise.test.suite === options.suiteName &&
+        promise.test.phase === options.hookType,
+    );
+
+  return await withRuntimeTimeout(
+    () =>
+      withPromiseTrackerTestContext(
+        {
+          file: options.file,
+          suite: options.suiteName,
+          name: options.hookType,
+          fullName: `${options.suiteName} ${options.hookType}`,
+          phase: options.hookType,
+        },
+        work,
+      ),
+    {
+      timeout: options.timeout,
+      createTimeoutError: () =>
+        new SuiteHookTimeoutError(
+          options.hookType,
+          options.suiteName,
+          options.timeout,
+          {
+            pendingPromises: getPendingPromiseDiagnostics(
+              getMatchingPendingPromises(),
+            ),
+          },
+        ),
+    },
+  );
 };
 
 const emitTestFinished = (
@@ -362,6 +441,7 @@ const runTest = async (
               suite: suite.name,
               name: test.name,
               fullName,
+              phase: 'test',
             },
             async () => {
               try {
@@ -561,7 +641,56 @@ export const runSuite = async (
   const suiteResults: TestSuiteResult[] = [];
 
   // Run beforeAll hooks
-  await runHooks(suite, 'beforeAll');
+  try {
+    await withSuiteHookTimeout(
+      () => runHooks(suite, 'beforeAll'),
+      {
+        file: context.testFilePath,
+        hookType: 'beforeAll',
+        suiteName: suite.name,
+        timeout: getTestTimeout(context),
+      },
+    );
+  } catch (error) {
+    if (!(error instanceof SuiteHookTimeoutError)) {
+      throw error;
+    }
+
+    state.interruptedByTimeout = true;
+    const duration = Date.now() - startTime;
+    const suiteError = (
+      await getTestExecutionError(
+        error,
+        context.testFilePath,
+        suite.name,
+        'beforeAll',
+      )
+    ).toSerializedJSON();
+    const skippedTests = suite.tests.map((test) =>
+      createSkippedTestResult(test, suite, context),
+    );
+    const skippedSuites = suite.suites.map((childSuite) =>
+      createSkippedSuiteResult(childSuite, context),
+    );
+
+    context.events.emit({
+      type: 'suite-finished',
+      file: context.testFilePath,
+      name: suite.name,
+      duration,
+      error: suiteError,
+      status: 'failed',
+    });
+
+    return {
+      name: suite.name,
+      tests: skippedTests,
+      suites: skippedSuites,
+      status: 'failed',
+      error: suiteError,
+      duration,
+    };
+  }
 
   // Run all tests in the current suite
   for (const test of suite.tests) {
@@ -580,8 +709,33 @@ export const runSuite = async (
   }
 
   // Run afterAll hooks
+  let suiteError: TestSuiteResult['error'];
   if (!state.interruptedByTimeout) {
-    await runHooks(suite, 'afterAll');
+    try {
+      await withSuiteHookTimeout(
+        () => runHooks(suite, 'afterAll'),
+        {
+          file: context.testFilePath,
+          hookType: 'afterAll',
+          suiteName: suite.name,
+          timeout: getTestTimeout(context),
+        },
+      );
+    } catch (error) {
+      if (!(error instanceof SuiteHookTimeoutError)) {
+        throw error;
+      }
+
+      state.interruptedByTimeout = true;
+      suiteError = (
+        await getTestExecutionError(
+          error,
+          context.testFilePath,
+          suite.name,
+          'afterAll',
+        )
+      ).toSerializedJSON();
+    }
   }
 
   const duration = Date.now() - startTime;
@@ -597,7 +751,7 @@ export const runSuite = async (
     (result) => result.status === 'failed'
   );
 
-  if (hasFailedTests || hasFailedSuites) {
+  if (suiteError || hasFailedTests || hasFailedSuites) {
     status = 'failed';
   } else {
     // Check if all tests and suites are skipped (and there are some tests/suites to check)
@@ -632,6 +786,7 @@ export const runSuite = async (
     file: context.testFilePath,
     name: suite.name,
     duration,
+    error: suiteError,
     status,
   });
 
@@ -640,6 +795,7 @@ export const runSuite = async (
     tests: testResults,
     suites: suiteResults,
     status,
+    error: suiteError,
     duration,
   };
 };

@@ -3,6 +3,7 @@ export type PromiseTrackerTestContext = {
   suite: string;
   name: string;
   fullName: string;
+  phase?: 'beforeAll' | 'beforeEach' | 'test' | 'afterEach' | 'afterAll';
 };
 
 export type TrackedPromiseRecord = {

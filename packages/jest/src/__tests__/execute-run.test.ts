@@ -610,6 +610,42 @@ describe('executeRun', () => {
       expect(session.restartApp).toHaveBeenCalledTimes(1);
       expect(session.restartApp).toHaveBeenCalledWith('/a.ts');
     });
+
+    it('restarts after a suite hook timeout', async () => {
+      const timedOutResult = makeHarnessResult('failed');
+      timedOutResult.suites = [
+        {
+          name: 'suite',
+          tests: [],
+          suites: [],
+          status: 'failed',
+          duration: 10,
+          error: {
+            name: 'SuiteHookTimeoutError',
+            message: 'beforeAll hook timed out after 10ms in suite: suite',
+          },
+        },
+      ];
+      mockRunHarnessTestFile.mockResolvedValueOnce(makeFileRunResult({
+        harnessResult: timedOutResult,
+        jestResult: makeJestResult({
+          numFailingTests: 1,
+          numPassingTests: 0,
+        }),
+      }));
+      const session = makeSession();
+
+      await executeRun(
+        session,
+        [makeTest('/a.ts')],
+        makeWatcher(),
+        makeEmitEvent().emitEvent,
+        makeGlobalConfig(),
+      );
+
+      expect(session.restartApp).toHaveBeenCalledTimes(1);
+      expect(session.restartApp).toHaveBeenCalledWith('/a.ts');
+    });
   });
 
   describe('platform-specific test files', () => {

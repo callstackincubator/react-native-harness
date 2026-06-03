@@ -17,6 +17,17 @@ const flattenTests = (
 ): Array<HarnessTestResult & { ancestorTitles: string[] }> => {
   const tests: Array<HarnessTestResult & { ancestorTitles: string[] }> = [];
 
+  if (suiteResult.error) {
+    tests.push({
+      name: suiteResult.name,
+      status: 'failed',
+      duration: suiteResult.duration,
+      error: suiteResult.error,
+      ancestorTitles: [...ancestorTitles],
+      fullName: [...ancestorTitles, suiteResult.name].join(' '),
+    });
+  }
+
   // Add tests from current suite with current hierarchy
   for (const test of suiteResult.tests) {
     tests.push({

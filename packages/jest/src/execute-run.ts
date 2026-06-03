@@ -116,9 +116,17 @@ const isHarnessCaseEvent = (
 ): event is TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent =>
   event.type === 'test-started' || event.type === 'test-finished';
 
-const hasTestCaseTimeout = (result: TestSuiteResult): boolean =>
-  result.tests.some((test) => test.error?.name === 'TestCaseTimeoutError') ||
-  result.suites.some(hasTestCaseTimeout);
+const TIMEOUT_ERROR_NAMES = new Set([
+  'SuiteHookTimeoutError',
+  'TestCaseTimeoutError',
+]);
+
+const hasRuntimeTimeout = (result: TestSuiteResult): boolean =>
+  (result.error ? TIMEOUT_ERROR_NAMES.has(result.error.name) : false) ||
+  result.tests.some((test) =>
+    test.error ? TIMEOUT_ERROR_NAMES.has(test.error.name) : false,
+  ) ||
+  result.suites.some(hasRuntimeTimeout);
 
 export const executeRun = async (
   session: HarnessSession,
@@ -267,11 +275,11 @@ export const executeRun = async (
           duration: result.duration,
           result: result.harnessResult,
         });
-        const didTestCaseTimeout = hasTestCaseTimeout(result.harnessResult);
-        shouldRestartAfterTimeout = didTestCaseTimeout;
+        const didRuntimeTimeout = hasRuntimeTimeout(result.harnessResult);
+        shouldRestartAfterTimeout = didRuntimeTimeout;
         await caseEventChain;
         await emitEvent('test-file-success', test, result.jestResult);
-        if (didTestCaseTimeout) {
+        if (didRuntimeTimeout) {
           await session.restartApp(test.path);
           shouldRestartAfterTimeout = false;
         }

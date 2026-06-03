@@ -1,5 +1,7 @@
 import {
   afterEach,
+  afterAll as harnessAfterAll,
+  beforeAll as harnessBeforeAll,
   beforeEach,
   describe as harnessDescribe,
   getTestCollector,
@@ -145,6 +147,7 @@ describe('runner task context', () => {
             suite: 'Promise Suite',
             name: 'leaves promise pending',
             fullName: 'Promise Suite leaves promise pending',
+            phase: 'test',
           },
         }),
       ]);
@@ -667,6 +670,125 @@ describe('runner task context', () => {
         { type: 'test-finished', name: 'keeps todo status', status: 'todo' },
         { type: 'test-finished', name: 'also does not run', status: 'skipped' },
       ]);
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
+
+  it('fails the suite when beforeAll times out and skips its tests', async () => {
+    installPromiseTracker();
+
+    const calls: string[] = [];
+    const events: Array<{ type: string; name?: string; status?: string }> = [];
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+    runner.events.addListener((event) => {
+      if (event.type === 'suite-finished') {
+        events.push({
+          type: event.type,
+          name: event.name,
+          status: event.status,
+        });
+      }
+    });
+
+    try {
+      const collection = await collector.collect(() => {
+        harnessDescribe('BeforeAll Timeout Suite', () => {
+          harnessBeforeAll(async () => {
+            calls.push('beforeAll');
+            await new Promise(() => undefined);
+          });
+
+          harnessIt('does not run', () => {
+            calls.push('test');
+          });
+        });
+      }, 'runtime/before-all-timeout.test.ts');
+
+      const result = await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/before-all-timeout.test.ts',
+        runner: 'ios',
+        testTimeout: 10,
+      });
+
+      expect(result.status).toBe('failed');
+      expect(result.suites[0]).toMatchObject({
+        name: 'BeforeAll Timeout Suite',
+        status: 'failed',
+        error: {
+          name: 'SuiteHookTimeoutError',
+          message: expect.stringContaining(
+            'beforeAll hook timed out after 10ms in suite: BeforeAll Timeout Suite',
+          ),
+          diagnostics: {
+            pendingPromises: {
+              total: expect.any(Number),
+              items: expect.arrayContaining([
+                expect.objectContaining({
+                  stack: expect.stringContaining('Promise created'),
+                }),
+              ]),
+            },
+          },
+        },
+        tests: [{ name: 'does not run', status: 'skipped' }],
+      });
+      expect(calls).toEqual(['beforeAll']);
+      expect(events).toContainEqual({
+        type: 'suite-finished',
+        name: 'BeforeAll Timeout Suite',
+        status: 'failed',
+      });
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
+
+  it('fails the suite when afterAll times out after tests pass', async () => {
+    installPromiseTracker();
+
+    const calls: string[] = [];
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+
+    try {
+      const collection = await collector.collect(() => {
+        harnessDescribe('AfterAll Timeout Suite', () => {
+          harnessIt('runs first', () => {
+            calls.push('test');
+          });
+
+          harnessAfterAll(async () => {
+            calls.push('afterAll');
+            await new Promise(() => undefined);
+          });
+        });
+      }, 'runtime/after-all-timeout.test.ts');
+
+      const result = await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/after-all-timeout.test.ts',
+        runner: 'ios',
+        testTimeout: 10,
+      });
+
+      expect(result.status).toBe('failed');
+      expect(result.suites[0]).toMatchObject({
+        name: 'AfterAll Timeout Suite',
+        status: 'failed',
+        error: {
+          name: 'SuiteHookTimeoutError',
+          message: expect.stringContaining(
+            'afterAll hook timed out after 10ms in suite: AfterAll Timeout Suite',
+          ),
+        },
+        tests: [{ name: 'runs first', status: 'passed' }],
+      });
+      expect(calls).toEqual(['test', 'afterAll']);
     } finally {
       collector.dispose();
       runner.dispose();

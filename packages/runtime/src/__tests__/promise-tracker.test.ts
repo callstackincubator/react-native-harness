@@ -70,19 +70,21 @@ describe('promise tracker', () => {
         suite: 'Example suite',
         name: 'waits forever',
         fullName: 'Example suite waits forever',
+        phase: 'test',
       },
       async () => {
         void new Promise(() => undefined);
       }
     );
 
-    expect(getPendingPromises()).toEqual([
+    expect(getPendingPromises().filter((promise) => promise.test)).toEqual([
       expect.objectContaining({
         test: {
           file: 'example.harness.ts',
           suite: 'Example suite',
           name: 'waits forever',
           fullName: 'Example suite waits forever',
+          phase: 'test',
         },
       }),
     ]);
