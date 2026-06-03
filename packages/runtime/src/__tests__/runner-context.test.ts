@@ -803,6 +803,10 @@ describe('runner task context', () => {
     try {
       const collection = await collector.collect(() => {
         harnessDescribe('Timeout Resume Suite', () => {
+          afterEach(() => {
+            calls.push('afterEach');
+          });
+
           harnessIt(
             'times out then resumes',
             async (context: HarnessTestContext) => {

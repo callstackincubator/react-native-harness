@@ -469,27 +469,27 @@ const runTest = async (
             didSkip = true;
           } finally {
             // Run all afterEach hooks from the current suite and its parents
-            await runHooks(suite, 'afterEach', activeTestContext, {
-              wrapHook: (runHook) =>
-                withPromiseTrackerTestContext(
-                  {
-                    file: context.testFilePath,
-                    suite: suite.name,
-                    name: test.name,
-                    fullName,
-                    phase: 'afterEach',
-                  },
-                  runHook,
-                  { omitReturnedPromise: true },
-                ),
-            });
+            if (!timedOut) {
+              await runHooks(suite, 'afterEach', activeTestContext, {
+                wrapHook: (runHook) =>
+                  withPromiseTrackerTestContext(
+                    {
+                      file: context.testFilePath,
+                      suite: suite.name,
+                      name: test.name,
+                      fullName,
+                      phase: 'afterEach',
+                    },
+                    runHook,
+                    { omitReturnedPromise: true },
+                  ),
+              });
+            }
           }
 
-          if (!didSkip) {
+          if (!didSkip && !timedOut) {
             await flushExpectTestState(expectTestState);
-            if (!timedOut) {
-              await runTestFinishedOnce();
-            }
+            await runTestFinishedOnce();
           }
         },
         {
