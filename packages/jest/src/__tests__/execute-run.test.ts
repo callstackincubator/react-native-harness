@@ -236,6 +236,25 @@ describe('executeRun', () => {
       expect(payload.status).toBe('passed');
     });
 
+    it('marks the final run state as completed', async () => {
+      const session = makeSession();
+
+      await executeRun(
+        session,
+        [makeTest()],
+        makeWatcher(),
+        makeEmitEvent().emitEvent,
+        makeGlobalConfig(),
+      );
+
+      expect(session.setRunState).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          completed: true,
+          status: 'passed',
+        }),
+      );
+    });
+
     it('attaches buffered client logs to the Jest result', async () => {
       const clientLogs = [{ message: 'Loaded screen', origin: '', type: 'warn' }] satisfies NonNullable<JestTestResult['console']>;
       const session = makeSession({

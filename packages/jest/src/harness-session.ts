@@ -127,6 +127,7 @@ export type HarnessRunState = {
   readonly testFiles: string[];
   readonly watchMode: boolean;
   readonly coverageEnabled: boolean;
+  readonly completed?: boolean;
   readonly summary?: HarnessRunSummary;
   readonly status?: HarnessRunStatus;
   readonly error?: unknown;
@@ -146,6 +147,21 @@ export type HarnessSession = {
   callHook: HarnessPluginManager<HarnessConfig, HarnessPlatform>['callHook'];
   setRunState: (state: HarnessRunState | null) => void;
   dispose: (reason?: 'normal' | 'abort' | 'error') => Promise<void>;
+};
+
+export const getSignalExitCodeForRunState = (
+  state: HarnessRunState | null
+): number => {
+  if (
+    state?.completed &&
+    state.status === 'passed' &&
+    !state.error &&
+    (state.summary?.failed ?? 0) === 0
+  ) {
+    return 0;
+  }
+
+  return 1;
 };
 
 // ---------------------------------------------------------------------------
@@ -715,7 +731,13 @@ export const createHarnessSession = async (
     // that all infrastructure is up.
     process.off('SIGTERM', onEarlySignal);
     process.off('SIGINT', onEarlySignal);
-    const onSignal = () => void dispose('abort').then(() => process.exit(0));
+    const onSignal = () => {
+      const exitCode = getSignalExitCodeForRunState(currentRun);
+      void dispose('abort').then(
+        () => process.exit(exitCode),
+        () => process.exit(1),
+      );
+    };
     process.once('SIGTERM', onSignal);
     process.once('SIGINT', onSignal);
 
@@ -854,10 +876,13 @@ export const createHarnessSession = async (
       setRunState: (state) => {
         currentRun = state;
       },
-      dispose: (reason = 'normal') => {
-        process.off('SIGTERM', onSignal);
-        process.off('SIGINT', onSignal);
-        return dispose(reason);
+      dispose: async (reason = 'normal') => {
+        try {
+          await dispose(reason);
+        } finally {
+          process.off('SIGTERM', onSignal);
+          process.off('SIGINT', onSignal);
+        }
       },
     };
   } catch (error) {

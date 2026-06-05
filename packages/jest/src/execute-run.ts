@@ -159,6 +159,7 @@ export const executeRun = async (
       testFiles,
       watchMode,
       coverageEnabled: globalConfig.collectCoverage,
+      completed: false,
       summary,
       status: summary.failed > 0 ? 'failed' : 'passed',
       ...overrides,
@@ -318,7 +319,7 @@ export const executeRun = async (
     if (!(err instanceof CancelRun)) throw err;
   } finally {
     const runState = updateRunState(
-      runError != null ? { error: runError, status: 'failed' } : {},
+      runError != null ? { completed: true, error: runError, status: 'failed' } : { completed: true },
     );
     await session.callHook('run:finished', {
       runId,

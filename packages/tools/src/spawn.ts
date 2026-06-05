@@ -40,6 +40,14 @@ export { Subprocess, SubprocessError };
 
 const activeChildProcesses = new Set<Subprocess>();
 let isProcessCleanupInstalled = false;
+let isTerminating = false;
+
+type CleanupSignal = 'SIGINT' | 'SIGTERM';
+
+const SIGNAL_EXIT_CODES: Record<CleanupSignal, number> = {
+  SIGINT: 130,
+  SIGTERM: 143,
+};
 
 const terminateActiveChildren = async () => {
   const children = [...activeChildProcesses];
@@ -62,16 +70,26 @@ const installProcessCleanup = () => {
 
   isProcessCleanupInstalled = true;
 
-  const terminate = async () => {
+  const terminate = async (signal: CleanupSignal) => {
+    if (isTerminating) {
+      return;
+    }
+
+    isTerminating = true;
+    const shouldExitAfterCleanup = process.listenerCount(signal) <= 1;
+
     await terminateActiveChildren();
-    process.exit(1);
+
+    if (shouldExitAfterCleanup) {
+      process.exit(process.exitCode ?? SIGNAL_EXIT_CODES[signal]);
+    }
   };
 
   process.on('SIGINT', () => {
-    void terminate();
+    void terminate('SIGINT');
   });
   process.on('SIGTERM', () => {
-    void terminate();
+    void terminate('SIGTERM');
   });
 };
 
