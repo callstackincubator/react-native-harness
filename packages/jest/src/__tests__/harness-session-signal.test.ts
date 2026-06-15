@@ -335,6 +335,7 @@ describe('createHarnessSession signal flow', () => {
     await handleHarnessSignal({
       currentRun: {
         coverageEnabled: false,
+        completed: true,
         runId: 'run-2',
         startTime: Date.now(),
         status: 'passed',

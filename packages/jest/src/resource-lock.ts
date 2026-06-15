@@ -354,6 +354,10 @@ export const createResourceLockManager = (
           heartbeatTimer = null;
         }
 
+        while (heartbeatInFlight) {
+          await wait(1);
+        }
+
         const owner = await readJsonFile<ResourceLockMetadata>(
           paths.ownerFilePath,
         );
