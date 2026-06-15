@@ -4,7 +4,10 @@ import type {
   BundlerEvents,
   TestExecutionOptions,
 } from '@react-native-harness/bridge';
-import { connectToHarness, type HarnessHandle } from '@react-native-harness/bridge/client';
+import {
+  connectToHarness,
+  type HarnessHandle,
+} from '@react-native-harness/bridge/client';
 import { store } from '../ui/state.js';
 import { getTestRunner, TestRunner } from '../runner/index.js';
 import { getTestCollector, TestCollector } from '../collector/index.js';
@@ -15,10 +18,13 @@ import { markTestsAsSkippedByName } from '../filtering/index.js';
 import { setup } from '../render/setup.js';
 import { runSetupFiles } from './setup-files.js';
 import { setHandle } from './store.js';
+import { installPromiseTracker } from '../promise-tracker.js';
 
 export const getClient = async (): Promise<HarnessHandle> => {
   const handle = await connectToHarness(getWSServer(), {
     runTests: async (path: string, options: TestExecutionOptions) => {
+      installPromiseTracker();
+
       if (store.getState().status === 'running') {
         throw new Error('Already running tests');
       }
@@ -39,7 +45,7 @@ export const getClient = async (): Promise<HarnessHandle> => {
         events = combineEventEmitters(
           collector.events,
           runner.events,
-          bundler.events,
+          bundler.events
         );
 
         events.addListener((event) => {
@@ -71,7 +77,7 @@ export const getClient = async (): Promise<HarnessHandle> => {
         const processedTestSuite = options.testNamePattern
           ? markTestsAsSkippedByName(
               collectionResult.testSuite,
-              options.testNamePattern,
+              options.testNamePattern
             )
           : collectionResult.testSuite;
 
@@ -79,6 +85,7 @@ export const getClient = async (): Promise<HarnessHandle> => {
           testSuite: processedTestSuite,
           testFilePath: path,
           runner: options.runner,
+          testTimeout: options.testTimeout,
         });
       } finally {
         collector?.dispose();

@@ -98,11 +98,24 @@ export const generateLcov = async (options: {
 }): Promise<void> => {
   const { profdataPath, binaryPath, outputPath, sourceFilters } = options;
 
+  // llvm-cov needs an explicit -arch for universal/fat binaries (e.g. Xcode 26
+  // debug.dylib). The profile data was produced by the simulator's execution
+  // arch, which matches the host: arm64 on Apple Silicon, x86_64 on Intel.
+  const { stdout: archs } = await spawn('lipo', ['-archs', binaryPath]);
+  const archList = archs.trim().split(/\s+/);
+  let archFlag: string[] = [];
+  if (archList.length > 1) {
+    const { stdout: hostArch } = await spawn('uname', ['-m']);
+    const arch = hostArch.trim();
+    archFlag = ['-arch', archList.includes(arch) ? arch : archList[0]];
+  }
+
   const args = [
     'llvm-cov',
     'export',
     '-format=lcov',
     `-instr-profile=${profdataPath}`,
+    ...archFlag,
     binaryPath,
   ];
 

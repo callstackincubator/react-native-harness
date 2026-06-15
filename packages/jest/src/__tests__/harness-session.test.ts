@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppConnection } from '@react-native-harness/bridge/server';
 import {
+  getSignalExitCodeForRunState,
   waitForBridgeDisconnectOrTimeout,
   waitForStartupCrash,
+  type HarnessRunState,
 } from '../harness-session.js';
 import type { CrashMonitor } from '../crash-monitor.js';
 
@@ -89,5 +91,56 @@ describe('waitForStartupCrash', () => {
 
     await expect(waitPromise).rejects.toThrow('Aborted');
     expect(watch).not.toHaveBeenCalled();
+  });
+});
+
+describe('getSignalExitCodeForRunState', () => {
+  const createRunState = (
+    overrides: Partial<HarnessRunState> = {}
+  ): HarnessRunState => ({
+    completed: true,
+    coverageEnabled: false,
+    runId: 'run-1',
+    startTime: 0,
+    status: 'passed',
+    summary: {
+      failed: 0,
+      passed: 1,
+      skipped: 0,
+      todo: 0,
+    },
+    testFiles: ['test.harness.ts'],
+    watchMode: false,
+    ...overrides,
+  });
+
+  it('preserves a successful exit after a completed passing run', () => {
+    expect(getSignalExitCodeForRunState(createRunState())).toBe(0);
+  });
+
+  it('fails when the run has not completed yet', () => {
+    expect(
+      getSignalExitCodeForRunState(createRunState({ completed: false }))
+    ).toBe(1);
+  });
+
+  it('fails when the completed run has failures', () => {
+    expect(
+      getSignalExitCodeForRunState(
+        createRunState({
+          status: 'failed',
+          summary: {
+            failed: 1,
+            passed: 0,
+            skipped: 0,
+            todo: 0,
+          },
+        })
+      )
+    ).toBe(1);
+  });
+
+  it('fails when no run state is available', () => {
+    expect(getSignalExitCodeForRunState(null)).toBe(1);
   });
 });

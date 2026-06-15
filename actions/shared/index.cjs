@@ -4417,6 +4417,7 @@ var ConfigSchema = external_exports.object({
   metroPort: external_exports.number().int("Metro port must be an integer").min(1, "Metro port must be at least 1").max(65535, "Metro port must be at most 65535").optional().default(DEFAULT_METRO_PORT),
   webSocketPort: external_exports.number().optional().describe("Deprecated. Bridge traffic now uses metroPort and this value is ignored."),
   bridgeTimeout: external_exports.number().min(1e3, "Bridge timeout must be at least 1 second").default(6e4),
+  testTimeout: external_exports.number().min(1e3, "Test timeout must be at least 1 second").default(5e3),
   platformReadyTimeout: external_exports.number().min(1e3, "Platform ready timeout must be at least 1 second").default(3e5),
   bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(6e4),
   maxAppRestarts: external_exports.number().min(0, "Max app restarts must be at least 0").default(2),

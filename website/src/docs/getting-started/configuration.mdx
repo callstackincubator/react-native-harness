@@ -98,6 +98,7 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `webSocketPort`                    | Deprecated. Bridge traffic now uses `metroPort`; this option is ignored.                                                                                  |
 | `platformReadyTimeout`             | Platform-ready timeout in milliseconds (default: `300000`).                                                                                               |
 | `bridgeTimeout`                    | Bridge timeout in milliseconds (default: `60000`).                                                                                                        |
+| `testTimeout`                      | Runtime timeout for each test case and suite hook in milliseconds (default: `5000`). Harness config takes precedence over Jest `testTimeout`.             |
 | `bundleStartTimeout`               | Bundle start timeout in milliseconds (default: `60000`).                                                                                                  |
 | `maxAppRestarts`                   | Maximum number of automatic app relaunch attempts while Harness is waiting for startup (default: `2`).                                                    |
 | `permissions`                      | Enable platform-specific permission prompt automation (default: `false`). On iOS, this controls whether Harness starts the XCTest-based permission helper. |
@@ -212,7 +213,9 @@ Increase this value if you experience startup failures while:
 
 ## Bridge Timeout
 
-The bridge timeout controls how long React Native Harness waits for the app to report runtime readiness after it has been launched. It does not include simulator or emulator boot time.
+The bridge timeout controls the app-side bridge readiness window after Harness launches the app. It does not include simulator or emulator boot time. Once the runtime is connected, Harness keeps test execution alive through heartbeat traffic and applies the configured test timeout to each individual test case.
+
+Harness uses `bridgeTimeout` while waiting for the app runtime to connect, and as the timeout for shorter bridge RPCs such as screenshots or image snapshot matching.
 
 ```javascript
 {
@@ -223,10 +226,25 @@ The bridge timeout controls how long React Native Harness waits for the app to r
 **Default:** 60000 (60 seconds)
 **Minimum:** 1000 (1 second)
 
-Increase this value if you experience timeout errors, especially on:
+Increase this value if Harness times out before the app runtime reports ready, especially on:
 
-- Complex test suites with heavy setup
 - Slower app startup after launch
+- Apps that take longer to load the Metro bundle and initialize the Harness runtime
+
+## Test Timeout
+
+The test timeout controls how long the runtime allows each test case and suite hook to run before reporting a timeout failure.
+
+```javascript
+{
+  testTimeout: 30000,
+}
+```
+
+**Default:** 5000 (5 seconds)
+**Minimum:** 1000 (1 second)
+
+Harness `testTimeout` takes precedence over Jest's `testTimeout` setting so runtime timeout behavior lives next to the rest of your Harness configuration.
 
 ## Bundle Start Timeout
 
@@ -320,6 +338,7 @@ const config = {
 
   platformReadyTimeout: isCI ? 420000 : 300000,
   bridgeTimeout: isCI ? 180000 : 60000,
+  testTimeout: isCI ? 30000 : 5000,
 };
 
 export default config;

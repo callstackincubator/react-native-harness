@@ -8,6 +8,7 @@ import type {
 import type { HarnessSession } from './harness-session.js';
 import { formatResultsErrors } from 'jest-message-util';
 import { toTestResult } from './toTestResult.js';
+import { formatHarnessErrorMessage } from './format-harness-error.js';
 
 // Helper function to flatten nested test suites into a flat array of tests with hierarchy
 const flattenTests = (
@@ -15,6 +16,17 @@ const flattenTests = (
   ancestorTitles: string[] = []
 ): Array<HarnessTestResult & { ancestorTitles: string[] }> => {
   const tests: Array<HarnessTestResult & { ancestorTitles: string[] }> = [];
+
+  if (suiteResult.error) {
+    tests.push({
+      name: suiteResult.name,
+      status: 'failed',
+      duration: suiteResult.duration,
+      error: suiteResult.error,
+      ancestorTitles: [...ancestorTitles],
+      fullName: [...ancestorTitles, suiteResult.name].join(' '),
+    });
+  }
 
   // Add tests from current suite with current hierarchy
   for (const test of suiteResult.tests) {
@@ -88,11 +100,18 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
   const setupFilesAfterEnv = projectConfig.setupFilesAfterEnv?.map(
     (setupFile) => path.relative(globalConfig.rootDir, setupFile)
   );
+  const testTimeout =
+    session.config.testTimeout ??
+    (projectConfig as JestConfig.ProjectConfig & { testTimeout?: number })
+      .testTimeout ??
+    (globalConfig as JestConfig.GlobalConfig & { testTimeout?: number })
+      .testTimeout;
 
   const harnessResult = await session.runTestFile(relativeTestPath, {
     testNamePattern: globalConfig.testNamePattern,
     setupFiles,
     setupFilesAfterEnv,
+    testTimeout,
     runner: session.context.platform.runner,
   });
   const end = Date.now();
@@ -102,14 +121,14 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
 
   // Convert TestResult[] to the format expected by toTestResult
   const tests = allTests.map((test) => {
-    const errorMessage = test.error?.message;
     const codeFrame = test.error?.codeFrame;
+    const errorMessage = formatHarnessErrorMessage(test.error, {
+      testStartedAt: test.startedAt,
+    });
 
     return {
       duration: test.duration,
-      errorMessage: errorMessage
-        ? `${errorMessage}${codeFrame ? `\n\n${codeFrame.content}` : ''}`
-        : undefined,
+      errorMessage,
       title: test.name,
       fullName: test.fullName,
       status: test.status,

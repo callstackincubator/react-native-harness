@@ -22,11 +22,13 @@ import type {
   TestRunnerEvents,
   TestRunnerTestFinishedEvent,
   TestRunnerTestStartedEvent,
+  TestSuiteResult,
 } from '@react-native-harness/bridge';
 import {
   createPlatformSkippedTestResult,
   shouldRunHarnessTestFile,
 } from './test-file-platform-filter.js';
+import { formatHarnessErrorMessage } from './format-harness-error.js';
 
 type EmitTestEvent = <Name extends keyof TestEvents>(
   eventName: Name,
@@ -86,8 +88,10 @@ const emitHarnessTestFinished = async (
   emitEvent: EmitTestEvent,
   event: TestRunnerTestFinishedEvent,
 ): Promise<void> => {
-  const failureMessage = event.error?.message;
   const codeFrame = event.error?.codeFrame;
+  const failureMessage = formatHarnessErrorMessage(event.error, {
+    testStartedAt: event.startedAt,
+  });
   const location = codeFrame?.location
     ? { column: codeFrame.location.column, line: codeFrame.location.row }
     : null;
@@ -95,9 +99,7 @@ const emitHarnessTestFinished = async (
     ancestorTitles: event.ancestorTitles,
     duration: event.duration,
     failureDetails: [],
-    failureMessages: failureMessage
-      ? [`${failureMessage}${codeFrame ? `\n\n${codeFrame.content}` : ''}`]
-      : [],
+    failureMessages: failureMessage ? [failureMessage] : [],
     fullName: event.fullName,
     location,
     numPassingAsserts: event.status === 'passed' ? 1 : 0,
@@ -113,6 +115,18 @@ const isHarnessCaseEvent = (
   event: TestRunnerEvents,
 ): event is TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent =>
   event.type === 'test-started' || event.type === 'test-finished';
+
+const TIMEOUT_ERROR_NAMES = new Set([
+  'SuiteHookTimeoutError',
+  'TestCaseTimeoutError',
+]);
+
+const hasRuntimeTimeout = (result: TestSuiteResult): boolean =>
+  (result.error ? TIMEOUT_ERROR_NAMES.has(result.error.name) : false) ||
+  result.tests.some((test) =>
+    test.error ? TIMEOUT_ERROR_NAMES.has(test.error.name) : false,
+  ) ||
+  result.suites.some(hasRuntimeTimeout);
 
 export const executeRun = async (
   session: HarnessSession,
@@ -145,6 +159,7 @@ export const executeRun = async (
       testFiles,
       watchMode,
       coverageEnabled: globalConfig.collectCoverage,
+      completed: false,
       summary,
       status: summary.failed > 0 ? 'failed' : 'passed',
       ...overrides,
@@ -174,6 +189,7 @@ export const executeRun = async (
     session.config.runners.map((runner) => runner.platformId),
   );
   let isFirstTest = true;
+  let shouldRestartAfterTimeout = false;
   let runError: unknown;
 
   try {
@@ -230,8 +246,9 @@ export const executeRun = async (
       }
 
       try {
-        if (shouldResetEnv && !isFirstTest) {
+        if ((shouldResetEnv && !isFirstTest) || shouldRestartAfterTimeout) {
           await session.restartApp(test.path);
+          shouldRestartAfterTimeout = false;
         }
         isFirstTest = false;
 
@@ -259,8 +276,14 @@ export const executeRun = async (
           duration: result.duration,
           result: result.harnessResult,
         });
+        const didRuntimeTimeout = hasRuntimeTimeout(result.harnessResult);
+        shouldRestartAfterTimeout = didRuntimeTimeout;
         await caseEventChain;
         await emitEvent('test-file-success', test, result.jestResult);
+        if (didRuntimeTimeout) {
+          await session.restartApp(test.path);
+          shouldRestartAfterTimeout = false;
+        }
       } catch (err) {
         if (!emittedTestFileFinished) {
           await emitTestFileFinished({
@@ -296,7 +319,7 @@ export const executeRun = async (
     if (!(err instanceof CancelRun)) throw err;
   } finally {
     const runState = updateRunState(
-      runError != null ? { error: runError, status: 'failed' } : {},
+      runError != null ? { completed: true, error: runError, status: 'failed' } : { completed: true },
     );
     await session.callHook('run:finished', {
       runId,

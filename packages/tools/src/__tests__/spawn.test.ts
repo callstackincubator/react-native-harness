@@ -99,7 +99,7 @@ describe('spawn', () => {
     ).resolves.toEqual(['alpha', 'beta']);
   });
 
-  it('does not install process signal listeners', () => {
+  it('installs process signal listeners and tracks the subprocess', () => {
     const onSpy = vi.spyOn(process, 'on');
     const onceSpy = vi.spyOn(process, 'once');
     const childProcess = createMockChildProcess();
@@ -107,7 +107,8 @@ describe('spawn', () => {
 
     spawn('example');
 
-    expect(onSpy).not.toHaveBeenCalled();
+    expect(onSpy).toHaveBeenCalledWith('SIGINT', expect.any(Function));
+    expect(onSpy).toHaveBeenCalledWith('SIGTERM', expect.any(Function));
     expect(onceSpy).not.toHaveBeenCalled();
   });
 

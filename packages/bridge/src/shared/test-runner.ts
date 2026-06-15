@@ -15,6 +15,16 @@ export type SerializedError = {
   name: string;
   message: string;
   codeFrame?: CodeFrame;
+  diagnostics?: {
+    pendingPromises?: {
+      total: number;
+      items: Array<{
+        id: number;
+        createdAt: number;
+        stack?: string;
+      }>;
+    };
+  };
 };
 
 export type TestRunnerFileStartedEvent = {

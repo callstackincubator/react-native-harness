@@ -192,7 +192,7 @@ describe('executeRun', () => {
       const session = makeSession({
         ensureAppReady: vi.fn(async () => { order.push('ensureAppReady'); }),
       });
-      const emitEvent: EmitEvent = (async (eventName, ..._eventData) => {
+      const emitEvent: EmitEvent = (async (eventName) => {
         if (eventName === 'test-file-start') {
           order.push('test-file-start');
         }
@@ -234,6 +234,25 @@ describe('executeRun', () => {
       const payload = finishedPayload as { summary: { passed: number }; status: string };
       expect(payload.summary.passed).toBe(6);
       expect(payload.status).toBe('passed');
+    });
+
+    it('marks the final run state as completed', async () => {
+      const session = makeSession();
+
+      await executeRun(
+        session,
+        [makeTest()],
+        makeWatcher(),
+        makeEmitEvent().emitEvent,
+        makeGlobalConfig(),
+      );
+
+      expect(session.setRunState).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          completed: true,
+          status: 'passed',
+        }),
+      );
     });
 
     it('attaches buffered client logs to the Jest result', async () => {
@@ -328,6 +347,65 @@ describe('executeRun', () => {
           }),
         ],
         ['test-file-success', expect.anything(), expect.anything()],
+      ]);
+    });
+
+    it('includes pending promise diagnostics in live test-case failures', async () => {
+      let testRunnerListener:
+        | ((event: TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent) => void)
+        | undefined;
+      const { emitEvent, calls: emittedEvents } = makeEmitEvent();
+      const session = makeSession({
+        onTestRunnerEvent: vi.fn((listener) => {
+          testRunnerListener = listener as typeof testRunnerListener;
+          return () => undefined;
+        }),
+      });
+
+      mockRunHarnessTestFile.mockImplementation(async () => {
+        testRunnerListener?.({
+          type: 'test-finished',
+          file: 'example.ts',
+          suite: 'suite',
+          name: 'hangs',
+          ancestorTitles: ['suite'],
+          fullName: 'suite hangs',
+          startedAt: 100,
+          duration: 50,
+          status: 'failed',
+          error: {
+            name: 'TestCaseTimeoutError',
+            message: 'Test timed out after 50ms: suite hangs',
+            diagnostics: {
+              pendingPromises: {
+                total: 1,
+                items: [
+                  {
+                    id: 7,
+                    createdAt: 110,
+                    stack: 'Error: Promise created\n    at hangs (example.ts:10:5)',
+                  },
+                ],
+              },
+            },
+          },
+        });
+
+        return makeFileRunResult();
+      });
+
+      await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
+
+      expect(emittedEvents).toContainEqual([
+        'test-case-result',
+        'example.ts',
+        expect.objectContaining({
+          failureMessages: [
+            expect.stringContaining(
+              'Pending promises at timeout: 1\n\nPromise #7, created 10ms after test start:',
+            ),
+          ],
+        }),
       ]);
     });
   });
@@ -460,6 +538,132 @@ describe('executeRun', () => {
 
       // restartApp should be called for tests 2 and 3, not test 1.
       expect(session.restartApp).toHaveBeenCalledTimes(2);
+    });
+
+    it('restarts after a test case timeout before the next runnable file', async () => {
+      const timedOutResult = makeHarnessResult('failed');
+      timedOutResult.tests = [
+        {
+          name: 'hangs',
+          status: 'failed',
+          duration: 10,
+          error: {
+            name: 'TestCaseTimeoutError',
+            message: 'Test timed out after 10ms: hangs',
+          },
+        },
+      ];
+      mockRunHarnessTestFile
+        .mockResolvedValueOnce(makeFileRunResult({
+          harnessResult: timedOutResult,
+          jestResult: makeJestResult({
+            numFailingTests: 1,
+            numPassingTests: 0,
+          }),
+        }))
+        .mockResolvedValueOnce(makeFileRunResult());
+      const session = makeSession({
+        config: {
+          metroPort: 8081,
+          resetEnvironmentBetweenTestFiles: false,
+          detectNativeCrashes: false,
+          runners: [
+            { platformId: 'android', name: 'android' },
+            { platformId: 'ios', name: 'ios' },
+          ],
+        } as HarnessSession['config'],
+      });
+
+      await executeRun(
+        session,
+        [makeTest('/a.ts'), makeTest('/b.ts')],
+        makeWatcher(),
+        makeEmitEvent().emitEvent,
+        makeGlobalConfig(),
+      );
+
+      expect(session.restartApp).toHaveBeenCalledTimes(1);
+      expect(session.restartApp).toHaveBeenCalledWith('/a.ts');
+    });
+
+    it('restarts after a timeout in the last runnable file', async () => {
+      const timedOutResult = makeHarnessResult('failed');
+      timedOutResult.tests = [
+        {
+          name: 'hangs',
+          status: 'failed',
+          duration: 10,
+          error: {
+            name: 'TestCaseTimeoutError',
+            message: 'Test timed out after 10ms: hangs',
+          },
+        },
+      ];
+      mockRunHarnessTestFile.mockResolvedValueOnce(makeFileRunResult({
+        harnessResult: timedOutResult,
+        jestResult: makeJestResult({
+          numFailingTests: 1,
+          numPassingTests: 0,
+        }),
+      }));
+      const session = makeSession({
+        config: {
+          metroPort: 8081,
+          resetEnvironmentBetweenTestFiles: false,
+          detectNativeCrashes: false,
+          runners: [
+            { platformId: 'android', name: 'android' },
+            { platformId: 'ios', name: 'ios' },
+          ],
+        } as HarnessSession['config'],
+      });
+
+      await executeRun(
+        session,
+        [makeTest('/a.ts')],
+        makeWatcher(),
+        makeEmitEvent().emitEvent,
+        makeGlobalConfig({ watch: true }),
+      );
+
+      expect(session.restartApp).toHaveBeenCalledTimes(1);
+      expect(session.restartApp).toHaveBeenCalledWith('/a.ts');
+    });
+
+    it('restarts after a suite hook timeout', async () => {
+      const timedOutResult = makeHarnessResult('failed');
+      timedOutResult.suites = [
+        {
+          name: 'suite',
+          tests: [],
+          suites: [],
+          status: 'failed',
+          duration: 10,
+          error: {
+            name: 'SuiteHookTimeoutError',
+            message: 'beforeAll hook timed out after 10ms in suite: suite',
+          },
+        },
+      ];
+      mockRunHarnessTestFile.mockResolvedValueOnce(makeFileRunResult({
+        harnessResult: timedOutResult,
+        jestResult: makeJestResult({
+          numFailingTests: 1,
+          numPassingTests: 0,
+        }),
+      }));
+      const session = makeSession();
+
+      await executeRun(
+        session,
+        [makeTest('/a.ts')],
+        makeWatcher(),
+        makeEmitEvent().emitEvent,
+        makeGlobalConfig(),
+      );
+
+      expect(session.restartApp).toHaveBeenCalledTimes(1);
+      expect(session.restartApp).toHaveBeenCalledWith('/a.ts');
     });
   });
 

@@ -33,5 +33,7 @@
   "devDependencies": {
     "react-native": "*"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "author": "Callstack",
+  "homepage": "https://github.com/callstackincubator/react-native-harness"
 }

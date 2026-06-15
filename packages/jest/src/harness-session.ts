@@ -129,6 +129,7 @@ export type HarnessRunState = {
   readonly testFiles: string[];
   readonly watchMode: boolean;
   readonly coverageEnabled: boolean;
+  readonly completed?: boolean;
   readonly summary?: HarnessRunSummary;
   readonly status?: HarnessRunStatus;
   readonly error?: unknown;
@@ -137,9 +138,18 @@ export type HarnessRunState = {
 export type HarnessRunTestsOptions = Exclude<TestExecutionOptions, 'platform'>;
 
 export const getSignalExitCodeForRunState = (
-  currentRun: HarnessRunState | null
+  state: HarnessRunState | null
 ): number => {
-  return currentRun?.status === 'passed' && currentRun.error == null ? 0 : 1;
+  if (
+    state?.completed &&
+    state.status === 'passed' &&
+    !state.error &&
+    (state.summary?.failed ?? 0) === 0
+  ) {
+    return 0;
+  }
+
+  return 1;
 };
 
 export const handleHarnessSignal = async (options: {
@@ -877,7 +887,7 @@ export const createHarnessSession = async (
       setRunState: (state) => {
         currentRun = state;
       },
-      dispose: (reason = 'normal') => {
+      dispose: async (reason = 'normal') => {
         process.off('SIGTERM', onSignal);
         process.off('SIGINT', onSignal);
         sessionController.abort(createAbortError());

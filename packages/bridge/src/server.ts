@@ -160,7 +160,7 @@ export const createHarnessBridge = async (
       onEvent: (event) => {
         emitter.emit('event', event);
       },
-      callTimeoutMs: timeout,
+      callTimeoutMs: (method) => method === 'runTests' ? undefined : timeout,
       createTimeoutError: (functionName, args) => {
         return new DeviceNotRespondingError(functionName, args) as unknown as Error;
       },

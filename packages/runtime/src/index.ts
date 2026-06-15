@@ -10,3 +10,4 @@ export * from './mocker/index.js';
 export * from './namespace.js';
 export * from './waitFor.js';
 export * from './render/index.js';
+export * from './promise-tracker.js';

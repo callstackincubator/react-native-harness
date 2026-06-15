@@ -1,4 +1,5 @@
 import type { SuiteHookFn, TestFn, TestSuite } from '@react-native-harness/bridge';
+import { omitPromiseFromTracking } from '../promise-tracker.js';
 import type { ActiveTestContext } from './types.js';
 
 export type HookType = 'beforeEach' | 'afterEach' | 'beforeAll' | 'afterAll';
@@ -56,12 +57,20 @@ export const runHooks = async (
   suite: TestSuite,
   hookType: HookType,
   context?: ActiveTestContext,
+  options: {
+    wrapHook?: (runHook: () => Promise<void>) => Promise<void>;
+  } = {},
 ): Promise<void> => {
   if (hookType === 'beforeAll' || hookType === 'afterAll') {
     const hooks = collectSuiteHooks(suite, hookType);
 
     for (const hook of hooks) {
-      await hook();
+      const runHook = async () => {
+        const result = hook();
+        omitPromiseFromTracking(result);
+        await result;
+      };
+      await (options.wrapHook ? options.wrapHook(runHook) : runHook());
     }
 
     return;
@@ -70,6 +79,11 @@ export const runHooks = async (
   const hooks = collectInheritedHooks(suite, hookType);
 
   for (const hook of hooks) {
-    await hook(context as ActiveTestContext);
+    const runHook = async () => {
+      const result = hook(context as ActiveTestContext);
+      omitPromiseFromTracking(result);
+      await result;
+    };
+    await (options.wrapHook ? options.wrapHook(runHook) : runHook());
   }
 };
