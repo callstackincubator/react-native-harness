@@ -8,7 +8,7 @@ import {
 import {
   escapeRegExp,
   logger,
-  type Subprocess,
+  type HarnessSubprocess,
 } from '@react-native-harness/tools';
 import { createAndroidCrashReporter } from './crash-reporter.js';
 
@@ -62,33 +62,30 @@ const isCrashSignal = (line: string, bundleId: string): boolean => {
   );
 };
 
-const stopSubprocess = async (child: Subprocess) => {
-  try {
-    (await child.nodeChildProcess).kill();
-  } catch {
-    // Ignore termination failures for already-ended background processes.
-  }
-};
-
 const isExitedState = (
   state: AppSessionState
 ): state is Extract<AppSessionState, { status: 'exited' }> =>
   state.status === 'exited';
 
 type CreateAndroidAppSessionOptions = {
+  signal: AbortSignal;
   appUid: number;
   bundleId: string;
   startApp: () => Promise<void>;
   stopApp: () => Promise<void>;
   getAppPid: () => Promise<number | null>;
   getLogcatTimestamp: () => Promise<string>;
-  startLogcat: (args: readonly string[]) => Subprocess;
+  startLogcat: (
+    args: readonly string[],
+    signal: AbortSignal
+  ) => HarnessSubprocess;
   getDropboxOutput?: () => Promise<string>;
   getExitInfo?: () => Promise<string>;
   crashArtifactWriter?: CrashArtifactWriter;
 };
 
 export const createAndroidAppSession = async ({
+  signal,
   appUid,
   bundleId,
   startApp,
@@ -141,23 +138,34 @@ export const createAndroidAppSession = async ({
 
   const waitForNextPoll = () =>
     new Promise<void>((resolve) => {
-      resolvePollDelay = () => {
+      if (signal.aborted) {
+        resolve();
+        return;
+      }
+
+      const finish = () => {
+        if (pollDelayTimeout) {
+          clearTimeout(pollDelayTimeout);
+          pollDelayTimeout = null;
+        }
+
+        signal.removeEventListener('abort', onAbort);
         resolvePollDelay = null;
-        pollDelayTimeout = null;
         resolve();
       };
 
+      const onAbort = () => {
+        finish();
+      };
+
+      resolvePollDelay = finish;
+      signal.addEventListener('abort', onAbort, { once: true });
       pollDelayTimeout = setTimeout(() => {
-        resolvePollDelay?.();
+        finish();
       }, APP_EXIT_POLL_INTERVAL_MS);
     });
 
   const cancelPendingPollDelay = () => {
-    if (pollDelayTimeout) {
-      clearTimeout(pollDelayTimeout);
-      pollDelayTimeout = null;
-    }
-
     resolvePollDelay?.();
   };
 
@@ -193,7 +201,7 @@ export const createAndroidAppSession = async ({
 
   const logcatTimestamp = await getLogcatTimestamp();
   const sessionStartedAt = Date.now();
-  const logcatProcess = startLogcat(getLogcatArgs(appUid, logcatTimestamp));
+  const logcatProcess = startLogcat(getLogcatArgs(appUid, logcatTimestamp), signal);
   const crashReporter = createAndroidCrashReporter({
     bundleId,
     crashArtifactWriter,
@@ -239,7 +247,7 @@ export const createAndroidAppSession = async ({
     disposed = true;
     stopPolling = true;
     emitter.clear();
-    await stopSubprocess(logcatProcess);
+    await logcatProcess.terminate();
     await Promise.allSettled([logTask]);
     throw error;
   }
@@ -248,6 +256,10 @@ export const createAndroidAppSession = async ({
     await sleep(0);
 
     while (!stopPolling) {
+      if (signal.aborted) {
+        return;
+      }
+
       if (isExitedState(state)) {
         return;
       }
@@ -287,7 +299,7 @@ export const createAndroidAppSession = async ({
       cancelPendingPollDelay();
 
       emitter.clear();
-      await stopSubprocess(logcatProcess);
+      await logcatProcess.terminate();
       await stopApp();
       await Promise.allSettled([logTask, pollTask]);
     },

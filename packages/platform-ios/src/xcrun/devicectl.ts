@@ -1,5 +1,5 @@
 import { type AppleAppLaunchOptions } from '@react-native-harness/platforms';
-import { spawn, type Subprocess } from '@react-native-harness/tools';
+import { spawn, type HarnessSubprocess } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -212,8 +212,9 @@ export const startApp = async (
 export const launchAppProcess = (
   identifier: string,
   bundleId: string,
-  options?: AppleAppLaunchOptions
-): Subprocess =>
+  options?: AppleAppLaunchOptions,
+  spawnOptions?: { signal?: AbortSignal }
+): HarnessSubprocess =>
   spawn(
     'xcrun',
     [
@@ -226,6 +227,7 @@ export const launchAppProcess = (
     {
       stdout: 'pipe',
       stderr: 'pipe',
+      signal: spawnOptions?.signal,
     }
   );
 

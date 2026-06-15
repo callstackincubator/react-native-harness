@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Subprocess } from '@react-native-harness/tools';
+import type { HarnessSubprocess } from '@react-native-harness/tools';
 import { createIosAppSession } from '../app-session.js';
 
-const createPendingLaunchProcess = (): Subprocess => {
+const createPendingLaunchProcess = (): HarnessSubprocess => {
   let resolveLaunch!: () => void;
   const pending = new Promise<void>((resolve) => {
     resolveLaunch = resolve;
@@ -14,6 +14,9 @@ const createPendingLaunchProcess = (): Subprocess => {
     }),
   };
   return Object.assign(pending, {
+    terminate: vi.fn(async () => {
+      child.kill();
+    }),
     [Symbol.asyncIterator]: () => ({
       next: async () => {
         await pending;
@@ -21,7 +24,7 @@ const createPendingLaunchProcess = (): Subprocess => {
       },
     }),
     nodeChildProcess: Promise.resolve(child),
-  }) as unknown as Subprocess;
+  }) as unknown as HarnessSubprocess;
 };
 
 describe('createIosAppSession', () => {
@@ -36,6 +39,7 @@ describe('createIosAppSession', () => {
         .mockResolvedValue(true);
 
       const sessionPromise = createIosAppSession({
+        signal: new AbortController().signal,
         launch: () => launchProcess,
         stopApp: vi.fn(async () => undefined),
         isAppRunning,

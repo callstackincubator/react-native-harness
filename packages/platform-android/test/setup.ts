@@ -23,6 +23,9 @@ const createMockSubprocess = () => ({
   nodeChildProcess: Promise.resolve({
     kill: vi.fn(),
   }),
+  terminate: vi.fn(async function (this: { nodeChildProcess: Promise<{ kill: () => void }> }) {
+    (await this.nodeChildProcess).kill();
+  }),
   [Symbol.asyncIterator]: async function* () {
     yield* [];
   },

@@ -103,6 +103,21 @@ const createLongRunningSubprocess = (options?: {
 
       stop();
     }),
+    terminate: vi.fn(async (terminateOptions?: { forceAfterMs?: number }) => {
+      childProcess.kill('SIGTERM');
+
+      if (stopped) {
+        return;
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, terminateOptions?.forceAfterMs ?? 5000);
+      });
+
+      if (!stopped) {
+        childProcess.kill('SIGKILL');
+      }
+    }),
     off: vi.fn((_event: string, listener: () => void) => {
       listeners.delete(listener);
       return childProcess;
@@ -118,6 +133,21 @@ const createLongRunningSubprocess = (options?: {
 
   const iterable = {
     nodeChildProcess: Promise.resolve(childProcess),
+    terminate: vi.fn(async (terminateOptions?: { forceAfterMs?: number }) => {
+      childProcess.kill('SIGTERM');
+
+      if (stopped) {
+        return;
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, terminateOptions?.forceAfterMs ?? 5000);
+      });
+
+      if (!stopped) {
+        childProcess.kill('SIGKILL');
+      }
+    }),
     [Symbol.asyncIterator]() {
       return {
         next: async () => {

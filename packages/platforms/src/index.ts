@@ -11,6 +11,7 @@ export type {
   AppSessionLog,
   AppSessionState,
   AppLaunchOptions,
+  CreateAppSessionContext,
   CrashArtifactKind,
   CrashDetailsLookupOptions,
   CrashEnrichmentArtifact,

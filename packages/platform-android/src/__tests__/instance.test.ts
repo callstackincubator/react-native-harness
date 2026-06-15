@@ -3,7 +3,7 @@ import {
   DEFAULT_METRO_PORT,
   type Config as HarnessConfig,
 } from '@react-native-harness/config';
-import type { Subprocess } from '@react-native-harness/tools';
+import type { HarnessSubprocess } from '@react-native-harness/tools';
 import {
   getAndroidEmulatorPlatformInstance,
   getAndroidPhysicalDevicePlatformInstance,
@@ -13,10 +13,13 @@ import * as avdConfig from '../avd-config.js';
 import * as sharedPrefs from '../shared-prefs.js';
 import { HarnessAppPathError, HarnessEmulatorConfigError } from '../errors.js';
 
-const createLogcatProcess = (lines: string[] = []): Subprocess => {
+const createLogcatProcess = (lines: string[] = []): HarnessSubprocess => {
   const process = {
     nodeChildProcess: Promise.resolve({
       kill: vi.fn(),
+    }),
+    terminate: vi.fn(async () => {
+      (await process.nodeChildProcess).kill();
     }),
     [Symbol.asyncIterator]: async function* () {
       for (const line of lines) {
@@ -25,7 +28,7 @@ const createLogcatProcess = (lines: string[] = []): Subprocess => {
     },
   };
 
-  return process as unknown as Subprocess;
+  return process as unknown as HarnessSubprocess;
 };
 
 const harnessConfig = {
@@ -552,16 +555,22 @@ describe('Android platform instance', () => {
     appSession.addListener(listener);
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(startLogcat).toHaveBeenCalledWith('emulator-5554', [
-      'logcat',
-      '-v',
-      'threadtime',
-      '-b',
-      'crash',
-      '--uid=10234',
-      '-T',
-      '01-01 00:00:00.000',
-    ]);
+    expect(startLogcat).toHaveBeenCalledWith(
+      'emulator-5554',
+      [
+        'logcat',
+        '-v',
+        'threadtime',
+        '-b',
+        'crash',
+        '--uid=10234',
+        '-T',
+        '01-01 00:00:00.000',
+      ],
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      }),
+    );
     expect(startLogcat.mock.invocationCallOrder[0]).toBeLessThan(
       startApp.mock.invocationCallOrder[0],
     );
@@ -690,16 +699,22 @@ describe('Android platform instance', () => {
     appSession.addListener(listener);
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(startLogcat).toHaveBeenCalledWith('012345', [
-      'logcat',
-      '-v',
-      'threadtime',
-      '-b',
-      'crash',
-      '--uid=10234',
-      '-T',
-      '01-01 00:00:00.000',
-    ]);
+    expect(startLogcat).toHaveBeenCalledWith(
+      '012345',
+      [
+        'logcat',
+        '-v',
+        'threadtime',
+        '-b',
+        'crash',
+        '--uid=10234',
+        '-T',
+        '01-01 00:00:00.000',
+      ],
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      }),
+    );
     await expect(appSession.getState()).resolves.toEqual({
       status: 'running',
       pid: 8765,

@@ -1,3 +1,22 @@
+export const createAbortError = () =>
+  new DOMException('The operation was aborted', 'AbortError');
+
+export const waitForAbort = (signal: AbortSignal): Promise<never> => {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? createAbortError());
+  }
+
+  return new Promise((_, reject) => {
+    signal.addEventListener(
+      'abort',
+      () => {
+        reject(signal.reason ?? createAbortError());
+      },
+      { once: true }
+    );
+  });
+};
+
 export const getTimeoutSignal = (timeout: number): AbortSignal => {
   return AbortSignal.timeout(timeout);
 };

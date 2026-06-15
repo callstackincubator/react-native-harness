@@ -5,7 +5,7 @@ import {
   type AppSessionState,
   type AppleAppLaunchOptions,
 } from '@react-native-harness/platforms';
-import { logger, type Subprocess } from '@react-native-harness/tools';
+import { logger, type HarnessSubprocess } from '@react-native-harness/tools';
 import type { IosCrashReporter } from './crash-reporter.js';
 
 const iosAppSessionLogger = logger.child('ios-app-session');
@@ -13,7 +13,8 @@ const APP_EXIT_POLL_INTERVAL_MS = 1000;
 const LAUNCH_FAILURE_SETTLE_MS = 100;
 
 type CreateIosAppSessionOptions = {
-  launch: () => Subprocess;
+  signal: AbortSignal;
+  launch: (signal: AbortSignal) => HarnessSubprocess;
   stopApp: () => Promise<void>;
   isAppRunning: () => Promise<boolean>;
   crashReporter?: IosCrashReporter;
@@ -22,6 +23,7 @@ type CreateIosAppSessionOptions = {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const createIosAppSession = async ({
+  signal,
   launch,
   stopApp,
   isAppRunning,
@@ -29,7 +31,7 @@ export const createIosAppSession = async ({
 }: CreateIosAppSessionOptions): Promise<AppSession> => {
   const emitter = createAppSessionEmitter();
   const logBuffer = createBoundedLogBuffer();
-  const launchProcess = launch();
+  const launchProcess = launch(signal);
   let state: AppSessionState = { status: 'running' };
   let disposed = false;
   let stopPolling = false;
@@ -118,7 +120,7 @@ export const createIosAppSession = async ({
       emitter.clear();
 
       try {
-        (await launchProcess.nodeChildProcess).kill();
+        await launchProcess.terminate();
       } catch {
         // Ignore termination failures for already-ended launch streams.
       }

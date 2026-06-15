@@ -1,7 +1,9 @@
 import {
   createAppSessionEmitter,
+  type AppLaunchOptions,
   type AppSession,
   type AppSessionState,
+  type CreateAppSessionContext,
   DeviceNotFoundError,
   AppNotInstalledError,
   type HarnessPlatformInitOptions,
@@ -36,7 +38,12 @@ const getVegaRunner = async (
   }
 
   return {
-    createAppSession: async (): Promise<AppSession> => {
+    createAppSession: async (
+      _options?: AppLaunchOptions,
+      _context?: CreateAppSessionContext
+    ): Promise<AppSession> => {
+      void _options;
+      void _context;
       await kepler.stopApp(deviceId, bundleId);
       await kepler.startApp(deviceId, bundleId);
 

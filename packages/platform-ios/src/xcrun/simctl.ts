@@ -7,7 +7,7 @@ import {
   spawn,
   spawnAndForget,
   SubprocessError,
-  type Subprocess,
+  type HarnessSubprocess,
 } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { homedir } from 'node:os';
@@ -305,7 +305,8 @@ export const launchAppProcess = (
   udid: string,
   bundleId: string,
   options?: AppleAppLaunchOptions,
-): Subprocess => {
+  spawnOptions?: { signal?: AbortSignal },
+): HarnessSubprocess => {
   const environment = getSimctlChildEnvironment(options);
   const argumentsList = options?.arguments ?? [];
 
@@ -324,6 +325,7 @@ export const launchAppProcess = (
       env: environment,
       stdout: 'pipe',
       stderr: 'pipe',
+      signal: spawnOptions?.signal,
     },
   );
 };
@@ -371,7 +373,7 @@ export const diagnose = async (
 export const streamLogs = (
   udid: string,
   predicate: string,
-): Subprocess =>
+): HarnessSubprocess =>
   spawn(
     'xcrun',
     [

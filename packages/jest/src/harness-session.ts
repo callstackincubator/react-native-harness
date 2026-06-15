@@ -37,7 +37,9 @@ import {
 import {
   createCrashArtifactWriter,
   logger,
+  createAbortError,
   getTimeoutSignal,
+  waitForAbort,
   raceAbortSignals,
 } from '@react-native-harness/tools';
 import {
@@ -134,6 +136,29 @@ export type HarnessRunState = {
 
 export type HarnessRunTestsOptions = Exclude<TestExecutionOptions, 'platform'>;
 
+export const getSignalExitCodeForRunState = (
+  currentRun: HarnessRunState | null
+): number => {
+  return currentRun?.status === 'passed' && currentRun.error == null ? 0 : 1;
+};
+
+export const handleHarnessSignal = async (options: {
+  currentRun: HarnessRunState | null;
+  dispose: () => Promise<void>;
+  exit: (exitCode: number) => void;
+  sessionController: AbortController;
+}): Promise<void> => {
+  const exitCode = getSignalExitCodeForRunState(options.currentRun);
+  options.sessionController.abort(createAbortError());
+
+  try {
+    await options.dispose();
+    options.exit(exitCode);
+  } catch {
+    options.exit(1);
+  }
+};
+
 export type HarnessSession = {
   readonly config: HarnessConfig;
   readonly context: HarnessContext;
@@ -151,22 +176,6 @@ export type HarnessSession = {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-const createAbortError = () =>
-  new DOMException('The operation was aborted', 'AbortError');
-
-const waitForAbort = (signal: AbortSignal): Promise<never> => {
-  if (signal.aborted) {
-    return Promise.reject(signal.reason ?? createAbortError());
-  }
-  return new Promise((_, reject) => {
-    signal.addEventListener(
-      'abort',
-      () => reject(signal.reason ?? createAbortError()),
-      { once: true },
-    );
-  });
-};
 
 const withPlatformReadyTimeout = async <T>(options: {
   timeout: number;
@@ -194,6 +203,7 @@ type AppReadyOptions = {
   metroInstance: MetroInstance;
   bridge: HarnessBridge;
   platformId: string;
+  signal: AbortSignal;
   bundleStartTimeout: number;
   readyTimeout: number;
   maxAppRestarts: number;
@@ -234,6 +244,7 @@ const waitForAppReady = async (
     metroInstance,
     bridge,
     platformId,
+    signal,
     bundleStartTimeout,
     readyTimeout,
     maxAppRestarts,
@@ -251,7 +262,7 @@ const waitForAppReady = async (
     bundleStartTimeout,
     readyTimeout,
     maxAppRestarts,
-    signal: new AbortController().signal,
+    signal,
     startAttempt: async () => {
       logWait('launching app for %s', testFilePath);
       await restartAppSession();
@@ -415,11 +426,10 @@ export const createHarnessSession = async (
     platform.platformId,
   );
 
-  // Single AbortController for the entire setup phase. Registered signal
-  // handlers abort this so that slow inflight operations (Metro init, platform
-  // runner startup) are cancelled promptly on SIGTERM/SIGINT.
-  const setupController = new AbortController();
-  const onEarlySignal = () => setupController.abort();
+  // Single AbortController for session setup and long-running waits. Signal
+  // handlers abort this so inflight work stops quickly on SIGTERM/SIGINT.
+  const sessionController = new AbortController();
+  const onEarlySignal = () => sessionController.abort(createAbortError());
   process.once('SIGTERM', onEarlySignal);
   process.once('SIGINT', onEarlySignal);
 
@@ -430,7 +440,7 @@ export const createHarnessSession = async (
   logTestRunHeader(platform);
 
   const resourceLease = await lockManager.acquire(resourceLockKey, {
-    signal: setupController.signal,
+    signal: sessionController.signal,
     onWait: () => {
       didWaitForResourceLock = true;
       logRunnerWaitingInQueue(platform);
@@ -456,7 +466,7 @@ export const createHarnessSession = async (
       config: harnessConfig,
       platform,
       resourceLockManager: lockManager,
-      signal: setupController.signal,
+      signal: sessionController.signal,
     });
     metroPortLease = resolution.metroPortLease;
     const { config: runtimeConfig, initialMetroPort, didFallback } = resolution;
@@ -467,13 +477,12 @@ export const createHarnessSession = async (
       logMetroCacheReused(platform);
     }
 
-    const pluginAbortController = new AbortController();
     const pluginManager = createHarnessPluginManager<HarnessConfig, HarnessPlatform>({
       plugins: (runtimeConfig.plugins ?? []) as Array<HarnessPlugin<object, HarnessConfig, HarnessPlatform>>,
       projectRoot,
       config: runtimeConfig,
       runner: platform,
-      abortSignal: pluginAbortController.signal,
+      abortSignal: sessionController.signal,
     });
 
     const hooks = createHookQueue();
@@ -508,14 +517,14 @@ export const createHarnessSession = async (
               [HARNESS_BRIDGE_PATH]: bridge.ws as unknown as MetroWebSocketEndpoint,
             },
           },
-          setupController.signal,
+          sessionController.signal,
         ).then((instance) => {
           sessionLogger.debug('Metro initialized');
           return instance;
         }),
         withPlatformReadyTimeout({
           timeout: runtimeConfig.platformReadyTimeout,
-          signal: setupController.signal,
+          signal: sessionController.signal,
           work: async (signal) => {
             return await import(platform.runner).then((module) =>
               module.default(platform.config, runtimeConfig, {
@@ -552,7 +561,9 @@ export const createHarnessSession = async (
     const restartAppSession = async (): Promise<AppSession> => {
       await crashMonitor.stop();
       await disposeCurrentAppSession();
-      const session = await platformInstance.createAppSession(appLaunchOptions);
+      const session = await platformInstance.createAppSession(appLaunchOptions, {
+        signal: sessionController.signal,
+      });
       currentAppSession = session;
       crashMonitor.setAppSession(session);
       await crashMonitor.start();
@@ -565,6 +576,7 @@ export const createHarnessSession = async (
       metroInstance,
       bridge,
       platformId: platform.platformId,
+      signal: sessionController.signal,
       bundleStartTimeout: runtimeConfig.bundleStartTimeout ?? 60000,
       readyTimeout: runtimeConfig.bridgeTimeout,
       maxAppRestarts: runtimeConfig.maxAppRestarts ?? 2,
@@ -697,7 +709,6 @@ export const createHarnessSession = async (
         cleanupError = error;
       } finally {
         await resourceLease.release();
-        pluginAbortController.abort();
       }
 
       sessionLogger.debug('session resources disposed');
@@ -715,7 +726,14 @@ export const createHarnessSession = async (
     // that all infrastructure is up.
     process.off('SIGTERM', onEarlySignal);
     process.off('SIGINT', onEarlySignal);
-    const onSignal = () => void dispose('abort').then(() => process.exit(0));
+    const onSignal = () => {
+      void handleHarnessSignal({
+        currentRun,
+        dispose: () => dispose('abort'),
+        exit: (exitCode) => process.exit(exitCode),
+        sessionController,
+      });
+    };
     process.once('SIGTERM', onSignal);
     process.once('SIGINT', onSignal);
 
@@ -771,7 +789,12 @@ export const createHarnessSession = async (
       if (testFilePath) {
         await ensureAppReady(testFilePath);
       } else {
-        const session = await platformInstance.createAppSession(appLaunchOptions);
+        const session = await platformInstance.createAppSession(
+          appLaunchOptions,
+          {
+            signal: sessionController.signal,
+          },
+        );
         currentAppSession = session;
         crashMonitor.setAppSession(session);
         crashMonitor.reset();
@@ -857,6 +880,7 @@ export const createHarnessSession = async (
       dispose: (reason = 'normal') => {
         process.off('SIGTERM', onSignal);
         process.off('SIGINT', onSignal);
+        sessionController.abort(createAbortError());
         return dispose(reason);
       },
     };

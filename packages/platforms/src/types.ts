@@ -109,13 +109,20 @@ export type AppLaunchOptions =
   | WebAppLaunchOptions
   | VegaAppLaunchOptions;
 
+export type CreateAppSessionContext = {
+  signal: AbortSignal;
+};
+
 export type CollectNativeCoverageOptions = {
   pods: string[];
   outputDir: string;
 };
 
 export type HarnessPlatformRunner = {
-  createAppSession: (options?: AppLaunchOptions) => Promise<AppSession>;
+  createAppSession: (
+    options?: AppLaunchOptions,
+    context?: CreateAppSessionContext
+  ) => Promise<AppSession>;
   dispose: () => Promise<void>;
   collectNativeCoverage?: (
     options: CollectNativeCoverageOptions

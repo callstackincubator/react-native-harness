@@ -148,11 +148,12 @@ export const getAppleSimulatorPlatformInstance = async (
   }
 
   return {
-    createAppSession: async (options) => {
+    createAppSession: async (options, context) => {
       await simctl.stopApp(udid, config.bundleId);
       const launchOptions =
         (options as typeof config.appLaunchOptions | undefined) ??
         config.appLaunchOptions;
+      const signal = context?.signal ?? new AbortController().signal;
       const appInfo = await simctl.getAppInfo(udid, config.bundleId);
       const processNames = getIosProcessNames(
         appInfo?.CFBundleExecutable,
@@ -170,8 +171,11 @@ export const getAppleSimulatorPlatformInstance = async (
       });
 
       return await createIosAppSession({
-        launch: () =>
-          simctl.launchAppProcess(udid, config.bundleId, launchOptions),
+        signal,
+        launch: (launchSignal) =>
+          simctl.launchAppProcess(udid, config.bundleId, launchOptions, {
+            signal: launchSignal,
+          }),
         stopApp: () => simctl.stopApp(udid, config.bundleId),
         isAppRunning: () => simctl.isAppRunning(udid, config.bundleId),
         crashReporter,
@@ -259,11 +263,12 @@ export const getApplePhysicalDevicePlatformInstance = async (
   }
 
   return {
-    createAppSession: async (options) => {
+    createAppSession: async (options, context) => {
       await devicectl.stopApp(deviceId, config.bundleId);
       const launchOptions =
         (options as typeof config.appLaunchOptions | undefined) ??
         config.appLaunchOptions;
+      const signal = context?.signal ?? new AbortController().signal;
       const appInfo = await devicectl.getAppInfo(deviceId, config.bundleId);
       const processNames = getIosProcessNames(appInfo?.name, config.bundleId);
       const crashReporter = createIosCrashReporter({
@@ -276,8 +281,11 @@ export const getApplePhysicalDevicePlatformInstance = async (
       });
 
       return await createIosAppSession({
-        launch: () =>
-          devicectl.launchAppProcess(deviceId, config.bundleId, launchOptions),
+        signal,
+        launch: (launchSignal) =>
+          devicectl.launchAppProcess(deviceId, config.bundleId, launchOptions, {
+            signal: launchSignal,
+          }),
         stopApp: () => devicectl.stopApp(deviceId, config.bundleId),
         isAppRunning: () => devicectl.isAppRunning(deviceId, config.bundleId),
         crashReporter,

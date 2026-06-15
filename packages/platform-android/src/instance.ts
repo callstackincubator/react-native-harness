@@ -271,13 +271,15 @@ export const getAndroidEmulatorPlatformInstance = async (
   }
 
   return {
-    createAppSession: async (options) => {
+    createAppSession: async (options, context) => {
       await adb.stopApp(adbId, config.bundleId);
       const launchOptions =
         (options as typeof config.appLaunchOptions | undefined) ??
         config.appLaunchOptions;
+      const signal = context?.signal ?? new AbortController().signal;
 
       return await createAndroidAppSession({
+        signal,
         appUid,
         bundleId: config.bundleId,
         startApp: () =>
@@ -286,11 +288,12 @@ export const getAndroidEmulatorPlatformInstance = async (
             config.bundleId,
             config.activityName,
             launchOptions
-          ),
+        ),
         stopApp: () => adb.stopApp(adbId, config.bundleId),
         getAppPid: () => adb.getAppPid(adbId, config.bundleId),
         getLogcatTimestamp: () => adb.getLogcatTimestamp(adbId),
-        startLogcat: (args) => adb.startLogcat(adbId, args),
+        startLogcat: (args, logcatSignal) =>
+          adb.startLogcat(adbId, args, { signal: logcatSignal }),
         getDropboxOutput: () => adb.getDropboxPrint(adbId),
         getExitInfo: () => adb.getActivityExitInfo(adbId, config.bundleId),
         crashArtifactWriter: init.crashArtifactWriter,
@@ -339,13 +342,15 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
   }
 
   return {
-    createAppSession: async (options) => {
+    createAppSession: async (options, context) => {
       await adb.stopApp(adbId, config.bundleId);
       const launchOptions =
         (options as typeof config.appLaunchOptions | undefined) ??
         config.appLaunchOptions;
+      const signal = context?.signal ?? new AbortController().signal;
 
       return await createAndroidAppSession({
+        signal,
         appUid,
         bundleId: config.bundleId,
         startApp: () =>
@@ -354,11 +359,12 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
             config.bundleId,
             config.activityName,
             launchOptions
-          ),
+        ),
         stopApp: () => adb.stopApp(adbId, config.bundleId),
         getAppPid: () => adb.getAppPid(adbId, config.bundleId),
         getLogcatTimestamp: () => adb.getLogcatTimestamp(adbId),
-        startLogcat: (args) => adb.startLogcat(adbId, args),
+        startLogcat: (args, logcatSignal) =>
+          adb.startLogcat(adbId, args, { signal: logcatSignal }),
         getDropboxOutput: () => adb.getDropboxPrint(adbId),
         getExitInfo: () => adb.getActivityExitInfo(adbId, config.bundleId),
         crashArtifactWriter: init?.crashArtifactWriter,

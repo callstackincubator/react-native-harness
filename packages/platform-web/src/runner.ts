@@ -1,7 +1,9 @@
 import {
   createAppSessionEmitter,
+  type AppLaunchOptions,
   type AppSession,
   type AppSessionState,
+  type CreateAppSessionContext,
   type HarnessPlatformInitOptions,
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
@@ -126,7 +128,12 @@ const getWebRunner = async (
   };
 
   return {
-    createAppSession: async (): Promise<AppSession> => {
+    createAppSession: async (
+      _options?: AppLaunchOptions,
+      _context?: CreateAppSessionContext
+    ): Promise<AppSession> => {
+      void _options;
+      void _context;
       if (browser) {
         await browser.close();
         browser = null;
