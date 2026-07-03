@@ -20,29 +20,18 @@ type PromiseExecutor<T> = (
   reject: PromiseReject
 ) => void;
 
-/**
- * Hard upper bound on how many pending-promise records we retain. The tracker
- * only exists to report which promises are still pending when a test times out,
- * and diagnostics never show more than a handful. Without a bound, an app that
- * continuously creates promises that are abandoned before they settle (any
- * per-frame render / animation / polling loop) grows this map without limit and
- * OOMs the JS heap. When the bound is exceeded we evict the oldest records
- * (Map preserves insertion order), keeping the most recent — and most relevant
- * for a "what is still pending right now" report.
- */
+// Backstop against unbounded growth if GC can't keep up: never-settling
+// promises created in a hot loop would otherwise OOM the heap. Diagnostics only
+// ever show a handful, so evicting the oldest (Map keeps insertion order) is safe.
 export const MAX_TRACKED_PROMISES = 10_000;
 
 const pendingPromises = new Map<number, TrackedPromiseRecord>();
 const promiseIds = new WeakMap<object, number>();
 const promiseContexts = new WeakMap<object, PromiseTrackerTestContext>();
 
-/**
- * Drop a promise's record as soon as the promise itself is garbage-collected.
- * A collected promise can no longer settle and cannot be keeping anything
- * pending, so retaining its record (and captured stack) is a pure leak. This is
- * the primary defense against unbounded growth; the size cap is a synchronous
- * backstop for when GC can't keep up under heavy allocation pressure.
- */
+// A garbage-collected promise can never settle or hold anything pending, so drop
+// its record (and captured stack) instead of leaking it. Primary defense; the
+// size cap above covers the window before GC runs.
 const promiseFinalization =
   typeof FinalizationRegistry === 'undefined'
     ? null
