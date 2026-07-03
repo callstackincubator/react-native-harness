@@ -88,6 +88,9 @@ export const getClient = async (): Promise<HarnessHandle> => {
           testTimeout: options.testTimeout,
         });
       } finally {
+        // Release this file's Metro graph so the dev server doesn't retain one
+        // dependency graph per test file for the whole run (unbounded → OOM).
+        await bundler?.releaseModule(path);
         collector?.dispose();
         runner?.dispose();
         events?.clearAllListeners();

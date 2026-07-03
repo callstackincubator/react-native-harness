@@ -24,3 +24,19 @@ export const fetchModule = async (fileName: string): Promise<string> => {
 
   return text;
 };
+
+/**
+ * Ask Metro to drop the cached module graph for this entry. Metro keeps one
+ * dependency graph in memory per distinct `.bundle` entry point (for delta
+ * updates); because each test file is fetched as its own entry, those graphs
+ * would otherwise accumulate — one full graph per file — for the whole run and
+ * OOM the Metro/runner process. Metro releases a graph on an HTTP DELETE to the
+ * same bundle URL, so we reuse the exact fetch URL to match its graph id.
+ */
+export const releaseModule = async (fileName: string): Promise<void> => {
+  try {
+    await fetch(getModuleUrl(fileName), { method: 'DELETE' });
+  } catch {
+    // Best-effort: a failed release only costs memory, never correctness.
+  }
+};

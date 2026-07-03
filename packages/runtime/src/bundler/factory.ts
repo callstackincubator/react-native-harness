@@ -1,7 +1,7 @@
 import { BundlerEvents } from '@react-native-harness/bridge';
 import { getEmitter } from '../utils/emitter.js';
 import { Bundler } from './types.js';
-import { fetchModule } from './bundle.js';
+import { fetchModule, releaseModule } from './bundle.js';
 import { BundlingFailedError } from './errors.js';
 
 export const getBundler = (): Bundler => {
@@ -39,5 +39,6 @@ export const getBundler = (): Bundler => {
         throw error;
       }
     },
+    releaseModule: (filePath) => releaseModule(filePath),
   };
 };
