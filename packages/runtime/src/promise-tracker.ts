@@ -20,9 +20,35 @@ type PromiseExecutor<T> = (
   reject: PromiseReject
 ) => void;
 
+/**
+ * Hard upper bound on how many pending-promise records we retain. The tracker
+ * only exists to report which promises are still pending when a test times out,
+ * and diagnostics never show more than a handful. Without a bound, an app that
+ * continuously creates promises that are abandoned before they settle (any
+ * per-frame render / animation / polling loop) grows this map without limit and
+ * OOMs the JS heap. When the bound is exceeded we evict the oldest records
+ * (Map preserves insertion order), keeping the most recent — and most relevant
+ * for a "what is still pending right now" report.
+ */
+export const MAX_TRACKED_PROMISES = 10_000;
+
 const pendingPromises = new Map<number, TrackedPromiseRecord>();
 const promiseIds = new WeakMap<object, number>();
 const promiseContexts = new WeakMap<object, PromiseTrackerTestContext>();
+
+/**
+ * Drop a promise's record as soon as the promise itself is garbage-collected.
+ * A collected promise can no longer settle and cannot be keeping anything
+ * pending, so retaining its record (and captured stack) is a pure leak. This is
+ * the primary defense against unbounded growth; the size cap is a synchronous
+ * backstop for when GC can't keep up under heavy allocation pressure.
+ */
+const promiseFinalization =
+  typeof FinalizationRegistry === 'undefined'
+    ? null
+    : new FinalizationRegistry<number>((id) => {
+        pendingPromises.delete(id);
+      });
 
 let originalPromise: PromiseConstructor | null = null;
 let nextPromiseId = 1;
@@ -63,6 +89,15 @@ const registerPromise = ():
     stack: createPromiseStack(),
     test,
   });
+
+  while (pendingPromises.size > MAX_TRACKED_PROMISES) {
+    const oldest = pendingPromises.keys().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+
+    pendingPromises.delete(oldest);
+  }
 
   return { id, test };
 };
@@ -161,6 +196,7 @@ const createTrackedPromiseConstructor = (): PromiseConstructor => {
 
       if (registration.id !== null) {
         promiseIds.set(this, registration.id);
+        promiseFinalization?.register(this, registration.id);
       }
 
       if (registration.test) {
