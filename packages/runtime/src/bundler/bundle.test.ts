@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fetchModule, releaseModule } from './bundle.js';
 
 const mocks = vi.hoisted(() => ({
   Platform: { OS: 'ios' as string },
@@ -12,8 +13,6 @@ vi.mock('react-native', () => ({
 vi.mock('react-native/Libraries/Core/Devtools/getDevServer', () => ({
   default: () => ({ url: mocks.devServerUrl }),
 }));
-
-import { fetchModule, releaseModule } from './bundle.js';
 
 const EXPECTED_URL =
   'http://localhost:8081/path/to/example.harness.bundle?modulesOnly=true&platform=ios';
