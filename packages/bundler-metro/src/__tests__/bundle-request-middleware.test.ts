@@ -23,10 +23,8 @@ const createReporter = () => {
 };
 
 const createProjectRoot = () => {
-  // realpath, because require.resolve returns real paths and macOS tmpdir is
-  // a symlink (/var -> /private/var)
   const projectRoot = fs.mkdtempSync(
-    path.join(fs.realpathSync(os.tmpdir()), 'rn-harness-bundle-request-'),
+    path.join(os.tmpdir(), 'rn-harness-bundle-request-'),
   );
   tempDirs.push(projectRoot);
   fs.writeFileSync(path.join(projectRoot, 'index.js'), 'module.exports = {};');

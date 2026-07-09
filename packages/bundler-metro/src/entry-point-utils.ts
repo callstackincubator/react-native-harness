@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
@@ -45,5 +46,11 @@ export const getResolvedEntryPointWithoutExtension = (
     );
   }
 
-  return relativePathWithoutExtension(projectRoot, absolutePathToEntryPoint);
+  // require.resolve returns real paths, so compute the relative path against
+  // the realpath of the project root — otherwise it is wrong whenever the
+  // root sits behind a symlink (e.g. /var -> /private/var on macOS).
+  return relativePathWithoutExtension(
+    fs.realpathSync(projectRoot),
+    absolutePathToEntryPoint
+  );
 };

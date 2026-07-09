@@ -14,10 +14,8 @@ const harnessEntryPointPath = require.resolve(
 const tempDirs: string[] = [];
 
 const createProjectRoot = (): string => {
-  // realpath, because require.resolve returns real paths and macOS tmpdir is
-  // a symlink (/var -> /private/var)
   const projectRoot = fs.mkdtempSync(
-    path.join(fs.realpathSync(os.tmpdir()), 'rn-harness-entry-resolver-'),
+    path.join(os.tmpdir(), 'rn-harness-entry-resolver-'),
   );
   tempDirs.push(projectRoot);
   return projectRoot;
