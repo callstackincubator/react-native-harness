@@ -192,7 +192,37 @@ jobs:
           path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-playground
 
+      - name: Start iOS simulator recording
+        shell: bash
+        working-directory: apps/playground
+        run: |
+          set -euo pipefail
+
+          mkdir -p .harness/simulator-recordings
+          RECORDING_PATH="$PWD/.harness/simulator-recordings/${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}.mp4"
+          LOG_PATH="$PWD/.harness/simulator-recordings/${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}.log"
+          PID_PATH="$PWD/.harness/simulator-recordings/${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}.pid"
+
+          {
+            echo "Recording path: $RECORDING_PATH"
+            echo "Waiting for booted simulator..."
+
+            for _ in {1..120}; do
+              BOOTED_UDID="$(xcrun simctl list devices booted -j | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next((d["udid"] for runtime in data.get("devices", {}).values() for d in runtime if d.get("state") == "Booted"), ""))')"
+              if [ -n "$BOOTED_UDID" ]; then
+                echo "Recording simulator: $BOOTED_UDID"
+                exec xcrun simctl io "$BOOTED_UDID" recordVideo --codec=h264 "$RECORDING_PATH"
+              fi
+              sleep 2
+            done
+
+            echo "No booted simulator found before timeout"
+          } >"$LOG_PATH" 2>&1 &
+
+          echo "$!" > "$PID_PATH"
+
       - name: Run React Native Harness
+        timeout-minutes: 25
         uses: ./
         with:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
@@ -204,6 +234,45 @@ jobs:
           afterRunHook: |
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
             echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
+
+      - name: Stop iOS simulator recording
+        if: always()
+        shell: bash
+        working-directory: apps/playground
+        run: |
+          set +e
+
+          PID_PATH="$PWD/.harness/simulator-recordings/${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}.pid"
+          if [ ! -f "$PID_PATH" ]; then
+            echo "No simulator recording PID file found"
+            exit 0
+          fi
+
+          PID="$(cat "$PID_PATH")"
+          if ! kill -0 "$PID" 2>/dev/null; then
+            echo "Simulator recorder already stopped"
+            exit 0
+          fi
+
+          kill -INT "$PID" 2>/dev/null
+          for _ in {1..30}; do
+            if ! kill -0 "$PID" 2>/dev/null; then
+              echo "Simulator recorder stopped"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Simulator recorder did not stop after SIGINT; sending SIGTERM"
+          kill -TERM "$PID" 2>/dev/null
+
+      - name: Upload iOS simulator recording
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: simulator-recording-e2e-ios
+          path: apps/playground/.harness/simulator-recordings
+          if-no-files-found: ignore
 
       - name: Upload Harness logs
         if: always()
@@ -468,9 +537,39 @@ jobs:
           path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-playground
 
+      - name: Start iOS simulator recording
+        shell: bash
+        working-directory: apps/playground
+        run: |
+          set -euo pipefail
+
+          mkdir -p .harness/simulator-recordings
+          RECORDING_PATH="$PWD/.harness/simulator-recordings/${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}.mp4"
+          LOG_PATH="$PWD/.harness/simulator-recordings/${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}.log"
+          PID_PATH="$PWD/.harness/simulator-recordings/${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}.pid"
+
+          {
+            echo "Recording path: $RECORDING_PATH"
+            echo "Waiting for booted simulator..."
+
+            for _ in {1..120}; do
+              BOOTED_UDID="$(xcrun simctl list devices booted -j | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next((d["udid"] for runtime in data.get("devices", {}).values() for d in runtime if d.get("state") == "Booted"), ""))')"
+              if [ -n "$BOOTED_UDID" ]; then
+                echo "Recording simulator: $BOOTED_UDID"
+                exec xcrun simctl io "$BOOTED_UDID" recordVideo --codec=h264 "$RECORDING_PATH"
+              fi
+              sleep 2
+            done
+
+            echo "No booted simulator found before timeout"
+          } >"$LOG_PATH" 2>&1 &
+
+          echo "$!" > "$PID_PATH"
+
       - name: Run React Native Harness (expect crash)
         id: crash-test
         continue-on-error: true
+        timeout-minutes: 25
         uses: ./
         with:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
@@ -483,6 +582,45 @@ jobs:
           afterRunHook: |
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
             echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
+
+      - name: Stop iOS simulator recording
+        if: always()
+        shell: bash
+        working-directory: apps/playground
+        run: |
+          set +e
+
+          PID_PATH="$PWD/.harness/simulator-recordings/${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}.pid"
+          if [ ! -f "$PID_PATH" ]; then
+            echo "No simulator recording PID file found"
+            exit 0
+          fi
+
+          PID="$(cat "$PID_PATH")"
+          if ! kill -0 "$PID" 2>/dev/null; then
+            echo "Simulator recorder already stopped"
+            exit 0
+          fi
+
+          kill -INT "$PID" 2>/dev/null
+          for _ in {1..30}; do
+            if ! kill -0 "$PID" 2>/dev/null; then
+              echo "Simulator recorder stopped"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Simulator recorder did not stop after SIGINT; sending SIGTERM"
+          kill -TERM "$PID" 2>/dev/null
+
+      - name: Upload iOS simulator recording
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: simulator-recording-crash-validate-ios
+          path: apps/playground/.harness/simulator-recordings
+          if-no-files-found: ignore
 
       - name: Verify crash was detected
         shell: bash
