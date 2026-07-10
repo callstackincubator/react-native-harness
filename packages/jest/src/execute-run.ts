@@ -29,6 +29,10 @@ import {
   shouldRunHarnessTestFile,
 } from './test-file-platform-filter.js';
 import { formatHarnessErrorMessage } from './format-harness-error.js';
+import { logger } from '@react-native-harness/tools';
+import { printSummary, writeTraceFile } from './diagnostics/index.js';
+
+const diagnosticsLogger = logger.child('diagnostics');
 
 type EmitTestEvent = <Name extends keyof TestEvents>(
   eventName: Name,
@@ -346,5 +350,16 @@ export const executeRun = async (
     await caseEventChain;
     unsubscribe();
     runSpan.end({ runId, status: finalStatus });
+
+    if (session.diagnostics.enabled) {
+      const entries = session.diagnostics.flush();
+      try {
+        printSummary(entries, (line) => diagnosticsLogger.info(line));
+        const tracePath = await writeTraceFile(entries, { projectRoot: rootDir, runId });
+        diagnosticsLogger.info(`wrote diagnostics trace to ${tracePath}`);
+      } catch (reportError) {
+        diagnosticsLogger.warn('failed to write diagnostics report: %s', reportError);
+      }
+    }
   }
 };
