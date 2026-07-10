@@ -138,6 +138,17 @@ export const ConfigSchema = z
           "When enabled, app console output is attached to the active test result's console output."
       ),
 
+    diagnostics: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        'Enable diagnostics tracing for the harness session. Records spans for ' +
+          'session setup, Metro bundling, bridge/client events, and per-file test runs, ' +
+          'then writes a Chrome Trace Event JSON file and prints a summary after each run. ' +
+          'Can also be enabled via the RN_HARNESS_DIAGNOSTICS environment variable.'
+      ),
+
     // Deprecated property - used for migration detection
     include: z.array(z.string()).optional(),
   })
@@ -157,3 +168,20 @@ export const ConfigSchema = z
   );
 
 export type Config = z.infer<typeof ConfigSchema>;
+
+/**
+ * Resolves whether diagnostics tracing is enabled: either explicitly via the
+ * `diagnostics` config option, or via the `RN_HARNESS_DIAGNOSTICS` environment
+ * variable (any value other than unset, `''`, `'0'`, or `'false'`).
+ */
+export const isDiagnosticsEnabled = (
+  config: Pick<Config, 'diagnostics'> | undefined,
+  env: NodeJS.ProcessEnv = process.env
+): boolean => {
+  if (config?.diagnostics === true) {
+    return true;
+  }
+
+  const envValue = env.RN_HARNESS_DIAGNOSTICS;
+  return !!envValue && envValue !== '0' && envValue !== 'false';
+};

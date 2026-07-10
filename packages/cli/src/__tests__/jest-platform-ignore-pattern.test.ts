@@ -45,6 +45,7 @@ const makeConfig = (): Config => ({
   crashDetectionInterval: 500,
   disableViewFlattening: false,
   forwardClientLogs: false,
+  diagnostics: false,
 });
 
 describe('createPlatformTestPathIgnorePattern', () => {

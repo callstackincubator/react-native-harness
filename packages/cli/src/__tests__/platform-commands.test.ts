@@ -56,6 +56,7 @@ describe('platform CLI command discovery', () => {
         crashDetectionInterval: 500,
         disableViewFlattening: false,
         forwardClientLogs: false,
+        diagnostics: false,
       } satisfies Config,
     }));
 
@@ -119,6 +120,7 @@ describe('platform CLI command discovery', () => {
         crashDetectionInterval: 500,
         disableViewFlattening: false,
         forwardClientLogs: false,
+        diagnostics: false,
       } satisfies Config,
     }));
 
@@ -160,6 +162,7 @@ describe('platform CLI command discovery', () => {
         crashDetectionInterval: 500,
         disableViewFlattening: false,
         forwardClientLogs: false,
+        diagnostics: false,
       } satisfies Config,
     }));
 
@@ -223,6 +226,7 @@ describe('platform CLI command discovery', () => {
         crashDetectionInterval: 500,
         disableViewFlattening: false,
         forwardClientLogs: false,
+        diagnostics: false,
       } satisfies Config,
     }));
 
