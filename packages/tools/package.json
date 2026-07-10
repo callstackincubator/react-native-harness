@@ -24,7 +24,8 @@
     "react-native": "*"
   },
   "devDependencies": {
-    "react-native": "*"
+    "react-native": "*",
+    "vite": "^7.2.2"
   },
   "license": "MIT"
 }
