@@ -11,6 +11,7 @@ import {
   AppBridgeDisconnectedError,
   DeviceNotRespondingError,
 } from '@react-native-harness/bridge/server';
+import { createDiagnostics } from '@react-native-harness/tools';
 import type { HarnessSession } from '../harness-session.js';
 import { executeRun } from '../execute-run.js';
 
@@ -112,6 +113,7 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
       config: {},
     },
   } as HarnessSession['context'],
+  diagnostics: createDiagnostics({ enabled: false }),
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async () => makeHarnessResult()),
   restartApp: vi.fn(resolveUndefined),

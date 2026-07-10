@@ -1,3 +1,5 @@
+import type { Diagnostics } from '@react-native-harness/tools';
+
 export type CrashArtifactKind =
   | 'logcat'
   | 'ios-crash-report'
@@ -125,6 +127,12 @@ export type HarnessPlatformRunner = {
 export type HarnessPlatformInitOptions = {
   signal: AbortSignal;
   crashArtifactWriter?: CrashArtifactWriter;
+  /**
+   * Optional diagnostics tracing handle. Platform runners may use this to
+   * instrument subsystems (e.g. adb/simctl/devicectl) via `instrumented()`.
+   * Omitted or a disabled instance when diagnostics tracing is off.
+   */
+  diagnostics?: Diagnostics;
 };
 
 export type HarnessCliCommandContext = {
