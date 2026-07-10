@@ -188,6 +188,49 @@ describe('executeRun', () => {
     });
   });
 
+  describe('diagnostics', () => {
+    it('records run.total and run.file spans when diagnostics is enabled', async () => {
+      const diagnostics = createDiagnostics({ enabled: true });
+      const session = makeSession({ diagnostics });
+
+      await executeRun(session, [makeTest('/a.ts')], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      const entries = diagnostics.flush();
+      const runEntry = entries.find((e) => e.label === 'run.total');
+      const fileEntry = entries.find((e) => e.label === 'run.file');
+
+      expect(runEntry).toMatchObject({ status: 'ok', attrs: { status: 'passed' } });
+      expect(runEntry?.attrs?.runId).toBeTypeOf('string');
+      expect(fileEntry).toMatchObject({ status: 'ok', attrs: { file: '../a.ts', status: 'passed' } });
+      expect(fileEntry?.attrs?.runId).toBeTypeOf('string');
+    });
+
+    it('still records run.total when a test throws', async () => {
+      const diagnostics = createDiagnostics({ enabled: true });
+      const session = makeSession({
+        diagnostics,
+        ensureAppReady: vi.fn(async () => { throw new Error('unexpected'); }),
+      });
+
+      await executeRun(session, [makeTest()], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      const entries = diagnostics.flush();
+      expect(entries.find((e) => e.label === 'run.total')).toBeDefined();
+      expect(entries.find((e) => e.label === 'run.file')).toMatchObject({
+        attrs: { status: 'failed' },
+      });
+    });
+
+    it('is a no-op when diagnostics is disabled', async () => {
+      const diagnostics = createDiagnostics({ enabled: false });
+      const session = makeSession({ diagnostics });
+
+      await executeRun(session, [makeTest()], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      expect(diagnostics.flush()).toEqual([]);
+    });
+  });
+
   describe('happy path', () => {
     it('emits file start, ensureAppReady, runTestFile, file success in order', async () => {
       const order: string[] = [];
