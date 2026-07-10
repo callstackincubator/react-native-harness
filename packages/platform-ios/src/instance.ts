@@ -14,11 +14,11 @@ import {
   assertAppleDevicePhysical,
   assertAppleDeviceSimulator,
 } from './config.js';
-import * as simctl from './xcrun/simctl.js';
-import * as devicectl from './xcrun/devicectl.js';
+import * as simctlModule from './xcrun/simctl.js';
+import * as devicectlModule from './xcrun/devicectl.js';
 import { getDeviceName } from './utils.js';
 import { HarnessAppPathError } from './errors.js';
-import { logger } from '@react-native-harness/tools';
+import { instrumented, logger, noopDiagnostics } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { createXCTestAgentController } from './xctest-agent.js';
 import { createPermissionPromptAutoAcceptCapability } from './xctest-agent-capabilities.js';
@@ -54,6 +54,11 @@ export const getAppleSimulatorPlatformInstance = async (
   init: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDeviceSimulator(config.device);
+  const simctl = instrumented(
+    simctlModule,
+    'platform.ios.simctl',
+    init.diagnostics ?? noopDiagnostics
+  );
   const permissionsEnabled = harnessConfig.permissions ?? false;
 
   if (harnessConfig.coverage?.native?.ios?.pods?.length) {
@@ -204,6 +209,11 @@ export const getApplePhysicalDevicePlatformInstance = async (
   init?: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAppleDevicePhysical(config.device);
+  const devicectl = instrumented(
+    devicectlModule,
+    'platform.ios.devicectl',
+    init?.diagnostics ?? noopDiagnostics
+  );
   const permissionsEnabled = harnessConfig.permissions ?? false;
 
   if (harnessConfig.metroPort !== DEFAULT_METRO_PORT) {
