@@ -560,6 +560,22 @@ export const createHarnessSession = async (
             setupController.signal,
           ).then((instance) => {
             sessionLogger.debug('Metro initialized');
+            if (runtimeConfig.eagerPrewarm !== false) {
+              // Kick off the first bundle build while the platform is still booting.
+              // prewarm() memoizes this first call, so its session-lifetime setup
+              // signal is the one that matters — later callers' signals cannot
+              // cancel it. Not awaited: metro.init must resolve immediately.
+              const prewarmSpan = diagnostics.start('metro.prewarm');
+              instance
+                .prewarm({
+                  platform: platform.platformId,
+                  signal: setupController.signal,
+                })
+                .then((completed) => prewarmSpan.end({ completed }))
+                // Swallow AbortError on teardown so it never becomes an
+                // unhandled rejection; non-abort failures resolve false.
+                .catch((error) => prewarmSpan.fail(error));
+            }
             return instance;
           })
         ),

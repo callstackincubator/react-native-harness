@@ -71,6 +71,14 @@ export const ConfigSchema = z
       .number()
       .min(0, 'Max app restarts must be at least 0')
       .default(2),
+    eagerPrewarm: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe(
+        'Start building the Metro bundle while the platform (emulator, simulator, or browser) is still booting, ' +
+          'so the first bundle is ready sooner. Disable to defer the first bundle build until app startup.'
+      ),
 
     resetEnvironmentBetweenTestFiles: z.boolean().optional().default(true),
     unstable__skipAlreadyIncludedModules: z.boolean().optional().default(false),

@@ -37,6 +37,7 @@ const makeConfig = (): Config => ({
   platformReadyTimeout: 300000,
   bundleStartTimeout: 60000,
   maxAppRestarts: 2,
+  eagerPrewarm: true,
   resetEnvironmentBetweenTestFiles: true,
   unstable__skipAlreadyIncludedModules: false,
   unstable__enableMetroCache: false,

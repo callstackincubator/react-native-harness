@@ -101,6 +101,7 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `testTimeout`                      | Runtime timeout for each test case and suite hook in milliseconds (default: `5000`). Harness config takes precedence over Jest `testTimeout`.             |
 | `bundleStartTimeout`               | Bundle start timeout in milliseconds (default: `60000`).                                                                                                  |
 | `maxAppRestarts`                   | Maximum number of automatic app relaunch attempts while Harness is waiting for startup (default: `2`).                                                    |
+| `eagerPrewarm`                     | Start building the Metro bundle while the platform is still booting so the first bundle is ready sooner (default: `true`).                                |
 | `permissions`                      | Enable platform-specific permission prompt automation (default: `false`). On iOS, this controls whether Harness starts the XCTest-based permission helper. |
 | `resetEnvironmentBetweenTestFiles` | Reset environment between test files (default: `true`).                                                                                                   |
 | `detectNativeCrashes`              | Detect native app crashes during startup and test execution (default: `true`).                                                                            |
