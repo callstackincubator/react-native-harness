@@ -1,31 +1,33 @@
 import { getResolvedEntryPointWithoutExtension } from './entry-point-utils.js';
 import { HARNESS_REQUEST_KIND_HEADER } from './request-kind.js';
+import { getBundleUrl, type BundleClientProfile } from './bundle-url.js';
 
 type PrewarmOptions = {
   projectRoot: string;
   entryPoint: string;
   port: number;
   platform: string;
-  dev: boolean;
-  minify: boolean;
+  profile: BundleClientProfile;
   signal: AbortSignal;
+};
+
+export const buildPrewarmUrl = (
+  options: Omit<PrewarmOptions, 'signal'>
+): string => {
+  const { projectRoot, entryPoint, port, platform, profile } = options;
+  const resolvedEntryPoint = getResolvedEntryPointWithoutExtension(
+    projectRoot,
+    entryPoint
+  );
+
+  return getBundleUrl({ port, resolvedEntryPoint, platform, profile });
 };
 
 export const prewarmMetroBundle = async (
   options: PrewarmOptions
 ): Promise<void> => {
-  const { projectRoot, entryPoint, port, platform, dev, minify, signal } =
-    options;
-  const resolvedEntryPoint = getResolvedEntryPointWithoutExtension(
-    projectRoot,
-    entryPoint
-  );
-  const searchParams = new URLSearchParams({
-    platform,
-    dev: String(dev),
-    minify: String(minify),
-  });
-  const url = `http://localhost:${port}/${resolvedEntryPoint}.bundle?${searchParams.toString()}`;
+  const { signal } = options;
+  const url = buildPrewarmUrl(options);
 
   const response = await fetch(url, {
     signal,

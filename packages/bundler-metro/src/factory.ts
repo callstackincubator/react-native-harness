@@ -14,7 +14,9 @@ import {
 import { getExpoMiddleware } from './middlewares/expo-middleware.js';
 import { getBundleRequestObserverMiddleware } from './middlewares/bundle-request-middleware.js';
 import { getStatusMiddleware } from './middlewares/status-middleware.js';
-import { prewarmMetroBundle } from './prewarm.js';
+import { buildPrewarmUrl, prewarmMetroBundle } from './prewarm.js';
+import { detectBundleClientProfile } from './bundle-url.js';
+import { diffGraphRelevantParams } from './prewarm-guard.js';
 import { withRnHarness } from './withRnHarness.js';
 const metroLogger = logger.child('metro');
 
@@ -105,6 +107,12 @@ export const getMetroInstance = async (
   }
 
   const Metro = getMetroPackage(projectRoot);
+  const bundleClientProfile = detectBundleClientProfile(projectRoot);
+  metroLogger.debug(
+    'detected bundle client profile "%s" for %s',
+    bundleClientProfile,
+    projectRoot
+  );
 
   process.env.RN_HARNESS = 'true';
 
@@ -151,6 +159,29 @@ export const getMetroInstance = async (
   metroLogger.debug('Metro server is running');
 
   let prewarmResult: Promise<boolean> | null = null;
+  let prewarmRequestUrl: string | null = null;
+  let mismatchWarned = false;
+
+  const onBundleRequestObserved = (event: ReportableEvent) => {
+    if (event.type !== 'bundle_request_observed') {
+      return;
+    }
+
+    if (event.requestKind !== 'app' || !prewarmRequestUrl || mismatchWarned) {
+      return;
+    }
+
+    const diffs = diffGraphRelevantParams(prewarmRequestUrl, event.url);
+
+    if (diffs.length > 0) {
+      mismatchWarned = true;
+      metroLogger.warn(
+        'Pre-warmed Metro bundle graph key does not match the app-requested bundle graph key; the pre-warm may have built a graph the app cannot reuse. Mismatched: %s',
+        diffs.join(', ')
+      );
+    }
+  };
+  reporter.addListener(onBundleRequestObserved);
 
   return {
     events: reporter,
@@ -162,13 +193,16 @@ export const getMetroInstance = async (
       if (!prewarmResult) {
         prewarmResult = (async () => {
           try {
-            await prewarmMetroBundle({
+            const prewarmOptions = {
               projectRoot,
               entryPoint: harnessConfig.entryPoint,
               port: metroPort,
               platform,
-              dev: true,
-              minify: false,
+              profile: bundleClientProfile,
+            };
+            prewarmRequestUrl = buildPrewarmUrl(prewarmOptions);
+            await prewarmMetroBundle({
+              ...prewarmOptions,
               signal,
             });
             return true;
@@ -194,6 +228,7 @@ export const getMetroInstance = async (
     },
     dispose: () =>
       new Promise<void>((resolve) => {
+        reporter.removeListener(onBundleRequestObserved);
         server.close(() => resolve());
         server.closeAllConnections();
       }),
