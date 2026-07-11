@@ -20,10 +20,10 @@ describe('getCappedMaxWorkers', () => {
     ).toBe(2);
   });
 
-  it('respects a configured value below the cap', () => {
+  it('reserves the four cores granted to the device on an 8-core host', () => {
     expect(
       getCappedMaxWorkers({ configuredMaxWorkers: 6, hostParallelism: 8 })
-    ).toBe(6);
+    ).toBe(4);
   });
 
   it('respects a configured value well below the cap on a large host', () => {
@@ -41,7 +41,7 @@ describe('getCappedMaxWorkers', () => {
   it('falls back to the cap when maxWorkers is undefined', () => {
     expect(
       getCappedMaxWorkers({ configuredMaxWorkers: undefined, hostParallelism: 8 })
-    ).toBe(6);
+    ).toBe(4);
   });
 
   it('lowers a configured value that exceeds the cap', () => {
