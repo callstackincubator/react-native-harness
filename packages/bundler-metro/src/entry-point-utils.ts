@@ -1,7 +1,22 @@
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
 import path from 'node:path';
 
 const require = createRequire(import.meta.url);
+
+// Node's CJS resolver returns a realpath'd absolute path (symlinks
+// resolved). On macOS, os.tmpdir() (and other paths) are commonly reached
+// through a symlink (e.g. /var -> /private/var), so projectRoot must be
+// realpath'd too before computing a relative path -- otherwise the result
+// is a bogus "../../../private/var/..." path instead of the intended
+// project-relative entry point.
+const realpathOrSelf = (input: string): string => {
+  try {
+    return fs.realpathSync(input);
+  } catch {
+    return input;
+  }
+};
 
 const CODE_EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx'];
 
@@ -34,8 +49,9 @@ export const getResolvedEntryPointWithoutExtension = (
   projectRoot: string,
   entryPoint: string
 ) => {
+  const realProjectRoot = realpathOrSelf(projectRoot);
   const absolutePathToEntryPoint = resolveWithAbsolutePath(
-    projectRoot,
+    realProjectRoot,
     entryPoint
   );
 
@@ -45,5 +61,8 @@ export const getResolvedEntryPointWithoutExtension = (
     );
   }
 
-  return relativePathWithoutExtension(projectRoot, absolutePathToEntryPoint);
+  return relativePathWithoutExtension(
+    realProjectRoot,
+    absolutePathToEntryPoint
+  );
 };

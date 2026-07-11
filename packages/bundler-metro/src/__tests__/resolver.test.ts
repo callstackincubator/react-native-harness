@@ -53,9 +53,11 @@ describe('createHarnessEntryPointResolver', () => {
     ).toEqual(
       expect.objectContaining({
         type: 'sourceFile',
-        filePath: expect.stringContaining(
-          '@react-native-harness/runtime/entry-point',
-        ),
+        // In this workspace, `@react-native-harness/runtime/entry-point`
+        // resolves straight to the package's source file (no node_modules
+        // symlink in the path) rather than a string containing the package
+        // specifier, so assert on the resolved file itself.
+        filePath: expect.stringMatching(/entry-point(\.[cm]?[jt]sx?)?$/),
       }),
     );
   });
