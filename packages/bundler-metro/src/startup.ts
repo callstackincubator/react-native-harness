@@ -135,12 +135,19 @@ const waitForReadyAfterBundleRequest = async (options: {
   signal: AbortSignal;
   readyPromise: Promise<void>;
   cancelReadyWait: () => void;
+  initialBundlingInProgress: boolean;
 }): Promise<void> => {
-  const { events, readyTimeout, signal, readyPromise, cancelReadyWait } =
-    options;
+  const {
+    events,
+    readyTimeout,
+    signal,
+    readyPromise,
+    cancelReadyWait,
+    initialBundlingInProgress,
+  } = options;
 
   return await new Promise<void>((resolve, reject) => {
-    let bundlingInProgress = false;
+    let bundlingInProgress = initialBundlingInProgress;
     let settled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -209,7 +216,11 @@ const waitForReadyAfterBundleRequest = async (options: {
       }
     };
 
-    startReadyTimer();
+    // When a build is already in flight (seeded), keep the ready timer paused
+    // until Metro reports the build done or failed.
+    if (!bundlingInProgress) {
+      startReadyTimer();
+    }
     events.addListener(onMetroEvent);
     signal.addEventListener('abort', onAbort, { once: true });
 
@@ -309,6 +320,12 @@ export const waitForMetroBackedAppReady = async ({
             new DOMException('The operation was aborted', 'AbortError')
           );
         },
+        // Always false today: prewarm was awaited above, so no build can be
+        // in flight here. This seeds the ready-timer pause for the upcoming
+        // change that drops that await, where the app's bundle request can
+        // coalesce into the still-in-flight prewarm build and Metro emits no
+        // fresh bundle_build_started event.
+        initialBundlingInProgress: metro.isBuildInFlight(),
       });
       await Promise.race([readyAfterBundleRequestPromise, crashPromise]);
       bundleRequestObserver.dispose();

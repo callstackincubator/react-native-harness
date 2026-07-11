@@ -153,6 +153,22 @@ export const getMetroInstance = async (
   let prewarmResult: Promise<boolean> | null = null;
   let prewarmState: PrewarmState = 'idle';
 
+  let buildsInFlight = 0;
+  const onBuildEvent = (event: ReportableEvent) => {
+    if (event.type === 'bundle_build_started') {
+      buildsInFlight += 1;
+      return;
+    }
+
+    if (
+      event.type === 'bundle_build_done' ||
+      event.type === 'bundle_build_failed'
+    ) {
+      buildsInFlight = Math.max(0, buildsInFlight - 1);
+    }
+  };
+  reporter.addListener(onBuildEvent);
+
   return {
     events: reporter,
     httpServer: server,
@@ -198,8 +214,10 @@ export const getMetroInstance = async (
       return prewarmResult;
     },
     getPrewarmState: () => prewarmState,
+    isBuildInFlight: () => buildsInFlight > 0,
     dispose: () =>
       new Promise<void>((resolve) => {
+        reporter.removeListener(onBuildEvent);
         server.close(() => resolve());
         server.closeAllConnections();
       }),

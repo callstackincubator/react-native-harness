@@ -34,6 +34,7 @@ export type MetroInstance = {
   waitUntilHealthy: (options: WaitForMetroHealthOptions) => Promise<string>;
   prewarm: (options: PrewarmMetroBundleOptions) => Promise<boolean>;
   getPrewarmState: () => PrewarmState;
+  isBuildInFlight: () => boolean;
   dispose: () => Promise<void>;
 };
 

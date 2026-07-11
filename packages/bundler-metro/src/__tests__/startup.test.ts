@@ -32,6 +32,7 @@ const createMetroInstance = (
   waitUntilHealthy: vi.fn(async () => 'HTTP 200: packager-status:running'),
   prewarm: vi.fn(async () => false),
   getPrewarmState: vi.fn((): PrewarmState => 'failed'),
+  isBuildInFlight: vi.fn(() => false),
   dispose: vi.fn(async () => undefined),
   ...overrides,
 });
@@ -289,6 +290,96 @@ describe('waitForMetroBackedAppReady', () => {
     await promise;
 
     expect(waitForReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the ready timer paused when a build is already in flight at seed time', async () => {
+    vi.useFakeTimers();
+
+    const metroInstance = createMetroInstance({
+      isBuildInFlight: vi.fn(() => true),
+    });
+    let resolveReady!: () => void;
+    const startAttempt = vi.fn(async () => {
+      emitBundleRequestObserved(metroInstance, 'app');
+    });
+    const waitForReady = vi.fn(
+      async () =>
+        await new Promise<void>((resolve) => {
+          resolveReady = resolve;
+        })
+    );
+
+    let settled = false;
+    const promise = waitForMetroBackedAppReady({
+      metro: metroInstance,
+      platformId: 'ios',
+      bundleStartTimeout: 1_000,
+      readyTimeout: 2_000,
+      maxAppRestarts: 2,
+      signal: new AbortController().signal,
+      startAttempt,
+      waitForReady,
+      waitForCrash: async (signal) => await waitForAbort(signal),
+    }).finally(() => {
+      settled = true;
+    });
+
+    // No bundle_build_started is emitted: the build was already running when
+    // the ready wait began. The seeded state must keep the timer paused.
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(settled).toBe(false);
+
+    emitMetroEvent(metroInstance, { type: 'bundle_build_done' } as never);
+    await vi.advanceTimersByTimeAsync(1_500);
+
+    expect(settled).toBe(false);
+
+    resolveReady();
+    await promise;
+
+    expect(waitForReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts the ready timer once a seeded in-flight build settles', async () => {
+    vi.useFakeTimers();
+
+    const metroInstance = createMetroInstance({
+      isBuildInFlight: vi.fn(() => true),
+    });
+    const startAttempt = vi.fn(async () => {
+      emitBundleRequestObserved(metroInstance, 'app');
+    });
+
+    let settled = false;
+    const promise = waitForMetroBackedAppReady({
+      metro: metroInstance,
+      platformId: 'ios',
+      bundleStartTimeout: 1_000,
+      readyTimeout: 2_000,
+      maxAppRestarts: 2,
+      signal: new AbortController().signal,
+      startAttempt,
+      waitForReady: async (signal) => await waitForAbort(signal),
+      waitForCrash: async (signal) => await waitForAbort(signal),
+    }).finally(() => {
+      settled = true;
+    });
+    const rejection = expect(promise).rejects.toMatchObject({
+      name: 'StartupStallError',
+      code: 'ready_not_reported',
+      attempts: 1,
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(settled).toBe(false);
+
+    emitMetroEvent(metroInstance, { type: 'bundle_build_failed' } as never);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await rejection;
+    expect(startAttempt).toHaveBeenCalledTimes(1);
   });
 
   it('fails when the app requests its bundle but never reports ready', async () => {
