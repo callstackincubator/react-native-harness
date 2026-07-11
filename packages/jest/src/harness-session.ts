@@ -545,6 +545,8 @@ export const createHarnessSession = async (
 
     let metroInstance: MetroInstance;
     let platformInstance: HarnessPlatformRunner;
+    // Noop until the Metro instance resolves and the deriver is attached.
+    let disposeMetroDiagnostics: () => void = () => undefined;
 
     try {
       [metroInstance, platformInstance] = await Promise.all([
@@ -560,6 +562,9 @@ export const createHarnessSession = async (
             setupController.signal,
           ).then((instance) => {
             sessionLogger.debug('Metro initialized');
+            // Attach the Metro diagnostics deriver before the eager prewarm
+            // fires so its bundle build/request events land in the trace.
+            disposeMetroDiagnostics = observeMetroEvents(instance.events, diagnostics);
             if (runtimeConfig.eagerPrewarm !== false) {
               // Kick off the first bundle build while the platform is still booting.
               // prewarm() memoizes this first call, so its session-lifetime setup
@@ -602,7 +607,9 @@ export const createHarnessSession = async (
         ),
       ]);
     } catch (error) {
-      // Only bridge needs cleanup here; leases are released by the outer catch.
+      // Only bridge and the Metro diagnostics listener need cleanup here;
+      // leases are released by the outer catch.
+      disposeMetroDiagnostics();
       await bridge.dispose();
       throw error;
     }
@@ -699,7 +706,6 @@ export const createHarnessSession = async (
       metroInstance.events.addListener(clientLogListener);
     }
 
-    const disposeMetroDiagnostics = observeMetroEvents(metroInstance.events, diagnostics);
     const disposeBridgeDiagnostics = observeBridgeEvents(bridge, diagnostics);
 
     sessionLogger.debug('registered runtime, bridge, and Metro listeners');
