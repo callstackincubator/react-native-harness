@@ -1,7 +1,7 @@
 import { access, readFile } from 'node:fs/promises';
 import type { AndroidSystemImageArch } from './environment.js';
 import type { AndroidEmulator, AndroidEmulatorAVDConfig } from './config.js';
-import { EMULATOR_CPU_CORES } from './emulator-startup.js';
+import { getEmulatorCpuCores } from './emulator-startup.js';
 
 export type AvdConfig = {
   imageSysdir1?: string;
@@ -242,11 +242,11 @@ export const isAvdCompatible = ({
 
   if (
     normalizeConfigValue(avdConfig.hwCpuNcore ?? '') !==
-    normalizeConfigValue(String(EMULATOR_CPU_CORES))
+    normalizeConfigValue(String(getEmulatorCpuCores()))
   ) {
     return {
       compatible: false,
-      reason: `CPU core count mismatch: expected ${EMULATOR_CPU_CORES}, got ${
+      reason: `CPU core count mismatch: expected ${getEmulatorCpuCores()}, got ${
         avdConfig.hwCpuNcore ?? 'missing'
       }.`,
     };

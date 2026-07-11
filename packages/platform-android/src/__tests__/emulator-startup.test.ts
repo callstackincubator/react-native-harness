@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getEmulatorCpuCores,
   getEmulatorStartupArgs,
   isAccelerationUsable,
 } from '../emulator-startup.js';
+import { getDeviceCoreBudget } from '@react-native-harness/tools';
+import os from 'node:os';
+
+describe('getEmulatorCpuCores', () => {
+  it('uses the shared device-core budget for the current host', () => {
+    expect(getEmulatorCpuCores()).toBe(
+      getDeviceCoreBudget(os.availableParallelism())
+    );
+  });
+});
 
 describe('emulator startup modes', () => {
   it('builds default boot args', () => {
@@ -14,9 +25,9 @@ describe('emulator startup modes', () => {
         '-no-metrics',
       ])
     );
-    expect(getEmulatorStartupArgs('Pixel_8_API_35', 'default-boot')).not.toEqual(
-      expect.arrayContaining(['-camera-back', 'none'])
-    );
+    expect(
+      getEmulatorStartupArgs('Pixel_8_API_35', 'default-boot')
+    ).not.toEqual(expect.arrayContaining(['-camera-back', 'none']));
   });
 
   it('builds clean snapshot generation args', () => {

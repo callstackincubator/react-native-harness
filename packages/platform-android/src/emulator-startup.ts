@@ -1,4 +1,10 @@
-import { logger, spawn, SubprocessError } from '@react-native-harness/tools';
+import {
+  getDeviceCoreBudget,
+  logger,
+  spawn,
+  SubprocessError,
+} from '@react-native-harness/tools';
+import os from 'node:os';
 import { getEmulatorBinaryPath } from './environment.js';
 
 const emulatorStartupLogger = logger.child('android-emulator-startup');
@@ -9,20 +15,15 @@ export type EmulatorBootMode =
   | 'snapshot-reuse';
 
 /**
- * Number of vCPUs baked into the AVD's `hw.cpu.ncore` at creation time.
+ * Returns the vCPU count baked into an AVD for this runner.
  *
- * GitHub-hosted CI runners only have 2-4 cores available (ubuntu-latest: 4
- * public / 2 private vCPUs; macos-latest arm64: 3-4 cores), so the emulator
- * guest must not claim the whole host. 2 vCPUs is enough for headless
- * instrumented tests and leaves the remaining host cores free for Metro's
- * transform workers and the Node test session.
- *
- * This is a fixed constant rather than something derived from the host CPU
- * count so AVDs (and their boot snapshots) stay byte-identical/portable
- * across runners of different sizes - loading a saved snapshot requires an
- * identical hardware configuration.
+ * AVD snapshots require an identical hardware configuration to load, so all
+ * AVD creation, compatibility, and cache-key callers must use this value on
+ * the same host.
  */
-export const EMULATOR_CPU_CORES = 2;
+export const getEmulatorCpuCores = (): number => {
+  return getDeviceCoreBudget(os.availableParallelism());
+};
 
 const COMMON_EMULATOR_ARGS = [
   '-no-window',
@@ -64,35 +65,36 @@ export const isAccelerationUsable = (accelCheckOutput: string): boolean => {
  * block emulator startup - any error running it is swallowed and only
  * debug-logged.
  */
-export const warnIfEmulatorAccelerationUnavailable = async (): Promise<void> => {
-  let combinedOutput: string;
+export const warnIfEmulatorAccelerationUnavailable =
+  async (): Promise<void> => {
+    let combinedOutput: string;
 
-  try {
-    const emulatorBinaryPath = getEmulatorBinaryPath();
-    const { stdout, stderr } = await spawn(emulatorBinaryPath, [
-      '-accel-check',
-    ]);
-    combinedOutput = `${stdout}\n${stderr}`;
-  } catch (error) {
-    if (error instanceof SubprocessError) {
-      // The check itself ran but exited non-zero - this is how
-      // `-accel-check` reports that acceleration is unavailable, so treat
-      // its output as a normal (non-fatal) result rather than swallowing it.
-      combinedOutput = `${error.stdout}\n${error.stderr}`;
-    } else {
-      // Failed to even run the check (e.g. binary missing). This must never
-      // fail or block emulator startup.
-      emulatorStartupLogger.debug(
-        'Failed to run "emulator -accel-check": %o',
-        error
-      );
-      return;
+    try {
+      const emulatorBinaryPath = getEmulatorBinaryPath();
+      const { stdout, stderr } = await spawn(emulatorBinaryPath, [
+        '-accel-check',
+      ]);
+      combinedOutput = `${stdout}\n${stderr}`;
+    } catch (error) {
+      if (error instanceof SubprocessError) {
+        // The check itself ran but exited non-zero - this is how
+        // `-accel-check` reports that acceleration is unavailable, so treat
+        // its output as a normal (non-fatal) result rather than swallowing it.
+        combinedOutput = `${error.stdout}\n${error.stderr}`;
+      } else {
+        // Failed to even run the check (e.g. binary missing). This must never
+        // fail or block emulator startup.
+        emulatorStartupLogger.debug(
+          'Failed to run "emulator -accel-check": %o',
+          error
+        );
+        return;
+      }
     }
-  }
 
-  if (!isAccelerationUsable(combinedOutput)) {
-    logger.warn(
-      'Hardware acceleration (KVM/HVF) appears unavailable for the Android emulator. It will fall back to very slow software emulation.'
-    );
-  }
-};
+    if (!isAccelerationUsable(combinedOutput)) {
+      logger.warn(
+        'Hardware acceleration (KVM/HVF) appears unavailable for the Android emulator. It will fall back to very slow software emulation.'
+      );
+    }
+  };

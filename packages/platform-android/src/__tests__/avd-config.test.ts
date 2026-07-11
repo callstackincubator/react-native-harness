@@ -6,7 +6,9 @@ import {
   resolveAvdCachingEnabled,
 } from '../avd-config.js';
 import { AndroidPlatformConfigSchema } from '../config.js';
-import { EMULATOR_CPU_CORES } from '../emulator-startup.js';
+import { getEmulatorCpuCores } from '../emulator-startup.js';
+
+const emulatorCpuCores = getEmulatorCpuCores();
 
 describe('AVD config helpers', () => {
   it('parses snapshot config from Android schema', () => {
@@ -74,10 +76,10 @@ abi.type=x86_64
 hw.device.name=pixel_8
 disk.dataPartition.size=1G
 vm.heapSize=512M
-hw.cpu.ncore=${EMULATOR_CPU_CORES}
+hw.cpu.ncore=${emulatorCpuCores}
 `);
 
-    expect(avdConfig.hwCpuNcore).toBe(String(EMULATOR_CPU_CORES));
+    expect(avdConfig.hwCpuNcore).toBe(String(emulatorCpuCores));
 
     expect(
       isAvdCompatible({
@@ -123,7 +125,7 @@ vm.heapSize=512M
       })
     ).toMatchObject({
       compatible: false,
-      reason: `CPU core count mismatch: expected ${EMULATOR_CPU_CORES}, got missing.`,
+      reason: `CPU core count mismatch: expected ${emulatorCpuCores}, got missing.`,
     });
   });
 
@@ -134,7 +136,7 @@ abi.type=x86_64
 hw.device.name=pixel_8
 disk.dataPartition.size=1G
 vm.heapSize=512M
-hw.cpu.ncore=4
+hw.cpu.ncore=${emulatorCpuCores === 4 ? 3 : 4}
 `);
 
     expect(
@@ -154,7 +156,9 @@ hw.cpu.ncore=4
       })
     ).toMatchObject({
       compatible: false,
-      reason: `CPU core count mismatch: expected ${EMULATOR_CPU_CORES}, got 4.`,
+      reason: `CPU core count mismatch: expected ${emulatorCpuCores}, got ${
+        emulatorCpuCores === 4 ? 3 : 4
+      }.`,
     });
   });
 
@@ -165,7 +169,7 @@ abi.type=x86_64
 hw.device.name=pixel_8
 disk.dataPartition.size=6442450944
 vm.heapSize=512M
-hw.cpu.ncore=${EMULATOR_CPU_CORES}
+hw.cpu.ncore=${emulatorCpuCores}
 `);
 
     expect(

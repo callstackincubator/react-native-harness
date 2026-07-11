@@ -4377,6 +4377,13 @@ var createNoopDiagnostics = () => {
 };
 var noopDiagnostics = createNoopDiagnostics();
 
+// ../tools/dist/device-core-budget.js
+var MIN_DEVICE_CORE_BUDGET = 2;
+var MAX_DEVICE_CORE_BUDGET = 4;
+var getDeviceCoreBudget = (hostParallelism) => {
+  return Math.min(Math.max(Math.floor(hostParallelism / 2), MIN_DEVICE_CORE_BUDGET), MAX_DEVICE_CORE_BUDGET);
+};
+
 // ../plugins/dist/utils.js
 var isHookTree = (value) => {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -4591,6 +4598,9 @@ var getConfig = async (dir) => {
 // ../platform-android/dist/avd-config.js
 var import_promises3 = require("fs/promises");
 
+// ../platform-android/dist/emulator-startup.js
+var import_node_os2 = __toESM(require("os"), 1);
+
 // ../platform-android/dist/environment.js
 var import_node_fs7 = require("fs");
 var import_promises = require("fs/promises");
@@ -4613,7 +4623,9 @@ var getHostAndroidSystemImageArch = (architecture = process.arch) => {
 
 // ../platform-android/dist/emulator-startup.js
 var emulatorStartupLogger = logger.child("android-emulator-startup");
-var EMULATOR_CPU_CORES = 2;
+var getEmulatorCpuCores = () => {
+  return getDeviceCoreBudget(import_node_os2.default.availableParallelism());
+};
 
 // ../platform-android/dist/adb.js
 var import_node_child_process = require("child_process");
@@ -4649,7 +4661,7 @@ var getNormalizedAvdCacheConfig2 = ({
     // Roll the AVD cache key whenever the baked-in vCPU count changes, so a
     // cached AVD built before this constant existed regenerates once instead
     // of failing the compatibility check on every run.
-    cpuCores: EMULATOR_CPU_CORES
+    cpuCores: getEmulatorCpuCores()
   };
 };
 var getResolvedRunner = (runner) => {
