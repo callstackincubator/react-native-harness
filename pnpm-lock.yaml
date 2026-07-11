@@ -501,6 +501,9 @@ importers:
 
   packages/platforms:
     dependencies:
+      '@react-native-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
@@ -593,6 +596,9 @@ importers:
       react-native:
         specifier: '*'
         version: 0.82.1(@babel/core@7.27.4)(@react-native-community/cli@20.0.0(typescript@5.9.3))(@react-native/metro-config@0.82.1)(@types/react@19.1.13)(react@19.2.3)
+      vite:
+        specifier: ^7.2.2
+        version: 7.2.2(@types/node@20.19.25)(jiti@2.6.1)(terser@5.42.0)(yaml@2.8.0)
 
   packages/ui:
     dependencies:

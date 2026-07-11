@@ -5,7 +5,7 @@ import {
   HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
-import { logger } from '@react-native-harness/tools';
+import { instrumented, logger, noopDiagnostics } from '@react-native-harness/tools';
 import {
   AndroidPlatformConfig,
   assertAndroidDeviceEmulator,
@@ -17,7 +17,7 @@ import {
   resolveAvdCachingEnabled,
 } from './avd-config.js';
 import { getAdbId } from './adb-id.js';
-import * as adb from './adb.js';
+import * as adbModule from './adb.js';
 import {
   applyHarnessDebugHttpHost,
   clearHarnessDebugHttpHost,
@@ -71,13 +71,13 @@ const configureAndroidRuntime = async (
   const metroPort = harnessConfig.metroPort;
 
   await Promise.all([
-    adb.reversePort(adbId, metroPort),
-    adb.reversePort(adbId, 8080),
-    adb.setHideErrorDialogs(adbId, true),
+    adbModule.reversePort(adbId, metroPort),
+    adbModule.reversePort(adbId, 8080),
+    adbModule.setHideErrorDialogs(adbId, true),
     applyHarnessDebugHttpHost(adbId, config.bundleId, `localhost:${metroPort}`),
   ]);
 
-  return adb.getAppUid(adbId, config.bundleId);
+  return adbModule.getAppUid(adbId, config.bundleId);
 };
 
 const startAndWaitForBoot = async ({
@@ -87,11 +87,11 @@ const startAndWaitForBoot = async ({
 }: {
   emulatorName: string;
   signal: AbortSignal;
-  mode?: Parameters<typeof adb.startEmulator>[1];
+  mode?: Parameters<typeof adbModule.startEmulator>[1];
 }): Promise<string> => {
   await ensureAndroidEmulatorAvailable();
-  await adb.startEmulator(emulatorName, mode);
-  return adb.waitForBoot(emulatorName, signal);
+  await adbModule.startEmulator(emulatorName, mode);
+  return adbModule.waitForBoot(emulatorName, signal);
 };
 
 const recreateAvd = async ({
@@ -106,7 +106,7 @@ const recreateAvd = async ({
     throw new HarnessEmulatorConfigError(emulatorConfig.name);
   }
 
-  await adb.createAvd({
+  await adbModule.createAvd({
     name: emulatorConfig.name,
     apiLevel: emulatorConfig.avd.apiLevel,
     profile: emulatorConfig.avd.profile,
@@ -127,7 +127,7 @@ const prepareCachedAvd = async ({
 }): Promise<string> => {
   const emulatorName = emulatorConfig.name;
   const hostArch = getHostAndroidSystemImageArch();
-  const hasExistingAvd = await adb.hasAvd(emulatorName);
+  const hasExistingAvd = await adbModule.hasAvd(emulatorName);
   const avdConfig = hasExistingAvd ? await readAvdConfig(emulatorName) : null;
   const compatibility =
     avdConfig == null
@@ -152,7 +152,7 @@ const prepareCachedAvd = async ({
         emulatorName,
         compatibility.reason
       );
-      await adb.deleteAvd(emulatorName);
+      await adbModule.deleteAvd(emulatorName);
     }
 
     await recreateAvd({ emulatorConfig });
@@ -164,8 +164,8 @@ const prepareCachedAvd = async ({
     });
 
     logger.info('Saving Android emulator snapshot for %s...', emulatorName);
-    await adb.stopEmulator(generationAdbId);
-    await adb.waitForEmulatorDisconnect(generationAdbId, signal);
+    await adbModule.stopEmulator(generationAdbId);
+    await adbModule.waitForEmulatorDisconnect(generationAdbId, signal);
   } else {
     logger.info('Using cached Android emulator %s...', emulatorName);
   }
@@ -183,6 +183,11 @@ export const getAndroidEmulatorPlatformInstance = async (
   init: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDeviceEmulator(config.device);
+  const adb = instrumented(
+    adbModule,
+    'platform.android.adb',
+    init.diagnostics ?? noopDiagnostics
+  );
   const permissionsEnabled = harnessConfig.permissions ?? false;
   const emulatorConfig = config.device;
   const emulatorName = emulatorConfig.name;
@@ -315,6 +320,11 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
   init?: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
   assertAndroidDevicePhysical(config.device);
+  const adb = instrumented(
+    adbModule,
+    'platform.android.adb',
+    init?.diagnostics ?? noopDiagnostics
+  );
   const permissionsEnabled = harnessConfig.permissions ?? false;
 
   const adbId = await getAdbId(config.device);

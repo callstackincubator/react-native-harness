@@ -5,7 +5,7 @@ import connect from 'connect';
 import nocache from 'nocache';
 import { isPortAvailable, getMetroPackage } from './utils.js';
 import { MetroPortUnavailableError } from './errors.js';
-import type { MetroInstance, MetroOptions } from './types.js';
+import type { MetroInstance, MetroOptions, PrewarmState } from './types.js';
 import {
   type Reporter,
   withReporter,
@@ -183,6 +183,24 @@ export const getMetroInstance = async (
   };
   reporter.addListener(onBundleRequestObserved);
 
+  let prewarmState: PrewarmState = 'idle';
+
+  let buildsInFlight = 0;
+  const onBuildEvent = (event: ReportableEvent) => {
+    if (event.type === 'bundle_build_started') {
+      buildsInFlight += 1;
+      return;
+    }
+
+    if (
+      event.type === 'bundle_build_done' ||
+      event.type === 'bundle_build_failed'
+    ) {
+      buildsInFlight = Math.max(0, buildsInFlight - 1);
+    }
+  };
+  reporter.addListener(onBuildEvent);
+
   return {
     events: reporter,
     httpServer: server,
@@ -191,6 +209,7 @@ export const getMetroInstance = async (
       waitForMetroStatus({ port: metroPort, timeoutMs, signal }),
     prewarm: ({ platform, signal }) => {
       if (!prewarmResult) {
+        prewarmState = 'pending';
         prewarmResult = (async () => {
           try {
             const prewarmOptions = {
@@ -205,6 +224,7 @@ export const getMetroInstance = async (
               ...prewarmOptions,
               signal,
             });
+            prewarmState = 'succeeded';
             return true;
           } catch (error) {
             if (
@@ -212,6 +232,7 @@ export const getMetroInstance = async (
               error.name === 'AbortError' &&
               signal.aborted
             ) {
+              prewarmState = 'failed';
               throw error;
             }
 
@@ -219,6 +240,7 @@ export const getMetroInstance = async (
               `Metro pre-warm for ${platform} failed; continuing without pre-warm.`,
               error
             );
+            prewarmState = 'failed';
             return false;
           }
         })();
@@ -226,9 +248,12 @@ export const getMetroInstance = async (
 
       return prewarmResult;
     },
+    getPrewarmState: () => prewarmState,
+    isBuildInFlight: () => buildsInFlight > 0,
     dispose: () =>
       new Promise<void>((resolve) => {
         reporter.removeListener(onBundleRequestObserved);
+        reporter.removeListener(onBuildEvent);
         server.close(() => resolve());
         server.closeAllConnections();
       }),

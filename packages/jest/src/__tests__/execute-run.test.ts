@@ -11,6 +11,7 @@ import {
   AppBridgeDisconnectedError,
   DeviceNotRespondingError,
 } from '@react-native-harness/bridge/server';
+import { createDiagnostics } from '@react-native-harness/tools';
 import type { HarnessSession } from '../harness-session.js';
 import { executeRun } from '../execute-run.js';
 
@@ -27,6 +28,16 @@ const resolveUndefined = async () => undefined;
 const mockRunHarnessTestFile = vi.hoisted(() => vi.fn());
 vi.mock('../run.js', () => ({
   runHarnessTestFile: mockRunHarnessTestFile,
+}));
+
+// Mock the reporting module so diagnostics tests can inspect the entries that
+// would have been reported without touching the real filesystem, and so
+// asserting on them doesn't race with executeRun's own diagnostics.flush().
+const mockPrintSummary = vi.hoisted(() => vi.fn());
+const mockWriteTraceFile = vi.hoisted(() => vi.fn(async () => '/fake/trace.json'));
+vi.mock('../diagnostics/index.js', () => ({
+  printSummary: mockPrintSummary,
+  writeTraceFile: mockWriteTraceFile,
 }));
 
 // ---------------------------------------------------------------------------
@@ -112,6 +123,7 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
       config: {},
     },
   } as HarnessSession['context'],
+  diagnostics: createDiagnostics({ enabled: false }),
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async () => makeHarnessResult()),
   restartApp: vi.fn(resolveUndefined),
@@ -183,6 +195,61 @@ describe('executeRun', () => {
       await executeRun(session, [makeTest()], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
 
       expect(hookNames).toContain('run:finished');
+    });
+  });
+
+  describe('diagnostics', () => {
+    beforeEach(() => {
+      mockPrintSummary.mockClear();
+      mockWriteTraceFile.mockClear();
+    });
+
+    it('records run.total and run.file spans when diagnostics is enabled', async () => {
+      const diagnostics = createDiagnostics({ enabled: true });
+      const session = makeSession({ diagnostics });
+
+      await executeRun(session, [makeTest('/a.ts')], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      // executeRun flushes and hands entries to the (mocked) reporter in its
+      // finally block, so we inspect what was reported rather than flushing
+      // the diagnostics instance ourselves.
+      expect(mockPrintSummary).toHaveBeenCalledTimes(1);
+      const entries = mockPrintSummary.mock.calls[0]?.[0] as Array<{ label: string; status: string; attrs?: Record<string, unknown> }>;
+      const runEntry = entries.find((e) => e.label === 'run.total');
+      const fileEntry = entries.find((e) => e.label === 'run.file');
+
+      expect(runEntry).toMatchObject({ status: 'ok', attrs: { status: 'passed' } });
+      expect(runEntry?.attrs?.runId).toBeTypeOf('string');
+      expect(fileEntry).toMatchObject({ status: 'ok', attrs: { file: '../a.ts', status: 'passed' } });
+      expect(fileEntry?.attrs?.runId).toBeTypeOf('string');
+      expect(mockWriteTraceFile).toHaveBeenCalledWith(entries, expect.objectContaining({ runId: expect.any(String) }));
+    });
+
+    it('still records run.total when a test throws', async () => {
+      const diagnostics = createDiagnostics({ enabled: true });
+      const session = makeSession({
+        diagnostics,
+        ensureAppReady: vi.fn(async () => { throw new Error('unexpected'); }),
+      });
+
+      await executeRun(session, [makeTest()], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      const entries = mockPrintSummary.mock.calls[0]?.[0] as Array<{ label: string; attrs?: Record<string, unknown> }>;
+      expect(entries.find((e) => e.label === 'run.total')).toBeDefined();
+      expect(entries.find((e) => e.label === 'run.file')).toMatchObject({
+        attrs: { status: 'failed' },
+      });
+    });
+
+    it('is a no-op and does not generate a report when diagnostics is disabled', async () => {
+      const diagnostics = createDiagnostics({ enabled: false });
+      const session = makeSession({ diagnostics });
+
+      await executeRun(session, [makeTest()], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      expect(diagnostics.flush()).toEqual([]);
+      expect(mockPrintSummary).not.toHaveBeenCalled();
+      expect(mockWriteTraceFile).not.toHaveBeenCalled();
     });
   });
 

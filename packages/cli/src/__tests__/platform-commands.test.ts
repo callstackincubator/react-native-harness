@@ -48,6 +48,7 @@ describe('platform CLI command discovery', () => {
         platformReadyTimeout: 300000,
         bundleStartTimeout: 60000,
         maxAppRestarts: 2,
+        eagerPrewarm: true,
         resetEnvironmentBetweenTestFiles: true,
         unstable__skipAlreadyIncludedModules: false,
         unstable__enableMetroCache: false,
@@ -56,6 +57,7 @@ describe('platform CLI command discovery', () => {
         crashDetectionInterval: 500,
         disableViewFlattening: false,
         forwardClientLogs: false,
+        diagnostics: false,
       } satisfies Config,
     }));
 
@@ -111,6 +113,7 @@ describe('platform CLI command discovery', () => {
         platformReadyTimeout: 300000,
         bundleStartTimeout: 60000,
         maxAppRestarts: 2,
+        eagerPrewarm: true,
         resetEnvironmentBetweenTestFiles: true,
         unstable__skipAlreadyIncludedModules: false,
         unstable__enableMetroCache: false,
@@ -119,6 +122,7 @@ describe('platform CLI command discovery', () => {
         crashDetectionInterval: 500,
         disableViewFlattening: false,
         forwardClientLogs: false,
+        diagnostics: false,
       } satisfies Config,
     }));
 
@@ -152,6 +156,7 @@ describe('platform CLI command discovery', () => {
         platformReadyTimeout: 300000,
         bundleStartTimeout: 60000,
         maxAppRestarts: 2,
+        eagerPrewarm: true,
         resetEnvironmentBetweenTestFiles: true,
         unstable__skipAlreadyIncludedModules: false,
         unstable__enableMetroCache: false,
@@ -160,6 +165,7 @@ describe('platform CLI command discovery', () => {
         crashDetectionInterval: 500,
         disableViewFlattening: false,
         forwardClientLogs: false,
+        diagnostics: false,
       } satisfies Config,
     }));
 
@@ -215,6 +221,7 @@ describe('platform CLI command discovery', () => {
         platformReadyTimeout: 300000,
         bundleStartTimeout: 60000,
         maxAppRestarts: 2,
+        eagerPrewarm: true,
         resetEnvironmentBetweenTestFiles: true,
         unstable__skipAlreadyIncludedModules: false,
         unstable__enableMetroCache: false,
@@ -223,6 +230,7 @@ describe('platform CLI command discovery', () => {
         crashDetectionInterval: 500,
         disableViewFlattening: false,
         forwardClientLogs: false,
+        diagnostics: false,
       } satisfies Config,
     }));
 

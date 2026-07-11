@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getEmitter } from '@react-native-harness/tools';
 import { waitForMetroBackedAppReady } from '../startup.js';
 import type { ReportableEvent } from '../reporter.js';
-import type { MetroInstance } from '../types.js';
+import type { MetroInstance, PrewarmState } from '../types.js';
 
 const createAbortError = () =>
   new DOMException('The operation was aborted', 'AbortError');
@@ -31,6 +31,8 @@ const createMetroInstance = (
   websocketEndpoints: {},
   waitUntilHealthy: vi.fn(async () => 'HTTP 200: packager-status:running'),
   prewarm: vi.fn(async () => false),
+  getPrewarmState: vi.fn((): PrewarmState => 'failed'),
+  isBuildInFlight: vi.fn(() => false),
   dispose: vi.fn(async () => undefined),
   ...overrides,
 });
@@ -93,6 +95,7 @@ describe('waitForMetroBackedAppReady', () => {
 
     const metroInstance = createMetroInstance({
       prewarm: vi.fn(async () => true),
+      getPrewarmState: vi.fn((): PrewarmState => 'succeeded'),
     });
     const startAttempt = vi.fn(async () => undefined);
 
@@ -114,7 +117,7 @@ describe('waitForMetroBackedAppReady', () => {
       name: 'StartupStallError',
       code: 'bundle_request_not_observed',
       attempts: 2,
-      sawPrewarmRequest: true,
+      prewarmState: 'succeeded',
     });
     expect(startAttempt).toHaveBeenCalledTimes(2);
   });
@@ -289,6 +292,96 @@ describe('waitForMetroBackedAppReady', () => {
     expect(waitForReady).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the ready timer paused when a build is already in flight at seed time', async () => {
+    vi.useFakeTimers();
+
+    const metroInstance = createMetroInstance({
+      isBuildInFlight: vi.fn(() => true),
+    });
+    let resolveReady!: () => void;
+    const startAttempt = vi.fn(async () => {
+      emitBundleRequestObserved(metroInstance, 'app');
+    });
+    const waitForReady = vi.fn(
+      async () =>
+        await new Promise<void>((resolve) => {
+          resolveReady = resolve;
+        })
+    );
+
+    let settled = false;
+    const promise = waitForMetroBackedAppReady({
+      metro: metroInstance,
+      platformId: 'ios',
+      bundleStartTimeout: 1_000,
+      readyTimeout: 2_000,
+      maxAppRestarts: 2,
+      signal: new AbortController().signal,
+      startAttempt,
+      waitForReady,
+      waitForCrash: async (signal) => await waitForAbort(signal),
+    }).finally(() => {
+      settled = true;
+    });
+
+    // No bundle_build_started is emitted: the build was already running when
+    // the ready wait began. The seeded state must keep the timer paused.
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(settled).toBe(false);
+
+    emitMetroEvent(metroInstance, { type: 'bundle_build_done' } as never);
+    await vi.advanceTimersByTimeAsync(1_500);
+
+    expect(settled).toBe(false);
+
+    resolveReady();
+    await promise;
+
+    expect(waitForReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts the ready timer once a seeded in-flight build settles', async () => {
+    vi.useFakeTimers();
+
+    const metroInstance = createMetroInstance({
+      isBuildInFlight: vi.fn(() => true),
+    });
+    const startAttempt = vi.fn(async () => {
+      emitBundleRequestObserved(metroInstance, 'app');
+    });
+
+    let settled = false;
+    const promise = waitForMetroBackedAppReady({
+      metro: metroInstance,
+      platformId: 'ios',
+      bundleStartTimeout: 1_000,
+      readyTimeout: 2_000,
+      maxAppRestarts: 2,
+      signal: new AbortController().signal,
+      startAttempt,
+      waitForReady: async (signal) => await waitForAbort(signal),
+      waitForCrash: async (signal) => await waitForAbort(signal),
+    }).finally(() => {
+      settled = true;
+    });
+    const rejection = expect(promise).rejects.toMatchObject({
+      name: 'StartupStallError',
+      code: 'ready_not_reported',
+      attempts: 1,
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(settled).toBe(false);
+
+    emitMetroEvent(metroInstance, { type: 'bundle_build_failed' } as never);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await rejection;
+    expect(startAttempt).toHaveBeenCalledTimes(1);
+  });
+
   it('fails when the app requests its bundle but never reports ready', async () => {
     vi.useFakeTimers();
 
@@ -406,7 +499,7 @@ describe('waitForMetroBackedAppReady', () => {
       name: 'StartupStallError',
       code: 'bundle_request_not_observed',
       attempts: 3,
-      sawPrewarmRequest: false,
+      prewarmState: 'failed',
     });
     expect(startAttempt).toHaveBeenCalledTimes(3);
   });
@@ -416,6 +509,7 @@ describe('waitForMetroBackedAppReady', () => {
 
     const metroInstance = createMetroInstance({
       prewarm: vi.fn(async () => true),
+      getPrewarmState: vi.fn((): PrewarmState => 'succeeded'),
     });
     let releaseStartAttempt!: () => void;
     const startAttemptGate = new Promise<void>((resolve) => {
@@ -440,7 +534,7 @@ describe('waitForMetroBackedAppReady', () => {
       name: 'StartupStallError',
       code: 'bundle_request_not_observed',
       attempts: 1,
-      sawPrewarmRequest: true,
+      prewarmState: 'succeeded',
     });
 
     await vi.advanceTimersByTimeAsync(5_000);

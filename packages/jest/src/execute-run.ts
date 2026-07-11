@@ -29,6 +29,10 @@ import {
   shouldRunHarnessTestFile,
 } from './test-file-platform-filter.js';
 import { formatHarnessErrorMessage } from './format-harness-error.js';
+import { logger } from '@react-native-harness/tools';
+import { printSummary, writeTraceFile } from './diagnostics/index.js';
+
+const diagnosticsLogger = logger.child('diagnostics');
 
 type EmitTestEvent = <Name extends keyof TestEvents>(
   eventName: Name,
@@ -136,6 +140,8 @@ export const executeRun = async (
   globalConfig: Config.GlobalConfig,
 ): Promise<void> => {
   const runId = randomUUID();
+  const diagnostics = session.diagnostics.child({ runId });
+  const runSpan = diagnostics.start('run.total', { runId });
   const startTime = Date.now();
   const watchMode = globalConfig.watch || globalConfig.watchAll;
   const rootDir = globalConfig.rootDir ?? process.cwd();
@@ -216,22 +222,82 @@ export const executeRun = async (
       };
 
       await session.callHook('test-file:started', { runId, file: relativeTestPath });
+      const fileSpan = diagnostics.start('run.file', { file: relativeTestPath });
+      let fileStatus: 'passed' | 'failed' | 'skipped' | 'todo' = 'failed';
 
-      if (
-        !shouldRunHarnessTestFile(test.path, platformId, knownPlatformIds)
-      ) {
+      try {
+        if (
+          !shouldRunHarnessTestFile(test.path, platformId, knownPlatformIds)
+        ) {
+          try {
+            await emitEvent('test-file-start', test);
+            const skippedResult = createPlatformSkippedTestResult(test.path);
+            applyJestResultToSummary(summary, skippedResult);
+            updateRunState();
+            fileStatus = 'skipped';
+            await emitTestFileFinished({
+              status: 'skipped',
+              duration: Date.now() - fileStartedAt,
+              result: null,
+            });
+            await emitEvent('test-file-success', test, skippedResult);
+          } catch (err) {
+            fileStatus = 'failed';
+            if (!emittedTestFileFinished) {
+              await emitTestFileFinished({
+                status: 'failed',
+                duration: Date.now() - fileStartedAt,
+                result: null,
+              });
+            }
+            updateRunState({ error: err });
+            await emitEvent('test-file-failure', test, buildTestFailure(err));
+          }
+          continue;
+        }
+
         try {
+          if ((shouldResetEnv && !isFirstTest) || shouldRestartAfterTimeout) {
+            await session.restartApp(test.path);
+            shouldRestartAfterTimeout = false;
+          }
+          isFirstTest = false;
+
+          session.flushClientLogs();
           await emitEvent('test-file-start', test);
-          const skippedResult = createPlatformSkippedTestResult(test.path);
-          applyJestResultToSummary(summary, skippedResult);
-          updateRunState();
-          await emitTestFileFinished({
-            status: 'skipped',
-            duration: Date.now() - fileStartedAt,
-            result: null,
+          await session.ensureAppReady(test.path);
+
+          // Crash detection is handled inside session.runTestFile; NativeCrashError
+          // propagates here if a crash wins the race.
+          const result = await runHarnessTestFile({
+            testPath: test.path,
+            session,
+            globalConfig,
+            projectConfig: test.context.config,
           });
-          await emitEvent('test-file-success', test, skippedResult);
+
+          applyJestResultToSummary(summary, result.jestResult);
+          const clientLogs = session.flushClientLogs();
+          if (clientLogs.length > 0) {
+            result.jestResult.console = clientLogs;
+          }
+          updateRunState();
+          fileStatus = result.harnessResult.status;
+          await emitTestFileFinished({
+            status: result.harnessResult.status,
+            duration: result.duration,
+            result: result.harnessResult,
+          });
+          const didRuntimeTimeout = hasRuntimeTimeout(result.harnessResult);
+          shouldRestartAfterTimeout = didRuntimeTimeout;
+          await caseEventChain;
+          await emitEvent('test-file-success', test, result.jestResult);
+          if (didRuntimeTimeout) {
+            await session.restartApp(test.path);
+            shouldRestartAfterTimeout = false;
+          }
         } catch (err) {
+          fileStatus = 'failed';
           if (!emittedTestFileFinished) {
             await emitTestFileFinished({
               status: 'failed',
@@ -239,79 +305,29 @@ export const executeRun = async (
               result: null,
             });
           }
-          updateRunState({ error: err });
+
+          const isRuntimeFailure =
+            err instanceof NativeCrashError ||
+            err instanceof RuntimeDisconnectError ||
+            err instanceof StartupStallError ||
+            err instanceof AppBridgeDisconnectedError ||
+            err instanceof DeviceNotRespondingError;
+
+          if (isRuntimeFailure) {
+            summary.failed += 1;
+            updateRunState();
+          }
+
+          if (err instanceof NativeCrashError || err instanceof RuntimeDisconnectError) {
+            session.resetCrashState();
+          }
+
+          updateRunState({ error: isRuntimeFailure ? undefined : err });
+          await caseEventChain;
           await emitEvent('test-file-failure', test, buildTestFailure(err));
         }
-        continue;
-      }
-
-      try {
-        if ((shouldResetEnv && !isFirstTest) || shouldRestartAfterTimeout) {
-          await session.restartApp(test.path);
-          shouldRestartAfterTimeout = false;
-        }
-        isFirstTest = false;
-
-        session.flushClientLogs();
-        await emitEvent('test-file-start', test);
-        await session.ensureAppReady(test.path);
-
-        // Crash detection is handled inside session.runTestFile; NativeCrashError
-        // propagates here if a crash wins the race.
-        const result = await runHarnessTestFile({
-          testPath: test.path,
-          session,
-          globalConfig,
-          projectConfig: test.context.config,
-        });
-
-        applyJestResultToSummary(summary, result.jestResult);
-        const clientLogs = session.flushClientLogs();
-        if (clientLogs.length > 0) {
-          result.jestResult.console = clientLogs;
-        }
-        updateRunState();
-        await emitTestFileFinished({
-          status: result.harnessResult.status,
-          duration: result.duration,
-          result: result.harnessResult,
-        });
-        const didRuntimeTimeout = hasRuntimeTimeout(result.harnessResult);
-        shouldRestartAfterTimeout = didRuntimeTimeout;
-        await caseEventChain;
-        await emitEvent('test-file-success', test, result.jestResult);
-        if (didRuntimeTimeout) {
-          await session.restartApp(test.path);
-          shouldRestartAfterTimeout = false;
-        }
-      } catch (err) {
-        if (!emittedTestFileFinished) {
-          await emitTestFileFinished({
-            status: 'failed',
-            duration: Date.now() - fileStartedAt,
-            result: null,
-          });
-        }
-
-        const isRuntimeFailure =
-          err instanceof NativeCrashError ||
-          err instanceof RuntimeDisconnectError ||
-          err instanceof StartupStallError ||
-          err instanceof AppBridgeDisconnectedError ||
-          err instanceof DeviceNotRespondingError;
-
-        if (isRuntimeFailure) {
-          summary.failed += 1;
-          updateRunState();
-        }
-
-        if (err instanceof NativeCrashError || err instanceof RuntimeDisconnectError) {
-          session.resetCrashState();
-        }
-
-        updateRunState({ error: isRuntimeFailure ? undefined : err });
-        await caseEventChain;
-        await emitEvent('test-file-failure', test, buildTestFailure(err));
+      } finally {
+        fileSpan.end({ status: fileStatus });
       }
     }
   } catch (err) {
@@ -321,16 +337,29 @@ export const executeRun = async (
     const runState = updateRunState(
       runError != null ? { completed: true, error: runError, status: 'failed' } : { completed: true },
     );
+    const finalStatus = runState.status ?? (runError != null ? 'failed' : 'passed');
     await session.callHook('run:finished', {
       runId,
       startTime,
       duration: Date.now() - startTime,
       testFiles,
       summary,
-      status: runState.status ?? (runError != null ? 'failed' : 'passed'),
+      status: finalStatus,
       ...(runError != null ? { error: runError } : {}),
     });
     await caseEventChain;
     unsubscribe();
+    runSpan.end({ runId, status: finalStatus });
+
+    if (session.diagnostics.enabled) {
+      const entries = session.diagnostics.flush();
+      try {
+        printSummary(entries, (line) => diagnosticsLogger.info(line));
+        const tracePath = await writeTraceFile(entries, { projectRoot: rootDir, runId });
+        diagnosticsLogger.info(`wrote diagnostics trace to ${tracePath}`);
+      } catch (reportError) {
+        diagnosticsLogger.warn('failed to write diagnostics report: %s', reportError);
+      }
+    }
   }
 };
