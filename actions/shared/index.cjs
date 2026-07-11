@@ -4599,6 +4599,17 @@ var import_node_path8 = __toESM(require("path"), 1);
 var import_promises2 = require("stream/promises");
 var import_node_https = __toESM(require("https"), 1);
 var androidEnvironmentLogger = logger.child("android-environment");
+var getHostAndroidSystemImageArch = (architecture = process.arch) => {
+  switch (architecture) {
+    case "arm64":
+      return "arm64-v8a";
+    case "arm":
+      return "armeabi-v7a";
+    case "x64":
+    default:
+      return "x86_64";
+  }
+};
 
 // ../platform-android/dist/emulator-startup.js
 var emulatorStartupLogger = logger.child("android-emulator-startup");
@@ -4613,17 +4624,6 @@ var androidAdbLogger = logger.child("android-adb");
 // src/shared/index.ts
 var import_node_path9 = __toESM(require("path"));
 var import_node_fs8 = __toESM(require("fs"));
-var getHostAndroidSystemImageArch2 = () => {
-  switch (process.arch) {
-    case "arm64":
-      return "arm64-v8a";
-    case "arm":
-      return "armeabi-v7a";
-    case "x64":
-    default:
-      return "x86_64";
-  }
-};
 var resolveAvdCachingEnabled2 = ({
   snapshotEnabled
 }) => {
@@ -4672,7 +4672,7 @@ var getResolvedRunner = (runner) => {
       avdCachingEnabled,
       avdCacheConfig: getNormalizedAvdCacheConfig2({
         emulator: runner.config.device,
-        hostArch: getHostAndroidSystemImageArch2()
+        hostArch: getHostAndroidSystemImageArch()
       })
     }
   };

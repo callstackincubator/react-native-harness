@@ -1,22 +1,10 @@
 import { getConfig } from '@react-native-harness/config';
-import { EMULATOR_CPU_CORES } from '@react-native-harness/platform-android';
+import {
+  EMULATOR_CPU_CORES,
+  getHostAndroidSystemImageArch,
+} from '@react-native-harness/platform-android';
 import path from 'node:path';
 import fs from 'node:fs';
-
-const getHostAndroidSystemImageArch = ():
-  | 'x86_64'
-  | 'arm64-v8a'
-  | 'armeabi-v7a' => {
-  switch (process.arch) {
-    case 'arm64':
-      return 'arm64-v8a';
-    case 'arm':
-      return 'armeabi-v7a';
-    case 'x64':
-    default:
-      return 'x86_64';
-  }
-};
 
 const resolveAvdCachingEnabled = ({
   snapshotEnabled,
