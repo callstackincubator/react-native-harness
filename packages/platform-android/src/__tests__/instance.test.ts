@@ -12,6 +12,8 @@ import * as adb from '../adb.js';
 import * as avdConfig from '../avd-config.js';
 import * as sharedPrefs from '../shared-prefs.js';
 import { HarnessAppPathError, HarnessEmulatorConfigError } from '../errors.js';
+import * as emulatorStartup from '../emulator-startup.js';
+const { EMULATOR_CPU_CORES } = emulatorStartup;
 
 const createLogcatProcess = (lines: string[] = []): Subprocess => {
   const process = {
@@ -48,6 +50,10 @@ describe('Android platform instance', () => {
       await import('../environment.js'),
       'ensureAndroidEmulatorAvailable',
     ).mockResolvedValue('/tmp/android-sdk');
+    vi.spyOn(
+      emulatorStartup,
+      'warnIfEmulatorAccelerationUnavailable',
+    ).mockResolvedValue(undefined);
   });
 
   it('reuses a running emulator and does not shut it down on dispose', async () => {
@@ -234,6 +240,7 @@ describe('Android platform instance', () => {
       hwDeviceName: 'pixel_8',
       diskDataPartitionSize: '1G',
       vmHeapSize: '1G',
+      hwCpuNcore: String(EMULATOR_CPU_CORES),
     });
     vi.spyOn(adb, 'startEmulator').mockResolvedValue(undefined);
     vi.spyOn(adb, 'waitForBoot').mockResolvedValue('emulator-5554');

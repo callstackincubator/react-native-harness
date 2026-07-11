@@ -25,6 +25,7 @@ import {
   getRequiredAndroidSdkPackages,
 } from './environment.js';
 import {
+  EMULATOR_CPU_CORES,
   getEmulatorStartupArgs,
   type EmulatorBootMode,
 } from './emulator-startup.js';
@@ -513,9 +514,14 @@ export const createAvd = async ({
   ]);
   await ensureAvdIniExists({ name, apiLevel });
   const configPath = await ensureAvdConfigExists(name);
+  // hw.cpu.ncore is baked into config.ini (rather than passed as a `-cores`
+  // boot flag) so it's part of the AVD's persisted hardware profile: boot
+  // snapshots require an identical hardware config to load, so the vCPU
+  // count must be fixed at AVD-creation time and stay consistent across
+  // boots.
   await spawn('bash', [
     '-lc',
-    `printf '%s\n%s\n' 'disk.dataPartition.size=${diskSize}' 'vm.heapSize=${heapSize}' >> "${configPath}"`,
+    `printf '%s\n%s\n%s\n' 'disk.dataPartition.size=${diskSize}' 'vm.heapSize=${heapSize}' 'hw.cpu.ncore=${EMULATOR_CPU_CORES}' >> "${configPath}"`,
   ]);
 };
 

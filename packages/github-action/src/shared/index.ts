@@ -1,4 +1,5 @@
 import { getConfig } from '@react-native-harness/config';
+import { EMULATOR_CPU_CORES } from '@react-native-harness/platform-android';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -57,6 +58,10 @@ const getNormalizedAvdCacheConfig = ({
     profile: avd.profile.trim().toLowerCase(),
     diskSize: avd.diskSize.trim().toLowerCase(),
     heapSize: avd.heapSize.trim().toLowerCase(),
+    // Roll the AVD cache key whenever the baked-in vCPU count changes, so a
+    // cached AVD built before this constant existed regenerates once instead
+    // of failing the compatibility check on every run.
+    cpuCores: EMULATOR_CPU_CORES,
   };
 };
 

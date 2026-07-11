@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { getEmulatorStartupArgs } from '../emulator-startup.js';
+import {
+  getEmulatorStartupArgs,
+  isAccelerationUsable,
+} from '../emulator-startup.js';
 
 describe('emulator startup modes', () => {
   it('builds default boot args', () => {
@@ -8,6 +11,7 @@ describe('emulator startup modes', () => {
         '@Pixel_8_API_35',
         '-no-snapshot-load',
         '-no-snapshot-save',
+        '-no-metrics',
       ])
     );
     expect(getEmulatorStartupArgs('Pixel_8_API_35', 'default-boot')).not.toEqual(
@@ -18,7 +22,13 @@ describe('emulator startup modes', () => {
   it('builds clean snapshot generation args', () => {
     expect(
       getEmulatorStartupArgs('Pixel_8_API_35', 'clean-snapshot-generation')
-    ).toEqual(expect.arrayContaining(['@Pixel_8_API_35', '-no-snapshot-load']));
+    ).toEqual(
+      expect.arrayContaining([
+        '@Pixel_8_API_35',
+        '-no-snapshot-load',
+        '-no-metrics',
+      ])
+    );
     expect(
       getEmulatorStartupArgs('Pixel_8_API_35', 'clean-snapshot-generation')
     ).not.toContain('-no-snapshot-save');
@@ -26,10 +36,36 @@ describe('emulator startup modes', () => {
 
   it('builds snapshot reuse args', () => {
     expect(getEmulatorStartupArgs('Pixel_8_API_35', 'snapshot-reuse')).toEqual(
-      expect.arrayContaining(['@Pixel_8_API_35', '-no-snapshot-save'])
+      expect.arrayContaining([
+        '@Pixel_8_API_35',
+        '-no-snapshot-save',
+        '-no-metrics',
+      ])
     );
     expect(
       getEmulatorStartupArgs('Pixel_8_API_35', 'snapshot-reuse')
     ).not.toContain('-no-snapshot-load');
+  });
+});
+
+describe('isAccelerationUsable', () => {
+  it('returns true when the emulator reports acceleration is usable', () => {
+    expect(
+      isAccelerationUsable(
+        'accel:\n0\nKVM (version 12) is installed and usable.\naccel\n'
+      )
+    ).toBe(true);
+  });
+
+  it('returns false when acceleration is disabled', () => {
+    expect(
+      isAccelerationUsable(
+        'accel:\n0\nKVM is not installed on this machine.\naccel\n'
+      )
+    ).toBe(false);
+  });
+
+  it('returns false for empty output', () => {
+    expect(isAccelerationUsable('')).toBe(false);
   });
 });
