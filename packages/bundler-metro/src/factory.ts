@@ -5,7 +5,7 @@ import connect from 'connect';
 import nocache from 'nocache';
 import { isPortAvailable, getMetroPackage } from './utils.js';
 import { MetroPortUnavailableError } from './errors.js';
-import type { MetroInstance, MetroOptions } from './types.js';
+import type { MetroInstance, MetroOptions, PrewarmState } from './types.js';
 import {
   type Reporter,
   withReporter,
@@ -151,6 +151,7 @@ export const getMetroInstance = async (
   metroLogger.debug('Metro server is running');
 
   let prewarmResult: Promise<boolean> | null = null;
+  let prewarmState: PrewarmState = 'idle';
 
   return {
     events: reporter,
@@ -160,6 +161,7 @@ export const getMetroInstance = async (
       waitForMetroStatus({ port: metroPort, timeoutMs, signal }),
     prewarm: ({ platform, signal }) => {
       if (!prewarmResult) {
+        prewarmState = 'pending';
         prewarmResult = (async () => {
           try {
             await prewarmMetroBundle({
@@ -171,6 +173,7 @@ export const getMetroInstance = async (
               minify: false,
               signal,
             });
+            prewarmState = 'succeeded';
             return true;
           } catch (error) {
             if (
@@ -178,6 +181,7 @@ export const getMetroInstance = async (
               error.name === 'AbortError' &&
               signal.aborted
             ) {
+              prewarmState = 'failed';
               throw error;
             }
 
@@ -185,6 +189,7 @@ export const getMetroInstance = async (
               `Metro pre-warm for ${platform} failed; continuing without pre-warm.`,
               error
             );
+            prewarmState = 'failed';
             return false;
           }
         })();
@@ -192,6 +197,7 @@ export const getMetroInstance = async (
 
       return prewarmResult;
     },
+    getPrewarmState: () => prewarmState,
     dispose: () =>
       new Promise<void>((resolve) => {
         server.close(() => resolve());

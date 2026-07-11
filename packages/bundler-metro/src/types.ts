@@ -25,12 +25,15 @@ export type PrewarmMetroBundleOptions = {
   signal: AbortSignal;
 };
 
+export type PrewarmState = 'idle' | 'pending' | 'succeeded' | 'failed';
+
 export type MetroInstance = {
   events: Reporter;
   httpServer: HttpServer | HttpsServer;
   websocketEndpoints: MetroWebSocketEndpoints;
   waitUntilHealthy: (options: WaitForMetroHealthOptions) => Promise<string>;
   prewarm: (options: PrewarmMetroBundleOptions) => Promise<boolean>;
+  getPrewarmState: () => PrewarmState;
   dispose: () => Promise<void>;
 };
 

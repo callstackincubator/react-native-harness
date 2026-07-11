@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getEmitter } from '@react-native-harness/tools';
 import { waitForMetroBackedAppReady } from '../startup.js';
 import type { ReportableEvent } from '../reporter.js';
-import type { MetroInstance } from '../types.js';
+import type { MetroInstance, PrewarmState } from '../types.js';
 
 const createAbortError = () =>
   new DOMException('The operation was aborted', 'AbortError');
@@ -31,6 +31,7 @@ const createMetroInstance = (
   websocketEndpoints: {},
   waitUntilHealthy: vi.fn(async () => 'HTTP 200: packager-status:running'),
   prewarm: vi.fn(async () => false),
+  getPrewarmState: vi.fn((): PrewarmState => 'failed'),
   dispose: vi.fn(async () => undefined),
   ...overrides,
 });
@@ -93,6 +94,7 @@ describe('waitForMetroBackedAppReady', () => {
 
     const metroInstance = createMetroInstance({
       prewarm: vi.fn(async () => true),
+      getPrewarmState: vi.fn((): PrewarmState => 'succeeded'),
     });
     const startAttempt = vi.fn(async () => undefined);
 
@@ -114,7 +116,7 @@ describe('waitForMetroBackedAppReady', () => {
       name: 'StartupStallError',
       code: 'bundle_request_not_observed',
       attempts: 2,
-      sawPrewarmRequest: true,
+      prewarmState: 'succeeded',
     });
     expect(startAttempt).toHaveBeenCalledTimes(2);
   });
@@ -406,7 +408,7 @@ describe('waitForMetroBackedAppReady', () => {
       name: 'StartupStallError',
       code: 'bundle_request_not_observed',
       attempts: 3,
-      sawPrewarmRequest: false,
+      prewarmState: 'failed',
     });
     expect(startAttempt).toHaveBeenCalledTimes(3);
   });
@@ -416,6 +418,7 @@ describe('waitForMetroBackedAppReady', () => {
 
     const metroInstance = createMetroInstance({
       prewarm: vi.fn(async () => true),
+      getPrewarmState: vi.fn((): PrewarmState => 'succeeded'),
     });
     let releaseStartAttempt!: () => void;
     const startAttemptGate = new Promise<void>((resolve) => {
@@ -440,7 +443,7 @@ describe('waitForMetroBackedAppReady', () => {
       name: 'StartupStallError',
       code: 'bundle_request_not_observed',
       attempts: 1,
-      sawPrewarmRequest: true,
+      prewarmState: 'succeeded',
     });
 
     await vi.advanceTimersByTimeAsync(5_000);
