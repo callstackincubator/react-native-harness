@@ -1,6 +1,7 @@
 import { logger, withAbortTimeout } from '@react-native-harness/tools';
 import type { Server as HttpServer } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
+import type { Socket } from 'node:net';
 import connect from 'connect';
 import nocache from 'nocache';
 import { isPortAvailable, getMetroPackage } from './utils.js';
@@ -152,6 +153,15 @@ export const getMetroInstance = async (
     'httpServer' in maybeServer ? maybeServer.httpServer : maybeServer;
   server.keepAliveTimeout = 30000;
 
+  // closeAllConnections() does not close sockets upgraded to WebSockets (e.g. Metro's /hot
+  // endpoint), but those sockets block server.close() from ever firing its callback; track them
+  // so dispose() can force-destroy whatever remains.
+  const sockets = new Set<Socket>();
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
+
   abortSignal.throwIfAborted();
 
   await ready;
@@ -256,6 +266,9 @@ export const getMetroInstance = async (
         reporter.removeListener(onBuildEvent);
         server.close(() => resolve());
         server.closeAllConnections();
+        for (const socket of sockets) {
+          socket.destroy();
+        }
       }),
   };
 };
