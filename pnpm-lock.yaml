@@ -362,6 +362,9 @@ importers:
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config
+      '@react-native-harness/platform-android':
+        specifier: workspace:*
+        version: link:../platform-android
     devDependencies:
       tsup:
         specifier: ^8.5.1

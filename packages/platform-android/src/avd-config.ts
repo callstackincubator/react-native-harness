@@ -1,6 +1,7 @@
 import { access, readFile } from 'node:fs/promises';
 import type { AndroidSystemImageArch } from './environment.js';
 import type { AndroidEmulator, AndroidEmulatorAVDConfig } from './config.js';
+import { getEmulatorCpuCores } from './emulator-startup.js';
 
 export type AvdConfig = {
   imageSysdir1?: string;
@@ -8,6 +9,7 @@ export type AvdConfig = {
   hwDeviceName?: string;
   diskDataPartitionSize?: string;
   vmHeapSize?: string;
+  hwCpuNcore?: string;
 };
 
 export type AvdCompatibilityResult =
@@ -123,6 +125,9 @@ export const parseAvdConfig = (contents: string): AvdConfig => {
       case 'vm.heapSize':
         config.vmHeapSize = value;
         break;
+      case 'hw.cpu.ncore':
+        config.hwCpuNcore = value;
+        break;
       default:
         break;
     }
@@ -232,6 +237,18 @@ export const isAvdCompatible = ({
       reason: `Heap size mismatch: expected ${
         requestedAvdConfig.heapSize
       }, got ${avdConfig.vmHeapSize ?? 'missing'}.`,
+    };
+  }
+
+  if (
+    normalizeConfigValue(avdConfig.hwCpuNcore ?? '') !==
+    normalizeConfigValue(String(getEmulatorCpuCores()))
+  ) {
+    return {
+      compatible: false,
+      reason: `CPU core count mismatch: expected ${getEmulatorCpuCores()}, got ${
+        avdConfig.hwCpuNcore ?? 'missing'
+      }.`,
     };
   }
 

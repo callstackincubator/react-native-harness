@@ -1,14 +1,18 @@
 import { createRequire } from 'node:module';
+import os from 'node:os';
 import type { MetroConfig } from 'metro-config';
 import { getConfig } from '@react-native-harness/config';
+import { logger } from '@react-native-harness/tools';
 import { getHarnessBabelTransformerPath } from './babel-transformer.js';
 import { getHarnessSerializer } from './getHarnessSerializer.js';
 import { getHarnessManifest } from './manifest.js';
 import { getHarnessCacheStores } from './metro-cache.js';
+import { getCappedMaxWorkers } from './metro-workers.js';
 import { getHarnessResolver } from './resolvers/resolver.js';
 import type { NotReadOnly } from './utils.js';
 
 const require = createRequire(import.meta.url);
+const metroWorkersLogger = logger.child('metro-workers');
 
 const INTERNAL_CALLSITES_REGEX =
   /(^|[\\/])(node_modules[/\\]@react-native-harness)([\\/]|$)/;
@@ -30,9 +34,25 @@ export const withRnHarness = <T extends MetroConfig>(
     const harnessBabelTransformerPath =
       getHarnessBabelTransformerPath(metroConfig);
 
+    const hostParallelism = os.availableParallelism();
+    const cappedMaxWorkers = getCappedMaxWorkers({
+      configuredMaxWorkers: metroConfig.maxWorkers,
+      hostParallelism,
+    });
+
+    if (cappedMaxWorkers !== metroConfig.maxWorkers) {
+      metroWorkersLogger.debug(
+        'Capping Metro maxWorkers from %s to %s (host parallelism: %s)',
+        metroConfig.maxWorkers ?? 'default',
+        cappedMaxWorkers,
+        hostParallelism
+      );
+    }
+
     const patchedConfig: MetroConfig = {
       ...metroConfig,
       cacheVersion: 'react-native-harness',
+      maxWorkers: cappedMaxWorkers,
       server: {
         ...metroConfig.server,
         forwardClientLogs: harnessConfig.forwardClientLogs ?? false,

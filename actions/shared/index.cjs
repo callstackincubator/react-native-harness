@@ -633,8 +633,8 @@ function getErrorMap() {
 
 // ../../node_modules/zod/dist/esm/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path8, errorMaps, issueData } = params;
-  const fullPath = [...path8, ...issueData.path || []];
+  const { data, path: path9, errorMaps, issueData } = params;
+  const fullPath = [...path9, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -750,11 +750,11 @@ var errorUtil;
 
 // ../../node_modules/zod/dist/esm/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path8, key) {
+  constructor(parent, value, path9, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path8;
+    this._path = path9;
     this._key = key;
   }
   get path() {
@@ -4357,6 +4357,33 @@ var DEFAULT_ARTIFACT_ROOT = import_node_path5.default.join(process.cwd(), ".harn
 var import_node_fs5 = __toESM(require("fs"), 1);
 var import_node_path6 = __toESM(require("path"), 1);
 
+// ../tools/dist/diagnostics.js
+var noop = () => void 0;
+var noopSpan = {
+  end: noop,
+  fail: noop
+};
+var createNoopDiagnostics = () => {
+  const diagnostics = {
+    enabled: false,
+    start: () => noopSpan,
+    measure: async (_label, fn) => fn(),
+    mark: noop,
+    record: noop,
+    child: () => diagnostics,
+    flush: () => []
+  };
+  return diagnostics;
+};
+var noopDiagnostics = createNoopDiagnostics();
+
+// ../tools/dist/device-core-budget.js
+var MIN_DEVICE_CORE_BUDGET = 2;
+var MAX_DEVICE_CORE_BUDGET = 4;
+var getDeviceCoreBudget = (hostParallelism) => {
+  return Math.min(Math.max(Math.floor(hostParallelism / 2), MIN_DEVICE_CORE_BUDGET), MAX_DEVICE_CORE_BUDGET);
+};
+
 // ../plugins/dist/utils.js
 var isHookTree = (value) => {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -4421,6 +4448,7 @@ var ConfigSchema = external_exports.object({
   platformReadyTimeout: external_exports.number().min(1e3, "Platform ready timeout must be at least 1 second").default(3e5),
   bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(6e4),
   maxAppRestarts: external_exports.number().min(0, "Max app restarts must be at least 0").default(2),
+  eagerPrewarm: external_exports.boolean().optional().default(true).describe("Start building the Metro bundle while the platform (emulator, simulator, or browser) is still booting, so the first bundle is ready sooner. Disable to defer the first bundle build until app startup."),
   resetEnvironmentBetweenTestFiles: external_exports.boolean().optional().default(true),
   unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().default(false),
   unstable__enableMetroCache: external_exports.boolean().optional().default(false),
@@ -4437,6 +4465,7 @@ var ConfigSchema = external_exports.object({
     }).optional().describe("Native code coverage configuration.")
   }).optional(),
   forwardClientLogs: external_exports.boolean().optional().default(false).describe("Enable forwarding of console.log, console.warn, console.error, and other console method calls from the React Native app during the active test run. When enabled, app console output is attached to the active test result's console output."),
+  diagnostics: external_exports.boolean().optional().default(false).describe("Enable diagnostics tracing for the harness session. Records spans for session setup, Metro bundling, bridge/client events, and per-file test runs, then writes a Chrome Trace Event JSON file and prints a summary after each run. Can also be enabled via the RN_HARNESS_DIAGNOSTICS environment variable."),
   // Deprecated property - used for migration detection
   include: external_exports.array(external_exports.string()).optional()
 }).refine((config) => {
@@ -4543,8 +4572,8 @@ var importUp = async (dir, name) => {
       } catch (error) {
         if (error instanceof ZodError) {
           const validationErrors = error.errors.map((err) => {
-            const path8 = err.path.length > 0 ? ` at "${err.path.join(".")}"` : "";
-            return `${err.message}${path8}`;
+            const path9 = err.path.length > 0 ? ` at "${err.path.join(".")}"` : "";
+            return `${err.message}${path9}`;
           });
           throw new ConfigValidationError(filePathWithExt, validationErrors);
         }
@@ -4566,11 +4595,22 @@ var getConfig = async (dir) => {
   };
 };
 
-// src/shared/index.ts
-var import_node_path8 = __toESM(require("path"));
-var import_node_fs7 = __toESM(require("fs"));
-var getHostAndroidSystemImageArch = () => {
-  switch (process.arch) {
+// ../platform-android/dist/avd-config.js
+var import_promises3 = require("fs/promises");
+
+// ../platform-android/dist/emulator-startup.js
+var import_node_os2 = __toESM(require("os"), 1);
+
+// ../platform-android/dist/environment.js
+var import_node_fs7 = require("fs");
+var import_promises = require("fs/promises");
+var import_node_os = __toESM(require("os"), 1);
+var import_node_path8 = __toESM(require("path"), 1);
+var import_promises2 = require("stream/promises");
+var import_node_https = __toESM(require("https"), 1);
+var androidEnvironmentLogger = logger.child("android-environment");
+var getHostAndroidSystemImageArch = (architecture = process.arch) => {
+  switch (architecture) {
     case "arm64":
       return "arm64-v8a";
     case "arm":
@@ -4580,14 +4620,30 @@ var getHostAndroidSystemImageArch = () => {
       return "x86_64";
   }
 };
-var resolveAvdCachingEnabled = ({
+
+// ../platform-android/dist/emulator-startup.js
+var emulatorStartupLogger = logger.child("android-emulator-startup");
+var getEmulatorCpuCores = () => {
+  return getDeviceCoreBudget(import_node_os2.default.availableParallelism());
+};
+
+// ../platform-android/dist/adb.js
+var import_node_child_process = require("child_process");
+var import_promises4 = require("fs/promises");
+var EMULATOR_OUTPUT_BUFFER_LIMIT = 16 * 1024;
+var androidAdbLogger = logger.child("android-adb");
+
+// src/shared/index.ts
+var import_node_path9 = __toESM(require("path"));
+var import_node_fs8 = __toESM(require("fs"));
+var resolveAvdCachingEnabled2 = ({
   snapshotEnabled
 }) => {
   const override = process.env.HARNESS_AVD_CACHING;
   const requestedValue = override == null ? snapshotEnabled : override.toLowerCase() === "true";
   return requestedValue === true;
 };
-var getNormalizedAvdCacheConfig = ({
+var getNormalizedAvdCacheConfig2 = ({
   emulator,
   hostArch
 }) => {
@@ -4601,14 +4657,18 @@ var getNormalizedAvdCacheConfig = ({
     arch: hostArch,
     profile: avd.profile.trim().toLowerCase(),
     diskSize: avd.diskSize.trim().toLowerCase(),
-    heapSize: avd.heapSize.trim().toLowerCase()
+    heapSize: avd.heapSize.trim().toLowerCase(),
+    // Roll the AVD cache key whenever the baked-in vCPU count changes, so a
+    // cached AVD built before this constant existed regenerates once instead
+    // of failing the compatibility check on every run.
+    cpuCores: getEmulatorCpuCores()
   };
 };
 var getResolvedRunner = (runner) => {
   if (runner.platformId !== "android" || runner.config.device.type !== "emulator") {
     return runner;
   }
-  const avdCachingEnabled = resolveAvdCachingEnabled({
+  const avdCachingEnabled = resolveAvdCachingEnabled2({
     snapshotEnabled: runner.config.device.avd?.snapshot?.enabled
   });
   return {
@@ -4622,7 +4682,7 @@ var getResolvedRunner = (runner) => {
     },
     action: {
       avdCachingEnabled,
-      avdCacheConfig: getNormalizedAvdCacheConfig({
+      avdCacheConfig: getNormalizedAvdCacheConfig2({
         emulator: runner.config.device,
         hostArch: getHostAndroidSystemImageArch()
       })
@@ -4636,7 +4696,7 @@ var run = async () => {
     if (!runnerInput) {
       throw new Error("Runner input is required");
     }
-    const projectRoot = projectRootInput ? import_node_path8.default.resolve(projectRootInput) : process.cwd();
+    const projectRoot = projectRootInput ? import_node_path9.default.resolve(projectRootInput) : process.cwd();
     console.info(`Loading React Native Harness config from: ${projectRoot}`);
     const { config, projectRoot: resolvedProjectRoot } = await getConfig(
       projectRoot
@@ -4650,13 +4710,13 @@ var run = async () => {
       throw new Error("GITHUB_OUTPUT environment variable is not set");
     }
     const resolvedRunner = getResolvedRunner(runner);
-    const relativeProjectRoot = import_node_path8.default.relative(process.cwd(), resolvedProjectRoot) || ".";
+    const relativeProjectRoot = import_node_path9.default.relative(process.cwd(), resolvedProjectRoot) || ".";
     const output = `config=${JSON.stringify(
       resolvedRunner
     )}
 projectRoot=${relativeProjectRoot}
 `;
-    import_node_fs7.default.appendFileSync(githubOutput, output);
+    import_node_fs8.default.appendFileSync(githubOutput, output);
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.message);

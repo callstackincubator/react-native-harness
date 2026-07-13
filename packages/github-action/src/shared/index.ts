@@ -1,21 +1,10 @@
 import { getConfig } from '@react-native-harness/config';
+import {
+  getEmulatorCpuCores,
+  getHostAndroidSystemImageArch,
+} from '@react-native-harness/platform-android';
 import path from 'node:path';
 import fs from 'node:fs';
-
-const getHostAndroidSystemImageArch = ():
-  | 'x86_64'
-  | 'arm64-v8a'
-  | 'armeabi-v7a' => {
-  switch (process.arch) {
-    case 'arm64':
-      return 'arm64-v8a';
-    case 'arm':
-      return 'armeabi-v7a';
-    case 'x64':
-    default:
-      return 'x86_64';
-  }
-};
 
 const resolveAvdCachingEnabled = ({
   snapshotEnabled,
@@ -57,6 +46,10 @@ const getNormalizedAvdCacheConfig = ({
     profile: avd.profile.trim().toLowerCase(),
     diskSize: avd.diskSize.trim().toLowerCase(),
     heapSize: avd.heapSize.trim().toLowerCase(),
+    // Roll the AVD cache key whenever the baked-in vCPU count changes, so a
+    // cached AVD built before this constant existed regenerates once instead
+    // of failing the compatibility check on every run.
+    cpuCores: getEmulatorCpuCores(),
   };
 };
 

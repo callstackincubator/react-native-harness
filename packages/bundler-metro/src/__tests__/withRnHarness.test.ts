@@ -1,7 +1,9 @@
+import os from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
 
 type MinimalMetroConfig = {
   projectRoot: string;
+  maxWorkers?: number;
   serializer?: {
     isThirdPartyModule?: (module: { path: string }) => boolean;
   };
@@ -97,5 +99,32 @@ describe('withRnHarness', () => {
     ).resolves.toEqual({
       collapse: false,
     });
+  });
+
+  it('caps maxWorkers to leave host cores free for the device under test', async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+    const { getCappedMaxWorkers } = await import('../metro-workers.js');
+
+    const config = (await withRnHarness(
+      {
+        projectRoot: '/tmp/app',
+        maxWorkers: 64,
+        serializer: {},
+        symbolicator: {
+          async customizeFrame() {
+            return {};
+          },
+        },
+      },
+      true,
+    )()) as unknown as MinimalMetroConfig;
+
+    expect(config.maxWorkers).toBe(
+      getCappedMaxWorkers({
+        configuredMaxWorkers: 64,
+        hostParallelism: os.availableParallelism(),
+      }),
+    );
+    expect(config.maxWorkers).toBeLessThan(64);
   });
 });

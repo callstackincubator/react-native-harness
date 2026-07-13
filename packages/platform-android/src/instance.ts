@@ -29,6 +29,7 @@ import {
   ensureAndroidEmulatorEnvironment,
   getHostAndroidSystemImageArch,
 } from './environment.js';
+import { warnIfEmulatorAccelerationUnavailable } from './emulator-startup.js';
 import { isInteractive } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { createAndroidAppSession } from './app-session.js';
@@ -90,6 +91,7 @@ const startAndWaitForBoot = async ({
   mode?: Parameters<typeof adbModule.startEmulator>[1];
 }): Promise<string> => {
   await ensureAndroidEmulatorAvailable();
+  await warnIfEmulatorAccelerationUnavailable();
   await adbModule.startEmulator(emulatorName, mode);
   return adbModule.waitForBoot(emulatorName, signal);
 };
