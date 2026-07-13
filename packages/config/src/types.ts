@@ -80,7 +80,17 @@ export const ConfigSchema = z
           'so the first bundle is ready sooner. Disable to defer the first bundle build until app startup.'
       ),
 
-    resetEnvironmentBetweenTestFiles: z.boolean().optional().default(true),
+    resetEnvironmentBetweenTestFiles: z
+      .union([z.boolean(), z.enum(['process', 'runtime'])])
+      .optional()
+      .default(true)
+      .describe(
+        'Controls how the environment is reset between test files. `true` (default) and `\'process\'` ' +
+          'kill and cold-restart the app process. `\'runtime\'` reloads the JS runtime in place ' +
+          '(DevSettings.reload() / window.location.reload()), which is cheaper but escalates to a ' +
+          'process restart if the reload fails or the app does not reconnect in time. `false` disables ' +
+          'resetting the environment between test files entirely.'
+      ),
     unstable__skipAlreadyIncludedModules: z.boolean().optional().default(false),
     unstable__enableMetroCache: z.boolean().optional().default(false),
     permissions: z
