@@ -15,6 +15,11 @@ type PreModule = Parameters<Serializer>[1][number];
 type Graph = ReadOnlyGraph;
 type BundleOptions = Parameters<Serializer>[3];
 
+// Both of these are CJS modules compiled with `exports.default = ...`
+// (Babel/Flow's ESM-interop output), not modules that assign their export
+// directly to `module.exports`. A plain `require()` therefore returns
+// `{default: fn}`, not `fn` itself -- unwrap `.default` explicitly rather
+// than calling the require() result as a function.
 const baseJSBundle: (
   entryPoint: string,
   preModules: ReadonlyArray<PreModule>,
@@ -24,7 +29,7 @@ const baseJSBundle: (
   pre: string;
   post: string;
   modules: Array<[number, string]>;
-} = require('metro/private/DeltaBundler/Serializers/baseJSBundle');
+} = require('metro/private/DeltaBundler/Serializers/baseJSBundle').default;
 
 // Metro ships no .d.ts for this module. Its actual (synchronous) return shape
 // is `{code, metadata}`, which doesn't line up with the `customSerializer`
@@ -38,7 +43,7 @@ const bundleToString: (bundle: {
   modules: Array<[number, string]>;
 }) => { code: string; metadata: unknown } = require(
   'metro/private/lib/bundleToString'
-);
+).default;
 
 const asSerializerResult = (result: {
   code: string;
