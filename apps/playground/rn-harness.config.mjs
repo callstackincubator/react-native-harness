@@ -79,12 +79,12 @@ export default {
     }),
     applePlatform({
       name: 'ios',
-      device: appleSimulator('iPhone 16 Pro', '26.4'),
+      device: appleSimulator('iPhone 17 Pro', '26.4'),
       bundleId: 'com.harnessplayground',
     }),
     applePlatform({
       name: 'ios-crash-pre-rn',
-      device: appleSimulator('iPhone 16 Pro', '26.4'),
+      device: appleSimulator('iPhone 17 Pro', '26.4'),
       bundleId: 'com.harnessplayground',
       appLaunchOptions: {
         environment: {
@@ -94,7 +94,7 @@ export default {
     }),
     applePlatform({
       name: 'ios-crash-delayed',
-      device: appleSimulator('iPhone 16 Pro', '26.4'),
+      device: appleSimulator('iPhone 17 Pro', '26.4'),
       bundleId: 'com.harnessplayground',
       appLaunchOptions: {
         environment: {
