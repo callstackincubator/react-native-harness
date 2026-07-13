@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import type { HarnessPlugin } from '@react-native-harness/plugins';
 import { isHarnessPlugin } from '@react-native-harness/plugins';
+import { logger } from '@react-native-harness/tools';
 
 export const DEFAULT_METRO_PORT = 8081;
+
+const configLogger = logger.child('config');
 
 const RunnerSchema = z.object({
   name: z
@@ -91,7 +94,26 @@ export const ConfigSchema = z
           'process restart if the reload fails or the app does not reconnect in time. `false` disables ' +
           'resetting the environment between test files entirely.'
       ),
-    unstable__skipAlreadyIncludedModules: z.boolean().optional().default(false),
+    skipAlreadyIncludedModules: z
+      .boolean()
+      .optional()
+      .describe(
+        'Skip re-sending modules already served in the main app bundle when Metro serves ' +
+          "a per-test-file bundle. Defaults to true; set to false as an escape hatch if it " +
+          'causes issues. Left undefined (rather than defaulted here) so `resolveSkipAlreadyIncludedModules` ' +
+          'can tell "not set" apart from "explicitly set" when reconciling with the deprecated ' +
+          '`unstable__skipAlreadyIncludedModules` alias.'
+      ),
+    // Deprecated alias for `skipAlreadyIncludedModules` -- see
+    // `resolveSkipAlreadyIncludedModules`. Left without a `.default()` for the
+    // same reason: a default value would be indistinguishable from the user
+    // never having set it, which would break alias-vs-explicit-flag precedence.
+    unstable__skipAlreadyIncludedModules: z
+      .boolean()
+      .optional()
+      .describe(
+        'Deprecated. Use `skipAlreadyIncludedModules` instead.'
+      ),
     unstable__enableMetroCache: z.boolean().optional().default(false),
     permissions: z
       .boolean()
@@ -202,4 +224,42 @@ export const isDiagnosticsEnabled = (
 
   const envValue = env.RN_HARNESS_DIAGNOSTICS;
   return !!envValue && envValue !== '0' && envValue !== 'false';
+};
+
+/**
+ * Resolves the effective value of `skipAlreadyIncludedModules`, reconciling
+ * it with the deprecated `unstable__skipAlreadyIncludedModules` alias:
+ *
+ * - The new flag, when explicitly set, always wins over the alias.
+ * - Otherwise, the alias's value is used (with a deprecation warning).
+ * - Otherwise, defaults to `true`.
+ *
+ * The default is applied here rather than in the zod schema so that "unset"
+ * and "explicitly set to the default value" remain distinguishable -- that
+ * distinction is what lets the deprecated alias keep working as an escape
+ * hatch (e.g. `unstable__skipAlreadyIncludedModules: false`) even though the
+ * new flag now defaults to `true`.
+ */
+export const resolveSkipAlreadyIncludedModules = (
+  config: Pick<
+    Config,
+    'skipAlreadyIncludedModules' | 'unstable__skipAlreadyIncludedModules'
+  >
+): boolean => {
+  if (config.unstable__skipAlreadyIncludedModules !== undefined) {
+    configLogger.warn(
+      '`unstable__skipAlreadyIncludedModules` is deprecated and will be removed in a future release. ' +
+        'Use `skipAlreadyIncludedModules` instead.'
+    );
+  }
+
+  if (config.skipAlreadyIncludedModules !== undefined) {
+    return config.skipAlreadyIncludedModules;
+  }
+
+  if (config.unstable__skipAlreadyIncludedModules !== undefined) {
+    return config.unstable__skipAlreadyIncludedModules;
+  }
+
+  return true;
 };

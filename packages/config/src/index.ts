@@ -4,6 +4,7 @@ export {
   ConfigSchema,
   DEFAULT_METRO_PORT,
   isDiagnosticsEnabled,
+  resolveSkipAlreadyIncludedModules,
 } from './types.js';
 export {
   ConfigValidationError,

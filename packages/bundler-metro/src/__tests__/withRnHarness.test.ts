@@ -14,7 +14,8 @@ type MinimalMetroConfig = {
   };
 };
 
-vi.mock('@react-native-harness/config', () => ({
+vi.mock('@react-native-harness/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@react-native-harness/config')>()),
   getConfig: vi.fn(async () => ({
     config: {},
   })),
