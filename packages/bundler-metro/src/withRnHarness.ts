@@ -118,7 +118,12 @@ export const withRnHarness = <T extends MetroConfig>(
         patchedConfig.serializer as NonNullable<
           NotReadOnly<MetroConfig['serializer']>
         >
-      ).customSerializer = getHarnessSerializer();
+      ).customSerializer = getHarnessSerializer({
+        harnessEntryPointPath: require.resolve(
+          '@react-native-harness/runtime/entry-point'
+        ),
+        customSerializer: metroConfig.serializer?.customSerializer ?? undefined,
+      });
     }
 
     return patchedConfig as T;
