@@ -16,6 +16,7 @@ const createConnection = (): AppConnection => ({
     osVersion: '18.0',
   },
   runTests: vi.fn(),
+  resetEnvironment: vi.fn(),
 });
 
 const createBridge = (connection: AppConnection | null) => {

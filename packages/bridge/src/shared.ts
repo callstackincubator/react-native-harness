@@ -143,6 +143,7 @@ export type BridgeClientFunctions = {
     path: string,
     options: TestExecutionOptions
   ) => Promise<TestSuiteResult>;
+  resetEnvironment: () => Promise<void>;
 };
 
 export type BinaryDataReference = {

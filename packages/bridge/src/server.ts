@@ -44,6 +44,7 @@ const noop = (): void => undefined;
 export type AppConnection = {
   readonly device: DeviceDescriptor;
   runTests: (path: string, options: TestExecutionOptions) => Promise<TestSuiteResult>;
+  resetEnvironment: () => Promise<void>;
 };
 
 export type HarnessBridgeEvents = {
@@ -223,6 +224,7 @@ export const createHarnessBridge = async (
           const conn: AppConnection = {
             device: controlMessage.device,
             runTests: (testPath, opts) => rpc.invoke('runTests', testPath, opts),
+            resetEnvironment: () => rpc.invoke('resetEnvironment'),
           };
 
           readyConnection = conn;
