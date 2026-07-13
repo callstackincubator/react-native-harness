@@ -1,4 +1,4 @@
-import { DevSettings, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import type {
   TestRunnerEvents,
   TestCollectorEvents,
@@ -29,6 +29,9 @@ const reloadRuntime = (): void => {
     if (Platform.OS === 'web') {
       window.location.reload();
     } else {
+      // Required lazily: react-native-web doesn't export DevSettings, so a
+      // named import would be undefined on web. Only native reaches this.
+      const { DevSettings } = require('react-native');
       DevSettings.reload();
     }
   }, 100);
