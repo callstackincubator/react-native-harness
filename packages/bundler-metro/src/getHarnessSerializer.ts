@@ -4,8 +4,10 @@ import type {
   ReadOnlyGraph,
   Module,
 } from 'metro/private/DeltaBundler/types';
+import { logger } from '@react-native-harness/tools';
 
 const require = createRequire(import.meta.url);
+const serializerLogger = logger.child('metro-serializer');
 
 export type Serializer = NonNullable<
   NonNullable<MetroConfig['serializer']>['customSerializer']
@@ -107,27 +109,43 @@ export type GetHarnessSerializerOptions = {
 
 /**
  * Derives a stable key from the parts of `graph.transformOptions` that
- * change what ends up in the graph (platform, dev/prod, minify,
- * transform profile, and any custom transform options). Module sets differ
- * across these -- e.g. a `.ios.ts` file's dependencies are not the same set
- * as `.android.ts` -- so the captured "already included" set must never be
- * shared across them.
+ * change which module PATHS end up in the graph: platform, dev, and minify.
+ *
+ * Platform keying is load-bearing: `.ios.ts` and `.android.ts` resolve to
+ * different paths, so an iOS capture must never be used to blank an Android
+ * test bundle (or vice versa). dev/minify are kept for the same "different
+ * request class" hygiene.
+ *
+ * `unstable_transformProfile` and `customTransformOptions` are deliberately
+ * EXCLUDED, for two reasons:
+ *
+ * (a) Including them makes the two sides of the lookup permanently
+ *     mismatched on Expo: the Expo client's main-bundle request carries
+ *     `transform.engine=hermes`, `transform.bytecode=1`,
+ *     `transform.routerRoot=app`, `transform.reactCompiler=true`, and
+ *     `unstable_transformProfile=hermes-stable` (see `bundle-url.ts`),
+ *     while the harness runtime's `?modulesOnly=true` test-bundle requests
+ *     send only `modulesOnly` + `platform` (packages/runtime/src/bundler/
+ *     bundle.ts), so its graph gets default/empty transform options. The
+ *     modulesOnly lookup would then always miss, fail open, and silently
+ *     turn the feature into a no-op forever.
+ *
+ * (b) Excluding them is still crash-safe. Blanking a path only requires
+ *     that the device already holds *a* `__d()` definition for that path's
+ *     module ID -- and module IDs are path-based via Metro's single
+ *     server-wide `createModuleId` counter, while exclusion only ever
+ *     applies to paths captured from a main bundle actually served to the
+ *     device. Transform options change a module's *content*, not the
+ *     presence of its definition, so a profile/custom-options difference
+ *     between the two graphs cannot produce "Requiring unknown module".
  */
 const getGraphKey = (graph: Graph): string => {
-  const {
-    platform,
-    dev,
-    minify,
-    unstable_transformProfile,
-    customTransformOptions,
-  } = graph.transformOptions;
+  const { platform, dev, minify } = graph.transformOptions;
 
   return JSON.stringify({
     platform: platform ?? null,
     dev,
     minify,
-    unstable_transformProfile,
-    customTransformOptions: customTransformOptions ?? {},
   });
 };
 
@@ -218,13 +236,26 @@ export const getHarnessSerializer = (
   return async (entryPoint, preModules, graph, bundleOptions) => {
     if (!bundleOptions.modulesOnly) {
       if (isMainEntrySerialization(entryPoint, graph, harnessEntryPointPath)) {
-        includedModulesByGraphKey.set(
-          getGraphKey(graph),
-          collectIncludedModulePaths(
-            preModules,
-            graph,
-            bundleOptions.processModuleFilter
-          )
+        // Capture assumption: we read `preModules`/`graph.dependencies`
+        // even when serialization below is delegated to the user's
+        // customSerializer (e.g. Expo's). If that serializer dropped
+        // modules beyond the config-level processModuleFilter (as some do
+        // for production tree-shaking), this set could over-include and
+        // blank a module the device never received. That's fine in
+        // practice: the harness always serves dev-mode bundles, and
+        // dev-mode serving doesn't tree-shake -- but it is the boundary of
+        // what this capture can guarantee.
+        const graphKey = getGraphKey(graph);
+        const capturedModules = collectIncludedModulePaths(
+          preModules,
+          graph,
+          bundleOptions.processModuleFilter
+        );
+        includedModulesByGraphKey.set(graphKey, capturedModules);
+        serializerLogger.debug(
+          'captured %d main-bundle module paths for graph key %s',
+          capturedModules.size,
+          graphKey
         );
       }
 
@@ -232,13 +263,20 @@ export const getHarnessSerializer = (
       return serialize(entryPoint, preModules, graph, bundleOptions);
     }
 
-    const includedModules = includedModulesByGraphKey.get(getGraphKey(graph));
+    const graphKey = getGraphKey(graph);
+    const includedModules = includedModulesByGraphKey.get(graphKey);
 
     if (!includedModules || includedModules.size === 0) {
       // Fail open: we have never observed a main bundle for this exact
       // graph identity, so we don't know what the device already has.
       // Serialize normally rather than risk stripping a module it never
-      // received.
+      // received. The debug log below is the diagnostic breadcrumb for
+      // "why are my test bundles fat".
+      serializerLogger.debug(
+        'no captured main-bundle module set for graph key %s (held keys: %s); serving the test bundle unfiltered',
+        graphKey,
+        [...includedModulesByGraphKey.keys()].join(', ') || '<none>'
+      );
       return defaultSerializer(entryPoint, preModules, graph, bundleOptions);
     }
 

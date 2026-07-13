@@ -406,6 +406,50 @@ describe('getHarnessSerializer', () => {
     expect(result.code).toContain('test("x", () => {}');
   });
 
+  it('still blanks when the main bundle was built with Expo transform options but the test bundle uses defaults', async () => {
+    const serializer = getHarnessSerializer({
+      harnessEntryPointPath: HARNESS_ENTRY,
+    });
+
+    const appModule = makeModule(APP_MODULE, 'console.log("app");\n');
+    const testModule = makeModule(TEST_MODULE, 'test("x", () => {});\n');
+
+    // Expo main-bundle requests carry transform.* params and a Hermes
+    // transform profile (see bundle-url.ts), but the runtime's
+    // ?modulesOnly=true test-bundle requests send only modulesOnly +
+    // platform, so their graph has default/empty transform options. The
+    // graph key must ignore those dimensions -- keying on them would make
+    // the lookup miss on every Expo test bundle and silently turn the
+    // feature into a permanent no-op.
+    const bundleOptions = makeBundleOptions();
+    const mainGraph = makeGraph([appModule], {
+      unstable_transformProfile: 'hermes-stable',
+      customTransformOptions: {
+        engine: 'hermes',
+        bytecode: '1',
+        routerRoot: 'app',
+        reactCompiler: 'true',
+      },
+    });
+    mainGraph.entryPoints.add(HARNESS_ENTRY);
+    await serializer(HARNESS_ENTRY, [], mainGraph, bundleOptions);
+
+    // Same platform/dev/minify, default transform options.
+    const testGraph = makeGraph([appModule, testModule]);
+    const result = (await serializer(
+      TEST_MODULE,
+      [],
+      testGraph,
+      makeBundleOptions({
+        modulesOnly: true,
+        createModuleId: bundleOptions.createModuleId,
+      })
+    )) as { code: string };
+
+    expect(result.code).not.toContain('console.log("app"');
+    expect(result.code).toContain('test("x", () => {}');
+  });
+
   it('honors the Expo virtual entry by matching it via graph.entryPoints', async () => {
     const serializer = getHarnessSerializer({
       harnessEntryPointPath: HARNESS_ENTRY,
