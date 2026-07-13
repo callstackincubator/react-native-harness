@@ -127,6 +127,7 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async () => makeHarnessResult()),
   restartApp: vi.fn(resolveUndefined),
+  resetEnvironment: vi.fn(resolveUndefined),
   resetCrashState: vi.fn(),
   flushClientLogs: vi.fn(() => []),
   callHook: vi.fn(resolveUndefined),
@@ -582,7 +583,7 @@ describe('executeRun', () => {
   });
 
   describe('resetEnvironmentBetweenTestFiles', () => {
-    it('calls restartApp before the second test but not the first', async () => {
+    it('calls resetEnvironment before the second test but not the first', async () => {
       const session = makeSession({
         config: {
           metroPort: 8081,
@@ -603,8 +604,58 @@ describe('executeRun', () => {
         makeGlobalConfig(),
       );
 
-      // restartApp should be called for tests 2 and 3, not test 1.
-      expect(session.restartApp).toHaveBeenCalledTimes(2);
+      // resetEnvironment should be called for tests 2 and 3, not test 1.
+      expect(session.resetEnvironment).toHaveBeenCalledTimes(2);
+      expect(session.restartApp).not.toHaveBeenCalled();
+    });
+
+    it('calls resetEnvironment with the "runtime" strategy configured', async () => {
+      const session = makeSession({
+        config: {
+          metroPort: 8081,
+          resetEnvironmentBetweenTestFiles: 'runtime',
+          detectNativeCrashes: false,
+          runners: [
+            { platformId: 'android', name: 'android' },
+            { platformId: 'ios', name: 'ios' },
+          ],
+        } as HarnessSession['config'],
+      });
+
+      await executeRun(
+        session,
+        [makeTest('/a.ts'), makeTest('/b.ts')],
+        makeWatcher(),
+        makeEmitEvent().emitEvent,
+        makeGlobalConfig(),
+      );
+
+      expect(session.resetEnvironment).toHaveBeenCalledTimes(1);
+      expect(session.resetEnvironment).toHaveBeenCalledWith('/b.ts');
+    });
+
+    it('does not call resetEnvironment when resetEnvironmentBetweenTestFiles is false', async () => {
+      const session = makeSession({
+        config: {
+          metroPort: 8081,
+          resetEnvironmentBetweenTestFiles: false,
+          detectNativeCrashes: false,
+          runners: [
+            { platformId: 'android', name: 'android' },
+            { platformId: 'ios', name: 'ios' },
+          ],
+        } as HarnessSession['config'],
+      });
+
+      await executeRun(
+        session,
+        [makeTest('/a.ts'), makeTest('/b.ts')],
+        makeWatcher(),
+        makeEmitEvent().emitEvent,
+        makeGlobalConfig(),
+      );
+
+      expect(session.resetEnvironment).not.toHaveBeenCalled();
     });
 
     it('restarts after a test case timeout before the next runnable file', async () => {
@@ -791,6 +842,7 @@ describe('executeRun', () => {
       );
 
       expect(session.restartApp).not.toHaveBeenCalled();
+      expect(session.resetEnvironment).not.toHaveBeenCalled();
       expect(mockRunHarnessTestFile).toHaveBeenCalledTimes(1);
     });
   });

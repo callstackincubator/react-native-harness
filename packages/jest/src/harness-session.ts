@@ -54,6 +54,12 @@ import path from 'node:path';
 import { PlatformReadyTimeoutError } from './errors.js';
 import { NoRunnerSpecifiedError, RunnerNotFoundError } from './errors.js';
 import { createCrashMonitor, type CrashMonitor } from './crash-monitor.js';
+import {
+  createProcessResetStrategy,
+  createRuntimeResetStrategy,
+  resolveResetStrategyKind,
+  withEscalation,
+} from './environment-reset.js';
 import { createHookQueue, type HookQueue } from './hook-queue.js';
 import {
   createClientLogCollector,
@@ -125,6 +131,28 @@ export const waitForBridgeDisconnectOrTimeout = async ({
   });
 };
 
+// Resolves the NEXT time the bridge reports a 'connected' event, rejecting
+// if `signal` aborts first. Deliberately does not use bridge.nextConnection(),
+// which would resolve immediately for a stale, already-set connection.
+export const waitForNextConnected = ({
+  bridge,
+  signal,
+}: {
+  bridge: Pick<HarnessBridge, 'on' | 'off'>;
+  signal: AbortSignal;
+}): Promise<void> =>
+  new Promise<void>((resolve, reject) => {
+    const onConnected = () => { cleanup(); resolve(); };
+    const onAbort = () => { cleanup(); reject(signal.reason ?? new DOMException('Aborted', 'AbortError')); };
+    const cleanup = () => {
+      bridge.off('connected', onConnected);
+      signal.removeEventListener('abort', onAbort);
+    };
+    if (signal.aborted) { onAbort(); return; }
+    bridge.on('connected', onConnected);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+
 export type HarnessRunState = {
   readonly runId: string;
   readonly startTime: number;
@@ -147,6 +175,7 @@ export type HarnessSession = {
   runTestFile: (path: string, options: HarnessRunTestsOptions) => Promise<TestSuiteResult>;
   ensureAppReady: (testFilePath: string) => Promise<void>;
   restartApp: (testFilePath?: string) => Promise<void>;
+  resetEnvironment: (testFilePath: string) => Promise<void>;
   resetCrashState: () => void;
   flushClientLogs: () => ClientLogBuffer;
   callHook: HarnessPluginManager<HarnessConfig, HarnessPlatform>['callHook'];
@@ -285,17 +314,7 @@ const waitForAppReady = async (
       // is already set. waitForReady is called before startAttempt, so a stale
       // connection from a previous run would resolve the promise before startAttempt
       // even restarts the app — leaving bridge.connection null after the restart.
-      await new Promise<void>((resolve, reject) => {
-        const onConnected = () => { cleanup(); resolve(); };
-        const onAbort = () => { cleanup(); reject(signal.reason ?? new DOMException('Aborted', 'AbortError')); };
-        const cleanup = () => {
-          bridge.off('connected', onConnected);
-          signal.removeEventListener('abort', onAbort);
-        };
-        if (signal.aborted) { onAbort(); return; }
-        bridge.on('connected', onConnected);
-        signal.addEventListener('abort', onAbort, { once: true });
-      });
+      await waitForNextConnected({ bridge, signal });
       logWait('runtime ready received');
     },
     waitForCrash: async (signal) => {
@@ -868,9 +887,26 @@ export const createHarnessSession = async (
       appReadySpan.end({ file: testFilePath, reused: false });
     };
 
+    // Shared by restartApp (crash/timeout recovery) and the 'process' reset
+    // strategy: kill the current app session and either wait for a fresh one
+    // to become ready for testFilePath, or (no testFilePath) just launch one.
+    const performRestart = async (testFilePath?: string): Promise<void> => {
+      await crashMonitor.stop();
+      await disposeCurrentAppSession();
+
+      if (testFilePath) {
+        await ensureAppReady(testFilePath);
+      } else {
+        const session = await platformInstance.createAppSession(appLaunchOptions);
+        currentAppSession = session;
+        crashMonitor.setAppSession(session);
+        crashMonitor.reset();
+        await crashMonitor.start();
+      }
+    };
+
     const restartApp = async (testFilePath?: string): Promise<void> => {
       await hooks.drain();
-      await crashMonitor.stop();
       const reason: 'stop-and-ensure-ready' | 'direct-restart' = testFilePath
         ? 'stop-and-ensure-ready'
         : 'direct-restart';
@@ -882,23 +918,64 @@ export const createHarnessSession = async (
       const restartSpan = diagnostics.start('app.restart', { reason });
 
       try {
-        await disposeCurrentAppSession();
-
-        if (testFilePath) {
-          await ensureAppReady(testFilePath);
-        } else {
-          const session = await platformInstance.createAppSession(appLaunchOptions);
-          currentAppSession = session;
-          crashMonitor.setAppSession(session);
-          crashMonitor.reset();
-          await crashMonitor.start();
-        }
-
+        await performRestart(testFilePath);
         await hooks.drain();
         sessionLogger.debug('restart completed');
         restartSpan.end();
       } catch (error) {
         restartSpan.fail(error);
+        throw error;
+      }
+    };
+
+    const processResetStrategy = createProcessResetStrategy({
+      restart: performRestart,
+    });
+    const runtimeResetStrategy = createRuntimeResetStrategy({
+      getConnection: () => bridge.connection,
+      expectDisconnect: crashMonitor.expectDisconnect,
+      waitForReconnect: (signal) => waitForNextConnected({ bridge, signal }),
+      timeoutMs: runtimeConfig.bundleStartTimeout ?? 60000,
+    });
+
+    const resetEnvironment = async (testFilePath: string): Promise<void> => {
+      const requestedKind = resolveResetStrategyKind(
+        runtimeConfig.resetEnvironmentBetweenTestFiles,
+      );
+      if (requestedKind === null) {
+        return;
+      }
+
+      await hooks.drain();
+      sessionLogger.debug(
+        'resetting environment (testFile=%s kind=%s)',
+        testFilePath,
+        requestedKind,
+      );
+
+      let escalated = false;
+      const strategy = requestedKind === 'runtime'
+        ? withEscalation(runtimeResetStrategy, processResetStrategy, {
+            onEscalate: (error) => {
+              escalated = true;
+              sessionLogger.debug(
+                'runtime reset failed, escalating to process restart: %s',
+                error,
+              );
+            },
+          })
+        : processResetStrategy;
+
+      const resetSpan = diagnostics.start('app.reset', { requested: requestedKind });
+      const performed = () => (escalated ? 'process' : requestedKind);
+
+      try {
+        await strategy.reset({ testFilePath });
+        await hooks.drain();
+        sessionLogger.debug('environment reset completed');
+        resetSpan.end({ performed: performed(), escalated });
+      } catch (error) {
+        resetSpan.fail(error, { performed: performed(), escalated });
         throw error;
       }
     };
@@ -966,6 +1043,7 @@ export const createHarnessSession = async (
       runTestFile,
       ensureAppReady,
       restartApp,
+      resetEnvironment,
       resetCrashState: () => crashMonitor.reset(),
       flushClientLogs,
       callHook: async (name, payload) => {

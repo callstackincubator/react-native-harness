@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { type HarnessSession, type HarnessRunState } from './harness-session.js';
 import { runHarnessTestFile } from './run.js';
+import { resolveResetStrategyKind } from './environment-reset.js';
 import {
   NativeCrashError,
   RuntimeDisconnectError,
@@ -189,7 +190,9 @@ export const executeRun = async (
     host: session.config.host?.trim() || undefined,
   });
 
-  const shouldResetEnv = session.config.resetEnvironmentBetweenTestFiles;
+  const resetStrategyKind = resolveResetStrategyKind(
+    session.config.resetEnvironmentBetweenTestFiles,
+  );
   const platformId = session.context.platform.platformId;
   const knownPlatformIds = new Set(
     session.config.runners.map((runner) => runner.platformId),
@@ -257,9 +260,13 @@ export const executeRun = async (
         }
 
         try {
-          if ((shouldResetEnv && !isFirstTest) || shouldRestartAfterTimeout) {
+          if (shouldRestartAfterTimeout) {
+            // Recovery from a runtime timeout always uses the (stronger)
+            // process restart, never the configured reset strategy.
             await session.restartApp(test.path);
             shouldRestartAfterTimeout = false;
+          } else if (resetStrategyKind !== null && !isFirstTest) {
+            await session.resetEnvironment(test.path);
           }
           isFirstTest = false;
 
