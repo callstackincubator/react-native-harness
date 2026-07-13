@@ -46,6 +46,41 @@ const asSerializerResult = (result: {
 }): Awaited<ReturnType<Serializer>> =>
   result as unknown as Awaited<ReturnType<Serializer>>;
 
+// Same filter Metro's own `processModules` helper (used internally by
+// baseJSBundle) applies before a module gets wrapped into a `__d()` call.
+const isJsModule: (mod: Module) => boolean = require(
+  'metro/private/DeltaBundler/Serializers/helpers/js'
+).isJsModule;
+
+const countLines = (code: string): number =>
+  (code.match(/\n/g)?.length ?? 0) + 1;
+
+/**
+ * Replaces a skipped module's code with blank lines instead of omitting it.
+ *
+ * Metro's `.map` endpoint and `/symbolicate` (Server.js's
+ * `_processSourceMapRequest` / `_explodedSourceMapForBundleOptions`) compute
+ * line offsets from the full, unfiltered graph -- they only ever see the
+ * config-level `processModuleFilter`, never a custom serializer's per-call
+ * override. If we simply left already-included modules out of the test
+ * bundle, every module's line offset after the first omitted one would
+ * shift, producing wrong code frames for test failures. Blanking preserves
+ * the exact line count instead, so an unfiltered `.map`/`/symbolicate`
+ * response is still correct for the (blanked) bundle we actually send.
+ */
+const blankModuleCode = (code: string): string => {
+  const newlineCount = countLines(code) - 1;
+  const blank = '\n'.repeat(newlineCount);
+
+  // bundleToString (metro/private/lib/bundleToString.js) skips appending a
+  // module's code entirely -- not even a trailing newline -- when its
+  // length is 0. The original module code is never empty, so a blank of ''
+  // (i.e. a module with no internal newlines) would drop the one line that
+  // module used to occupy and desync every subsequent module's offset. A
+  // single space keeps the length > 0 without adding an extra line.
+  return blank.length > 0 ? blank : ' ';
+};
+
 export type GetHarnessSerializerOptions = {
   /**
    * Absolute path Metro resolves the harness main entry point to (the
@@ -100,28 +135,45 @@ const isMainEntrySerialization = (
   graph.entryPoints.has(harnessEntryPointPath);
 
 /**
- * Builds the set of module paths already shipped in the main bundle.
+ * Builds the set of module paths already shipped (as a `__d()` definition)
+ * in the main bundle.
  *
  * Deliberately does NOT use Metro's `getAllFiles` serializer helper: for
  * asset modules that helper expands to the physical variant files on disk
  * (e.g. `icon@2x.png`) rather than the module path Metro actually uses to
  * identify the module in the graph (`mod.path`), so assets would never
  * match and the helper does pointless async fs work besides. Building the
- * set directly from `preModules` and `graph.dependencies` keys gives us
- * exactly the identifiers `processModuleFilter`/`createModuleId` operate on.
+ * set directly from `preModules` and `graph.dependencies` gives us exactly
+ * the identifiers `processModuleFilter`/`createModuleId` operate on.
+ *
+ * Mirrors the exact filter Metro's `processModules` helper applies
+ * (`isJsModule` + the user's own config-level `processModuleFilter`) before
+ * a module is wrapped into the main bundle. A module the user's filter
+ * rejects from the main bundle can still be a real dependency of a test
+ * file (it simply never reached the device the first time), so it must
+ * NOT be recorded as "already included" -- doing so would make the
+ * modulesOnly branch blank out a module the device never actually got,
+ * which is the over-exclusion crash this feature must never cause.
  */
 const collectIncludedModulePaths = (
   preModules: ReadonlyArray<PreModule>,
-  graph: Graph
+  graph: Graph,
+  processModuleFilter: BundleOptions['processModuleFilter']
 ): Set<string> => {
   const paths = new Set<string>();
+  const isIncludedInMainBundle = (mod: Module): boolean =>
+    isJsModule(mod) && (!processModuleFilter || processModuleFilter(mod));
 
   for (const preModule of preModules) {
-    paths.add(preModule.path);
+    if (isIncludedInMainBundle(preModule)) {
+      paths.add(preModule.path);
+    }
   }
 
-  for (const path of graph.dependencies.keys()) {
-    paths.add(path);
+  for (const mod of graph.dependencies.values()) {
+    if (isIncludedInMainBundle(mod)) {
+      paths.add(mod.path);
+    }
   }
 
   return paths;
@@ -163,7 +215,11 @@ export const getHarnessSerializer = (
       if (isMainEntrySerialization(entryPoint, graph, harnessEntryPointPath)) {
         includedModulesByGraphKey.set(
           getGraphKey(graph),
-          collectIncludedModulePaths(preModules, graph)
+          collectIncludedModulePaths(
+            preModules,
+            graph,
+            bundleOptions.processModuleFilter
+          )
         );
       }
 
@@ -181,22 +237,26 @@ export const getHarnessSerializer = (
       return defaultSerializer(entryPoint, preModules, graph, bundleOptions);
     }
 
-    // Phase 2 replaces this filter-based exclusion with post-hoc blanking
-    // of module code so source maps and `/symbolicate` (which only see
-    // Metro's config-level `processModuleFilter`, not this per-call
-    // override) stay in sync with what's actually sent to the device.
-    return defaultSerializer(entryPoint, preModules, graph, {
-      ...bundleOptions,
-      processModuleFilter: (mod: Module) => {
-        if (
-          bundleOptions.processModuleFilter &&
-          !bundleOptions.processModuleFilter(mod)
-        ) {
-          return false;
-        }
+    // Serialize the FULL graph -- options.processModuleFilter is passed
+    // through untouched, with no per-call override -- so Metro's
+    // independent `.map`/`/symbolicate` code paths (which only ever see
+    // that config-level filter) compute line offsets that match what we
+    // actually send byte-for-byte. Already-included modules are blanked out
+    // afterwards instead of omitted; see `blankModuleCode`.
+    const bundle = baseJSBundle(entryPoint, preModules, graph, bundleOptions);
 
-        return !includedModules.has(mod.path);
-      },
-    });
+    const excludedModuleIds = new Set<number>();
+    for (const path of includedModules) {
+      excludedModuleIds.add(bundleOptions.createModuleId(path));
+    }
+
+    const blankedModules: Array<[number, string]> = bundle.modules.map(
+      ([id, code]) =>
+        excludedModuleIds.has(id) ? [id, blankModuleCode(code)] : [id, code]
+    );
+
+    return asSerializerResult(
+      bundleToString({ ...bundle, modules: blankedModules })
+    );
   };
 };
