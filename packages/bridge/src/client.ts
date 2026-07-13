@@ -19,6 +19,7 @@ import type {
 
 export type HarnessCallbacks = {
   runTests: (path: string, options: TestExecutionOptions) => Promise<TestSuiteResult>;
+  resetEnvironment: () => Promise<void>;
 };
 
 export type HarnessHandle = {

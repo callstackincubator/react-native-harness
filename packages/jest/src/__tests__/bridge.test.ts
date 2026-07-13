@@ -37,8 +37,12 @@ afterEach(async () => {
   await new Promise((r) => setTimeout(r, 10));
 });
 
-const connect = (callbacks: Parameters<typeof connectToHarness>[1] = { runTests: vi.fn() }) =>
-  connectToHarness(`ws://127.0.0.1:${bridgePort}`, callbacks);
+const connect = (
+  callbacks: Parameters<typeof connectToHarness>[1] = {
+    runTests: vi.fn(),
+    resetEnvironment: vi.fn(),
+  },
+) => connectToHarness(`ws://127.0.0.1:${bridgePort}`, callbacks);
 
 const device = {
   platform: 'ios' as const,
@@ -140,7 +144,7 @@ describe('bridge: createHarnessBridge + connectToHarness', () => {
       const runTestsCb = vi.fn(async () => suiteResult);
 
       const connectionPromise = bridge.nextConnection();
-      const handle = await connect({ runTests: runTestsCb });
+      const handle = await connect({ runTests: runTestsCb, resetEnvironment: vi.fn() });
       handle.reportReady(device);
 
       const conn = await connectionPromise;
@@ -157,6 +161,7 @@ describe('bridge: createHarnessBridge + connectToHarness', () => {
       const firstHandle = await connect({
         runTests: async (): Promise<TestSuiteResult> =>
           await new Promise<TestSuiteResult>(() => undefined),
+        resetEnvironment: vi.fn(),
       });
       firstHandle.reportReady(device);
 

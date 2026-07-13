@@ -22,6 +22,7 @@ const createConfig = (overrides: Partial<HarnessConfig> = {}): HarnessConfig =>
     disableViewFlattening: false,
     entryPoint: 'index.js',
     forwardClientLogs: false,
+    diagnostics: false,
     maxAppRestarts: 2,
     metroPort: 8081,
     platformReadyTimeout: 300_000,

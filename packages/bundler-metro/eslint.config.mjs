@@ -9,7 +9,11 @@ export default [
         'error',
         {
           ignoredFiles: ['{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}'],
-          ignoredDependencies: ['@react-native-harness/babel-preset', 'vitest'],
+          ignoredDependencies: [
+            '@react-native-harness/babel-preset',
+            'vite',
+            'vitest',
+          ],
         },
       ],
     },

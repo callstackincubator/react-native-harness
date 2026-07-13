@@ -9,5 +9,6 @@ export {
   resolveAvdCachingEnabled,
 } from './avd-config.js';
 export { getHostAndroidSystemImageArch } from './environment.js';
+export { getEmulatorCpuCores } from './emulator-startup.js';
 export { HarnessAppPathError, HarnessEmulatorConfigError } from './errors.js';
 export { getRunTargets } from './targets.js';

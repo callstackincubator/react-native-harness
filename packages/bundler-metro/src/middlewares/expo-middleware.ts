@@ -3,6 +3,7 @@ import type { NextFunction } from 'connect';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
 import crypto from 'node:crypto';
 import { getResolvedEntryPointWithoutExtension } from '../entry-point-utils.js';
+import { getBundleUrl } from '../bundle-url.js';
 
 export const getExpoMiddleware =
   (projectRoot: string, harnessConfig: HarnessConfig) =>
@@ -25,7 +26,12 @@ export const getExpoMiddleware =
       launchAsset: {
         key: 'bundle',
         contentType: 'application/javascript',
-        url: `http://localhost:${harnessConfig.metroPort}/${resolvedEntryPoint}.bundle?platform=${platform}&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&transform.reactCompiler=true&unstable_transformProfile=hermes-stable`,
+        url: getBundleUrl({
+          port: harnessConfig.metroPort,
+          resolvedEntryPoint,
+          platform,
+          profile: 'expo',
+        }),
       },
       assets: [],
       metadata: {},

@@ -1,11 +1,12 @@
 import { logger, withAbortTimeout } from '@react-native-harness/tools';
 import type { Server as HttpServer } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
+import type { Socket } from 'node:net';
 import connect from 'connect';
 import nocache from 'nocache';
 import { isPortAvailable, getMetroPackage } from './utils.js';
 import { MetroPortUnavailableError } from './errors.js';
-import type { MetroInstance, MetroOptions } from './types.js';
+import type { MetroInstance, MetroOptions, PrewarmState } from './types.js';
 import {
   type Reporter,
   withReporter,
@@ -14,7 +15,9 @@ import {
 import { getExpoMiddleware } from './middlewares/expo-middleware.js';
 import { getBundleRequestObserverMiddleware } from './middlewares/bundle-request-middleware.js';
 import { getStatusMiddleware } from './middlewares/status-middleware.js';
-import { prewarmMetroBundle } from './prewarm.js';
+import { buildPrewarmUrl, prewarmMetroBundle } from './prewarm.js';
+import { detectBundleClientProfile } from './bundle-url.js';
+import { diffGraphRelevantParams } from './prewarm-guard.js';
 import { withRnHarness } from './withRnHarness.js';
 const metroLogger = logger.child('metro');
 
@@ -105,6 +108,12 @@ export const getMetroInstance = async (
   }
 
   const Metro = getMetroPackage(projectRoot);
+  const bundleClientProfile = detectBundleClientProfile(projectRoot);
+  metroLogger.debug(
+    'detected bundle client profile "%s" for %s',
+    bundleClientProfile,
+    projectRoot
+  );
 
   process.env.RN_HARNESS = 'true';
 
@@ -144,6 +153,15 @@ export const getMetroInstance = async (
     'httpServer' in maybeServer ? maybeServer.httpServer : maybeServer;
   server.keepAliveTimeout = 30000;
 
+  // closeAllConnections() does not close sockets upgraded to WebSockets (e.g. Metro's /hot
+  // endpoint), but those sockets block server.close() from ever firing its callback; track them
+  // so dispose() can force-destroy whatever remains.
+  const sockets = new Set<Socket>();
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
+
   abortSignal.throwIfAborted();
 
   await ready;
@@ -151,6 +169,47 @@ export const getMetroInstance = async (
   metroLogger.debug('Metro server is running');
 
   let prewarmResult: Promise<boolean> | null = null;
+  let prewarmRequestUrl: string | null = null;
+  let mismatchWarned = false;
+
+  const onBundleRequestObserved = (event: ReportableEvent) => {
+    if (event.type !== 'bundle_request_observed') {
+      return;
+    }
+
+    if (event.requestKind !== 'app' || !prewarmRequestUrl || mismatchWarned) {
+      return;
+    }
+
+    const diffs = diffGraphRelevantParams(prewarmRequestUrl, event.url);
+
+    if (diffs.length > 0) {
+      mismatchWarned = true;
+      metroLogger.warn(
+        'Pre-warmed Metro bundle graph key does not match the app-requested bundle graph key; the pre-warm may have built a graph the app cannot reuse. Mismatched: %s',
+        diffs.join(', ')
+      );
+    }
+  };
+  reporter.addListener(onBundleRequestObserved);
+
+  let prewarmState: PrewarmState = 'idle';
+
+  let buildsInFlight = 0;
+  const onBuildEvent = (event: ReportableEvent) => {
+    if (event.type === 'bundle_build_started') {
+      buildsInFlight += 1;
+      return;
+    }
+
+    if (
+      event.type === 'bundle_build_done' ||
+      event.type === 'bundle_build_failed'
+    ) {
+      buildsInFlight = Math.max(0, buildsInFlight - 1);
+    }
+  };
+  reporter.addListener(onBuildEvent);
 
   return {
     events: reporter,
@@ -160,17 +219,22 @@ export const getMetroInstance = async (
       waitForMetroStatus({ port: metroPort, timeoutMs, signal }),
     prewarm: ({ platform, signal }) => {
       if (!prewarmResult) {
+        prewarmState = 'pending';
         prewarmResult = (async () => {
           try {
-            await prewarmMetroBundle({
+            const prewarmOptions = {
               projectRoot,
               entryPoint: harnessConfig.entryPoint,
               port: metroPort,
               platform,
-              dev: true,
-              minify: false,
+              profile: bundleClientProfile,
+            };
+            prewarmRequestUrl = buildPrewarmUrl(prewarmOptions);
+            await prewarmMetroBundle({
+              ...prewarmOptions,
               signal,
             });
+            prewarmState = 'succeeded';
             return true;
           } catch (error) {
             if (
@@ -178,6 +242,7 @@ export const getMetroInstance = async (
               error.name === 'AbortError' &&
               signal.aborted
             ) {
+              prewarmState = 'failed';
               throw error;
             }
 
@@ -185,6 +250,7 @@ export const getMetroInstance = async (
               `Metro pre-warm for ${platform} failed; continuing without pre-warm.`,
               error
             );
+            prewarmState = 'failed';
             return false;
           }
         })();
@@ -192,10 +258,17 @@ export const getMetroInstance = async (
 
       return prewarmResult;
     },
+    getPrewarmState: () => prewarmState,
+    isBuildInFlight: () => buildsInFlight > 0,
     dispose: () =>
       new Promise<void>((resolve) => {
+        reporter.removeListener(onBundleRequestObserved);
+        reporter.removeListener(onBuildEvent);
         server.close(() => resolve());
         server.closeAllConnections();
+        for (const socket of sockets) {
+          socket.destroy();
+        }
       }),
   };
 };

@@ -13,3 +13,5 @@ export * from './crash-artifacts.js';
 export * from './harness-artifacts.js';
 export * from './regex.js';
 export * from './isInteractive.js';
+export * from './diagnostics.js';
+export * from './device-core-budget.js';

@@ -236,4 +236,88 @@ describe('createCrashMonitor', () => {
     expect(session.removeListener).toHaveBeenCalledOnce();
     expect(cm.isAlive()).toBe(false);
   });
+
+  describe('expectDisconnect', () => {
+    it('suppresses handleBridgeDisconnect while the window is open', async () => {
+      const { session } = createAppSessionMock({ status: 'running' });
+      const cm = createCrashMonitor({ appSession: session });
+      const watch = cm.watch('test.ts', 'execution');
+      watch.promise.catch(noop);
+
+      const closeWindow = cm.expectDisconnect();
+      cm.handleBridgeDisconnect();
+      await waitForClassification();
+
+      const settled = vi.fn();
+      watch.promise.then(settled, settled);
+      await Promise.resolve();
+      expect(settled).not.toHaveBeenCalled();
+
+      closeWindow();
+      watch.cancel();
+    });
+
+    it('resumes classifying disconnects once the window closes', async () => {
+      const { session } = createAppSessionMock({ status: 'running' });
+      const cm = createCrashMonitor({ appSession: session });
+      const watch = cm.watch('test.ts', 'execution');
+      watch.promise.catch(noop);
+
+      const closeWindow = cm.expectDisconnect();
+      closeWindow();
+
+      cm.handleBridgeDisconnect();
+
+      await expect(watch.promise).rejects.toBeInstanceOf(RuntimeDisconnectError);
+    });
+
+    it('keeps the window open until every opener has closed it (nested windows)', async () => {
+      const { session } = createAppSessionMock({ status: 'running' });
+      const cm = createCrashMonitor({ appSession: session });
+      const watch = cm.watch('test.ts', 'execution');
+      watch.promise.catch(noop);
+
+      const closeFirst = cm.expectDisconnect();
+      const closeSecond = cm.expectDisconnect();
+      closeFirst();
+
+      cm.handleBridgeDisconnect();
+      await waitForClassification();
+
+      const settled = vi.fn();
+      watch.promise.then(settled, settled);
+      await Promise.resolve();
+      expect(settled).not.toHaveBeenCalled();
+
+      closeSecond();
+      watch.cancel();
+    });
+
+    it('ignores a redundant close() call', async () => {
+      const { session } = createAppSessionMock({ status: 'running' });
+      const cm = createCrashMonitor({ appSession: session });
+      const watch = cm.watch('test.ts', 'execution');
+      watch.promise.catch(noop);
+
+      const closeWindow = cm.expectDisconnect();
+      closeWindow();
+      closeWindow();
+
+      cm.handleBridgeDisconnect();
+
+      await expect(watch.promise).rejects.toBeInstanceOf(RuntimeDisconnectError);
+    });
+
+    it('clears the expected-disconnect window on dispose', async () => {
+      const { session } = createAppSessionMock({ status: 'running' });
+      const cm = createCrashMonitor({ appSession: session });
+      cm.expectDisconnect();
+
+      await cm.dispose();
+
+      // A disconnect after dispose should not throw or hang; monitoring is
+      // fully torn down regardless of the window state.
+      expect(() => cm.handleBridgeDisconnect()).not.toThrow();
+    });
+  });
 });

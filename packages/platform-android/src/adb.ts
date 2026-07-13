@@ -25,6 +25,7 @@ import {
   getRequiredAndroidSdkPackages,
 } from './environment.js';
 import {
+  getEmulatorCpuCores,
   getEmulatorStartupArgs,
   type EmulatorBootMode,
 } from './emulator-startup.js';
@@ -50,14 +51,14 @@ const waitForAbort = (signal: AbortSignal): Promise<never> => {
       () => {
         reject(signal.reason);
       },
-      { once: true },
+      { once: true }
     );
   });
 };
 
 const waitWithSignal = async (
   ms: number,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<void> => {
   if (signal.aborted) {
     throw signal.reason;
@@ -73,7 +74,7 @@ const androidAdbLogger = logger.child('android-adb');
 export const emulatorProcess = {
   startDetachedProcess: (
     file: string,
-    args: readonly string[],
+    args: readonly string[]
   ): ChildProcessByStdio<null, Readable, Readable> =>
     nodeSpawn(file, args, {
       detached: true,
@@ -84,7 +85,7 @@ export const emulatorProcess = {
 const appendBoundedOutput = (
   output: string,
   chunk: string,
-  limit: number = EMULATOR_OUTPUT_BUFFER_LIMIT,
+  limit: number = EMULATOR_OUTPUT_BUFFER_LIMIT
 ): string => {
   const nextOutput = output + chunk;
 
@@ -165,7 +166,7 @@ export const getRequiredEmulatorPackages = (apiLevel: number): string[] => {
 };
 
 export const verifyAndroidEmulatorSdk = async (
-  apiLevel: number,
+  apiLevel: number
 ): Promise<void> => {
   await ensureAndroidSdkPackages(getRequiredEmulatorPackages(apiLevel));
 };
@@ -192,7 +193,7 @@ const ensureAvdProfileAvailable = async (profile: string): Promise<void> => {
       : 'None reported by avdmanager.';
 
   throw new Error(
-    `Android AVD profile "${profile}" is not available on this machine. Available profiles: ${availableProfilesList}`,
+    `Android AVD profile "${profile}" is not available on this machine. Available profiles: ${availableProfilesList}`
   );
 };
 
@@ -201,7 +202,7 @@ const ensureAvdConfigExists = async (name: string): Promise<string> => {
 
   if ((await readAvdConfig(name)) == null) {
     throw new Error(
-      `Android AVD "${name}" was created, but config.ini was not found at ${configPath}.`,
+      `Android AVD "${name}" was created, but config.ini was not found at ${configPath}.`
     );
   }
 
@@ -235,7 +236,7 @@ const ensureAvdIniExists = async ({
 export const getStartAppArgs = (
   bundleId: string,
   activityName: string,
-  options?: AndroidAppLaunchOptions,
+  options?: AndroidAppLaunchOptions
 ): string[] => {
   const args = [
     'shell',
@@ -264,7 +265,7 @@ export const getStartAppArgs = (
 
     if (!Number.isSafeInteger(value)) {
       throw new Error(
-        `Android app launch option "${key}" must be a safe integer.`,
+        `Android app launch option "${key}" must be a safe integer.`
       );
     }
 
@@ -276,7 +277,7 @@ export const getStartAppArgs = (
 
 export const isAppInstalled = async (
   adbId: string,
-  bundleId: string,
+  bundleId: string
 ): Promise<boolean> => {
   const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
@@ -293,7 +294,7 @@ export const isAppInstalled = async (
 export const reversePort = async (
   adbId: string,
   port: number,
-  hostPort: number = port,
+  hostPort: number = port
 ): Promise<void> => {
   await spawn(getAdbBinaryPath(), [
     '-s',
@@ -306,7 +307,7 @@ export const reversePort = async (
 
 export const stopApp = async (
   adbId: string,
-  bundleId: string,
+  bundleId: string
 ): Promise<void> => {
   await spawn(getAdbBinaryPath(), [
     '-s',
@@ -322,7 +323,7 @@ export const startApp = async (
   adbId: string,
   bundleId: string,
   activityName: string,
-  options?: AndroidAppLaunchOptions,
+  options?: AndroidAppLaunchOptions
 ): Promise<void> => {
   await spawn(getAdbBinaryPath(), [
     '-s',
@@ -341,7 +342,7 @@ export const getDeviceIds = async (): Promise<string[]> => {
 };
 
 export const getEmulatorName = async (
-  adbId: string,
+  adbId: string
 ): Promise<string | null> => {
   const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
@@ -355,7 +356,7 @@ export const getEmulatorName = async (
 
 export const getShellProperty = async (
   adbId: string,
-  property: string,
+  property: string
 ): Promise<string | null> => {
   const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
@@ -377,7 +378,7 @@ export type DeviceInfo = {
 };
 
 export const getDeviceInfo = async (
-  adbId: string,
+  adbId: string
 ): Promise<DeviceInfo | null> => {
   const manufacturer = await getShellProperty(adbId, 'ro.product.manufacturer');
   const model = await getShellProperty(adbId, 'ro.product.model');
@@ -386,7 +387,7 @@ export const getDeviceInfo = async (
 
 const getRequestedPermissions = async (
   adbId: string,
-  bundleId: string,
+  bundleId: string
 ): Promise<string[]> => {
   const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
@@ -476,14 +477,14 @@ export const stopEmulator = async (adbId: string): Promise<void> => {
 
 export const installApp = async (
   adbId: string,
-  appPath: string,
+  appPath: string
 ): Promise<void> => {
   await spawn(getAdbBinaryPath(), ['-s', adbId, 'install', '-r', appPath]);
 };
 
 export const uninstallApp = async (
   adbId: string,
-  bundleId: string,
+  bundleId: string
 ): Promise<void> => {
   await spawn(getAdbBinaryPath(), ['-s', adbId, 'uninstall', bundleId]);
 };
@@ -502,20 +503,27 @@ export const createAvd = async ({
 }: CreateAvdOptions): Promise<void> => {
   const systemImagePackage = getAndroidSystemImagePackage(
     apiLevel,
-    getHostAndroidSystemImageArch(),
+    getHostAndroidSystemImageArch()
   );
 
   await verifyAndroidEmulatorSdk(apiLevel);
   await ensureAvdProfileAvailable(profile);
   await spawn('bash', [
     '-lc',
-    `printf 'no\n' | "${getAvdManagerBinaryPath()}" create avd --force --name "${name}" --package "${systemImagePackage}" --device "${profile}" -p "${getAvdDirectory(name)}"`,
+    `printf 'no\n' | "${getAvdManagerBinaryPath()}" create avd --force --name "${name}" --package "${systemImagePackage}" --device "${profile}" -p "${getAvdDirectory(
+      name
+    )}"`,
   ]);
   await ensureAvdIniExists({ name, apiLevel });
   const configPath = await ensureAvdConfigExists(name);
+  // hw.cpu.ncore is baked into config.ini (rather than passed as a `-cores`
+  // boot flag) so it's part of the AVD's persisted hardware profile: boot
+  // snapshots require an identical hardware config to load, so the vCPU
+  // count must be fixed at AVD-creation time and stay consistent across
+  // boots.
   await spawn('bash', [
     '-lc',
-    `printf '%s\n%s\n' 'disk.dataPartition.size=${diskSize}' 'vm.heapSize=${heapSize}' >> "${configPath}"`,
+    `printf '%s\n%s\n%s\n' 'disk.dataPartition.size=${diskSize}' 'vm.heapSize=${heapSize}' 'hw.cpu.ncore=${getEmulatorCpuCores()}' >> "${configPath}"`,
   ]);
 };
 
@@ -527,7 +535,7 @@ export const deleteAvd = async (name: string): Promise<void> => {
     {
       force: true,
       recursive: true,
-    },
+    }
   );
   await rm(
     `${
@@ -535,18 +543,18 @@ export const deleteAvd = async (name: string): Promise<void> => {
     }/${name}.ini`,
     {
       force: true,
-    },
+    }
   );
 };
 
 export const startEmulator = async (
   name: string,
-  mode: EmulatorBootMode = 'default-boot',
+  mode: EmulatorBootMode = 'default-boot'
 ): Promise<void> => {
   const emulatorBinaryPath = await ensureEmulatorInstalled();
   const childProcess = emulatorProcess.startDetachedProcess(
     emulatorBinaryPath,
-    getEmulatorStartupArgs(name, mode),
+    getEmulatorStartupArgs(name, mode)
   );
 
   let stdout = '';
@@ -582,7 +590,7 @@ export const startEmulator = async (
           stdout,
           stderr,
           error,
-        }),
+        })
       );
     });
 
@@ -594,7 +602,7 @@ export const startEmulator = async (
           stderr,
           exitCode,
           signal,
-        }),
+        })
       );
     });
   });
@@ -610,7 +618,7 @@ export const startEmulator = async (
     });
 
   const observationTimeout = wait(EMULATOR_STARTUP_OBSERVATION_TIMEOUT_MS).then(
-    () => 'timeout' as const,
+    () => 'timeout' as const
   );
 
   try {
@@ -626,7 +634,7 @@ export const startEmulator = async (
 
 export const waitForEmulator = async (
   name: string,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<string> => {
   while (!signal.aborted) {
     const adbIds = await getDeviceIds();
@@ -651,7 +659,7 @@ export const waitForEmulator = async (
 
 export const waitForEmulatorDisconnect = async (
   adbId: string,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<void> => {
   while (!signal.aborted) {
     const adbIds = await getDeviceIds();
@@ -668,7 +676,7 @@ export const waitForEmulatorDisconnect = async (
 
 export const waitForBoot = async (
   name: string,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<string> => {
   while (!signal.aborted) {
     const adbIds = await getDeviceIds();
@@ -697,14 +705,14 @@ export const waitForBoot = async (
 
 export const isAppRunning = async (
   adbId: string,
-  bundleId: string,
+  bundleId: string
 ): Promise<boolean> => {
   return (await getAppPid(adbId, bundleId)) != null;
 };
 
 export const getAppPid = async (
   adbId: string,
-  bundleId: string,
+  bundleId: string
 ): Promise<number | null> => {
   try {
     const { stdout } = await spawn(getAdbBinaryPath(), [
@@ -731,7 +739,7 @@ export const getAppPid = async (
 
 export const getAppUid = async (
   adbId: string,
-  bundleId: string,
+  bundleId: string
 ): Promise<number> => {
   const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
@@ -756,7 +764,7 @@ export const getAppUid = async (
 
 export const setHideErrorDialogs = async (
   adbId: string,
-  hide: boolean,
+  hide: boolean
 ): Promise<void> => {
   await spawn(getAdbBinaryPath(), [
     '-s',
@@ -784,7 +792,7 @@ export const getLogcatTimestamp = async (adbId: string): Promise<string> => {
 
 export const startLogcat = (
   adbId: string,
-  args: readonly string[],
+  args: readonly string[]
 ): Subprocess =>
   spawn(getAdbBinaryPath(), ['-s', adbId, ...args], {
     stdout: 'pipe',
@@ -798,7 +806,7 @@ export const DROPBOX_CRASH_TAGS = [
 
 export const getDropboxPrint = async (
   adbId: string,
-  tags: readonly string[] = DROPBOX_CRASH_TAGS,
+  tags: readonly string[] = DROPBOX_CRASH_TAGS
 ): Promise<string> => {
   // Android treats multiple args after --print as one search string, so each
   // tag must be queried separately and merged on the host.
@@ -815,7 +823,7 @@ export const getDropboxPrint = async (
       ]);
 
       return stdout;
-    }),
+    })
   );
 
   return outputs.join('\n');
@@ -823,7 +831,7 @@ export const getDropboxPrint = async (
 
 export const getActivityExitInfo = async (
   adbId: string,
-  bundleId: string,
+  bundleId: string
 ): Promise<string> => {
   const { stdout } = await spawn(getAdbBinaryPath(), [
     '-s',
@@ -891,7 +899,7 @@ export const getConnectedDevices = async (): Promise<AdbDevice[]> => {
 
 export const grantPermissions = async (
   adbId: string,
-  bundleId: string,
+  bundleId: string
 ): Promise<void> => {
   androidAdbLogger.debug('grantPermissions:start %o', {
     adbId,
@@ -908,7 +916,7 @@ export const grantPermissions = async (
     getDangerousPermissions(adbId),
   ]);
   const permissions = requestedPermissions.filter((permission) =>
-    dangerousPermissions.has(permission),
+    dangerousPermissions.has(permission)
   );
 
   androidAdbLogger.debug('grantPermissions:resolved %o', {
@@ -944,7 +952,7 @@ export const grantPermissions = async (
     });
 
     await Promise.all(
-      grantCommands.map((args) => spawn(getAdbBinaryPath(), args as string[])),
+      grantCommands.map((args) => spawn(getAdbBinaryPath(), args as string[]))
     );
 
     androidAdbLogger.debug('grantPermissions:success %o', {

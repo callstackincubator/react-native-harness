@@ -73,7 +73,7 @@ describe('connectToHarness transport injection', () => {
     const mockTransport = createMockTransport();
     const handlePromise = connectToHarness(
       'ws://unused',
-      { runTests: vi.fn() },
+      { runTests: vi.fn(), resetEnvironment: vi.fn() },
       { transport: mockTransport.transport },
     );
 

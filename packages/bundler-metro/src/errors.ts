@@ -1,4 +1,5 @@
 import { HarnessError } from '@react-native-harness/tools';
+import type { PrewarmState } from './types.js';
 
 export class MetroPortUnavailableError extends HarnessError {
   constructor(public readonly port: number) {
@@ -24,7 +25,21 @@ export type StartupStallCode =
 export type StartupStallDetails = {
   code?: StartupStallCode;
   lastMetroStatus?: string;
-  sawPrewarmRequest?: boolean;
+  prewarmState?: PrewarmState;
+};
+
+const getPrewarmSuffix = (prewarmState: PrewarmState | undefined): string => {
+  switch (prewarmState) {
+    case 'succeeded':
+      return ' Only prewarm traffic was observed.';
+    case 'pending':
+      return ' The prewarm bundle was still building.';
+    case 'failed':
+      return ' The prewarm bundle failed to build.';
+    case 'idle':
+    default:
+      return '';
+  }
 };
 
 const getStartupStallMessage = (
@@ -48,9 +63,7 @@ const getStartupStallMessage = (
       );
     case 'bundle_request_not_observed':
     default: {
-      const prewarmSuffix = details.sawPrewarmRequest
-        ? ' Only prewarm traffic was observed.'
-        : '';
+      const prewarmSuffix = getPrewarmSuffix(details.prewarmState);
 
       return (
         `The app did not request its Metro bundle after ${attempts} launch attempt${
@@ -65,7 +78,7 @@ const getStartupStallMessage = (
 export class StartupStallError extends HarnessError {
   public readonly code: StartupStallCode;
   public readonly lastMetroStatus?: string;
-  public readonly sawPrewarmRequest: boolean;
+  public readonly prewarmState: PrewarmState;
 
   constructor(
     public readonly timeoutMs: number,
@@ -75,13 +88,13 @@ export class StartupStallError extends HarnessError {
     const normalizedDetails = {
       code: details.code ?? 'bundle_request_not_observed',
       lastMetroStatus: details.lastMetroStatus,
-      sawPrewarmRequest: details.sawPrewarmRequest ?? false,
+      prewarmState: details.prewarmState ?? 'idle',
     };
 
     super(getStartupStallMessage(timeoutMs, attempts, normalizedDetails));
     this.name = 'StartupStallError';
     this.code = normalizedDetails.code;
     this.lastMetroStatus = normalizedDetails.lastMetroStatus;
-    this.sawPrewarmRequest = normalizedDetails.sawPrewarmRequest;
+    this.prewarmState = normalizedDetails.prewarmState;
   }
 }

@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import type {
   TestRunnerEvents,
   TestCollectorEvents,
@@ -20,8 +21,27 @@ import { runSetupFiles } from './setup-files.js';
 import { setHandle } from './store.js';
 import { installPromiseTracker } from '../promise-tracker.js';
 
+// Reloading tears down the JS runtime, so the RPC caller would never see a
+// response if we reloaded synchronously. Acknowledge first, then reload on
+// the next tick so the response has a chance to flush over the bridge.
+const reloadRuntime = (): void => {
+  setTimeout(() => {
+    if (Platform.OS === 'web') {
+      window.location.reload();
+    } else {
+      // Required lazily: react-native-web doesn't export DevSettings, so a
+      // named import would be undefined on web. Only native reaches this.
+      const { DevSettings } = require('react-native');
+      DevSettings.reload();
+    }
+  }, 100);
+};
+
 export const getClient = async (): Promise<HarnessHandle> => {
   const handle = await connectToHarness(getWSServer(), {
+    resetEnvironment: async () => {
+      reloadRuntime();
+    },
     runTests: async (path: string, options: TestExecutionOptions) => {
       installPromiseTracker();
 
@@ -88,6 +108,8 @@ export const getClient = async (): Promise<HarnessHandle> => {
           testTimeout: options.testTimeout,
         });
       } finally {
+        // Free this file's Metro graph so graphs don't accumulate per file (OOM).
+        await bundler?.releaseModule(path);
         collector?.dispose();
         runner?.dispose();
         events?.clearAllListeners();

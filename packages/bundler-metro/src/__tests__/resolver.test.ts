@@ -56,10 +56,16 @@ describe('createHarnessEntryPointResolver', () => {
         './node_modules/expo-router/entry',
         'android',
       ),
-    ).toEqual({
-      type: 'sourceFile',
-      filePath: harnessEntryPointPath,
-    });
+    ).toEqual(
+      expect.objectContaining({
+        type: 'sourceFile',
+        // In this workspace, `@react-native-harness/runtime/entry-point`
+        // resolves straight to the package's source file (no node_modules
+        // symlink in the path) rather than a string containing the package
+        // specifier, so assert on the resolved file itself.
+        filePath: expect.stringMatching(/entry-point(\.[cm]?[jt]sx?)?$/),
+      }),
+    );
   });
 
   it('hijacks entry points requested relative to a monorepo server root', () => {

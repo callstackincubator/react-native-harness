@@ -4,4 +4,5 @@ import { EventEmitter } from '../utils/emitter.js';
 export type Bundler = {
   events: EventEmitter<BundlerEvents>;
   getModule: (filePath: string) => Promise<string>;
+  releaseModule: (filePath: string) => Promise<void>;
 };

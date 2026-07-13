@@ -9,17 +9,11 @@ import type { MetroInstance } from './types.js';
 type WaitForBundleRequestOptions = {
   events: MetroInstance['events'];
   platformId: string;
-  initialPrewarmSeen?: boolean;
-};
-
-type BundleRequestObservation = {
-  sawPrewarmRequest: boolean;
 };
 
 type BundleRequestObserver = {
-  sawPrewarmRequest: () => boolean;
   hasSeenAppRequest: () => boolean;
-  waitForAppRequest: () => Promise<BundleRequestObservation>;
+  waitForAppRequest: () => Promise<void>;
   dispose: () => void;
 };
 
@@ -47,7 +41,7 @@ export type WaitForMetroBackedAppReadyOptions = {
 };
 
 class BundleRequestTimeoutError extends Error {
-  constructor(public readonly sawPrewarmRequest: boolean) {
+  constructor() {
     super('Timed out waiting for an app-originated Metro bundle request.');
     this.name = 'BundleRequestTimeoutError';
   }
@@ -60,14 +54,12 @@ const isAbortError = (error: unknown): error is DOMException => {
 const observeBundleRequest = ({
   events,
   platformId,
-  initialPrewarmSeen = false,
 }: WaitForBundleRequestOptions): BundleRequestObserver => {
-  let sawPrewarmRequest = initialPrewarmSeen;
   let sawAppRequest = false;
   let settled = false;
 
-  let resolvePromise!: (value: BundleRequestObservation) => void;
-  const appRequestPromise = new Promise<BundleRequestObservation>((resolve) => {
+  let resolvePromise!: () => void;
+  const appRequestPromise = new Promise<void>((resolve) => {
     resolvePromise = resolve;
   });
 
@@ -77,9 +69,7 @@ const observeBundleRequest = ({
     }
 
     settled = true;
-    resolvePromise({
-      sawPrewarmRequest,
-    });
+    resolvePromise();
   };
 
   const onMetroEvent = (event: ReportableEvent) => {
@@ -87,11 +77,9 @@ const observeBundleRequest = ({
       return;
     }
 
-    if (event.requestKind === 'prewarm') {
-      sawPrewarmRequest = true;
-      return;
-    }
-
+    // Only the app's own bundle request should resolve this observer; the
+    // harness's prewarm fetch also produces a 'bundle_request_observed'
+    // event but must not be mistaken for the app launching.
     if (event.requestKind === 'app' && event.platform === platformId) {
       sawAppRequest = true;
       resolveOnce();
@@ -101,7 +89,6 @@ const observeBundleRequest = ({
   events.addListener(onMetroEvent);
 
   return {
-    sawPrewarmRequest: () => sawPrewarmRequest,
     hasSeenAppRequest: () => sawAppRequest,
     waitForAppRequest: async () => await appRequestPromise,
     dispose: () => {
@@ -113,11 +100,9 @@ const observeBundleRequest = ({
 const waitForBundleRequestTimeout = async ({
   timeoutMs,
   signal,
-  sawPrewarmRequest,
 }: {
   timeoutMs: number;
   signal: AbortSignal;
-  sawPrewarmRequest: () => boolean;
 }): Promise<never> => {
   const timeoutSignal = withAbortTimeout(signal, timeoutMs);
 
@@ -137,7 +122,7 @@ const waitForBundleRequestTimeout = async ({
         return;
       }
 
-      reject(new BundleRequestTimeoutError(sawPrewarmRequest()));
+      reject(new BundleRequestTimeoutError());
     };
 
     timeoutSignal.addEventListener('abort', onAbort, { once: true });
@@ -150,12 +135,19 @@ const waitForReadyAfterBundleRequest = async (options: {
   signal: AbortSignal;
   readyPromise: Promise<void>;
   cancelReadyWait: () => void;
+  initialBundlingInProgress: boolean;
 }): Promise<void> => {
-  const { events, readyTimeout, signal, readyPromise, cancelReadyWait } =
-    options;
+  const {
+    events,
+    readyTimeout,
+    signal,
+    readyPromise,
+    cancelReadyWait,
+    initialBundlingInProgress,
+  } = options;
 
   return await new Promise<void>((resolve, reject) => {
-    let bundlingInProgress = false;
+    let bundlingInProgress = initialBundlingInProgress;
     let settled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -224,7 +216,11 @@ const waitForReadyAfterBundleRequest = async (options: {
       }
     };
 
-    startReadyTimer();
+    // When a build is already in flight (seeded), keep the ready timer paused
+    // until Metro reports the build done or failed.
+    if (!bundlingInProgress) {
+      startReadyTimer();
+    }
     events.addListener(onMetroEvent);
     signal.addEventListener('abort', onAbort, { once: true });
 
@@ -270,15 +266,15 @@ export const waitForMetroBackedAppReady = async ({
     throw new StartupStallError(bundleStartTimeout, 1, {
       code: 'metro_not_ready',
       lastMetroStatus,
+      prewarmState: metro.getPrewarmState(),
     });
   }
 
-  const prewarmCompleted = await metro.prewarm({
+  await metro.prewarm({
     platform: platformId,
     signal,
   });
 
-  let sawPrewarmRequest = prewarmCompleted;
   const totalAttempts = maxAppRestarts + 1;
 
   for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
@@ -298,25 +294,20 @@ export const waitForMetroBackedAppReady = async ({
     const bundleRequestObserver = observeBundleRequest({
       events: metro.events,
       platformId,
-      initialPrewarmSeen: sawPrewarmRequest,
     });
 
     try {
       await startAttempt();
 
       if (!bundleRequestObserver.hasSeenAppRequest()) {
-        const bundleRequestResult = await Promise.race([
+        await Promise.race([
           bundleRequestObserver.waitForAppRequest(),
           waitForBundleRequestTimeout({
             timeoutMs: bundleStartTimeout,
             signal: attemptSignal,
-            sawPrewarmRequest: bundleRequestObserver.sawPrewarmRequest,
           }),
           crashPromise,
         ]);
-        sawPrewarmRequest = bundleRequestResult.sawPrewarmRequest;
-      } else {
-        sawPrewarmRequest = bundleRequestObserver.sawPrewarmRequest();
       }
 
       const readyAfterBundleRequestPromise = waitForReadyAfterBundleRequest({
@@ -329,6 +320,12 @@ export const waitForMetroBackedAppReady = async ({
             new DOMException('The operation was aborted', 'AbortError')
           );
         },
+        // Always false today: prewarm was awaited above, so no build can be
+        // in flight here. This seeds the ready-timer pause for the upcoming
+        // change that drops that await, where the app's bundle request can
+        // coalesce into the still-in-flight prewarm build and Metro emits no
+        // fresh bundle_build_started event.
+        initialBundlingInProgress: metro.isBuildInFlight(),
       });
       await Promise.race([readyAfterBundleRequestPromise, crashPromise]);
       bundleRequestObserver.dispose();
@@ -348,13 +345,11 @@ export const waitForMetroBackedAppReady = async ({
       }
 
       if (error instanceof BundleRequestTimeoutError) {
-        sawPrewarmRequest = error.sawPrewarmRequest;
-
         if (attempt >= totalAttempts) {
           throw new StartupStallError(bundleStartTimeout, totalAttempts, {
             code: 'bundle_request_not_observed',
             lastMetroStatus,
-            sawPrewarmRequest,
+            prewarmState: metro.getPrewarmState(),
           });
         }
 
@@ -365,7 +360,7 @@ export const waitForMetroBackedAppReady = async ({
         throw new StartupStallError(readyTimeout, attempt, {
           code: 'ready_not_reported',
           lastMetroStatus,
-          sawPrewarmRequest,
+          prewarmState: metro.getPrewarmState(),
         });
       }
 

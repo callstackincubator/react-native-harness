@@ -7,6 +7,9 @@
       "path": "../config"
     },
     {
+      "path": "../platform-android"
+    },
+    {
       "path": "./tsconfig.lib.json"
     }
   ]

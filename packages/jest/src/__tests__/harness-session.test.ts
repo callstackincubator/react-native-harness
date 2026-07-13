@@ -3,6 +3,7 @@ import type { AppConnection } from '@react-native-harness/bridge/server';
 import {
   getSignalExitCodeForRunState,
   waitForBridgeDisconnectOrTimeout,
+  waitForNextConnected,
   waitForStartupCrash,
   type HarnessRunState,
 } from '../harness-session.js';
@@ -16,6 +17,7 @@ const createConnection = (): AppConnection => ({
     osVersion: '18.0',
   },
   runTests: vi.fn(),
+  resetEnvironment: vi.fn(),
 });
 
 const createBridge = (connection: AppConnection | null) => {
@@ -70,6 +72,65 @@ describe('waitForBridgeDisconnectOrTimeout', () => {
         timeoutMs: 10,
       }),
     ).resolves.toBe(false);
+  });
+});
+
+describe('waitForNextConnected', () => {
+  const createConnectableBridge = () => {
+    let listener: (() => void) | null = null;
+    const bridge: Pick<
+      import('@react-native-harness/bridge/server').HarnessBridge,
+      'on' | 'off'
+    > = {
+      on: vi.fn((event, l) => {
+        if (event === 'connected') listener = l as () => void;
+      }),
+      off: vi.fn((event, l) => {
+        if (event === 'connected' && listener === l) listener = null;
+      }),
+    };
+    return { bridge, emitConnected: () => listener?.() };
+  };
+
+  it('resolves when the bridge emits a connected event', async () => {
+    const { bridge, emitConnected } = createConnectableBridge();
+    const controller = new AbortController();
+
+    const waitPromise = waitForNextConnected({ bridge, signal: controller.signal });
+    emitConnected();
+
+    await expect(waitPromise).resolves.toBeUndefined();
+  });
+
+  it('rejects when the signal aborts before a connected event', async () => {
+    const { bridge } = createConnectableBridge();
+    const controller = new AbortController();
+
+    const waitPromise = waitForNextConnected({ bridge, signal: controller.signal });
+    controller.abort(new DOMException('Aborted', 'AbortError'));
+
+    await expect(waitPromise).rejects.toThrow('Aborted');
+  });
+
+  it('rejects immediately when the signal is already aborted', async () => {
+    const { bridge } = createConnectableBridge();
+    const controller = new AbortController();
+    controller.abort(new DOMException('Aborted', 'AbortError'));
+
+    await expect(
+      waitForNextConnected({ bridge, signal: controller.signal }),
+    ).rejects.toThrow('Aborted');
+  });
+
+  it('unsubscribes the connected listener once settled', async () => {
+    const { bridge, emitConnected } = createConnectableBridge();
+    const controller = new AbortController();
+
+    const waitPromise = waitForNextConnected({ bridge, signal: controller.signal });
+    emitConnected();
+    await waitPromise;
+
+    expect(bridge.off).toHaveBeenCalledOnce();
   });
 });
 

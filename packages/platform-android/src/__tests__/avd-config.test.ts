@@ -6,6 +6,9 @@ import {
   resolveAvdCachingEnabled,
 } from '../avd-config.js';
 import { AndroidPlatformConfigSchema } from '../config.js';
+import { getEmulatorCpuCores } from '../emulator-startup.js';
+
+const emulatorCpuCores = getEmulatorCpuCores();
 
 describe('AVD config helpers', () => {
   it('parses snapshot config from Android schema', () => {
@@ -73,7 +76,10 @@ abi.type=x86_64
 hw.device.name=pixel_8
 disk.dataPartition.size=1G
 vm.heapSize=512M
+hw.cpu.ncore=${emulatorCpuCores}
 `);
+
+    expect(avdConfig.hwCpuNcore).toBe(String(emulatorCpuCores));
 
     expect(
       isAvdCompatible({
@@ -93,6 +99,69 @@ vm.heapSize=512M
     ).toEqual({ compatible: true });
   });
 
+  it('rejects AVDs missing hw.cpu.ncore', () => {
+    const avdConfig = parseAvdConfig(`
+image.sysdir.1=system-images/android-35/default/x86_64/
+abi.type=x86_64
+hw.device.name=pixel_8
+disk.dataPartition.size=1G
+vm.heapSize=512M
+`);
+
+    expect(
+      isAvdCompatible({
+        emulator: {
+          type: 'emulator',
+          name: 'Pixel_8_API_35',
+          avd: {
+            apiLevel: 35,
+            profile: 'pixel_8',
+            diskSize: '1G',
+            heapSize: '512M',
+          },
+        },
+        avdConfig,
+        hostArch: 'x86_64',
+      })
+    ).toMatchObject({
+      compatible: false,
+      reason: `CPU core count mismatch: expected ${emulatorCpuCores}, got missing.`,
+    });
+  });
+
+  it('rejects AVDs with a different hw.cpu.ncore', () => {
+    const avdConfig = parseAvdConfig(`
+image.sysdir.1=system-images/android-35/default/x86_64/
+abi.type=x86_64
+hw.device.name=pixel_8
+disk.dataPartition.size=1G
+vm.heapSize=512M
+hw.cpu.ncore=${emulatorCpuCores === 4 ? 3 : 4}
+`);
+
+    expect(
+      isAvdCompatible({
+        emulator: {
+          type: 'emulator',
+          name: 'Pixel_8_API_35',
+          avd: {
+            apiLevel: 35,
+            profile: 'pixel_8',
+            diskSize: '1G',
+            heapSize: '512M',
+          },
+        },
+        avdConfig,
+        hostArch: 'x86_64',
+      })
+    ).toMatchObject({
+      compatible: false,
+      reason: `CPU core count mismatch: expected ${emulatorCpuCores}, got ${
+        emulatorCpuCores === 4 ? 3 : 4
+      }.`,
+    });
+  });
+
   it('accepts disk partition sizes rewritten to bytes', () => {
     const avdConfig = parseAvdConfig(`
 image.sysdir.1=system-images/android-35/default/x86_64/
@@ -100,6 +169,7 @@ abi.type=x86_64
 hw.device.name=pixel_8
 disk.dataPartition.size=6442450944
 vm.heapSize=512M
+hw.cpu.ncore=${emulatorCpuCores}
 `);
 
     expect(

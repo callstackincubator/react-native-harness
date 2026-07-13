@@ -3,7 +3,7 @@ import type { Config, Test, TestEvents, TestRunnerOptions, TestWatcher } from 'j
 import type { TestSuiteResult } from '@react-native-harness/bridge';
 import type { HarnessSession } from '../harness-session.js';
 import type { executeRun as ExecuteRun } from '../execute-run.js';
-import { HarnessError } from '@react-native-harness/tools';
+import { createDiagnostics, HarnessError } from '@react-native-harness/tools';
 import JestHarness from '../index.js';
 
 const resolveUndefined = async () => undefined;
@@ -15,6 +15,7 @@ const resolveUndefined = async () => undefined;
 const mockSession: HarnessSession = {
   config: { metroPort: 8081 } as HarnessSession['config'],
   context: {} as HarnessSession['context'],
+  diagnostics: createDiagnostics({ enabled: false }),
   onTestRunnerEvent: vi.fn(() => () => undefined),
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async (): Promise<TestSuiteResult> => ({
@@ -25,6 +26,7 @@ const mockSession: HarnessSession = {
     duration: 0,
   })),
   restartApp: vi.fn(resolveUndefined),
+  resetEnvironment: vi.fn(resolveUndefined),
   resetCrashState: vi.fn(),
   flushClientLogs: vi.fn(() => []),
   callHook: vi.fn(resolveUndefined),

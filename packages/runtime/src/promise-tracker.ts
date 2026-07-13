@@ -20,9 +20,24 @@ type PromiseExecutor<T> = (
   reject: PromiseReject
 ) => void;
 
+// Backstop against unbounded growth if GC can't keep up: never-settling
+// promises created in a hot loop would otherwise OOM the heap. Diagnostics only
+// ever show a handful, so evicting the oldest (Map keeps insertion order) is safe.
+export const MAX_TRACKED_PROMISES = 10_000;
+
 const pendingPromises = new Map<number, TrackedPromiseRecord>();
 const promiseIds = new WeakMap<object, number>();
 const promiseContexts = new WeakMap<object, PromiseTrackerTestContext>();
+
+// A garbage-collected promise can never settle or hold anything pending, so drop
+// its record (and captured stack) instead of leaking it. Primary defense; the
+// size cap above covers the window before GC runs.
+const promiseFinalization =
+  typeof FinalizationRegistry === 'undefined'
+    ? null
+    : new FinalizationRegistry<number>((id) => {
+        pendingPromises.delete(id);
+      });
 
 let originalPromise: PromiseConstructor | null = null;
 let nextPromiseId = 1;
@@ -63,6 +78,15 @@ const registerPromise = ():
     stack: createPromiseStack(),
     test,
   });
+
+  while (pendingPromises.size > MAX_TRACKED_PROMISES) {
+    const oldest = pendingPromises.keys().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+
+    pendingPromises.delete(oldest);
+  }
 
   return { id, test };
 };
@@ -161,6 +185,7 @@ const createTrackedPromiseConstructor = (): PromiseConstructor => {
 
       if (registration.id !== null) {
         promiseIds.set(this, registration.id);
+        promiseFinalization?.register(this, registration.id);
       }
 
       if (registration.test) {

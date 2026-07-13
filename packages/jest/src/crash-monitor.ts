@@ -40,6 +40,13 @@ export type CrashMonitor = {
   reset: () => void;
   setAppSession: (session: AppSession | null) => void;
   handleBridgeDisconnect: () => void;
+  /**
+   * Opens a window during which handleBridgeDisconnect() is suppressed,
+   * for use around operations (like a runtime reset) that intentionally
+   * disconnect the bridge without the app process dying. Returns a closer
+   * that ends the window; safe to call multiple times or nest.
+   */
+  expectDisconnect: () => () => void;
   dispose: () => Promise<void>;
 };
 
@@ -131,6 +138,7 @@ export const createCrashMonitor = ({
 
   let currentTestFilePath = '';
   let currentPhase: NativeCrashPhase = 'startup';
+  let expectedDisconnectDepth = 0;
   const watchers = new Set<(err: HarnessRuntimeFailure) => void>();
 
   const notifyFailure = (err: HarnessRuntimeFailure) => {
@@ -273,6 +281,19 @@ export const createCrashMonitor = ({
     return { promise, cancel };
   };
 
+  const expectDisconnect = (): (() => void) => {
+    expectedDisconnectDepth += 1;
+    let closed = false;
+
+    return () => {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      expectedDisconnectDepth = Math.max(0, expectedDisconnectDepth - 1);
+    };
+  };
+
   return {
     watch,
     isAlive: () => alive,
@@ -289,15 +310,22 @@ export const createCrashMonitor = ({
       watchers.clear();
       isResolvingCrash = false;
       currentTestFilePath = '';
+      expectedDisconnectDepth = 0;
       clearPendingTimer();
     },
     setAppSession,
     handleBridgeDisconnect: () => {
+      if (expectedDisconnectDepth > 0) {
+        crashLogger.debug('ignoring expected bridge disconnect');
+        return;
+      }
       startCrashResolution('bridge-disconnect');
     },
+    expectDisconnect,
     dispose: async () => {
       disposed = true;
       monitoring = false;
+      expectedDisconnectDepth = 0;
       watchers.clear();
       isResolvingCrash = false;
       clearPendingTimer();
