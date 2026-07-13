@@ -103,7 +103,7 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `maxAppRestarts`                   | Maximum number of automatic app relaunch attempts while Harness is waiting for startup (default: `2`).                                                    |
 | `eagerPrewarm`                     | Start building the Metro bundle while the platform is still booting so the first bundle is ready sooner (default: `true`).                                |
 | `permissions`                      | Enable platform-specific permission prompt automation (default: `false`). On iOS, this controls whether Harness starts the XCTest-based permission helper. |
-| `resetEnvironmentBetweenTestFiles` | Reset environment between test files (default: `true`).                                                                                                   |
+| `resetEnvironmentBetweenTestFiles` | How to reset the environment between test files: `true`/`'process'` restarts the app process (default), `'runtime'` reloads the JS runtime in place (falling back to a process restart on failure), `false` disables resetting. |
 | `detectNativeCrashes`              | Detect native app crashes during startup and test execution (default: `true`).                                                                            |
 | `crashDetectionInterval`           | Interval in milliseconds to check for native crashes (default: `500`).                                                                                    |
 | `disableViewFlattening`            | Disable view flattening in React Native (default: `false`).                                                                                               |

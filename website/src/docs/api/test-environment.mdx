@@ -76,7 +76,17 @@ mock('react-native-safe-area-context', () => ({
 
 By default, Harness ensures test isolation by resetting the environment between test files.
 
-- **`resetEnvironmentBetweenTestFiles`**: (Default: `true`) When enabled, the app is fully restarted between different test files. This prevents state leakage (like singleton native modules or global variables) from affecting subsequent tests.
+- **`resetEnvironmentBetweenTestFiles`**: (Default: `true`) Controls how — or whether — the environment is reset between test files. Accepts a boolean or one of two strategy names:
+  - **`true` / `'process'`** (default): The app process is fully killed and relaunched between test files. This prevents state leakage (like singleton native modules or global variables) from affecting subsequent tests, at the cost of a full app restart per file.
+  - **`'runtime'`**: Instead of restarting the process, Harness reloads the JS runtime in place (`DevSettings.reload()` on native, `window.location.reload()` on web). This resets the JS runtime, TurboModule instances, and Fabric state without paying for a process restart, which is significantly faster. If the reload fails, doesn't acknowledge, or the app doesn't reconnect in time, Harness automatically escalates to a full `'process'` restart for that file so the run doesn't hang or leave the app in an inconsistent state.
+  - **`false`**: The environment is never reset between test files. Use this only if you manage isolation yourself.
+
+  ```javascript title="rn-harness.config.mjs"
+  const config = {
+    // ...
+    resetEnvironmentBetweenTestFiles: 'runtime',
+  };
+  ```
 
 ### Native Module Mocking
 
