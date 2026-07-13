@@ -138,10 +138,10 @@ jobs:
           node-version: '24.10.0'
           cache: 'pnpm'
 
-      - name: Setup Xcode 26
+      - name: Setup Xcode 26.4.1
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: '26.0'
+          xcode-version: '26.4.1'
 
       - name: Install Watchman
         run: brew install watchman
@@ -414,10 +414,10 @@ jobs:
           node-version: '24.10.0'
           cache: 'pnpm'
 
-      - name: Setup Xcode 26
+      - name: Setup Xcode 26.4.1
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: '26.0'
+          xcode-version: '26.4.1'
 
       - name: Install Watchman
         run: brew install watchman
