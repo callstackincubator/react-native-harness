@@ -122,7 +122,7 @@ export default {
 
   permissions: true,
   detectNativeCrashes: true,
-  resetEnvironmentBetweenTestFiles: true,
+  resetEnvironmentBetweenTestFiles: 'runtime',
   unstable__enableMetroCache: true,
   unstable__skipAlreadyIncludedModules: false,
   forwardClientLogs: true,
