@@ -30,7 +30,7 @@ jobs:
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android')) }}
     env:
       HARNESS_DEBUG: true
-      DEBUG: 'Metro:*'
+      RN_HARNESS_DIAGNOSTICS: true
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -112,6 +112,14 @@ jobs:
           path: apps/playground/.harness/logs
           if-no-files-found: ignore
 
+      - name: Upload Harness diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: harness-diagnostics-e2e-android
+          path: apps/playground/.harness/diagnostics
+          if-no-files-found: ignore
+
   e2e-ios:
     name: E2E iOS
     runs-on: macos-latest
@@ -119,7 +127,7 @@ jobs:
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios')) }}
     env:
       HARNESS_DEBUG: true
-      DEBUG: 'Metro:*'
+      RN_HARNESS_DIAGNOSTICS: true
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -213,6 +221,14 @@ jobs:
           path: apps/playground/.harness/logs
           if-no-files-found: ignore
 
+      - name: Upload Harness diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: harness-diagnostics-e2e-ios
+          path: apps/playground/.harness/diagnostics
+          if-no-files-found: ignore
+
   e2e-web:
     name: E2E Web
     runs-on: ubuntu-22.04
@@ -220,7 +236,7 @@ jobs:
     if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'web')) }}
     env:
       HARNESS_DEBUG: true
-      DEBUG: 'Metro:*'
+      RN_HARNESS_DIAGNOSTICS: true
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -267,6 +283,14 @@ jobs:
           path: apps/playground/.harness/logs
           if-no-files-found: ignore
 
+      - name: Upload Harness diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: harness-diagnostics-e2e-web
+          path: apps/playground/.harness/diagnostics
+          if-no-files-found: ignore
+
   crash-validate-android:
     name: Crash Validation Android
     runs-on: ubuntu-22.04
@@ -274,7 +298,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android') }}
     env:
       HARNESS_DEBUG: true
-      DEBUG: 'Metro:*'
+      RN_HARNESS_DIAGNOSTICS: true
 
     steps:
       - name: Checkout code
@@ -388,6 +412,14 @@ jobs:
           path: apps/playground/.harness/logs
           if-no-files-found: ignore
 
+      - name: Upload Harness diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: harness-diagnostics-crash-validate-android
+          path: apps/playground/.harness/diagnostics
+          if-no-files-found: ignore
+
   crash-validate-ios:
     name: Crash Validation iOS
     runs-on: macos-latest
@@ -395,7 +427,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios') }}
     env:
       HARNESS_DEBUG: true
-      DEBUG: 'Metro:*'
+      RN_HARNESS_DIAGNOSTICS: true
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -518,4 +550,12 @@ jobs:
         with:
           name: harness-logs-crash-validate-ios
           path: apps/playground/.harness/logs
+          if-no-files-found: ignore
+
+      - name: Upload Harness diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: harness-diagnostics-crash-validate-ios
+          path: apps/playground/.harness/diagnostics
           if-no-files-found: ignore

@@ -17,13 +17,10 @@ import {
   chromium,
   chrome,
 } from '@react-native-harness/platform-web';
-import { harnessLoggingPlugin } from './harness-logging-plugin.mjs';
 
 export default {
   entryPoint: './index.js',
   appRegistryComponentName: 'HarnessPlayground',
-  plugins: [harnessLoggingPlugin()],
-
   runners: [
     androidPlatform({
       name: 'android',
