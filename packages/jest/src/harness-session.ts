@@ -1,5 +1,6 @@
 import {
   createHarnessBridge,
+  AppBridgeDisconnectedError,
   type HarnessBridge,
   type AppConnection,
 } from '@react-native-harness/bridge/server';
@@ -935,6 +936,9 @@ export const createHarnessSession = async (
       getConnection: () => bridge.connection,
       expectDisconnect: crashMonitor.expectDisconnect,
       waitForReconnect: (signal) => waitForNextConnected({ bridge, signal }),
+      // Pending rpc.invoke calls reject with AppBridgeDisconnectedError when
+      // the app connection drops (see bridge server's disconnect()).
+      isDisconnectError: (error) => error instanceof AppBridgeDisconnectedError,
       timeoutMs: runtimeConfig.bundleStartTimeout ?? 60000,
     });
 

@@ -70,6 +70,7 @@ describe('createRuntimeResetStrategy', () => {
         return closeWindow;
       },
       waitForReconnect,
+      isDisconnectError: () => false,
       timeoutMs: 1000,
     });
 
@@ -101,6 +102,7 @@ describe('createRuntimeResetStrategy', () => {
       getConnection: () => connection,
       expectDisconnect: () => () => undefined,
       waitForReconnect,
+      isDisconnectError: () => false,
       timeoutMs: 1000,
     });
 
@@ -115,6 +117,7 @@ describe('createRuntimeResetStrategy', () => {
       getConnection: () => null,
       expectDisconnect,
       waitForReconnect: vi.fn(async () => undefined),
+      isDisconnectError: () => false,
       timeoutMs: 1000,
     });
 
@@ -136,6 +139,7 @@ describe('createRuntimeResetStrategy', () => {
       getConnection: () => connection,
       expectDisconnect: () => closeWindow,
       waitForReconnect: vi.fn(async () => undefined),
+      isDisconnectError: () => false,
       timeoutMs: 1000,
     });
 
@@ -153,6 +157,7 @@ describe('createRuntimeResetStrategy', () => {
       waitForReconnect: vi.fn(async () => {
         throw new Error('reconnect timed out');
       }),
+      isDisconnectError: () => false,
       timeoutMs: 1000,
     });
 
@@ -160,6 +165,88 @@ describe('createRuntimeResetStrategy', () => {
       'reconnect timed out'
     );
     expect(closeWindow).toHaveBeenCalledOnce();
+  });
+
+  it('treats a disconnect-flavored RPC rejection as reload-in-flight and succeeds', async () => {
+    const disconnectError = new Error('app bridge disconnected');
+    const connection = {
+      resetEnvironment: vi.fn(async () => {
+        throw disconnectError;
+      }),
+    };
+    const waitForReconnect = vi.fn(async () => undefined);
+
+    const strategy = createRuntimeResetStrategy({
+      getConnection: () => connection,
+      expectDisconnect: () => () => undefined,
+      waitForReconnect,
+      isDisconnectError: (error) => error === disconnectError,
+      timeoutMs: 1000,
+    });
+
+    await expect(strategy.reset({ testFilePath })).resolves.toBeUndefined();
+    expect(waitForReconnect).toHaveBeenCalledOnce();
+  });
+
+  it('still throws on a non-disconnect RPC rejection', async () => {
+    const connection = {
+      resetEnvironment: vi.fn(async () => {
+        throw new Error('rpc failed');
+      }),
+    };
+
+    const strategy = createRuntimeResetStrategy({
+      getConnection: () => connection,
+      expectDisconnect: () => () => undefined,
+      waitForReconnect: vi.fn(async () => undefined),
+      isDisconnectError: (error) =>
+        error instanceof Error && error.message === 'app bridge disconnected',
+      timeoutMs: 1000,
+    });
+
+    await expect(strategy.reset({ testFilePath })).rejects.toThrow('rpc failed');
+  });
+
+  it('does not leave an unhandled rejection when the RPC fails before the reconnect wait settles', async () => {
+    let rejectReconnect!: (error: Error) => void;
+    const waitForReconnect = vi.fn(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectReconnect = reject;
+        })
+    );
+    const connection = {
+      resetEnvironment: vi.fn(async () => {
+        throw new Error('rpc failed');
+      }),
+    };
+
+    const unhandled: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandledRejection);
+
+    try {
+      const strategy = createRuntimeResetStrategy({
+        getConnection: () => connection,
+        expectDisconnect: () => () => undefined,
+        waitForReconnect,
+        isDisconnectError: () => false,
+        timeoutMs: 1000,
+      });
+
+      await expect(strategy.reset({ testFilePath })).rejects.toThrow('rpc failed');
+
+      // Simulate the reconnect timeout firing after the strategy already
+      // threw; the strategy must have attached a rejection handler.
+      rejectReconnect(new Error('reconnect timed out'));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+    }
   });
 });
 

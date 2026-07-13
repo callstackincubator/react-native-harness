@@ -1,6 +1,8 @@
 import { getTimeoutSignal } from '@react-native-harness/tools';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
 
+const ignorePromiseRejection = () => undefined;
+
 export type ResetStrategyKind = 'process' | 'runtime';
 
 export type EnvironmentResetStrategy = {
@@ -55,6 +57,10 @@ export type RuntimeResetStrategyDeps = {
   // Resolves the next time the bridge reports a 'connected' event, or
   // rejects when `signal` aborts.
   waitForReconnect: (signal: AbortSignal) => Promise<void>;
+  // Identifies RPC rejections caused by the bridge disconnecting. Inside the
+  // expected-disconnect window these mean the reload tore the runtime down
+  // before the RPC ack flushed — the reload is in flight, not failed.
+  isDisconnectError: (error: unknown) => boolean;
   // Reconnect timeout in ms (the configured bundleStartTimeout).
   timeoutMs: number;
 };
@@ -81,7 +87,22 @@ export const createRuntimeResetStrategy = (
       // Start listening for the reconnect before firing the RPC, so a fast
       // reload can't reconnect before we're watching for it.
       const reconnected = deps.waitForReconnect(getTimeoutSignal(deps.timeoutMs));
-      await connection.resetEnvironment();
+      // Observe the rejection even when the RPC throws first, so the timeout
+      // abort firing later can't become an unhandled rejection. (.catch()
+      // returns a new promise; the original is what gets awaited below.)
+      reconnected.catch(ignorePromiseRejection);
+
+      try {
+        await connection.resetEnvironment();
+      } catch (error) {
+        // The reload can tear the runtime down before the RPC ack flushes.
+        // A disconnect-flavored rejection means the reload is in flight, so
+        // keep waiting for the reconnect; anything else is a real failure.
+        if (!deps.isDisconnectError(error)) {
+          throw error;
+        }
+      }
+
       await reconnected;
     } finally {
       closeWindow();
