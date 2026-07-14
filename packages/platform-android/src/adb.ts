@@ -792,11 +792,13 @@ export const getLogcatTimestamp = async (adbId: string): Promise<string> => {
 
 export const startLogcat = (
   adbId: string,
-  args: readonly string[]
+  args: readonly string[],
+  options?: { signal?: AbortSignal }
 ): Subprocess =>
   spawn(getAdbBinaryPath(), ['-s', adbId, ...args], {
     stdout: 'pipe',
     stderr: 'pipe',
+    signal: options?.signal,
   });
 
 export const DROPBOX_CRASH_TAGS = [

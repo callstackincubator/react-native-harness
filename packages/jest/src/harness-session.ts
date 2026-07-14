@@ -791,9 +791,13 @@ export const createHarnessSession = async (
 
       let cleanupError: unknown;
       try {
+        // The app session (and its logcat/device log stream) must be fully
+        // torn down before the platform is disposed: platform disposal can
+        // shut down the device/emulator, and doing that concurrently with
+        // the app session's own cleanup races the device's log stream
+        // against the device disappearing out from under it.
+        await Promise.all([crashMonitor.dispose(), disposeCurrentAppSession()]);
         await Promise.all([
-          crashMonitor.dispose(),
-          disposeCurrentAppSession(),
           bridge.dispose(),
           platformInstance.dispose(),
           metroInstance.dispose(),
