@@ -1,0 +1,49 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHarnessCache } from '@react-native-harness/cache';
+import { getConfig } from '@react-native-harness/config';
+
+/**
+ * Must run AFTER the "Restore Metro cache" step and BEFORE the test run, so
+ * this snapshot reflects exactly what was restored from a prior save (empty
+ * on a cache miss) -- not the pre-restore, always-empty state of a fresh
+ * checkout. plan-save.ts diffs its own post-run snapshot against this one, so
+ * capturing it too early would make every run look like it added the whole
+ * restored cache, defeating the "only save when content actually changed"
+ * policy.
+ */
+const run = async (): Promise<void> => {
+  try {
+    const projectRootInput = process.env.INPUT_PROJECTROOT;
+
+    const projectRoot = projectRootInput
+      ? path.resolve(projectRootInput)
+      : process.cwd();
+
+    console.info(`Snapshotting Metro cache for: ${projectRoot}`);
+
+    const { projectRoot: resolvedProjectRoot } = await getConfig(projectRoot);
+
+    const githubOutput = process.env.GITHUB_OUTPUT;
+    if (!githubOutput) {
+      throw new Error('GITHUB_OUTPUT environment variable is not set');
+    }
+
+    const cache = createHarnessCache({ projectRoot: resolvedProjectRoot });
+    const snapshotAfterRestore = cache.snapshot();
+
+    const output = `metroSnapshot=${JSON.stringify(snapshotAfterRestore)}\n`;
+
+    fs.appendFileSync(githubOutput, output);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(error.message);
+    } else {
+      console.error('Failed to snapshot the Metro cache');
+    }
+
+    process.exit(1);
+  }
+};
+
+run();

@@ -371,6 +371,9 @@ importers:
 
   packages/github-action:
     dependencies:
+      '@react-native-harness/cache':
+        specifier: workspace:*
+        version: link:../cache
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config

@@ -45,6 +45,7 @@ The action accepts the following inputs:
 - `cacheAvd` (optional, Android only): Whether to cache the Android Virtual Device snapshot. Defaults to `true`. This is most useful when your Android runner defines AVD details in `rn-harness.config.mjs`.
 - `preRunHook` (optional): Inline shell script run in `bash` immediately before Harness starts
 - `afterRunHook` (optional): Inline shell script run in `bash` immediately after Harness finishes and before artifacts are uploaded
+- `cacheSavePolicy` (optional): When to save a new Metro cache entry -- `default-branch` (default), `always`, or `never`. See [Metro cache](#metro-cache) below
 
 ## Crash Artifacts
 
@@ -249,7 +250,17 @@ If your workflow does not define AVD details, the action can still run the tests
 
 React Native Harness persists Metro's transform cache under `.harness/cache/metro` and its file-map (haste) cache under `.harness/cache/metro-file-map`, both in your project root. This is on by default (`cache.metro: true`); set `cache.metro: false` in config to disable it. The deprecated `unstable__enableMetroCache` option is still honored as an alias for one release.
 
-When you use the `callstackincubator/react-native-harness` GitHub Action, Metro cache restoration and saving is handled automatically for the resolved `projectRoot`. You do not need to add a separate `actions/cache` step for `.harness/cache/metro` or `.harness/cache/metro-file-map`.
+When you use the `callstackincubator/react-native-harness` GitHub Action, Metro cache restoration and saving is handled automatically for the resolved `projectRoot`. Do not add your own `actions/cache` step for `.harness/cache/metro` or `.harness/cache/metro-file-map` -- the action's cache key scheme assumes it's the only thing writing and reading those entries, and a manually-added step would fight it for ownership of the same paths.
+
+The cache key is computed by Harness itself, not a static file list: it hashes your lockfile(s) and Metro/Babel config together with the resolved `@react-native-harness/bundler-metro` version and your `cache.version` salt. This means the cache invalidates automatically whenever you upgrade `@react-native-harness/bundler-metro`, not only when a lockfile or config file changes.
+
+Use the `cacheSavePolicy` input to control when a new cache entry is saved:
+
+- `default-branch` (default): only save from your default branch, so pull request runs restore from the shared cache but never write to it. This keeps PR runs cache-neutral and avoids cache churn from short-lived branches.
+- `always`: save a new entry from every run that changed the cache contents, regardless of branch. Useful if you want branches to build on each other's cache, at the cost of more cache writes and storage churn.
+- `never`: never save, only restore. Useful if you manage the Metro cache some other way and only want the action to consume it.
+
+A new entry is only saved when the run actually changed the cache's contents -- an unchanged, fully cache-hit run does not create a redundant save.
 
 ## Web in CI
 

@@ -43,6 +43,11 @@ inputs:
     required: false
     type: string
     default: ''
+  cacheSavePolicy:
+    description: When to save a new Metro cache entry ('default-branch', 'always', or 'never')
+    required: false
+    type: string
+    default: 'default-branch'
 runs:
   using: 'composite'
   steps:
@@ -64,21 +69,41 @@ runs:
           echo "Please provide the path to the built app (.apk for Android, .app for iOS)"
           exit 1
         fi
-    - name: Metro bundler cache (.harness/cache/metro)
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+    - name: Plan Metro cache restore
+      id: plan-metro-restore
+      shell: bash
+      env:
+        INPUT_PROJECTROOT: ${{ steps.load-config.outputs.projectRoot }}
+      run: |
+        node ${{ github.action_path }}/actions/shared/plan-restore.cjs
+    - name: Restore Metro cache (.harness/cache/metro)
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: |
           ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/metro
           ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/metro-file-map
-        key: ${{ runner.os }}-metro-cache-v2-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/metro.config.js', '**/metro.config.cjs', '**/metro.config.mjs', '**/metro.config.ts', '**/babel.config.js', '**/babel.config.cjs', '**/babel.config.mjs', '**/babel.config.ts', '**/babel.config.json') }}
-        restore-keys: |
-          ${{ runner.os }}-metro-cache-v2-
+        key: ${{ steps.plan-metro-restore.outputs.metroRestoreKey }}
+        # The '\n' here is a literal newline embedded via YAML double-quote
+        # escaping (not a GitHub Actions expression escape -- expression
+        # string literals don't interpret backslash sequences), so join()
+        # actually separates entries onto their own lines, as actions/cache
+        # requires for restore-keys.
+        restore-keys: "${{ join(fromJson(steps.plan-metro-restore.outputs.metroRestorePrefixes), '\n') }}"
+    # Must run after "Restore Metro cache" so this reflects what was actually
+    # restored (empty on a cache miss), not the always-empty pre-restore state.
+    - name: Snapshot Metro cache
+      id: snapshot-metro-restore
+      shell: bash
+      env:
+        INPUT_PROJECTROOT: ${{ steps.load-config.outputs.projectRoot }}
+      run: |
+        node ${{ github.action_path }}/actions/shared/snapshot-metro.cjs
     - name: Restore Harness cache
       id: cache-harness-restore
       if: fromJson(steps.load-config.outputs.config).platformId == 'ios'
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
-        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache
+        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/xctest-agent-simulator-*
         key: harness-ios-${{ runner.os }}-${{ hashFiles(format('{0}/.harness/cache/**/cache.json', steps.load-config.outputs.projectRoot)) }}
         restore-keys: |
           harness-ios-${{ runner.os }}-
@@ -242,8 +267,27 @@ runs:
       if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'ios' && steps.cache-harness-restore.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
-        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache
+        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/xctest-agent-simulator-*
         key: ${{ steps.cache-harness-restore.outputs.cache-primary-key }}
+    - name: Plan Metro cache save
+      id: plan-metro-save
+      if: always()
+      shell: bash
+      env:
+        INPUT_PROJECTROOT: ${{ steps.load-config.outputs.projectRoot }}
+        INPUT_METRO_SNAPSHOT: ${{ steps.snapshot-metro-restore.outputs.metroSnapshot }}
+        INPUT_CACHESAVEPOLICY: ${{ inputs.cacheSavePolicy }}
+        IS_DEFAULT_BRANCH: ${{ github.ref_name == github.event.repository.default_branch }}
+      run: |
+        node ${{ github.action_path }}/actions/shared/plan-save.cjs
+    - name: Save Metro cache
+      if: always() && steps.plan-metro-save.outputs.metroShouldSave == 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: |
+          ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/metro
+          ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/metro-file-map
+        key: ${{ steps.plan-metro-save.outputs.metroSaveKey }}
     - name: Upload crash report artifacts
       if: always()
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -11,6 +11,7 @@
     "build": "tsup"
   },
   "dependencies": {
+    "@react-native-harness/cache": "workspace:*",
     "@react-native-harness/config": "workspace:*",
     "@react-native-harness/platform-android": "workspace:*"
   },

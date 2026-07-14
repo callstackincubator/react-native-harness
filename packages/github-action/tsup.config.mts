@@ -15,6 +15,9 @@ export default defineConfig({
       TARGETS.map((target) => [`${target}/index`, `src/${target}/index.ts`])
     ),
     'shared/index': 'src/shared/index.ts',
+    'shared/plan-restore': 'src/shared/plan-restore.ts',
+    'shared/snapshot-metro': 'src/shared/snapshot-metro.ts',
+    'shared/plan-save': 'src/shared/plan-save.ts',
   },
   outDir: OUT_DIR,
   format: 'cjs',

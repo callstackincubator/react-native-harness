@@ -32,8 +32,9 @@ The action reads your `rn-harness.config.mjs` file, resolves the `runner` you pa
 - `cacheAvd` (optional, Android only): Whether to cache the Android Virtual Device snapshot. Defaults to `true`
 - `preRunHook` (optional): Inline shell script run in `bash` immediately before Harness starts
 - `afterRunHook` (optional): Inline shell script run in `bash` immediately after Harness finishes and before artifact upload
+- `cacheSavePolicy` (optional): When to save a new Metro cache entry -- `default-branch` (default), `always`, or `never`
 - Crash artifacts persisted to `.harness/crash-reports/` are uploaded automatically when present
-- Metro cache persisted to `.harness/cache/metro/` and `.harness/cache/metro-file-map/` is restored and saved automatically when present
+- Metro cache persisted to `.harness/cache/metro/` and `.harness/cache/metro-file-map/` is restored and saved automatically when present. The cache key is computed by `@react-native-harness/cache` from your lockfile(s), Metro/Babel config, the installed `@react-native-harness/bundler-metro` version, and your Harness config's `cache.version` salt -- a new entry is only saved when the run's cache content actually changed and `cacheSavePolicy` allows it
 
 ## Behavior
 
