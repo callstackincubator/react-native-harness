@@ -4914,12 +4914,25 @@ var resolveRepoRoot = (projectRoot) => {
     dir = parent;
   }
 };
-var resolveBundlerMetroVersion = (projectRoot) => {
+var resolveBundlerMetroPackageJson = (projectRoot) => {
   try {
-    const packageJsonPath = require.resolve(
+    return require.resolve(
       "@react-native-harness/bundler-metro/package.json",
       { paths: [projectRoot] }
     );
+  } catch {
+    const jestPackageJsonPath = require.resolve(
+      "@react-native-harness/jest/package.json",
+      { paths: [projectRoot] }
+    );
+    return require.resolve("@react-native-harness/bundler-metro/package.json", {
+      paths: [import_node_path11.default.dirname(jestPackageJsonPath)]
+    });
+  }
+};
+var resolveBundlerMetroVersion = (projectRoot) => {
+  try {
+    const packageJsonPath = resolveBundlerMetroPackageJson(projectRoot);
     const packageJson = JSON.parse(import_node_fs11.default.readFileSync(packageJsonPath, "utf8"));
     if (typeof packageJson.version !== "string") {
       throw new Error('"version" field is missing or not a string');

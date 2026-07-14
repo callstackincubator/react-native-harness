@@ -29,6 +29,32 @@ export const resolveRepoRoot = (projectRoot: string): string => {
 };
 
 /**
+ * `@react-native-harness/bundler-metro` is rarely a direct dependency of the
+ * consuming project — it's pulled in transitively through
+ * `@react-native-harness/jest` (the jest preset every Harness project
+ * installs directly). Package managers that don't hoist nested/transitive
+ * workspace deps to the project root (e.g. pnpm) can only resolve it by
+ * walking through `@react-native-harness/jest`'s own node_modules, so that's
+ * tried as a fallback resolution root.
+ */
+const resolveBundlerMetroPackageJson = (projectRoot: string): string => {
+  try {
+    return require.resolve(
+      '@react-native-harness/bundler-metro/package.json',
+      { paths: [projectRoot] }
+    );
+  } catch {
+    const jestPackageJsonPath = require.resolve(
+      '@react-native-harness/jest/package.json',
+      { paths: [projectRoot] }
+    );
+    return require.resolve('@react-native-harness/bundler-metro/package.json', {
+      paths: [path.dirname(jestPackageJsonPath)],
+    });
+  }
+};
+
+/**
  * Resolved from the consuming project's own installed copy of
  * `@react-native-harness/bundler-metro`, since that's the actual Metro
  * integration whose behavior determines cache validity for that project.
@@ -37,10 +63,7 @@ export const resolveRepoRoot = (projectRoot: string): string => {
  */
 export const resolveBundlerMetroVersion = (projectRoot: string): string => {
   try {
-    const packageJsonPath = require.resolve(
-      '@react-native-harness/bundler-metro/package.json',
-      { paths: [projectRoot] }
-    );
+    const packageJsonPath = resolveBundlerMetroPackageJson(projectRoot);
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
     if (typeof packageJson.version !== 'string') {

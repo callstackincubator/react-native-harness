@@ -70,6 +70,47 @@ describe('resolveBundlerMetroVersion', () => {
     expect(resolveBundlerMetroVersion(projectRoot)).toBe('9.9.9');
   });
 
+  it('resolves the version through @react-native-harness/jest when bundler-metro is only a nested dependency', () => {
+    const jestPackageDir = path.join(
+      projectRoot,
+      'node_modules',
+      '@react-native-harness',
+      'jest'
+    );
+    fs.mkdirSync(jestPackageDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(jestPackageDir, 'package.json'),
+      JSON.stringify({
+        name: '@react-native-harness/jest',
+        version: '1.0.0',
+        main: 'index.js',
+      })
+    );
+    fs.writeFileSync(path.join(jestPackageDir, 'index.js'), 'module.exports = {};');
+
+    const nestedBundlerMetroDir = path.join(
+      jestPackageDir,
+      'node_modules',
+      '@react-native-harness',
+      'bundler-metro'
+    );
+    fs.mkdirSync(nestedBundlerMetroDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(nestedBundlerMetroDir, 'package.json'),
+      JSON.stringify({
+        name: '@react-native-harness/bundler-metro',
+        version: '2.2.2',
+        main: 'index.js',
+      })
+    );
+    fs.writeFileSync(
+      path.join(nestedBundlerMetroDir, 'index.js'),
+      'module.exports = {};'
+    );
+
+    expect(resolveBundlerMetroVersion(projectRoot)).toBe('2.2.2');
+  });
+
   it('falls back to "unknown" and warns when the package cannot be resolved', () => {
     expect(resolveBundlerMetroVersion(projectRoot)).toBe('unknown');
     expect(console.warn).toHaveBeenCalled();
