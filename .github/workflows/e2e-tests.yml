@@ -97,7 +97,6 @@ jobs:
           app: android/app/build/outputs/apk/debug/app-debug.apk
           runner: android
           projectRoot: apps/playground
-          cacheSavePolicy: always
           preRunHook: |
             echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
@@ -207,7 +206,6 @@ jobs:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           runner: ios
           projectRoot: apps/playground
-          cacheSavePolicy: always
           preRunHook: |
             echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
@@ -270,7 +268,6 @@ jobs:
         with:
           runner: chromium
           projectRoot: apps/playground
-          cacheSavePolicy: always
           preRunHook: |
             echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
@@ -371,7 +368,6 @@ jobs:
           app: android/app/build/outputs/apk/debug/app-debug.apk
           runner: android-crash-pre-rn
           projectRoot: apps/playground
-          cacheSavePolicy: always
           harnessArgs: '--config jest.harness.crash.config.mjs --testPathPatterns src/__tests__/crash/android'
           preRunHook: |
             echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
@@ -512,7 +508,6 @@ jobs:
           app: ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           runner: ios-crash-pre-rn
           projectRoot: apps/playground
-          cacheSavePolicy: always
           harnessArgs: '--config jest.harness.crash.config.mjs --testPathPatterns src/__tests__/crash/ios'
           preRunHook: |
             echo "HARNESS_PROJECT_ROOT=$HARNESS_PROJECT_ROOT"
