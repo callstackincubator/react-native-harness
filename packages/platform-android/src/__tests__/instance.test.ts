@@ -16,7 +16,9 @@ import * as emulatorStartup from '../emulator-startup.js';
 const { getEmulatorCpuCores } = emulatorStartup;
 
 const createLogcatProcess = (lines: string[] = []): Subprocess => {
-  const process = {
+  // Mirrors nano-spawn's real Subprocess, which is both a Promise and an
+  // async iterable, since app-session.ts relies on it being thenable.
+  const process = Object.assign(Promise.resolve(undefined), {
     nodeChildProcess: Promise.resolve({
       kill: vi.fn(),
     }),
@@ -25,7 +27,7 @@ const createLogcatProcess = (lines: string[] = []): Subprocess => {
         yield line;
       }
     },
-  };
+  });
 
   return process as unknown as Subprocess;
 };
@@ -545,16 +547,20 @@ describe('Android platform instance', () => {
     appSession.addListener(listener);
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(startLogcat).toHaveBeenCalledWith('emulator-5554', [
-      'logcat',
-      '-v',
-      'threadtime',
-      '-b',
-      'crash',
-      '--uid=10234',
-      '-T',
-      '01-01 00:00:00.000',
-    ]);
+    expect(startLogcat).toHaveBeenCalledWith(
+      'emulator-5554',
+      [
+        'logcat',
+        '-v',
+        'threadtime',
+        '-b',
+        'crash',
+        '--uid=10234',
+        '-T',
+        '01-01 00:00:00.000',
+      ],
+      { signal: expect.any(AbortSignal) }
+    );
     expect(startLogcat.mock.invocationCallOrder[0]).toBeLessThan(
       startApp.mock.invocationCallOrder[0]
     );
@@ -679,16 +685,20 @@ describe('Android platform instance', () => {
     appSession.addListener(listener);
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(startLogcat).toHaveBeenCalledWith('012345', [
-      'logcat',
-      '-v',
-      'threadtime',
-      '-b',
-      'crash',
-      '--uid=10234',
-      '-T',
-      '01-01 00:00:00.000',
-    ]);
+    expect(startLogcat).toHaveBeenCalledWith(
+      '012345',
+      [
+        'logcat',
+        '-v',
+        'threadtime',
+        '-b',
+        'crash',
+        '--uid=10234',
+        '-T',
+        '01-01 00:00:00.000',
+      ],
+      { signal: expect.any(AbortSignal) }
+    );
     await expect(appSession.getState()).resolves.toEqual({
       status: 'running',
       pid: 8765,

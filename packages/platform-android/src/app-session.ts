@@ -62,14 +62,6 @@ const isCrashSignal = (line: string, bundleId: string): boolean => {
   );
 };
 
-const stopSubprocess = async (child: Subprocess) => {
-  try {
-    (await child.nodeChildProcess).kill();
-  } catch {
-    // Ignore termination failures for already-ended background processes.
-  }
-};
-
 const isExitedState = (
   state: AppSessionState
 ): state is Extract<AppSessionState, { status: 'exited' }> =>
@@ -82,7 +74,10 @@ type CreateAndroidAppSessionOptions = {
   stopApp: () => Promise<void>;
   getAppPid: () => Promise<number | null>;
   getLogcatTimestamp: () => Promise<string>;
-  startLogcat: (args: readonly string[]) => Subprocess;
+  startLogcat: (
+    args: readonly string[],
+    options: { signal: AbortSignal }
+  ) => Subprocess;
   getDropboxOutput?: () => Promise<string>;
   getExitInfo?: () => Promise<string>;
   crashArtifactWriter?: CrashArtifactWriter;
@@ -193,7 +188,17 @@ export const createAndroidAppSession = async ({
 
   const logcatTimestamp = await getLogcatTimestamp();
   const sessionStartedAt = Date.now();
-  const logcatProcess = startLogcat(getLogcatArgs(appUid, logcatTimestamp));
+  const logcatAbortController = new AbortController();
+  const logcatProcess = startLogcat(getLogcatArgs(appUid, logcatTimestamp), {
+    signal: logcatAbortController.signal,
+  });
+  // Aborting is nano-spawn's own cancellation path, so the resulting
+  // SubprocessError is settled the same way regardless of which of the
+  // merged stdout/stderr iterators observes it first. Without this, killing
+  // the underlying process directly can make both iterators reject at once,
+  // and nano-spawn's internal `Promise.race` only reports one of them,
+  // leaving the other an unhandled rejection.
+  logcatProcess.catch(() => undefined);
   const crashReporter = createAndroidCrashReporter({
     bundleId,
     crashArtifactWriter,
@@ -239,7 +244,7 @@ export const createAndroidAppSession = async ({
     disposed = true;
     stopPolling = true;
     emitter.clear();
-    await stopSubprocess(logcatProcess);
+    logcatAbortController.abort();
     await Promise.allSettled([logTask]);
     throw error;
   }
@@ -287,7 +292,7 @@ export const createAndroidAppSession = async ({
       cancelPendingPollDelay();
 
       emitter.clear();
-      await stopSubprocess(logcatProcess);
+      logcatAbortController.abort();
       await stopApp();
       await Promise.allSettled([logTask, pollTask]);
     },

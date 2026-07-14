@@ -258,16 +258,17 @@ export const instrumented = <T extends object>(
           'then' in result &&
           typeof (result as { then: unknown }).then === 'function'
         ) {
-          return (result as Promise<unknown>).then(
-            (resolved) => {
-              span.end();
-              return resolved;
-            },
-            (error: unknown) => {
-              span.fail(error);
-              throw error;
-            }
+          // Some thenables (e.g. nano-spawn's Subprocess) carry extra
+          // properties/behavior beyond `.then()` (async iteration, a handle
+          // to the underlying child process, etc). Calling `.then()` and
+          // returning its result would collapse them into a plain Promise
+          // and silently drop that shape, so track the span as a side
+          // effect and always return the original object untouched.
+          (result as Promise<unknown>).then(
+            () => span.end(),
+            (error: unknown) => span.fail(error)
           );
+          return result;
         }
 
         span.end();
