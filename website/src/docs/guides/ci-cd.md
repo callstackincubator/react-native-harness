@@ -247,9 +247,9 @@ If your workflow does not define AVD details, the action can still run the tests
 
 ## Metro cache
 
-React Native Harness can persist Metro's transformation cache under `.harness/metro-cache` in your project root. Enabling it in config (`unstable__enableMetroCache: true`) speeds up repeated Metro runs.
+React Native Harness persists Metro's transform cache under `.harness/cache/metro` and its file-map (haste) cache under `.harness/cache/metro-file-map`, both in your project root. This is on by default (`cache.metro: true`); set `cache.metro: false` in config to disable it. The deprecated `unstable__enableMetroCache` option is still honored as an alias for one release.
 
-When you use the `callstackincubator/react-native-harness` GitHub Action, Metro cache restoration and saving is handled automatically for the resolved `projectRoot`. You do not need to add a separate `actions/cache` step for `.harness/metro-cache`.
+When you use the `callstackincubator/react-native-harness` GitHub Action, Metro cache restoration and saving is handled automatically for the resolved `projectRoot`. You do not need to add a separate `actions/cache` step for `.harness/cache/metro` or `.harness/cache/metro-file-map`.
 
 ## Web in CI
 

@@ -31,6 +31,9 @@
       "path": "./packages/tools"
     },
     {
+      "path": "./packages/cache"
+    },
+    {
       "path": "./packages/react-native-harness"
     },
     {

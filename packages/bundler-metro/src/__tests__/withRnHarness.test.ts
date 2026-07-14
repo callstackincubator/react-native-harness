@@ -1,9 +1,14 @@
 import os from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
+import { getConfig } from '@react-native-harness/config';
 
 type MinimalMetroConfig = {
   projectRoot: string;
   maxWorkers?: number;
+  cacheVersion?: string;
+  cacheStores?: unknown;
+  fileMapCacheDirectory?: string;
+  hasteMapCacheDirectory?: string;
   serializer?: {
     isThirdPartyModule?: (module: { path: string }) => boolean;
   };
@@ -14,10 +19,27 @@ type MinimalMetroConfig = {
   };
 };
 
+const { ensureDomainDirectories } = vi.hoisted(() => ({
+  ensureDomainDirectories: vi.fn(),
+}));
+
 vi.mock('@react-native-harness/config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@react-native-harness/config')>()),
   getConfig: vi.fn(async () => ({
     config: {},
+    projectRoot: '/tmp/app',
+  })),
+}));
+
+vi.mock('@react-native-harness/cache', () => ({
+  createHarnessCache: vi.fn((options: { projectRoot: string }) => ({
+    paths: {
+      root: `${options.projectRoot}/.harness/cache`,
+      metroTransform: `${options.projectRoot}/.harness/cache/metro`,
+      metroFileMap: `${options.projectRoot}/.harness/cache/metro-file-map`,
+    },
+    isWarm: vi.fn(() => false),
+    ensureDomainDirectories,
   })),
 }));
 
@@ -127,5 +149,102 @@ describe('withRnHarness', () => {
       }),
     );
     expect(config.maxWorkers).toBeLessThan(64);
+  });
+
+  it('enables the persistent Metro cache by default', async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+    const { getHarnessCacheStores } = await import('../metro-cache.js');
+
+    const config = (await withRnHarness(
+      {
+        projectRoot: '/tmp/app',
+        serializer: {},
+      },
+      true,
+    )()) as unknown as MinimalMetroConfig;
+
+    expect(getHarnessCacheStores).toHaveBeenCalledWith(
+      '/tmp/app/.harness/cache/metro',
+    );
+    expect(config.cacheStores).toBe(
+      vi.mocked(getHarnessCacheStores).mock.results.at(-1)?.value,
+    );
+    expect(config.fileMapCacheDirectory).toBe(
+      '/tmp/app/.harness/cache/metro-file-map',
+    );
+    expect(ensureDomainDirectories).toHaveBeenCalledWith('metro');
+    expect(config.cacheVersion).toMatch(/^react-native-harness:\d+\.\d+\.\d+/);
+  });
+
+  it('respects a user-configured file map cache directory', async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+
+    const config = (await withRnHarness(
+      {
+        projectRoot: '/tmp/app',
+        fileMapCacheDirectory: '/custom/file-map',
+        serializer: {},
+      },
+      true,
+    )()) as unknown as MinimalMetroConfig;
+
+    expect(config.fileMapCacheDirectory).toBe('/custom/file-map');
+  });
+
+  it('respects the legacy haste map cache directory', async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+
+    const config = (await withRnHarness(
+      {
+        projectRoot: '/tmp/app',
+        hasteMapCacheDirectory: '/custom/haste-map',
+        serializer: {},
+      },
+      true,
+    )()) as unknown as MinimalMetroConfig;
+
+    expect(config.fileMapCacheDirectory).toBeUndefined();
+    expect(config.hasteMapCacheDirectory).toBe('/custom/haste-map');
+  });
+
+  it('leaves Metro cache defaults untouched when caching is disabled', async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+
+    vi.mocked(getConfig).mockResolvedValueOnce({
+      config: { cache: { metro: false } },
+      projectRoot: '/tmp/app',
+    } as Awaited<ReturnType<typeof getConfig>>);
+
+    const config = (await withRnHarness(
+      {
+        projectRoot: '/tmp/app',
+        serializer: {},
+      },
+      true,
+    )()) as unknown as MinimalMetroConfig;
+
+    expect(config.cacheStores).toBeUndefined();
+    expect(config.fileMapCacheDirectory).toBeUndefined();
+  });
+
+  it('folds the user cache version salt into the Metro cacheVersion', async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+
+    vi.mocked(getConfig).mockResolvedValueOnce({
+      config: { cache: { version: 'my-salt' } },
+      projectRoot: '/tmp/app',
+    } as Awaited<ReturnType<typeof getConfig>>);
+
+    const config = (await withRnHarness(
+      {
+        projectRoot: '/tmp/app',
+        serializer: {},
+      },
+      true,
+    )()) as unknown as MinimalMetroConfig;
+
+    expect(config.cacheVersion).toMatch(
+      /^react-native-harness:\d+\.\d+\.\d+.*:my-salt$/,
+    );
   });
 });

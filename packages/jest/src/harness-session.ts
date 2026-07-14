@@ -19,9 +19,9 @@ import {
   type HarnessPlatformInitOptions,
   type HarnessPlatformRunner,
 } from '@react-native-harness/platforms';
+import { createHarnessCache } from '@react-native-harness/cache';
 import {
   getMetroInstance,
-  isMetroCacheReusable,
   waitForMetroBackedAppReady,
   type MetroInstance,
   type MetroWebSocketEndpoint,
@@ -46,6 +46,7 @@ import {
 import {
   getConfig,
   isDiagnosticsEnabled,
+  resolveMetroCacheEnabled,
   type Config as HarnessConfig,
   ConfigSchema,
 } from '@react-native-harness/config';
@@ -399,13 +400,37 @@ const applyEnvVars = (
   }
 };
 
+/**
+ * Logs the "Reusing Metro cache" message when persistent Metro caching is
+ * enabled and the cache is warm. `projectRoot` must be the config-resolved
+ * project root so the warmth check looks at the same directory Metro caches
+ * into.
+ */
+export const maybeLogMetroCacheReused = (options: {
+  config: Pick<HarnessConfig, 'cache' | 'unstable__enableMetroCache'>;
+  projectRoot: string;
+  platform: HarnessPlatform;
+}): void => {
+  if (!resolveMetroCacheEnabled(options.config)) {
+    return;
+  }
+
+  if (
+    createHarnessCache({ projectRoot: options.projectRoot }).isWarm('metro')
+  ) {
+    logMetroCacheReused(options.platform);
+  }
+};
+
 const loadConfig = async (globalConfig: JestConfig.GlobalConfig): Promise<{
   harnessConfig: HarnessConfig;
   platform: HarnessPlatform;
   projectRoot: string;
+  configProjectRoot: string;
 }> => {
   const projectRoot = globalConfig.rootDir;
-  const { config: rawConfig } = await getConfig(projectRoot);
+  const { config: rawConfig, projectRoot: configProjectRoot } =
+    await getConfig(projectRoot);
 
   const cliArgs = getAdditionalCliArgs();
   let harnessConfig = cliArgs.metroPort != null
@@ -434,7 +459,7 @@ const loadConfig = async (globalConfig: JestConfig.GlobalConfig): Promise<{
   const platform = harnessConfig.runners.find((r) => r.name === selectedRunnerName);
   if (!platform) throw new RunnerNotFoundError(selectedRunnerName);
 
-  return { harnessConfig, platform, projectRoot };
+  return { harnessConfig, platform, projectRoot, configProjectRoot };
 };
 
 // ---------------------------------------------------------------------------
@@ -448,7 +473,7 @@ export const createHarnessSession = async (
   preRunMessage.remove(process.stderr);
 
   const setupStartedAt = Date.now();
-  const { harnessConfig, platform, projectRoot } = await loadConfig(globalConfig);
+  const { harnessConfig, platform, projectRoot, configProjectRoot } = await loadConfig(globalConfig);
   applyEnvVars(harnessConfig, globalConfig);
 
   const diagnostics = createDiagnostics({
@@ -529,9 +554,11 @@ export const createHarnessSession = async (
 
     if (didFallback) logMetroPortFallback(initialMetroPort, runtimeConfig.metroPort);
 
-    if (runtimeConfig.unstable__enableMetroCache && isMetroCacheReusable(projectRoot)) {
-      logMetroCacheReused(platform);
-    }
+    maybeLogMetroCacheReused({
+      config: runtimeConfig,
+      projectRoot: configProjectRoot,
+      platform,
+    });
 
     const pluginAbortController = new AbortController();
     const pluginManager = createHarnessPluginManager<HarnessConfig, HarnessPlatform>({

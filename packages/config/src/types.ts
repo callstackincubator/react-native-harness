@@ -114,7 +114,36 @@ export const ConfigSchema = z
       .describe(
         'Deprecated. Use `skipAlreadyIncludedModules` instead.'
       ),
-    unstable__enableMetroCache: z.boolean().optional().default(false),
+    cache: z
+      .object({
+        metro: z
+          .boolean()
+          .optional()
+          .describe(
+            'Enable persistent Metro transform and file-map caching under the .harness cache directory. ' +
+              'Defaults to true; set to false to always start with a cold Metro cache. ' +
+              'Left undefined (rather than defaulted here) so `resolveMetroCacheEnabled` can tell ' +
+              '"not set" apart from "explicitly set" when reconciling with the deprecated ' +
+              '`unstable__enableMetroCache` alias.'
+          ),
+        version: z
+          .string()
+          .optional()
+          .describe(
+            'User-controlled salt folded into the Metro cacheVersion. ' +
+              'Bump it to force-invalidate previously cached transforms.'
+          ),
+      })
+      .optional(),
+    // Deprecated alias for `cache.metro` -- see `resolveMetroCacheEnabled`.
+    // Left without a `.default()` for the same reason as
+    // `unstable__skipAlreadyIncludedModules`: a default value would be
+    // indistinguishable from the user never having set it, which would break
+    // alias-vs-explicit-flag precedence.
+    unstable__enableMetroCache: z
+      .boolean()
+      .optional()
+      .describe('Deprecated. Use `cache.metro` instead.'),
     permissions: z
       .boolean()
       .optional()
@@ -259,6 +288,41 @@ export const resolveSkipAlreadyIncludedModules = (
 
   if (config.unstable__skipAlreadyIncludedModules !== undefined) {
     return config.unstable__skipAlreadyIncludedModules;
+  }
+
+  return true;
+};
+
+/**
+ * Resolves whether persistent Metro caching is enabled, reconciling
+ * `cache.metro` with the deprecated `unstable__enableMetroCache` alias:
+ *
+ * - `cache.metro`, when explicitly set, always wins over the alias.
+ * - Otherwise, the alias's value is used (with a deprecation warning).
+ * - Otherwise, defaults to `true`.
+ *
+ * The default is applied here rather than in the zod schema so that "unset"
+ * and "explicitly set to the default value" remain distinguishable -- that
+ * distinction is what lets the deprecated alias keep working as an escape
+ * hatch (e.g. `unstable__enableMetroCache: false`) even though caching now
+ * defaults to on.
+ */
+export const resolveMetroCacheEnabled = (
+  config: Pick<Config, 'cache' | 'unstable__enableMetroCache'>
+): boolean => {
+  if (config.unstable__enableMetroCache !== undefined) {
+    configLogger.warn(
+      '`unstable__enableMetroCache` is deprecated and will be removed in a future release. ' +
+        'Use `cache.metro` instead.'
+    );
+  }
+
+  if (config.cache?.metro !== undefined) {
+    return config.cache.metro;
+  }
+
+  if (config.unstable__enableMetroCache !== undefined) {
+    return config.unstable__enableMetroCache;
   }
 
   return true;

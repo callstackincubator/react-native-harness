@@ -7,25 +7,12 @@
     "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
     "emitDeclarationOnly": false,
     "forceConsistentCasingInFileNames": true,
-    "types": ["node"],
-    "lib": ["DOM", "ES2022"]
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../runtime/tsconfig.lib.json"
-    },
-    {
-      "path": "../cache/tsconfig.lib.json"
-    },
-    {
-      "path": "../config/tsconfig.lib.json"
-    },
-    {
       "path": "../tools/tsconfig.lib.json"
-    },
-    {
-      "path": "../babel-preset/tsconfig.lib.json"
     }
   ]
 }

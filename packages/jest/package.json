@@ -36,6 +36,7 @@
     "@jest/test-result": "^30.2.0",
     "@react-native-harness/bridge": "workspace:*",
     "@react-native-harness/bundler-metro": "workspace:*",
+    "@react-native-harness/cache": "workspace:*",
     "@react-native-harness/config": "workspace:*",
     "@react-native-harness/plugins": "workspace:*",
     "@react-native-harness/platforms": "workspace:*",

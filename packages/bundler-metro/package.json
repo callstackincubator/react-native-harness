@@ -18,6 +18,7 @@
   "dependencies": {
     "@react-native/metro-config": "*",
     "@react-native-harness/babel-preset": "workspace:*",
+    "@react-native-harness/cache": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
     "@react-native-harness/config": "workspace:*",
     "@react-native-harness/runtime": "workspace:*",

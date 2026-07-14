@@ -4,6 +4,7 @@ export {
   ConfigSchema,
   DEFAULT_METRO_PORT,
   isDiagnosticsEnabled,
+  resolveMetroCacheEnabled,
   resolveSkipAlreadyIncludedModules,
 } from './types.js';
 export {

@@ -111,7 +111,10 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `coverage.root`                    | Root directory for coverage instrumentation (default: `process.cwd()`).                                                                                   |
 | `coverage.native.ios.pods`         | Experimental list of CocoaPods target names to instrument for iOS native coverage.                                                                       |
 | `forwardClientLogs`                | Forward console logs from the app to the terminal (default: `false`).                                                                                     |
-| `unstable__enableMetroCache`       | Enable Metro transformation cache under `.harness/metro-cache` and log when reusing it (default: `false`).                                                |
+| `cache`                            | Cache configuration object.                                                                                                                                |
+| `cache.metro`                      | Enable persistent Metro transform and file-map caching under `.harness/cache` (default: `true`).                                                          |
+| `cache.version`                    | User-controlled salt folded into the Metro cache version. Bump it to force-invalidate previously cached transforms.                                       |
+| `unstable__enableMetroCache`       | Deprecated. Use `cache.metro` instead.                                                                                                                     |
 
 ## Test Runners
 

@@ -4426,6 +4426,7 @@ var pluginsLogger = logger.child("plugins");
 
 // ../config/dist/types.js
 var DEFAULT_METRO_PORT = 8081;
+var configLogger = logger.child("config");
 var RunnerSchema = external_exports.object({
   name: external_exports.string().min(1, "Runner name is required").regex(/^[a-zA-Z0-9._-]+$/, "Runner name can only contain alphanumeric characters, dots, underscores, and hyphens"),
   config: external_exports.record(external_exports.any()),
@@ -4449,9 +4450,23 @@ var ConfigSchema = external_exports.object({
   bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(6e4),
   maxAppRestarts: external_exports.number().min(0, "Max app restarts must be at least 0").default(2),
   eagerPrewarm: external_exports.boolean().optional().default(true).describe("Start building the Metro bundle while the platform (emulator, simulator, or browser) is still booting, so the first bundle is ready sooner. Disable to defer the first bundle build until app startup."),
-  resetEnvironmentBetweenTestFiles: external_exports.boolean().optional().default(true),
-  unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().default(false),
-  unstable__enableMetroCache: external_exports.boolean().optional().default(false),
+  resetEnvironmentBetweenTestFiles: external_exports.union([external_exports.boolean(), external_exports.enum(["process", "runtime"])]).optional().default(true).describe("Controls how the environment is reset between test files. `true` (default) and `'process'` kill and cold-restart the app process. `'runtime'` reloads the JS runtime in place (DevSettings.reload() / window.location.reload()), which is cheaper but escalates to a process restart if the reload fails or the app does not reconnect in time. `false` disables resetting the environment between test files entirely."),
+  skipAlreadyIncludedModules: external_exports.boolean().optional().describe('Skip re-sending modules already served in the main app bundle when Metro serves a per-test-file bundle. Defaults to true; set to false as an escape hatch if it causes issues. Left undefined (rather than defaulted here) so `resolveSkipAlreadyIncludedModules` can tell "not set" apart from "explicitly set" when reconciling with the deprecated `unstable__skipAlreadyIncludedModules` alias.'),
+  // Deprecated alias for `skipAlreadyIncludedModules` -- see
+  // `resolveSkipAlreadyIncludedModules`. Left without a `.default()` for the
+  // same reason: a default value would be indistinguishable from the user
+  // never having set it, which would break alias-vs-explicit-flag precedence.
+  unstable__skipAlreadyIncludedModules: external_exports.boolean().optional().describe("Deprecated. Use `skipAlreadyIncludedModules` instead."),
+  cache: external_exports.object({
+    metro: external_exports.boolean().optional().describe('Enable persistent Metro transform and file-map caching under the .harness cache directory. Defaults to true; set to false to always start with a cold Metro cache. Left undefined (rather than defaulted here) so `resolveMetroCacheEnabled` can tell "not set" apart from "explicitly set" when reconciling with the deprecated `unstable__enableMetroCache` alias.'),
+    version: external_exports.string().optional().describe("User-controlled salt folded into the Metro cacheVersion. Bump it to force-invalidate previously cached transforms.")
+  }).optional(),
+  // Deprecated alias for `cache.metro` -- see `resolveMetroCacheEnabled`.
+  // Left without a `.default()` for the same reason as
+  // `unstable__skipAlreadyIncludedModules`: a default value would be
+  // indistinguishable from the user never having set it, which would break
+  // alias-vs-explicit-flag precedence.
+  unstable__enableMetroCache: external_exports.boolean().optional().describe("Deprecated. Use `cache.metro` instead."),
   permissions: external_exports.boolean().optional().default(false).describe("Enable platform-specific permission prompt automation. When false, Harness does not start permission-handling helpers such as the iOS XCTest agent."),
   detectNativeCrashes: external_exports.boolean().optional().default(true),
   crashDetectionInterval: external_exports.number().min(100, "Crash detection interval must be at least 100ms").default(500),

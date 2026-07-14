@@ -7,7 +7,6 @@ export type {
   PrewarmState,
 } from './types.js';
 export type { Reporter, ReportableEvent } from './reporter.js';
-export { isMetroCacheReusable } from './paths.js';
 export {
   StartupStallError,
   type StartupStallCode,

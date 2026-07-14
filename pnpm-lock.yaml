@@ -263,6 +263,9 @@ importers:
       '@react-native-harness/babel-preset':
         specifier: workspace:*
         version: link:../babel-preset
+      '@react-native-harness/cache':
+        specifier: workspace:*
+        version: link:../cache
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config
@@ -300,6 +303,15 @@ importers:
       metro-resolver:
         specifier: '*'
         version: 0.83.3
+
+  packages/cache:
+    dependencies:
+      '@react-native-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
 
   packages/cli:
     dependencies:
@@ -381,6 +393,9 @@ importers:
       '@react-native-harness/bundler-metro':
         specifier: workspace:*
         version: link:../bundler-metro
+      '@react-native-harness/cache':
+        specifier: workspace:*
+        version: link:../cache
       '@react-native-harness/config':
         specifier: workspace:*
         version: link:../config

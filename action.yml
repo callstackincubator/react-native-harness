@@ -64,13 +64,15 @@ runs:
           echo "Please provide the path to the built app (.apk for Android, .app for iOS)"
           exit 1
         fi
-    - name: Metro bundler cache (.harness/metro-cache)
+    - name: Metro bundler cache (.harness/cache/metro)
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
-        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/metro-cache
-        key: ${{ runner.os }}-metro-cache-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/metro.config.js', '**/metro.config.cjs', '**/metro.config.mjs', '**/metro.config.ts', '**/babel.config.js', '**/babel.config.cjs', '**/babel.config.mjs', '**/babel.config.ts', '**/babel.config.json') }}
+        path: |
+          ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/metro
+          ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/metro-file-map
+        key: ${{ runner.os }}-metro-cache-v2-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/metro.config.js', '**/metro.config.cjs', '**/metro.config.mjs', '**/metro.config.ts', '**/babel.config.js', '**/babel.config.cjs', '**/babel.config.mjs', '**/babel.config.ts', '**/babel.config.json') }}
         restore-keys: |
-          ${{ runner.os }}-metro-cache-
+          ${{ runner.os }}-metro-cache-v2-
     - name: Restore Harness cache
       id: cache-harness-restore
       if: fromJson(steps.load-config.outputs.config).platformId == 'ios'

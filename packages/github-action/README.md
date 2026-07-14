@@ -33,7 +33,7 @@ The action reads your `rn-harness.config.mjs` file, resolves the `runner` you pa
 - `preRunHook` (optional): Inline shell script run in `bash` immediately before Harness starts
 - `afterRunHook` (optional): Inline shell script run in `bash` immediately after Harness finishes and before artifact upload
 - Crash artifacts persisted to `.harness/crash-reports/` are uploaded automatically when present
-- Metro cache persisted to `.harness/metro-cache/` is restored and saved automatically when present
+- Metro cache persisted to `.harness/cache/metro/` and `.harness/cache/metro-file-map/` is restored and saved automatically when present
 
 ## Behavior
 

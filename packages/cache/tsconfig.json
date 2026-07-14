@@ -4,19 +4,7 @@
   "include": [],
   "references": [
     {
-      "path": "../runtime"
-    },
-    {
-      "path": "../cache"
-    },
-    {
-      "path": "../config"
-    },
-    {
       "path": "../tools"
-    },
-    {
-      "path": "../babel-preset"
     },
     {
       "path": "./tsconfig.lib.json"
