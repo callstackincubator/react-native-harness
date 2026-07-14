@@ -231,6 +231,35 @@ describe('instrumented()', () => {
     expect(listeners.size).toBe(0);
   });
 
+  it('returns hybrid thenables (e.g. nano-spawn Subprocess) untouched, not collapsed to a plain Promise', async () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    const nodeChildProcess = Promise.resolve({ kill: vi.fn() });
+    const hybrid = Object.assign(Promise.resolve('done'), {
+      nodeChildProcess,
+      [Symbol.asyncIterator]: async function* () {
+        yield 'line-1';
+      },
+    });
+    const target = { startLogcat: () => hybrid };
+
+    const wrapped = instrumented(target, 'platform.android.adb', diagnostics);
+    const result = wrapped.startLogcat();
+
+    expect(result).toBe(hybrid);
+    expect((result as typeof hybrid).nodeChildProcess).toBe(nodeChildProcess);
+
+    const lines: string[] = [];
+    for await (const line of result as AsyncIterable<string>) {
+      lines.push(line);
+    }
+    expect(lines).toEqual(['line-1']);
+
+    await wait(5);
+    const entries = diagnostics.flush();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.status).toBe('ok');
+  });
+
   it('spy-based check that fn is invoked once per call', () => {
     const diagnostics = createDiagnostics({ enabled: true });
     const spy = vi.fn(() => 'ok');
