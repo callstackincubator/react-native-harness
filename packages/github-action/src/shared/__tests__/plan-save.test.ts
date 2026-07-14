@@ -140,6 +140,104 @@ describe('plan-save', () => {
     );
   });
 
+  it('reports the delta and save key when the cache changed and will be saved', async () => {
+    planSaveMock.mockReturnValue({
+      version: 1,
+      domains: {
+        metro: {
+          shouldSave: true,
+          saveKey: 'harness-metro-linux-abc-contenthash',
+          delta: {
+            addedEntries: 3,
+            removedEntries: 1,
+            addedBytes: 2 * 1024 * 1024,
+          },
+        },
+      },
+    });
+
+    await import('../plan-save.js');
+
+    await vi.waitFor(() => {
+      expect(writeKeysFileMock).toHaveBeenCalled();
+    });
+
+    expect(console.info).toHaveBeenCalledWith(
+      'Metro cache: changed (+3 files / 2.0 MB added, 1 removed) — saving new entry with key "harness-metro-linux-abc-contenthash".'
+    );
+  });
+
+  it('reports an unchanged cache as the reason for skipping the save', async () => {
+    planSaveMock.mockReturnValue({
+      version: 1,
+      domains: {
+        metro: {
+          shouldSave: false,
+          saveKey: 'harness-metro-linux-abc-contenthash',
+          delta: { addedEntries: 0, removedEntries: 0, addedBytes: 0 },
+        },
+      },
+    });
+
+    await import('../plan-save.js');
+
+    await vi.waitFor(() => {
+      expect(writeKeysFileMock).toHaveBeenCalled();
+    });
+
+    expect(console.info).toHaveBeenCalledWith(
+      'Metro cache: unchanged — skipping save.'
+    );
+  });
+
+  it('reports the "default-branch" policy as the reason when a change is not saved off the default branch', async () => {
+    process.env.IS_DEFAULT_BRANCH = 'false';
+    planSaveMock.mockReturnValue({
+      version: 1,
+      domains: {
+        metro: {
+          shouldSave: false,
+          saveKey: 'harness-metro-linux-abc-contenthash',
+          delta: { addedEntries: 2, removedEntries: 0, addedBytes: 1024 },
+        },
+      },
+    });
+
+    await import('../plan-save.js');
+
+    await vi.waitFor(() => {
+      expect(writeKeysFileMock).toHaveBeenCalled();
+    });
+
+    expect(console.info).toHaveBeenCalledWith(
+      'Metro cache: changed (+2 files / 0.0 MB added, 0 removed) but save skipped by policy "default-branch" (current branch is not the default branch).'
+    );
+  });
+
+  it('reports the "never" policy as the reason when a change is not saved', async () => {
+    process.env.INPUT_CACHESAVEPOLICY = 'never';
+    planSaveMock.mockReturnValue({
+      version: 1,
+      domains: {
+        metro: {
+          shouldSave: false,
+          saveKey: 'harness-metro-linux-abc-contenthash',
+          delta: { addedEntries: 2, removedEntries: 0, addedBytes: 1024 },
+        },
+      },
+    });
+
+    await import('../plan-save.js');
+
+    await vi.waitFor(() => {
+      expect(writeKeysFileMock).toHaveBeenCalled();
+    });
+
+    expect(console.info).toHaveBeenCalledWith(
+      'Metro cache: changed (+2 files / 0.0 MB added, 0 removed) but save skipped by policy "never".'
+    );
+  });
+
   it('fails loudly (process.exit(1)) when GITHUB_OUTPUT is not set', async () => {
     delete process.env.GITHUB_OUTPUT;
 

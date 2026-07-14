@@ -549,40 +549,79 @@ var import_node_crypto2 = require("crypto");
 var import_node_fs8 = __toESM(require("fs"), 1);
 var import_node_path9 = __toESM(require("path"), 1);
 var cacheLogger3 = logger.child("cache");
-var SKIPPED_DIRNAMES = /* @__PURE__ */ new Set(["node_modules", ".git", "dist", "build"]);
-var METRO_KEY_FILENAMES = [
+var LOCKFILE_NAMES = [
   "bun.lock",
   "bun.lockb",
   "package-lock.json",
   "npm-shrinkwrap.json",
   "pnpm-lock.yaml",
-  "yarn.lock",
-  "metro.config.js",
-  "metro.config.cjs",
-  "metro.config.mjs",
-  "metro.config.ts",
+  "yarn.lock"
+];
+var METRO_CONFIG_EXTENSIONS = [
+  "js",
+  "cjs",
+  "mjs",
+  "ts",
+  "cts",
+  "mts",
+  "json"
+];
+var METRO_CONFIG_NAMES = METRO_CONFIG_EXTENSIONS.map((extension) => `metro.config.${extension}`);
+var METRO_CONFIG_DIR_NAMES = METRO_CONFIG_EXTENSIONS.map((extension) => `.config/metro.${extension}`);
+var BABEL_CONFIG_NAMES = [
+  "babel.config.json",
   "babel.config.js",
   "babel.config.cjs",
   "babel.config.mjs",
-  "babel.config.ts",
-  "babel.config.json"
+  "babel.config.cts"
 ];
-var METRO_KEY_FILENAME_SET = new Set(METRO_KEY_FILENAMES);
-var collectKeyFiles = (repoRoot, directory, matches) => {
-  for (const dirent of import_node_fs8.default.readdirSync(directory, { withFileTypes: true })) {
-    if (dirent.isDirectory()) {
-      if (SKIPPED_DIRNAMES.has(dirent.name)) {
+var METRO_KEY_FILENAMES = [
+  ...LOCKFILE_NAMES,
+  ...METRO_CONFIG_NAMES,
+  ...METRO_CONFIG_DIR_NAMES,
+  ...BABEL_CONFIG_NAMES
+];
+var collectAncestorDirectories = (projectRoot, repoRoot) => {
+  const resolvedProjectRoot = import_node_path9.default.resolve(projectRoot);
+  const resolvedRepoRoot = import_node_path9.default.resolve(repoRoot);
+  if (resolvedProjectRoot === resolvedRepoRoot) {
+    return [resolvedProjectRoot];
+  }
+  const relative = import_node_path9.default.relative(resolvedRepoRoot, resolvedProjectRoot);
+  const isProjectRootInsideRepoRoot = relative !== "" && !relative.startsWith(`..${import_node_path9.default.sep}`) && relative !== ".." && !import_node_path9.default.isAbsolute(relative);
+  if (!isProjectRootInsideRepoRoot) {
+    return [resolvedProjectRoot];
+  }
+  const directories = [];
+  let current = resolvedProjectRoot;
+  for (; ; ) {
+    directories.push(current);
+    if (current === resolvedRepoRoot) {
+      break;
+    }
+    const parent = import_node_path9.default.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+  return directories;
+};
+var collectKeyFiles = (directories, repoRoot) => {
+  const matches = [];
+  for (const directory of directories) {
+    for (const candidate of METRO_KEY_FILENAMES) {
+      const fullPath = import_node_path9.default.join(directory, candidate);
+      if (!import_node_fs8.default.existsSync(fullPath) || !import_node_fs8.default.statSync(fullPath).isFile()) {
         continue;
       }
-      collectKeyFiles(repoRoot, import_node_path9.default.join(directory, dirent.name), matches);
-    } else if (dirent.isFile() && METRO_KEY_FILENAME_SET.has(dirent.name)) {
-      const fullPath = import_node_path9.default.join(directory, dirent.name);
       matches.push({
         relativePath: import_node_path9.default.relative(repoRoot, fullPath).split(import_node_path9.default.sep).join("/"),
         content: import_node_fs8.default.readFileSync(fullPath)
       });
     }
   }
+  return matches;
 };
 var hashKeyFiles = (matches) => {
   const hash = (0, import_node_crypto2.createHash)("sha256");
@@ -596,15 +635,23 @@ var hashKeyFiles = (matches) => {
 };
 var computeMetroStaticInputs = (options) => {
   try {
-    const matches = [];
-    collectKeyFiles(options.repoRoot, options.repoRoot, matches);
+    const resolvedProjectRoot = import_node_path9.default.resolve(options.projectRoot);
+    const resolvedRepoRoot = import_node_path9.default.resolve(options.repoRoot);
+    if (!import_node_fs8.default.statSync(resolvedProjectRoot).isDirectory()) {
+      throw new Error(`projectRoot "${resolvedProjectRoot}" is not a directory`);
+    }
+    if (!import_node_fs8.default.statSync(resolvedRepoRoot).isDirectory()) {
+      throw new Error(`repoRoot "${resolvedRepoRoot}" is not a directory`);
+    }
+    const directories = collectAncestorDirectories(resolvedProjectRoot, resolvedRepoRoot);
+    const matches = collectKeyFiles(directories, resolvedRepoRoot);
     return {
       lockfileHash: hashKeyFiles(matches),
       bundlerMetroVersion: options.bundlerMetroVersion,
       ...options.salt ? { salt: options.salt } : {}
     };
   } catch (error) {
-    cacheLogger3.warn(`Failed to compute Metro cache key inputs for "${options.repoRoot}". Falling back to an always-miss key.`, error);
+    cacheLogger3.warn(`Failed to compute Metro cache key inputs for "${options.projectRoot}". Falling back to an always-miss key.`, error);
     return {
       lockfileHash: "unavailable",
       bundlerMetroVersion: options.bundlerMetroVersion
@@ -4897,6 +4944,9 @@ var getConfig = async (dir) => {
   };
 };
 
+// src/shared/format-bytes.ts
+var formatMegabytes = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
 // src/shared/metro-cache-inputs.ts
 var import_node_fs11 = __toESM(require("fs"));
 var import_node_path11 = __toESM(require("path"));
@@ -4947,6 +4997,7 @@ var resolveBundlerMetroVersion = (projectRoot) => {
   }
 };
 var resolveMetroStaticInputs = (options) => computeMetroStaticInputs({
+  projectRoot: options.projectRoot,
   repoRoot: resolveRepoRoot(options.projectRoot),
   bundlerMetroVersion: resolveBundlerMetroVersion(options.projectRoot),
   salt: options.cacheVersionSalt
@@ -4972,6 +5023,27 @@ var parseSavePolicyMode = (raw) => {
     return raw;
   }
   return "default-branch";
+};
+var logMetroSaveDecision = (plan, policy) => {
+  if (!plan) {
+    return;
+  }
+  const { delta, shouldSave, saveKey } = plan;
+  if (delta.addedEntries + delta.removedEntries === 0) {
+    console.info("Metro cache: unchanged \u2014 skipping save.");
+    return;
+  }
+  const change = `+${delta.addedEntries} files / ${formatMegabytes(delta.addedBytes)} added, ${delta.removedEntries} removed`;
+  if (shouldSave) {
+    console.info(
+      `Metro cache: changed (${change}) \u2014 saving new entry with key "${saveKey}".`
+    );
+    return;
+  }
+  const reason = policy.mode === "default-branch" ? 'policy "default-branch" (current branch is not the default branch)' : `policy "${policy.mode}"`;
+  console.info(
+    `Metro cache: changed (${change}) but save skipped by ${reason}.`
+  );
 };
 var run = async () => {
   try {
@@ -5001,6 +5073,7 @@ var run = async () => {
     });
     cache.writeKeysFile(savePlan);
     const metroPlan = savePlan.domains.metro;
+    logMetroSaveDecision(metroPlan, policy);
     const output = `metroShouldSave=${metroPlan?.shouldSave ? "true" : "false"}
 metroSaveKey=${metroPlan?.saveKey ?? ""}
 `;

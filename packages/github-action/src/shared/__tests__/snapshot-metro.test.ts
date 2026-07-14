@@ -54,6 +54,7 @@ describe('snapshot-metro', () => {
     fs.rmSync(projectRoot, { recursive: true, force: true });
     delete process.env.INPUT_PROJECTROOT;
     delete process.env.GITHUB_OUTPUT;
+    delete process.env.METRO_RESTORED_KEY;
     vi.restoreAllMocks();
   });
 
@@ -67,6 +68,40 @@ describe('snapshot-metro', () => {
     const output = fs.readFileSync(githubOutputPath, 'utf8');
     expect(output).toContain(
       'metroSnapshot={"metro":[{"path":"metro/a","sizeBytes":3,"mtimeMs":1}]}\n'
+    );
+  });
+
+  it('reports the restored key with file count and size when a cache entry matched', async () => {
+    process.env.METRO_RESTORED_KEY = 'harness-metro-linux-abc-contenthash';
+    snapshotMock.mockReturnValue({
+      metro: [
+        { path: 'metro/a', sizeBytes: 1024 * 1024, mtimeMs: 1 },
+        { path: 'metro/b', sizeBytes: 512 * 1024, mtimeMs: 1 },
+      ],
+    });
+
+    await import('../snapshot-metro.js');
+
+    await vi.waitFor(() => {
+      expect(snapshotMock).toHaveBeenCalled();
+    });
+
+    expect(console.info).toHaveBeenCalledWith(
+      'Metro cache: restored from key "harness-metro-linux-abc-contenthash" (2 files, 1.5 MB).'
+    );
+  });
+
+  it('reports a cold start when no cache entry matched', async () => {
+    delete process.env.METRO_RESTORED_KEY;
+
+    await import('../snapshot-metro.js');
+
+    await vi.waitFor(() => {
+      expect(snapshotMock).toHaveBeenCalled();
+    });
+
+    expect(console.info).toHaveBeenCalledWith(
+      'Metro cache: no existing cache entry matched — starting cold.'
     );
   });
 

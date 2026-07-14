@@ -6,10 +6,11 @@ const FALLBACK_BUNDLER_METRO_VERSION = 'unknown';
 
 /**
  * Lockfiles in a monorepo often live above the Harness projectRoot, so the
- * Metro key recipe walk anchors at the git repository root when discoverable
- * (mirroring how action.yml's `hashFiles('**\/pnpm-lock.yaml', ...)` today
- * searches from the workflow's checkout root, not from projectRoot), falling
- * back to projectRoot itself for shallow/sparse checkouts with no `.git`.
+ * Metro key recipe walks the ancestor chain upward from projectRoot. The git
+ * repository root is the upper boundary of that walk when discoverable,
+ * ensuring monorepo-root lockfiles above projectRoot are included. Falls
+ * back to projectRoot itself for shallow/sparse checkouts with no `.git`
+ * (limiting the walk to projectRoot alone).
  */
 export const resolveRepoRoot = (projectRoot: string): string => {
   let dir = projectRoot;
@@ -92,6 +93,7 @@ export const resolveMetroStaticInputs = (options: {
   cacheVersionSalt?: string;
 }): Record<string, string> =>
   computeMetroStaticInputs({
+    projectRoot: options.projectRoot,
     repoRoot: resolveRepoRoot(options.projectRoot),
     bundlerMetroVersion: resolveBundlerMetroVersion(options.projectRoot),
     salt: options.cacheVersionSalt,

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHarnessCache } from '@react-native-harness/cache';
 import { getConfig } from '@react-native-harness/config';
+import { formatMegabytes } from './format-bytes.js';
 
 /**
  * Must run AFTER the "Restore Metro cache" step and BEFORE the test run, so
@@ -31,6 +32,25 @@ const run = async (): Promise<void> => {
 
     const cache = createHarnessCache({ projectRoot: resolvedProjectRoot });
     const snapshotAfterRestore = cache.snapshot();
+
+    // actions/cache/restore's cache-matched-key output, threaded in via the
+    // step env; empty on a cache miss. This makes the job log state plainly
+    // whether the Metro cache was actually restored.
+    const restoredKey = process.env.METRO_RESTORED_KEY;
+    if (restoredKey) {
+      const metroEntries = snapshotAfterRestore.metro ?? [];
+      const totalBytes = metroEntries.reduce(
+        (sum, entry) => sum + entry.sizeBytes,
+        0
+      );
+      console.info(
+        `Metro cache: restored from key "${restoredKey}" (${metroEntries.length} files, ${formatMegabytes(totalBytes)}).`
+      );
+    } else {
+      console.info(
+        'Metro cache: no existing cache entry matched — starting cold.'
+      );
+    }
 
     const output = `metroSnapshot=${JSON.stringify(snapshotAfterRestore)}\n`;
 

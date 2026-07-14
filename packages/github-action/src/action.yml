@@ -77,6 +77,7 @@ runs:
       run: |
         node ${{ github.action_path }}/actions/shared/plan-restore.cjs
     - name: Restore Metro cache (.harness/cache/metro)
+      id: restore-metro
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: |
@@ -96,6 +97,9 @@ runs:
       shell: bash
       env:
         INPUT_PROJECTROOT: ${{ steps.load-config.outputs.projectRoot }}
+        # Empty on a cache miss; snapshot-metro.cjs uses it to report whether
+        # the Metro cache was actually restored and from which key.
+        METRO_RESTORED_KEY: ${{ steps.restore-metro.outputs.cache-matched-key }}
       run: |
         node ${{ github.action_path }}/actions/shared/snapshot-metro.cjs
     - name: Restore Harness cache

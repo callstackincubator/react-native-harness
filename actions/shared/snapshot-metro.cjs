@@ -549,24 +549,38 @@ var import_node_crypto2 = require("crypto");
 var import_node_fs8 = __toESM(require("fs"), 1);
 var import_node_path9 = __toESM(require("path"), 1);
 var cacheLogger3 = logger.child("cache");
-var METRO_KEY_FILENAMES = [
+var LOCKFILE_NAMES = [
   "bun.lock",
   "bun.lockb",
   "package-lock.json",
   "npm-shrinkwrap.json",
   "pnpm-lock.yaml",
-  "yarn.lock",
-  "metro.config.js",
-  "metro.config.cjs",
-  "metro.config.mjs",
-  "metro.config.ts",
+  "yarn.lock"
+];
+var METRO_CONFIG_EXTENSIONS = [
+  "js",
+  "cjs",
+  "mjs",
+  "ts",
+  "cts",
+  "mts",
+  "json"
+];
+var METRO_CONFIG_NAMES = METRO_CONFIG_EXTENSIONS.map((extension) => `metro.config.${extension}`);
+var METRO_CONFIG_DIR_NAMES = METRO_CONFIG_EXTENSIONS.map((extension) => `.config/metro.${extension}`);
+var BABEL_CONFIG_NAMES = [
+  "babel.config.json",
   "babel.config.js",
   "babel.config.cjs",
   "babel.config.mjs",
-  "babel.config.ts",
-  "babel.config.json"
+  "babel.config.cts"
 ];
-var METRO_KEY_FILENAME_SET = new Set(METRO_KEY_FILENAMES);
+var METRO_KEY_FILENAMES = [
+  ...LOCKFILE_NAMES,
+  ...METRO_CONFIG_NAMES,
+  ...METRO_CONFIG_DIR_NAMES,
+  ...BABEL_CONFIG_NAMES
+];
 
 // ../cache/dist/index.js
 var cacheLogger4 = logger.child("cache");
@@ -4853,6 +4867,9 @@ var getConfig = async (dir) => {
   };
 };
 
+// src/shared/format-bytes.ts
+var formatMegabytes = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
 // src/shared/snapshot-metro.ts
 var run = async () => {
   try {
@@ -4866,6 +4883,21 @@ var run = async () => {
     }
     const cache = createHarnessCache({ projectRoot: resolvedProjectRoot });
     const snapshotAfterRestore = cache.snapshot();
+    const restoredKey = process.env.METRO_RESTORED_KEY;
+    if (restoredKey) {
+      const metroEntries = snapshotAfterRestore.metro ?? [];
+      const totalBytes = metroEntries.reduce(
+        (sum, entry) => sum + entry.sizeBytes,
+        0
+      );
+      console.info(
+        `Metro cache: restored from key "${restoredKey}" (${metroEntries.length} files, ${formatMegabytes(totalBytes)}).`
+      );
+    } else {
+      console.info(
+        "Metro cache: no existing cache entry matched \u2014 starting cold."
+      );
+    }
     const output = `metroSnapshot=${JSON.stringify(snapshotAfterRestore)}
 `;
     import_node_fs11.default.appendFileSync(githubOutput, output);

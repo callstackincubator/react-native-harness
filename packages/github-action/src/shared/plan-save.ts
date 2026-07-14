@@ -3,9 +3,11 @@ import path from 'node:path';
 import {
   createHarnessCache,
   type CacheSnapshot,
+  type DomainSavePlan,
   type SavePolicy,
 } from '@react-native-harness/cache';
 import { getConfig } from '@react-native-harness/config';
+import { formatMegabytes } from './format-bytes.js';
 import { resolveMetroStaticInputs } from './metro-cache-inputs.js';
 
 const parseSnapshot = (raw: string | undefined): CacheSnapshot => {
@@ -32,6 +34,44 @@ const parseSavePolicyMode = (
   }
 
   return 'default-branch';
+};
+
+/**
+ * Single-line, grep-friendly job-log report of the save decision and its
+ * reason, so a skipped "Save Metro cache" step is never a mystery: it
+ * distinguishes "nothing changed" from "changed but blocked by policy".
+ */
+const logMetroSaveDecision = (
+  plan: DomainSavePlan | undefined,
+  policy: SavePolicy
+): void => {
+  if (!plan) {
+    return;
+  }
+
+  const { delta, shouldSave, saveKey } = plan;
+
+  if (delta.addedEntries + delta.removedEntries === 0) {
+    console.info('Metro cache: unchanged — skipping save.');
+    return;
+  }
+
+  const change = `+${delta.addedEntries} files / ${formatMegabytes(delta.addedBytes)} added, ${delta.removedEntries} removed`;
+
+  if (shouldSave) {
+    console.info(
+      `Metro cache: changed (${change}) — saving new entry with key "${saveKey}".`
+    );
+    return;
+  }
+
+  const reason =
+    policy.mode === 'default-branch'
+      ? 'policy "default-branch" (current branch is not the default branch)'
+      : `policy "${policy.mode}"`;
+  console.info(
+    `Metro cache: changed (${change}) but save skipped by ${reason}.`
+  );
 };
 
 const run = async (): Promise<void> => {
@@ -76,6 +116,7 @@ const run = async (): Promise<void> => {
     cache.writeKeysFile(savePlan);
 
     const metroPlan = savePlan.domains.metro;
+    logMetroSaveDecision(metroPlan, policy);
 
     const output =
       `metroShouldSave=${metroPlan?.shouldSave ? 'true' : 'false'}\n` +
