@@ -116,6 +116,7 @@ export default {
   defaultRunner: 'android',
   platformReadyTimeout: 300000,
   bridgeTimeout: 120000,
+  testTimeout: 10000,
 
   permissions: true,
   detectNativeCrashes: true,
