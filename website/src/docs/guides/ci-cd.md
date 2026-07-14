@@ -252,7 +252,7 @@ React Native Harness persists Metro's transform cache under `.harness/cache/metr
 
 When you use the `callstackincubator/react-native-harness` GitHub Action, Metro cache restoration and saving is handled automatically for the resolved `projectRoot`. Do not add your own `actions/cache` step for `.harness/cache/metro` or `.harness/cache/metro-file-map` -- the action's cache key scheme assumes it's the only thing writing and reading those entries, and a manually-added step would fight it for ownership of the same paths.
 
-The cache key is computed by Harness itself, not a static file list: it hashes your lockfile(s) and Metro/Babel config together with the resolved `@react-native-harness/bundler-metro` version and your `cache.version` salt. This means the cache invalidates automatically whenever you upgrade `@react-native-harness/bundler-metro`, not only when a lockfile or config file changes.
+The cache key is computed by Harness itself, not a static file list: it hashes your lockfile(s) and Metro/Babel config together with the resolved `@react-native-harness/bundler-metro` version and your `cache.version` salt. This means the cache invalidates automatically whenever you upgrade `@react-native-harness/bundler-metro`, not only when a lockfile or config file changes. Key files are discovered in `projectRoot` and its ancestor directories up to the repository root -- so in a monorepo the root lockfile is included, while sibling packages' Metro/Babel configs never affect your project's cache key.
 
 Use the `cacheSavePolicy` input to control when a new cache entry is saved:
 
