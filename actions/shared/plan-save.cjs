@@ -384,7 +384,7 @@ var isAccretiveDomain = (domain) => {
     case "metro":
       return true;
     default:
-      return true;
+      return false;
   }
 };
 var hashSortedEntries = (entries) => (0, import_node_crypto.createHash)("sha256").update(entries.slice().sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, value]) => `${key}=${value}`).join("\n")).digest("hex").slice(0, HASH_LENGTH);
