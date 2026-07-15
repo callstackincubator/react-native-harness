@@ -180,11 +180,24 @@ private final class XCTestAgentHTTPServer {
 final class HarnessXCTestAgentUITests: XCTestCase {
   private enum Environment {
     static let targetBundleIdentifier = "HARNESS_XCTEST_AGENT_TARGET_BUNDLE_ID"
+    static let tickIntervalMs = "HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS"
   }
 
   private enum Constants {
     static let defaultSessionDuration: TimeInterval = 60 * 60
-    static let tickInterval: TimeInterval = 1
+    static let defaultTickInterval: TimeInterval = 1
+  }
+
+  private static func resolveTickInterval() -> TimeInterval {
+    guard
+      let rawValue = ProcessInfo.processInfo.environment[Environment.tickIntervalMs],
+      let milliseconds = Int(rawValue),
+      milliseconds > 0
+    else {
+      return Constants.defaultTickInterval
+    }
+
+    return TimeInterval(milliseconds) / 1000
   }
 
   private let state = HarnessXCTestAgentState(
@@ -194,6 +207,7 @@ final class HarnessXCTestAgentUITests: XCTestCase {
   private let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
   private var capabilities: [AgentCapability] = []
   private var httpServer: XCTestAgentHTTPServer?
+  private let tickInterval = HarnessXCTestAgentUITests.resolveTickInterval()
 
   private func log(_ message: String) {
     NSLog("[HarnessXCTestAgent] %@", message)
@@ -309,7 +323,7 @@ final class HarnessXCTestAgentUITests: XCTestCase {
       }
 
       RunLoop.current.run(
-        until: Date().addingTimeInterval(Constants.tickInterval)
+        until: Date().addingTimeInterval(tickInterval)
       )
     }
 

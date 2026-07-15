@@ -25,6 +25,8 @@ const xctestAgentLogger = logger.child('ios-xctest-agent');
 const XCTEST_AGENT_PROJECT_NAME = 'HarnessXCTestAgent';
 const XCTEST_AGENT_SCHEME_NAME = 'HarnessXCTestAgent';
 const XCTEST_AGENT_PORT_ENV = 'HARNESS_XCTEST_AGENT_PORT';
+const XCTEST_AGENT_TICK_INTERVAL_MS_ENV =
+  'HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS';
 const XCTEST_AGENT_TARGET_BUNDLE_ID_ENV =
   'HARNESS_XCTEST_AGENT_TARGET_BUNDLE_ID';
 const XCTEST_AGENT_XCTESTRUN_FILE_ENV = 'HARNESS_IOS_XCTESTRUN_FILE';
@@ -937,11 +939,18 @@ export const createXCTestAgentController = (options: {
   let processTask: Promise<void> | null = null;
 
   const getLaunchEnvironment = (): Record<string, string> => {
+    const tickIntervalMs = getEnvironmentPath(XCTEST_AGENT_TICK_INTERVAL_MS_ENV);
+
     return Object.assign(
       {},
       options.appBundleId
         ? {
             [XCTEST_AGENT_TARGET_BUNDLE_ID_ENV]: options.appBundleId,
+          }
+        : {},
+      tickIntervalMs
+        ? {
+            [XCTEST_AGENT_TICK_INTERVAL_MS_ENV]: tickIntervalMs,
           }
         : {},
       ...capabilities.map(

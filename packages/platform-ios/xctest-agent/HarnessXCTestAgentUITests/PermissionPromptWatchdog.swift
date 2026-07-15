@@ -54,6 +54,14 @@ final class PermissionPromptWatchdog: AgentCapability {
       return
     }
 
+    let guardQuery = springboard.buttons.matching(
+      NSPredicate(format: "label IN %@", Constants.knownPositiveButtonLabels)
+    ).firstMatch
+
+    guard guardQuery.exists else {
+      return
+    }
+
     for label in Constants.knownPositiveButtonLabels {
       let button = springboard.buttons[label].firstMatch
 
