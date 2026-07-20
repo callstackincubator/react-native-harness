@@ -1,7 +1,15 @@
 import type { Subprocess } from 'nano-spawn';
 
-const delay = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+// Cancellable so the winning race branch can clear the timer instead of
+// leaving a ref'd setTimeout alive for `forceAfterMs` after the process
+// already exited gracefully.
+const delay = (ms: number): { promise: Promise<void>; cancel: () => void } => {
+  let timer: ReturnType<typeof setTimeout>;
+  const promise = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms);
+  });
+  return { promise, cancel: () => clearTimeout(timer) };
+};
 
 const waitForExit = (
   childProcess: Awaited<Subprocess['nodeChildProcess']>
@@ -47,16 +55,26 @@ export const terminate = async (
 
   const exited = waitForExit(childProcess);
 
-  childProcess.kill('SIGTERM');
+  try {
+    childProcess.kill('SIGTERM');
+  } catch {
+    // Ignore termination failures for already-ended processes.
+  }
 
   const timedOut = Symbol('timedOut');
+  const forceKill = delay(forceAfterMs);
   const result = await Promise.race([
     exited.then(() => 'exited' as const),
-    delay(forceAfterMs).then(() => timedOut),
+    forceKill.promise.then(() => timedOut),
   ]);
+  forceKill.cancel();
 
   if (result === timedOut) {
-    childProcess.kill('SIGKILL');
+    try {
+      childProcess.kill('SIGKILL');
+    } catch {
+      // Ignore termination failures for already-ended processes.
+    }
     await exited;
   }
 };

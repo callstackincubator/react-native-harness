@@ -69,6 +69,15 @@ describe('terminate', () => {
     expect(childProcess.kill).toHaveBeenNthCalledWith(2, 'SIGKILL');
   });
 
+  it('clears the force-kill timer once the process exits gracefully', async () => {
+    vi.useFakeTimers();
+    const childProcess = createMockChildProcess({ exitOnKill: 'SIGTERM' });
+
+    await terminate(createMockSubprocess(childProcess), { forceAfterMs: 1_000 });
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('does nothing if resolving nodeChildProcess rejects', async () => {
     const subprocess = {
       nodeChildProcess: Promise.reject(new Error('spawn failed')),
