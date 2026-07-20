@@ -4,6 +4,7 @@ import {
   getAvailablePort,
   logger,
   spawn,
+  terminate,
   type Subprocess,
 } from '@react-native-harness/tools';
 import fs from 'node:fs';
@@ -833,44 +834,13 @@ const waitForChildProcessExit = async (subprocess: Subprocess) => {
 
 const stopProcess = async (options: {
   process: Subprocess | null;
-  processTask: Promise<void> | null;
   shutdownTimeoutMs: number;
-  targetKind: XCTestAgentTarget['kind'];
 }) => {
   if (!options.process) {
     return;
   }
 
-  let childProcess: Awaited<Subprocess['nodeChildProcess']>;
-
-  try {
-    childProcess = await options.process.nodeChildProcess;
-  } catch {
-    return;
-  }
-
-  childProcess.kill('SIGTERM');
-
-  if (
-    await waitForShutdown({
-      processTask: options.processTask,
-      shutdownTimeoutMs: options.shutdownTimeoutMs,
-    })
-  ) {
-    return;
-  }
-
-  xctestAgentLogger.warn(
-    'XCTest agent session for %s target did not stop after %dms; forcing shutdown',
-    options.targetKind,
-    options.shutdownTimeoutMs
-  );
-  childProcess.kill('SIGKILL');
-
-  await waitForShutdown({
-    processTask: options.processTask,
-    shutdownTimeoutMs: options.shutdownTimeoutMs,
-  });
+  await terminate(options.process, { forceAfterMs: options.shutdownTimeoutMs });
 };
 
 const toTestRunnerEnv = (env: Record<string, string>): Record<string, string> =>
@@ -944,6 +914,8 @@ export const createXCTestAgentController = (options: {
   port?: number;
   shutdownTimeoutMs?: number;
   startupTimeoutMs?: number;
+  /** Session-lifetime abort signal (see HarnessPlatformInitOptions.signal). */
+  signal?: AbortSignal;
 }): XCTestAgentController => {
   const { target } = options;
   const capabilities = options.capabilities ?? [];
@@ -1129,12 +1101,7 @@ export const createXCTestAgentController = (options: {
       );
       await transport.dispose();
       agentClient = null;
-      await stopProcess({
-        process: currentProcess,
-        processTask,
-        shutdownTimeoutMs,
-        targetKind: target.kind,
-      });
+      await stopProcess({ process: currentProcess, shutdownTimeoutMs });
       throw error;
     }
   };
@@ -1197,20 +1164,25 @@ export const createXCTestAgentController = (options: {
     }
 
     await currentClient?.dispose();
-    await stopProcess({
-      process: currentProcess,
-      processTask: currentProcessTask,
-      shutdownTimeoutMs,
-      targetKind: target.kind,
-    });
+    await stopProcess({ process: currentProcess, shutdownTimeoutMs });
   };
+
+  const dispose = async () => {
+    await stop();
+  };
+
+  if (options.signal?.aborted) {
+    void dispose();
+  } else {
+    options.signal?.addEventListener('abort', () => void dispose(), {
+      once: true,
+    });
+  }
 
   return {
     prepare,
     ensureStarted,
     stop,
-    dispose: async () => {
-      await stop();
-    },
+    dispose,
   };
 };

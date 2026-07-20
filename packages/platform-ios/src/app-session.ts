@@ -5,18 +5,25 @@ import {
   type AppSessionState,
   type AppleAppLaunchOptions,
 } from '@react-native-harness/platforms';
-import { logger, type Subprocess } from '@react-native-harness/tools';
+import { logger, terminate, type Subprocess } from '@react-native-harness/tools';
 import type { IosCrashReporter } from './crash-reporter.js';
 
 const iosAppSessionLogger = logger.child('ios-app-session');
 const APP_EXIT_POLL_INTERVAL_MS = 1000;
 const LAUNCH_FAILURE_SETTLE_MS = 100;
+const LAUNCH_PROCESS_FORCE_KILL_AFTER_MS = 2000;
 
 type CreateIosAppSessionOptions = {
   launch: () => Subprocess;
   stopApp: () => Promise<void>;
   isAppRunning: () => Promise<boolean>;
   crashReporter?: IosCrashReporter;
+  /**
+   * Session-lifetime abort signal (see HarnessPlatformInitOptions.signal).
+   * Terminates the `--console` launch process on session teardown, in
+   * addition to the normal dispose() path.
+   */
+  signal?: AbortSignal;
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -26,6 +33,7 @@ export const createIosAppSession = async ({
   stopApp,
   isAppRunning,
   crashReporter,
+  signal,
 }: CreateIosAppSessionOptions): Promise<AppSession> => {
   const emitter = createAppSessionEmitter();
   const logBuffer = createBoundedLogBuffer();
@@ -106,26 +114,31 @@ export const createIosAppSession = async ({
     throw new Error('The iOS app launch finished before the app was running.');
   }
 
+  const dispose = async () => {
+    if (disposed) {
+      return;
+    }
+
+    disposed = true;
+    stopPolling = true;
+    state = { status: 'disposed', occurredAt: Date.now() };
+    emitter.clear();
+
+    await terminate(launchProcess, {
+      forceAfterMs: LAUNCH_PROCESS_FORCE_KILL_AFTER_MS,
+    });
+    await stopApp();
+    await Promise.allSettled([logTask, exitTask, pollTask]);
+  };
+
+  if (signal?.aborted) {
+    void dispose();
+  } else {
+    signal?.addEventListener('abort', () => void dispose(), { once: true });
+  }
+
   return {
-    dispose: async () => {
-      if (disposed) {
-        return;
-      }
-
-      disposed = true;
-      stopPolling = true;
-      state = { status: 'disposed', occurredAt: Date.now() };
-      emitter.clear();
-
-      try {
-        (await launchProcess.nodeChildProcess).kill();
-      } catch {
-        // Ignore termination failures for already-ended launch streams.
-      }
-
-      await stopApp();
-      await Promise.allSettled([logTask, exitTask, pollTask]);
-    },
+    dispose,
     getState: async () => state,
     getLogs: () => logBuffer.getLogs(),
     getCrashDetails: crashReporter?.getCrashDetails,

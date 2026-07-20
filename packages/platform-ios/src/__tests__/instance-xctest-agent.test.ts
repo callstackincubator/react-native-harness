@@ -53,6 +53,7 @@ describe('iOS XCTest agent runner integration', () => {
       undefined,
     );
 
+    const initSignal = new AbortController().signal;
     const instance = await getAppleSimulatorPlatformInstance(
       {
         name: 'ios',
@@ -65,7 +66,7 @@ describe('iOS XCTest agent runner integration', () => {
       },
       harnessConfigWithPermissionsEnabled,
       {
-        signal: new AbortController().signal,
+        signal: initSignal,
       },
     );
 
@@ -82,6 +83,7 @@ describe('iOS XCTest agent runner integration', () => {
         kind: 'simulator',
         id: 'sim-udid',
       },
+      signal: initSignal,
     });
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.ensureStarted).toHaveBeenCalledTimes(1);
