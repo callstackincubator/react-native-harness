@@ -1167,7 +1167,15 @@ export const createXCTestAgentController = (options: {
     await stopProcess({ process: currentProcess, shutdownTimeoutMs });
   };
 
+  // Guards against the abort listener below redundantly re-running stop()
+  // when the caller has already disposed the controller explicitly (the
+  // normal teardown path always aborts the session signal afterwards too).
+  let disposed = false;
   const dispose = async () => {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
     await stop();
   };
 
