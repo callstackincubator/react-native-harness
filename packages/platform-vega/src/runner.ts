@@ -19,7 +19,6 @@ const getVegaRunner = async (
   config: VegaPlatformConfig,
   init?: HarnessPlatformInitOptions
 ): Promise<HarnessPlatformRunner> => {
-  void init;
   const parsedConfig = VegaPlatformConfigSchema.parse(config);
   const deviceId = parsedConfig.device.deviceId;
   const bundleId = parsedConfig.bundleId;
@@ -33,6 +32,20 @@ const getVegaRunner = async (
 
   if (!isInstalled) {
     throw new AppNotInstalledError(bundleId, deviceId);
+  }
+
+  let currentAppSession: AppSession | null = null;
+
+  // Session-lifetime signal (see HarnessPlatformInitOptions.signal): stop the
+  // poll loop and the app on session teardown, in addition to the normal
+  // dispose() path.
+  const disposeCurrentAppSessionOnAbort = () => void currentAppSession?.dispose();
+  if (init?.signal.aborted) {
+    disposeCurrentAppSessionOnAbort();
+  } else {
+    init?.signal.addEventListener('abort', disposeCurrentAppSessionOnAbort, {
+      once: true,
+    });
   }
 
   return {
@@ -59,7 +72,7 @@ const getVegaRunner = async (
         }
       })();
 
-      return {
+      const session: AppSession = {
         dispose: async () => {
           if (disposed) {
             return;
@@ -77,6 +90,9 @@ const getVegaRunner = async (
         addListener: emitter.addListener,
         removeListener: emitter.removeListener,
       };
+
+      currentAppSession = session;
+      return session;
     },
     dispose: async () => {
       await kepler.stopApp(deviceId, bundleId);
