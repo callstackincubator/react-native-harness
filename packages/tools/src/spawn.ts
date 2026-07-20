@@ -5,6 +5,26 @@ import { logger } from './logger.js';
 export type SpawnOptions = Options;
 const spawnLogger = logger.child('spawn');
 
+let signalsDeliverableEnsured = false;
+
+/**
+ * Restores default stdin raw-mode handling so SIGINT/SIGTERM keep being
+ * delivered to the process. @clack/prompts puts stdin into raw mode for its
+ * spinner/prompt UI, which otherwise suppresses those signals. Call this once
+ * per process, before relying on signal handlers.
+ */
+export const ensureSignalsDeliverable = (): void => {
+  if (signalsDeliverableEnsured) {
+    return;
+  }
+  signalsDeliverableEnsured = true;
+
+  if (process.stdin.isTTY) {
+    // https://stackoverflow.com/questions/53049939/node-daemon-wont-start-with-process-stdin-setrawmodetrue/53050098#53050098
+    process.stdin.setRawMode(false);
+  }
+};
+
 export const spawn = (
   file: string,
   args?: readonly string[],
@@ -18,10 +38,7 @@ export const spawn = (
   };
   const command = [file, ...(args ?? [])].join(' ');
   spawnLogger.debug('running command: %s', command);
-  const childProcess = nanoSpawn(file, args, { ...defaultOptions, ...options });
-
-  setupChildProcessCleanup(childProcess);
-  return childProcess;
+  return nanoSpawn(file, args, { ...defaultOptions, ...options });
 };
 
 export const spawnAndForget = async (
@@ -37,76 +54,3 @@ export const spawnAndForget = async (
 };
 
 export { Subprocess, SubprocessError };
-
-const activeChildProcesses = new Set<Subprocess>();
-let isProcessCleanupInstalled = false;
-let isTerminating = false;
-
-type CleanupSignal = 'SIGINT' | 'SIGTERM';
-
-const SIGNAL_EXIT_CODES: Record<CleanupSignal, number> = {
-  SIGINT: 130,
-  SIGTERM: 143,
-};
-
-const terminateActiveChildren = async () => {
-  const children = [...activeChildProcesses];
-
-  await Promise.allSettled(
-    children.map(async (childProcess) => {
-      try {
-        (await childProcess.nodeChildProcess).kill();
-      } catch {
-        // Ignore cleanup failures while shutting down.
-      }
-    })
-  );
-};
-
-const installProcessCleanup = () => {
-  if (isProcessCleanupInstalled) {
-    return;
-  }
-
-  isProcessCleanupInstalled = true;
-
-  const terminate = async (signal: CleanupSignal) => {
-    if (isTerminating) {
-      return;
-    }
-
-    isTerminating = true;
-    const shouldExitAfterCleanup = process.listenerCount(signal) <= 1;
-
-    await terminateActiveChildren();
-
-    if (shouldExitAfterCleanup) {
-      process.exit(process.exitCode ?? SIGNAL_EXIT_CODES[signal]);
-    }
-  };
-
-  process.on('SIGINT', () => {
-    void terminate('SIGINT');
-  });
-  process.on('SIGTERM', () => {
-    void terminate('SIGTERM');
-  });
-};
-
-const setupChildProcessCleanup = (childProcess: Subprocess) => {
-  // https://stackoverflow.com/questions/53049939/node-daemon-wont-start-with-process-stdin-setrawmodetrue/53050098#53050098
-  if (process.stdin.isTTY) {
-    // overwrite @clack/prompts setting raw mode for spinner and prompts,
-    // which prevents listening for SIGINT and SIGTERM
-    process.stdin.setRawMode(false);
-  }
-
-  installProcessCleanup();
-  activeChildProcesses.add(childProcess);
-
-  const cleanup = () => {
-    activeChildProcesses.delete(childProcess);
-  };
-
-  childProcess.nodeChildProcess.finally(cleanup);
-};
