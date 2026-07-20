@@ -60,4 +60,65 @@ describe('createIosAppSession', () => {
       vi.useRealTimers();
     }
   });
+
+  it('disposes the session when the session-lifetime signal aborts', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const launchProcess = createPendingLaunchProcess();
+      const isAppRunning = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      const stopApp = vi.fn(async () => undefined);
+      const controller = new AbortController();
+
+      const sessionPromise = createIosAppSession({
+        launch: () => launchProcess,
+        stopApp,
+        isAppRunning,
+        signal: controller.signal,
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+      const session = await sessionPromise;
+
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await expect(session.getState()).resolves.toMatchObject({
+        status: 'disposed',
+      });
+      expect(stopApp).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('disposes immediately when created with an already-aborted signal', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const launchProcess = createPendingLaunchProcess();
+      const isAppRunning = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      const stopApp = vi.fn(async () => undefined);
+      const controller = new AbortController();
+      controller.abort();
+
+      const sessionPromise = createIosAppSession({
+        launch: () => launchProcess,
+        stopApp,
+        isAppRunning,
+        signal: controller.signal,
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+      const session = await sessionPromise;
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await expect(session.getState()).resolves.toMatchObject({
+        status: 'disposed',
+      });
+      expect(stopApp).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

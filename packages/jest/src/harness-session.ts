@@ -226,7 +226,7 @@ const waitForAbort = (signal: AbortSignal): Promise<never> => {
 // On timeout this throws PlatformReadyTimeoutError without cancelling `work`
 // itself — the caller is expected to abort the session signal as part of
 // tearing down, which then cancels the still-inflight call cooperatively.
-const withPlatformReadyTimeout = async <T>(options: {
+export const withPlatformReadyTimeout = async <T>(options: {
   timeout: number;
   signal: AbortSignal;
   work: (signal: AbortSignal) => Promise<T>;

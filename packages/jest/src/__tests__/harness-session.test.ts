@@ -1,13 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppConnection } from '@react-native-harness/bridge/server';
 import {
   getSignalExitCodeForRunState,
   waitForBridgeDisconnectOrTimeout,
   waitForNextConnected,
   waitForStartupCrash,
+  withPlatformReadyTimeout,
   type HarnessRunState,
 } from '../harness-session.js';
 import type { CrashMonitor } from '../crash-monitor.js';
+import { PlatformReadyTimeoutError } from '../errors.js';
 
 const createConnection = (): AppConnection => ({
   device: {
@@ -152,6 +154,66 @@ describe('waitForStartupCrash', () => {
 
     await expect(waitPromise).rejects.toThrow('Aborted');
     expect(watch).not.toHaveBeenCalled();
+  });
+});
+
+describe('withPlatformReadyTimeout', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('passes the real session signal to work, unmodified by the timeout', async () => {
+    const controller = new AbortController();
+    const work = vi.fn(async (signal: AbortSignal) => {
+      expect(signal).toBe(controller.signal);
+      return 'ready';
+    });
+
+    await expect(
+      withPlatformReadyTimeout({
+        timeout: 1_000,
+        signal: controller.signal,
+        work,
+      }),
+    ).resolves.toBe('ready');
+    expect(work).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws PlatformReadyTimeoutError on timeout without aborting the session signal', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    // Never resolves within the test; simulates a hung platform init.
+    const work = () => new Promise<void>(() => undefined);
+
+    const resultPromise = withPlatformReadyTimeout({
+      timeout: 1_000,
+      signal: controller.signal,
+      work,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(resultPromise).rejects.toBeInstanceOf(PlatformReadyTimeoutError);
+    expect(controller.signal.aborted).toBe(false);
+  });
+
+  it('propagates a genuine abort from the session signal as-is', async () => {
+    const controller = new AbortController();
+    const abortReason = new DOMException('Aborted', 'AbortError');
+    const work = (signal: AbortSignal) =>
+      new Promise<never>((_, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason));
+      });
+
+    const resultPromise = withPlatformReadyTimeout({
+      timeout: 1_000,
+      signal: controller.signal,
+      work,
+    });
+
+    controller.abort(abortReason);
+
+    await expect(resultPromise).rejects.toBe(abortReason);
   });
 });
 
