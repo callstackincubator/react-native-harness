@@ -5,6 +5,7 @@ import {
   isProject,
   cancelPromptAndExit,
   promptConfirm,
+  ensureSignalsDeliverable,
 } from '@react-native-harness/tools';
 import { getProjectConfig } from './projectType.js';
 import { installPlatforms } from './platforms.js';
@@ -36,6 +37,11 @@ const checkForExistingConfig = async (projectRoot: string) => {
 };
 
 export const runInitWizard = async () => {
+  // The wizard spawns subprocesses (e.g. platform installers) while a @clack
+  // spinner may be active, which puts stdin in raw mode and would otherwise
+  // swallow SIGINT until a prompt reads it. See spawn.ts's doc comment.
+  ensureSignalsDeliverable();
+
   const projectRoot = process.cwd();
 
   if (!isProject(projectRoot)) {
