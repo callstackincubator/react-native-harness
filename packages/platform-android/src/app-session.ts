@@ -81,6 +81,13 @@ type CreateAndroidAppSessionOptions = {
   getDropboxOutput?: () => Promise<string>;
   getExitInfo?: () => Promise<string>;
   crashArtifactWriter?: CrashArtifactWriter;
+  /**
+   * Session-lifetime abort signal (see HarnessPlatformInitOptions.signal).
+   * Combined with the app session's own logcatAbortController so that
+   * aborting the session stops the logcat stream even if dispose() hasn't
+   * been called yet (e.g. SIGTERM during teardown of other resources).
+   */
+  signal?: AbortSignal;
 };
 
 export const createAndroidAppSession = async ({
@@ -94,6 +101,7 @@ export const createAndroidAppSession = async ({
   getDropboxOutput,
   getExitInfo,
   crashArtifactWriter,
+  signal,
 }: CreateAndroidAppSessionOptions): Promise<AppSession> => {
   const emitter = createAppSessionEmitter();
   const logBuffer = createBoundedLogBuffer();
@@ -189,8 +197,11 @@ export const createAndroidAppSession = async ({
   const logcatTimestamp = await getLogcatTimestamp();
   const sessionStartedAt = Date.now();
   const logcatAbortController = new AbortController();
+  const logcatSignal = signal
+    ? AbortSignal.any([signal, logcatAbortController.signal])
+    : logcatAbortController.signal;
   const logcatProcess = startLogcat(getLogcatArgs(appUid, logcatTimestamp), {
-    signal: logcatAbortController.signal,
+    signal: logcatSignal,
   });
   // Aborting is nano-spawn's own cancellation path, so the resulting
   // SubprocessError is settled the same way regardless of which of the
