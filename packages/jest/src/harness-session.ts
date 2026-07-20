@@ -40,7 +40,7 @@ import {
   createDiagnostics,
   logger,
   getTimeoutSignal,
-  raceAbortSignals,
+  ensureSignalsDeliverable,
   type Diagnostics,
 } from '@react-native-harness/tools';
 import {
@@ -220,26 +220,24 @@ const waitForAbort = (signal: AbortSignal): Promise<never> => {
   });
 };
 
+// Bounds only the init *call* with a readiness timeout; `options.signal` (the
+// session-lifetime signal) is passed to `work` unmodified, so a slow init
+// call keeps observing real session teardown, not a synthetic timeout abort.
+// On timeout this throws PlatformReadyTimeoutError without cancelling `work`
+// itself — the caller is expected to abort the session signal as part of
+// tearing down, which then cancels the still-inflight call cooperatively.
 const withPlatformReadyTimeout = async <T>(options: {
   timeout: number;
   signal: AbortSignal;
   work: (signal: AbortSignal) => Promise<T>;
 }): Promise<T> => {
   const timeoutSignal = getTimeoutSignal(options.timeout);
-  const combinedSignal = raceAbortSignals([options.signal, timeoutSignal]);
-  try {
-    return await options.work(combinedSignal);
-  } catch (error) {
-    if (
-      error instanceof DOMException &&
-      error.name === 'AbortError' &&
-      timeoutSignal.aborted &&
-      !options.signal.aborted
-    ) {
+  return await Promise.race([
+    options.work(options.signal),
+    waitForAbort(timeoutSignal).catch(() => {
       throw new PlatformReadyTimeoutError(options.timeout);
-    }
-    throw error;
-  }
+    }),
+  ]);
 };
 
 type AppReadyOptions = {
@@ -490,11 +488,14 @@ export const createHarnessSession = async (
     platform.platformId,
   );
 
-  // Single AbortController for the entire setup phase. Registered signal
-  // handlers abort this so that slow inflight operations (Metro init, platform
-  // runner startup) are cancelled promptly on SIGTERM/SIGINT.
-  const setupController = new AbortController();
-  const onEarlySignal = () => setupController.abort();
+  // Single, session-lifetime AbortController: it aborts on early SIGTERM/SIGINT
+  // during setup (below) and, once the session is up, in dispose()'s finally
+  // (unchanged lifetime). It is the one signal the plugin manager and platform
+  // runner see for the entire session, so its abort reaches every long-lived
+  // child the runner threads it into.
+  ensureSignalsDeliverable();
+  const sessionController = new AbortController();
+  const onEarlySignal = () => sessionController.abort();
   process.once('SIGTERM', onEarlySignal);
   process.once('SIGINT', onEarlySignal);
 
@@ -508,7 +509,7 @@ export const createHarnessSession = async (
     'session.lock.wait',
     () =>
       lockManager.acquire(resourceLockKey, {
-        signal: setupController.signal,
+        signal: sessionController.signal,
         onWait: () => {
           didWaitForResourceLock = true;
           logRunnerWaitingInQueue(platform);
@@ -539,7 +540,7 @@ export const createHarnessSession = async (
         config: harnessConfig,
         platform,
         resourceLockManager: lockManager,
-        signal: setupController.signal,
+        signal: sessionController.signal,
       });
     } catch (error) {
       portResolveSpan.fail(error);
@@ -560,13 +561,12 @@ export const createHarnessSession = async (
       platform,
     });
 
-    const pluginAbortController = new AbortController();
     const pluginManager = createHarnessPluginManager<HarnessConfig, HarnessPlatform>({
       plugins: (runtimeConfig.plugins ?? []) as Array<HarnessPlugin<object, HarnessConfig, HarnessPlatform>>,
       projectRoot,
       config: runtimeConfig,
       runner: platform,
-      abortSignal: pluginAbortController.signal,
+      abortSignal: sessionController.signal,
     });
 
     const hooks = createHookQueue();
@@ -606,7 +606,7 @@ export const createHarnessSession = async (
                 [HARNESS_BRIDGE_PATH]: bridge.ws as unknown as MetroWebSocketEndpoint,
               },
             },
-            setupController.signal,
+            sessionController.signal,
           ).then((instance) => {
             sessionLogger.debug('Metro initialized');
             // Attach the Metro diagnostics deriver before the eager prewarm
@@ -621,7 +621,7 @@ export const createHarnessSession = async (
               instance
                 .prewarm({
                   platform: platform.platformId,
-                  signal: setupController.signal,
+                  signal: sessionController.signal,
                 })
                 .then((completed) => prewarmSpan.end({ completed }))
                 // Swallow AbortError on teardown so it never becomes an
@@ -636,7 +636,7 @@ export const createHarnessSession = async (
           () =>
             withPlatformReadyTimeout({
               timeout: runtimeConfig.platformReadyTimeout,
-              signal: setupController.signal,
+              signal: sessionController.signal,
               work: async (signal) => {
                 return await import(platform.runner).then((module) =>
                   module.default(platform.config, runtimeConfig, {
@@ -834,7 +834,7 @@ export const createHarnessSession = async (
         cleanupError = error;
       } finally {
         await resourceLease.release();
-        pluginAbortController.abort();
+        sessionController.abort();
       }
 
       sessionLogger.debug('session resources disposed');
@@ -1105,6 +1105,9 @@ export const createHarnessSession = async (
   } catch (error) {
     process.off('SIGTERM', onEarlySignal);
     process.off('SIGINT', onEarlySignal);
+    // Cancels any inflight init work still holding sessionController.signal
+    // (e.g. a platform init call abandoned after a readiness timeout race).
+    sessionController.abort();
     await Promise.allSettled([resourceLease.release(), metroPortLease?.release()]);
     throw error;
   }
