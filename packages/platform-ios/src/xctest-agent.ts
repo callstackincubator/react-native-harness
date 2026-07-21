@@ -762,51 +762,45 @@ const waitForAgentReady = async (options: {
   );
 };
 
-const waitForShutdown = async (options: {
-  processTask: Promise<void> | null;
-  shutdownTimeoutMs: number;
-}): Promise<boolean> => {
-  if (!options.processTask) {
-    return true;
-  }
-
-  const timedOut = Symbol('timedOut');
-  const result = await Promise.race([
-    options.processTask.then(() => undefined),
-    delay(options.shutdownTimeoutMs).then(() => timedOut),
-  ]);
-
-  return result !== timedOut;
-};
-
 const waitForGracefulShutdown = async (options: {
   client: ReturnType<typeof createXCTestAgentClient>;
   processTask: Promise<void> | null;
   shutdownTimeoutMs: number;
 }): Promise<{ didStop: boolean; requestError: unknown | null }> => {
   let requestError: unknown | null = null;
+  let shutdownTimer: ReturnType<typeof setTimeout> | null = null;
   const timedOut = Symbol('timedOut');
+  const timeoutTask = new Promise<typeof timedOut>((resolve) => {
+    shutdownTimer = setTimeout(
+      () => resolve(timedOut),
+      options.shutdownTimeoutMs
+    );
+  });
 
-  const result = await Promise.race([
-    (async () => {
-      try {
-        await options.client.shutdown();
-      } catch (error) {
-        requestError = error;
-      }
+  try {
+    const result = await Promise.race([
+      (async () => {
+        try {
+          await options.client.shutdown();
+        } catch (error) {
+          requestError = error;
+        }
 
-      return await waitForShutdown({
-        processTask: options.processTask,
-        shutdownTimeoutMs: options.shutdownTimeoutMs,
-      });
-    })(),
-    delay(options.shutdownTimeoutMs).then(() => timedOut),
-  ]);
+        await options.processTask;
+        return true;
+      })(),
+      timeoutTask,
+    ]);
 
-  return {
-    didStop: result !== timedOut && result === true,
-    requestError,
-  };
+    return {
+      didStop: result !== timedOut,
+      requestError,
+    };
+  } finally {
+    if (shutdownTimer !== null) {
+      clearTimeout(shutdownTimer);
+    }
+  }
 };
 
 const waitForChildProcessExit = async (subprocess: Subprocess) => {

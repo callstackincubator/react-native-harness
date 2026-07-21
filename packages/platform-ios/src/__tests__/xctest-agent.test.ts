@@ -514,6 +514,30 @@ describe('xctest-agent orchestration', () => {
     expect(mocks.kill).not.toHaveBeenCalled();
   });
 
+  it('clears the shutdown timer after graceful shutdown', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const controller = createXCTestAgentController({
+        port: 49154,
+        shutdownTimeoutMs: 30_000,
+        target: {
+          kind: 'simulator',
+          id: 'sim-timeout',
+        },
+      });
+
+      await controller.ensureStarted();
+      await controller.dispose();
+
+      expect(mocks.shutdown).toHaveBeenCalledTimes(1);
+      expect(mocks.kill).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('kills the agent process when graceful shutdown times out', async () => {
     mocks.shutdown.mockResolvedValue(undefined);
 
