@@ -114,7 +114,10 @@ export default {
     }),
   ],
   defaultRunner: 'android',
-  platformReadyTimeout: 300000,
+  // DIAGNOSTIC: raised from 300000 — GH Actions macOS runners have been taking
+  // ~2-3min just to boot the iOS 26.4 simulator, blowing the setup budget
+  // before any test runs. Bumped so the type-timeout diagnostics can execute.
+  platformReadyTimeout: 600000,
   bridgeTimeout: 120000,
   testTimeout: 10000,
 
