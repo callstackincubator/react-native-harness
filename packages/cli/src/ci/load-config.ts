@@ -1,5 +1,5 @@
 import { getConfig } from '@react-native-harness/config';
-import fs from 'node:fs';
+import { getFs } from '@react-native-harness/tools/harness-context';
 import { createRequire } from 'node:module';
 import { relativeToWorkspaceRoot, resolveProjectRoot } from './workspace-root.js';
 
@@ -144,7 +144,7 @@ export const runLoadConfig = async (): Promise<void> => {
     const output = `config=${JSON.stringify(
       resolvedRunner
     )}\nprojectRoot=${relativeProjectRoot}\n`;
-    fs.appendFileSync(githubOutput, output);
+    getFs().appendFileSync(githubOutput, output);
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.message);

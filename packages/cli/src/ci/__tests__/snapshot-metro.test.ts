@@ -1,7 +1,11 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import {
+  runWithHarnessContext,
+  type FileSystem,
+} from '@react-native-harness/tools/harness-context';
+import { createInMemoryFileSystem } from '@react-native-harness/tools/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runSnapshotMetro } from '../snapshot-metro.js';
 
 const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
@@ -19,15 +23,17 @@ vi.mock('@react-native-harness/cache', () => ({
 describe('snapshot-metro', () => {
   let projectRoot: string;
   let githubOutputPath: string;
+  let fileSystem: FileSystem;
   let snapshotMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    vi.resetModules();
     vi.clearAllMocks();
 
-    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gha-snapshot-metro-'));
+    fileSystem = createInMemoryFileSystem();
+    projectRoot = '/project';
     githubOutputPath = path.join(projectRoot, 'github-output.txt');
-    fs.writeFileSync(githubOutputPath, '');
+    fileSystem.mkdirSync(projectRoot, { recursive: true });
+    fileSystem.writeFileSync(githubOutputPath, '');
 
     process.env.INPUT_PROJECTROOT = projectRoot;
     process.env.GITHUB_OUTPUT = githubOutputPath;
@@ -51,7 +57,6 @@ describe('snapshot-metro', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(projectRoot, { recursive: true, force: true });
     delete process.env.INPUT_PROJECTROOT;
     delete process.env.GITHUB_OUTPUT;
     delete process.env.METRO_RESTORED_KEY;
@@ -59,13 +64,13 @@ describe('snapshot-metro', () => {
   });
 
   it('writes the current cache snapshot to GITHUB_OUTPUT as metroSnapshot', async () => {
-    await (await import('../snapshot-metro.js')).runSnapshotMetro();
+    await runWithHarnessContext({ fs: fileSystem }, runSnapshotMetro);
 
     await vi.waitFor(() => {
       expect(snapshotMock).toHaveBeenCalled();
     });
 
-    const output = fs.readFileSync(githubOutputPath, 'utf8');
+    const output = fileSystem.readFileSync(githubOutputPath, 'utf8');
     expect(output).toContain(
       'metroSnapshot={"metro":[{"path":"metro/a","sizeBytes":3,"mtimeMs":1}]}\n'
     );
@@ -80,7 +85,7 @@ describe('snapshot-metro', () => {
       ],
     });
 
-    await (await import('../snapshot-metro.js')).runSnapshotMetro();
+    await runWithHarnessContext({ fs: fileSystem }, runSnapshotMetro);
 
     await vi.waitFor(() => {
       expect(snapshotMock).toHaveBeenCalled();
@@ -94,7 +99,7 @@ describe('snapshot-metro', () => {
   it('reports a cold start when no cache entry matched', async () => {
     delete process.env.METRO_RESTORED_KEY;
 
-    await (await import('../snapshot-metro.js')).runSnapshotMetro();
+    await runWithHarnessContext({ fs: fileSystem }, runSnapshotMetro);
 
     await vi.waitFor(() => {
       expect(snapshotMock).toHaveBeenCalled();
@@ -108,7 +113,7 @@ describe('snapshot-metro', () => {
   it('fails loudly (process.exit(1)) when GITHUB_OUTPUT is not set', async () => {
     delete process.env.GITHUB_OUTPUT;
 
-    await (await import('../snapshot-metro.js')).runSnapshotMetro();
+    await runWithHarnessContext({ fs: fileSystem }, runSnapshotMetro);
 
     await vi.waitFor(() => {
       expect(process.exit).toHaveBeenCalledWith(1);

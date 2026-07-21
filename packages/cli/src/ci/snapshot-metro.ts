@@ -1,6 +1,6 @@
-import fs from 'node:fs';
 import { createHarnessCache } from '@react-native-harness/cache';
 import { getConfig } from '@react-native-harness/config';
+import { getFs } from '@react-native-harness/tools/harness-context';
 import { formatMegabytes } from './format-bytes.js';
 import { resolveProjectRoot } from './workspace-root.js';
 
@@ -52,7 +52,7 @@ export const runSnapshotMetro = async (): Promise<void> => {
 
     const output = `metroSnapshot=${JSON.stringify(snapshotAfterRestore)}\n`;
 
-    fs.appendFileSync(githubOutput, output);
+    getFs().appendFileSync(githubOutput, output);
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.message);

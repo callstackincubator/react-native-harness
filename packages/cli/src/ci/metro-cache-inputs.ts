@@ -1,7 +1,7 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { computeMetroStaticInputs } from '@react-native-harness/cache';
+import { getFs } from '@react-native-harness/tools/harness-context';
 
 const require = createRequire(import.meta.url);
 
@@ -19,7 +19,7 @@ export const resolveRepoRoot = (projectRoot: string): string => {
   let dir = projectRoot;
 
   while (true) {
-    if (fs.existsSync(path.join(dir, '.git'))) {
+    if (getFs().existsSync(path.join(dir, '.git'))) {
       return dir;
     }
 
@@ -68,7 +68,9 @@ const resolveBundlerMetroPackageJson = (projectRoot: string): string => {
 export const resolveBundlerMetroVersion = (projectRoot: string): string => {
   try {
     const packageJsonPath = resolveBundlerMetroPackageJson(projectRoot);
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    const packageJson = JSON.parse(
+      getFs().readFileSync(packageJsonPath, 'utf8')
+    );
 
     if (typeof packageJson.version !== 'string') {
       throw new Error('"version" field is missing or not a string');

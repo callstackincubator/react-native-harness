@@ -13,6 +13,12 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./harness-context": {
+      "development": "./src/harness-context.ts",
+      "types": "./dist/harness-context.d.ts",
+      "import": "./dist/harness-context.js",
+      "default": "./dist/harness-context.js"
+    },
     "./testing": {
       "development": "./src/testing.ts",
       "types": "./dist/testing.d.ts",

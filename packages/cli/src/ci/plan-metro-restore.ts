@@ -1,6 +1,6 @@
-import fs from 'node:fs';
 import { createHarnessCache } from '@react-native-harness/cache';
 import { getConfig } from '@react-native-harness/config';
+import { getFs } from '@react-native-harness/tools/harness-context';
 import { resolveMetroStaticInputs } from './metro-cache-inputs.js';
 import { resolveProjectRoot } from './workspace-root.js';
 
@@ -52,7 +52,7 @@ export const runPlanMetroRestore = async (): Promise<void> => {
         metroPlan?.restorePrefixes ?? []
       )}\n`;
 
-    fs.appendFileSync(githubOutput, output);
+    getFs().appendFileSync(githubOutput, output);
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.message);

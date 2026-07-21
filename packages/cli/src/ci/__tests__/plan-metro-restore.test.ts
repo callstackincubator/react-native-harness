@@ -1,7 +1,11 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import {
+  runWithHarnessContext,
+  type FileSystem,
+} from '@react-native-harness/tools/harness-context';
+import { createInMemoryFileSystem } from '@react-native-harness/tools/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runPlanMetroRestore } from '../plan-metro-restore.js';
 
 const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
@@ -23,16 +27,18 @@ vi.mock('@react-native-harness/cache', () => ({
 describe('plan-restore', () => {
   let projectRoot: string;
   let githubOutputPath: string;
+  let fileSystem: FileSystem;
   let planRestoreMock: ReturnType<typeof vi.fn>;
   let writeKeysFileMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    vi.resetModules();
     vi.clearAllMocks();
 
-    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gha-plan-restore-'));
+    fileSystem = createInMemoryFileSystem();
+    projectRoot = '/project';
     githubOutputPath = path.join(projectRoot, 'github-output.txt');
-    fs.writeFileSync(githubOutputPath, '');
+    fileSystem.mkdirSync(projectRoot, { recursive: true });
+    fileSystem.writeFileSync(githubOutputPath, '');
 
     process.env.INPUT_PROJECTROOT = projectRoot;
     process.env.GITHUB_OUTPUT = githubOutputPath;
@@ -69,7 +75,6 @@ describe('plan-restore', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(projectRoot, { recursive: true, force: true });
     delete process.env.INPUT_PROJECTROOT;
     delete process.env.GITHUB_OUTPUT;
     delete process.env.RUNNER_OS;
@@ -77,13 +82,13 @@ describe('plan-restore', () => {
   });
 
   it('writes metroRestoreKey and metroRestorePrefixes (as JSON) to GITHUB_OUTPUT', async () => {
-    await (await import('../plan-metro-restore.js')).runPlanMetroRestore();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroRestore);
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
     });
 
-    const output = fs.readFileSync(githubOutputPath, 'utf8');
+    const output = fileSystem.readFileSync(githubOutputPath, 'utf8');
     expect(output).toContain('metroRestoreKey=harness-metro-linux-abc\n');
     expect(output).toContain(
       'metroRestorePrefixes=["harness-metro-linux-abc-"]\n'
@@ -94,7 +99,7 @@ describe('plan-restore', () => {
   });
 
   it('calls planRestore with the os and staticInputs assembled from the Metro key recipe', async () => {
-    await (await import('../plan-metro-restore.js')).runPlanMetroRestore();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroRestore);
 
     await vi.waitFor(() => {
       expect(planRestoreMock).toHaveBeenCalled();
@@ -111,7 +116,7 @@ describe('plan-restore', () => {
   it('fails loudly (process.exit(1)) when GITHUB_OUTPUT is not set', async () => {
     delete process.env.GITHUB_OUTPUT;
 
-    await (await import('../plan-metro-restore.js')).runPlanMetroRestore();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroRestore);
 
     await vi.waitFor(() => {
       expect(process.exit).toHaveBeenCalledWith(1);

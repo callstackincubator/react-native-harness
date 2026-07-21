@@ -1,7 +1,11 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import {
+  runWithHarnessContext,
+  type FileSystem,
+} from '@react-native-harness/tools/harness-context';
+import { createInMemoryFileSystem } from '@react-native-harness/tools/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runPlanMetroSave } from '../plan-metro-save.js';
 
 const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
@@ -21,16 +25,18 @@ vi.mock('@react-native-harness/cache', () => ({
 describe('plan-save', () => {
   let projectRoot: string;
   let githubOutputPath: string;
+  let fileSystem: FileSystem;
   let planSaveMock: ReturnType<typeof vi.fn>;
   let writeKeysFileMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    vi.resetModules();
     vi.clearAllMocks();
 
-    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gha-plan-save-'));
+    fileSystem = createInMemoryFileSystem();
+    projectRoot = '/project';
     githubOutputPath = path.join(projectRoot, 'github-output.txt');
-    fs.writeFileSync(githubOutputPath, '');
+    fileSystem.mkdirSync(projectRoot, { recursive: true });
+    fileSystem.writeFileSync(githubOutputPath, '');
 
     process.env.INPUT_PROJECTROOT = projectRoot;
     process.env.GITHUB_OUTPUT = githubOutputPath;
@@ -69,7 +75,6 @@ describe('plan-save', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(projectRoot, { recursive: true, force: true });
     delete process.env.INPUT_PROJECTROOT;
     delete process.env.GITHUB_OUTPUT;
     delete process.env.RUNNER_OS;
@@ -80,13 +85,13 @@ describe('plan-save', () => {
   });
 
   it('writes metroShouldSave and metroSaveKey to GITHUB_OUTPUT', async () => {
-    await (await import('../plan-metro-save.js')).runPlanMetroSave();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
     });
 
-    const output = fs.readFileSync(githubOutputPath, 'utf8');
+    const output = fileSystem.readFileSync(githubOutputPath, 'utf8');
     expect(output).toContain('metroShouldSave=true\n');
     expect(output).toContain(
       'metroSaveKey=harness-metro-linux-abc-contenthash\n'
@@ -94,7 +99,7 @@ describe('plan-save', () => {
   });
 
   it('parses the metroSnapshot input and builds the SavePolicy from env/input', async () => {
-    await (await import('../plan-metro-save.js')).runPlanMetroSave();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
 
     await vi.waitFor(() => {
       expect(planSaveMock).toHaveBeenCalled();
@@ -110,7 +115,7 @@ describe('plan-save', () => {
   it('treats an unparseable metroSnapshot input as an empty snapshot instead of throwing', async () => {
     process.env.INPUT_METRO_SNAPSHOT = 'not json';
 
-    await (await import('../plan-metro-save.js')).runPlanMetroSave();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
 
     await vi.waitFor(() => {
       expect(planSaveMock).toHaveBeenCalled();
@@ -127,7 +132,7 @@ describe('plan-save', () => {
   it('defaults an unrecognized cacheSavePolicy input to "default-branch"', async () => {
     process.env.INPUT_CACHESAVEPOLICY = 'bogus';
 
-    await (await import('../plan-metro-save.js')).runPlanMetroSave();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
 
     await vi.waitFor(() => {
       expect(planSaveMock).toHaveBeenCalled();
@@ -156,7 +161,7 @@ describe('plan-save', () => {
       },
     });
 
-    await (await import('../plan-metro-save.js')).runPlanMetroSave();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
@@ -179,7 +184,7 @@ describe('plan-save', () => {
       },
     });
 
-    await (await import('../plan-metro-save.js')).runPlanMetroSave();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
@@ -203,7 +208,7 @@ describe('plan-save', () => {
       },
     });
 
-    await (await import('../plan-metro-save.js')).runPlanMetroSave();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
@@ -227,7 +232,7 @@ describe('plan-save', () => {
       },
     });
 
-    await (await import('../plan-metro-save.js')).runPlanMetroSave();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
@@ -241,7 +246,7 @@ describe('plan-save', () => {
   it('fails loudly (process.exit(1)) when GITHUB_OUTPUT is not set', async () => {
     delete process.env.GITHUB_OUTPUT;
 
-    await (await import('../plan-metro-save.js')).runPlanMetroSave();
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
 
     await vi.waitFor(() => {
       expect(process.exit).toHaveBeenCalledWith(1);
