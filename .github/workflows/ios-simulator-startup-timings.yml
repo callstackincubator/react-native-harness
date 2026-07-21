@@ -142,8 +142,28 @@ jobs:
             exit "$BOOT_STATUS"
           fi
 
+      - name: Shut down iOS 26.5 simulator before caching
+        id: shutdown-ios-26-5
+        if: always() && matrix.runtime == 'iOS-26-5'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          UDID="FD9EC0F9-63AA-4C2F-B0F5-224AAE68866E"
+          xcrun simctl shutdown "$UDID" || true
+
+          for _ in {1..30}; do
+            if xcrun simctl list devices | grep -F "$UDID" | grep -q '(Shutdown)'; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "::error::Simulator $UDID did not shut down before caching"
+          exit 1
+
       - name: Save iOS 26.5 simulator cache
-        if: always() && matrix.runtime == 'iOS-26-5' && steps.cache-ios-26-5-restore.outputs.cache-hit != 'true'
+        if: always() && matrix.runtime == 'iOS-26-5' && steps.shutdown-ios-26-5.outcome == 'success' && steps.cache-ios-26-5-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/Library/Developer/CoreSimulator/Devices/FD9EC0F9-63AA-4C2F-B0F5-224AAE68866E
