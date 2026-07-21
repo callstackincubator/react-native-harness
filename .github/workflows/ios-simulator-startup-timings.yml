@@ -1,53 +1,127 @@
-name: iOS Simulator Startup Timings
+name: Simulator boot benchmark
 
 on:
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  measure-ios-simulator-startup:
-    name: Measure iOS simulator startup
-    runs-on: macos-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+  simulator-boot:
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime:
+          - iOS-26-2
+          - iOS-26-4
+          - iOS-26-5
 
-      - name: Measure simulator startup timings
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    steps:
+      - name: Select Xcode 26.6
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
 
           sudo xcode-select \
             --switch /Applications/Xcode_26.6.app/Contents/Developer
 
-          echo "=== First launch ==="
-          time sudo xcodebuild -runFirstLaunch
+          xcodebuild -version
+          xcrun simctl list runtimes
+          xcrun simctl list devices available
 
-          echo "=== Cache preparation ==="
-          time xcrun simctl runtime dyld_shared_cache update --all
+      - name: Measure existing simulator boot
+        shell: bash
+        env:
+          RUNTIME_SUFFIX: ${{ matrix.runtime }}
+          DEVICE_NAME: iPhone 17 Pro
+        run: |
+          set -euo pipefail
 
-          RUNTIME="com.apple.CoreSimulator.SimRuntime.iOS-26-5"
-          DEVICE_NAME="iPhone 17 Pro"
+          RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.${RUNTIME_SUFFIX}"
+          BOOT_LOG="$RUNNER_TEMP/bootstatus-${RUNTIME_SUFFIX}.log"
 
+          echo "Looking for:"
+          echo "  Runtime: $RUNTIME_ID"
+          echo "  Device:  $DEVICE_NAME"
+
+          # Verify that the requested runtime is installed.
+          if ! xcrun simctl list runtimes -j |
+            jq -e --arg runtime "$RUNTIME_ID" '
+              .runtimes[]
+              | select(
+                  .identifier == $runtime
+                  and .isAvailable == true
+                )
+            ' >/dev/null; then
+            echo "::error::Runtime $RUNTIME_ID is not available"
+            exit 1
+          fi
+
+          # Select an existing available device only.
           UDID="$(
             xcrun simctl list devices available -j |
-              jq -er --arg runtime "$RUNTIME" --arg name "$DEVICE_NAME" '
-                .devices[$runtime]
-                | map(select(.name == $name and .isAvailable == true))
-                | .[0].udid
-              '
-          )"
+              jq -er \
+                --arg runtime "$RUNTIME_ID" \
+                --arg name "$DEVICE_NAME" '
+                  .devices[$runtime]
+                  | map(
+                      select(
+                        .name == $name
+                        and .isAvailable == true
+                      )
+                    )
+                  | .[0].udid
+                '
+          )" || {
+            echo "::error::No existing $DEVICE_NAME found for $RUNTIME_ID"
+            echo "Available devices:"
+            xcrun simctl list devices available
+            exit 1
+          }
 
-          echo "=== Selected simulator ==="
-          echo "$DEVICE_NAME ($RUNTIME): $UDID"
+          echo "Selected existing simulator:"
+          echo "  $DEVICE_NAME"
+          echo "  $RUNTIME_ID"
+          echo "  $UDID"
+
+          # Do not erase, recreate, or delete the selected device.
+          xcrun simctl shutdown "$UDID" 2>/dev/null || true
+
+          START_SECONDS="$(date +%s)"
 
           echo "=== Boot request ==="
-          time xcrun simctl boot "$UDID" || true
+          time xcrun simctl boot "$UDID"
 
           echo "=== Boot completion ==="
-          time xcrun simctl bootstatus "$UDID" -b
+          set +e
+          xcrun simctl bootstatus "$UDID" -b 2>&1 |
+            tee "$BOOT_LOG"
+          BOOT_STATUS="${PIPESTATUS[0]}"
+          set -e
+
+          END_SECONDS="$(date +%s)"
+          ELAPSED_SECONDS="$((END_SECONDS - START_SECONDS))"
+
+          MIGRATION_SAMPLES="$(
+            grep -c "Waiting on Data Migration" "$BOOT_LOG" || true
+          )"
+
+          {
+            echo "### Existing simulator boot result"
+            echo
+            echo "- Runtime: \`$RUNTIME_ID\`"
+            echo "- Device: \`$DEVICE_NAME\`"
+            echo "- UDID: \`$UDID\`"
+            echo "- Duration: **${ELAPSED_SECONDS}s**"
+            echo "- Migration samples: **${MIGRATION_SAMPLES}**"
+            echo "- Runner image: \`${ImageOS:-unknown}\`"
+            echo "- Image version: \`${ImageVersion:-unknown}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$BOOT_STATUS" -ne 0 ]]; then
+            echo "::error::Simulator failed to finish booting"
+            exit "$BOOT_STATUS"
+          fi
