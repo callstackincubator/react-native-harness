@@ -1,0 +1,53 @@
+name: iOS Simulator Startup Timings
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  measure-ios-simulator-startup:
+    name: Measure iOS simulator startup
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Measure simulator startup timings
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          sudo xcode-select \
+            --switch /Applications/Xcode_26.6.app/Contents/Developer
+
+          echo "=== First launch ==="
+          time sudo xcodebuild -runFirstLaunch
+
+          echo "=== Cache preparation ==="
+          time xcrun simctl runtime dyld_shared_cache update --all
+
+          RUNTIME="com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+          DEVICE_NAME="iPhone 17 Pro"
+
+          UDID="$(
+            xcrun simctl list devices available -j |
+              jq -er --arg runtime "$RUNTIME" --arg name "$DEVICE_NAME" '
+                .devices[$runtime]
+                | map(select(.name == $name and .isAvailable == true))
+                | .[0].udid
+              '
+          )"
+
+          echo "=== Selected simulator ==="
+          echo "$DEVICE_NAME ($RUNTIME): $UDID"
+
+          echo "=== Boot request ==="
+          time xcrun simctl boot "$UDID" || true
+
+          echo "=== Boot completion ==="
+          time xcrun simctl bootstatus "$UDID" -b
