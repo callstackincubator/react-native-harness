@@ -29,6 +29,22 @@ jobs:
             --switch /Applications/Xcode_26.6.app/Contents/Developer
 
           xcodebuild -version
+
+          echo "SIMULATOR_CACHE_KEY=core-simulator-device-ios-26-5-xcode-26-6-${ImageOS}-${ImageVersion}" >> "$GITHUB_ENV"
+
+      - name: Restore iOS 26.5 simulator cache
+        id: cache-ios-26-5-restore
+        if: matrix.runtime == 'iOS-26-5'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/Library/Developer/CoreSimulator/Devices/FD9EC0F9-63AA-4C2F-B0F5-224AAE68866E
+          key: ${{ env.SIMULATOR_CACHE_KEY }}
+
+      - name: Inspect available simulators
+        shell: bash
+        run: |
+          set -euo pipefail
+
           xcrun simctl list runtimes
           xcrun simctl list devices available
 
@@ -125,3 +141,10 @@ jobs:
             echo "::error::Simulator failed to finish booting"
             exit "$BOOT_STATUS"
           fi
+
+      - name: Save iOS 26.5 simulator cache
+        if: always() && matrix.runtime == 'iOS-26-5' && steps.cache-ios-26-5-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/Library/Developer/CoreSimulator/Devices/FD9EC0F9-63AA-4C2F-B0F5-224AAE68866E
+          key: ${{ steps.cache-ios-26-5-restore.outputs.cache-primary-key }}
