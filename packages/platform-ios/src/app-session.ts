@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   createAppSessionEmitter,
   createBoundedLogBuffer,
@@ -5,7 +7,12 @@ import {
   type AppSessionState,
   type AppleAppLaunchOptions,
 } from '@react-native-harness/platforms';
-import { logger, terminate, type Subprocess } from '@react-native-harness/tools';
+import {
+  createHarnessArtifactDirectory,
+  logger,
+  terminate,
+  type Subprocess,
+} from '@react-native-harness/tools';
 import type { IosCrashReporter } from './crash-reporter.js';
 
 const iosAppSessionLogger = logger.child('ios-app-session');
@@ -24,6 +31,13 @@ type CreateIosAppSessionOptions = {
    * addition to the normal dispose() path.
    */
   signal?: AbortSignal;
+  /**
+   * DIAGNOSTIC: optional os_log stream (e.g. `simctl spawn <udid> log stream`)
+   * whose output is persisted alongside the console log. `--console` only
+   * captures the app's stdout/stderr; the native `[HarnessUI]` RCTLog
+   * breadcrumbs go to the unified log, so we capture them separately.
+   */
+  streamSystemLogs?: () => Subprocess;
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -34,6 +48,7 @@ export const createIosAppSession = async ({
   isAppRunning,
   crashReporter,
   signal,
+  streamSystemLogs,
 }: CreateIosAppSessionOptions): Promise<AppSession> => {
   const emitter = createAppSessionEmitter();
   const logBuffer = createBoundedLogBuffer();
@@ -42,6 +57,54 @@ export const createIosAppSession = async ({
   let disposed = false;
   let stopPolling = false;
   let hasObservedRunning = false;
+
+  // DIAGNOSTIC: persist the `--console` app stdout/stderr (which includes the
+  // native `[HarnessUI]` RCTLog breadcrumbs) to a file under `.harness/logs`
+  // so it is uploaded as a CI artifact. See app-console-persistence diagnosis.
+  let consoleLogStream: fs.WriteStream | null = null;
+  let osLogStream: fs.WriteStream | null = null;
+  try {
+    const consoleArtifacts = createHarnessArtifactDirectory({
+      artifactType: 'logs',
+      platformId: 'ios',
+      runnerName: 'app-console-simulator',
+    });
+    consoleLogStream = fs.createWriteStream(
+      path.join(consoleArtifacts.directoryPath, 'app-console.log'),
+      { flags: 'a' }
+    );
+    if (streamSystemLogs) {
+      osLogStream = fs.createWriteStream(
+        path.join(consoleArtifacts.directoryPath, 'app-oslog.log'),
+        { flags: 'a' }
+      );
+    }
+    iosAppSessionLogger.info(
+      'Saving iOS app console logs to %s',
+      consoleArtifacts.directoryPath
+    );
+  } catch (error) {
+    iosAppSessionLogger.debug('Failed to open iOS app console log file', error);
+  }
+
+  const systemLogProcess = streamSystemLogs?.();
+  const systemLogTask = systemLogProcess
+    ? (async () => {
+        try {
+          for await (const line of systemLogProcess) {
+            if (!disposed) {
+              osLogStream?.write(`${String(line)}\n`);
+            }
+          }
+        } catch (error) {
+          if (!disposed) {
+            iosAppSessionLogger.debug('iOS os_log stream stopped', error);
+          }
+        } finally {
+          osLogStream?.end();
+        }
+      })()
+    : null;
 
   const setExited = (reason: 'observed-exit' | 'process-gone') => {
     if (disposed || state.status !== 'running') {
@@ -56,13 +119,17 @@ export const createIosAppSession = async ({
     try {
       for await (const line of launchProcess) {
         if (!disposed) {
-          logBuffer.push(String(line));
+          const text = String(line);
+          logBuffer.push(text);
+          consoleLogStream?.write(`${text}\n`);
         }
       }
     } catch (error) {
       if (!disposed) {
         iosAppSessionLogger.debug('iOS app launch log stream stopped', error);
       }
+    } finally {
+      consoleLogStream?.end();
     }
   })();
 
@@ -109,7 +176,12 @@ export const createIosAppSession = async ({
     disposed = true;
     stopPolling = true;
     emitter.clear();
-    await Promise.allSettled([logTask, exitTask, pollTask]);
+    if (systemLogProcess) {
+      await terminate(systemLogProcess, {
+        forceAfterMs: LAUNCH_PROCESS_FORCE_KILL_AFTER_MS,
+      });
+    }
+    await Promise.allSettled([logTask, exitTask, pollTask, systemLogTask]);
     await launchProcess;
     throw new Error('The iOS app launch finished before the app was running.');
   }
@@ -127,8 +199,13 @@ export const createIosAppSession = async ({
     await terminate(launchProcess, {
       forceAfterMs: LAUNCH_PROCESS_FORCE_KILL_AFTER_MS,
     });
+    if (systemLogProcess) {
+      await terminate(systemLogProcess, {
+        forceAfterMs: LAUNCH_PROCESS_FORCE_KILL_AFTER_MS,
+      });
+    }
     await stopApp();
-    await Promise.allSettled([logTask, exitTask, pollTask]);
+    await Promise.allSettled([logTask, exitTask, pollTask, systemLogTask]);
   };
 
   if (signal?.aborted) {

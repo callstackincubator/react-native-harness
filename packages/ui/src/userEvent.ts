@@ -85,29 +85,47 @@ const createUserEvent = (): UserEvent => {
         submitEditing?: boolean;
       }
     ): Promise<void> => {
+      // DIAGNOSTIC: time each step so a CI timeout points at the stalling await.
+      // Forwarded to the harness output via `forwardClientLogs`. Grep [userEvent.type:diag].
+      const t0 = Date.now();
+      const step = async (label: string, run: () => Promise<unknown>) => {
+        const start = Date.now();
+        console.log(
+          `[userEvent.type:diag] -> ${label} (t+${start - t0}ms)`
+        );
+        await run();
+        console.log(
+          `[userEvent.type:diag] <- ${label} took ${Date.now() - start}ms (t+${Date.now() - t0}ms)`
+        );
+      };
+
       // Press to focus the element (triggers pressIn/pressOut unless skipPress is true)
-      if (!options?.skipPress) {
-        await HarnessUI.simulatePress(element.nativeId, 0, 0);
-        await flushEvents();
-      } else {
-        // Still need to press to focus
-        await HarnessUI.simulatePress(element.nativeId, 0, 0);
-        await flushEvents();
-      }
+      await step('focus.simulatePress', () =>
+        HarnessUI.simulatePress(element.nativeId, 0, 0)
+      );
+      await step('focus.flushEvents', () => flushEvents());
 
       // Type each character one by one
+      let index = 0;
       for (const char of text) {
-        await HarnessUI.typeChar(char);
-        await flushEvents(); // Let onChangeText fire
+        const i = index++;
+        await step(`typeChar[${i}]`, () => HarnessUI.typeChar(char));
+        await step(`typeChar[${i}].flushEvents`, () => flushEvents()); // Let onChangeText fire
       }
 
       // Blur (triggers endEditing and blur unless skipBlur)
       if (!options?.skipBlur) {
-        await HarnessUI.blur({
-          submitEditing: options?.submitEditing ?? false,
-        });
-        await flushEvents();
+        await step('blur', () =>
+          HarnessUI.blur({
+            submitEditing: options?.submitEditing ?? false,
+          })
+        );
+        await step('blur.flushEvents', () => flushEvents());
       }
+
+      console.log(
+        `[userEvent.type:diag] done total=${Date.now() - t0}ms`
+      );
     },
   };
 };

@@ -182,6 +182,13 @@ export const getAppleSimulatorPlatformInstance = async (
         isAppRunning: () => simctl.isAppRunning(udid, config.bundleId),
         crashReporter,
         signal: init.signal,
+        // DIAGNOSTIC: capture the app's unified-log output (native
+        // `[HarnessUI]` RCTLog breadcrumbs) which `--console` does not.
+        streamSystemLogs: () =>
+          simctl.streamLogs(
+            udid,
+            `process == "${appInfo?.CFBundleExecutable ?? 'HarnessPlayground'}"`
+          ),
       });
     },
     dispose: async () => {
