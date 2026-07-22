@@ -85,8 +85,11 @@ describe('iOS XCTest agent runner integration', () => {
       },
       signal: initSignal,
     });
-    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.prepare).toHaveBeenCalledTimes(1);
     expect(mocks.ensureStarted).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.prepare.mock.invocationCallOrder[0]
+    ).toBeLessThan(mocks.ensureStarted.mock.invocationCallOrder[0]);
     expect(mocks.dispose).toHaveBeenCalledTimes(1);
   });
 
@@ -168,6 +171,7 @@ describe('iOS XCTest agent runner integration', () => {
     );
 
     expect(mocks.createXCTestAgentController).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.ensureStarted).not.toHaveBeenCalled();
   });
 });

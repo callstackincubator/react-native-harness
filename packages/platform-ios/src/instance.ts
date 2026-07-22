@@ -74,6 +74,33 @@ export const getAppleSimulatorPlatformInstance = async (
     throw new DeviceNotFoundError(getDeviceName(config.device));
   }
 
+  const xctestAgent = permissionsEnabled
+    ? createXCTestAgentController({
+        appBundleId: config.bundleId,
+        target: {
+          kind: 'simulator',
+          id: udid,
+        },
+        capabilities: [createPermissionPromptAutoAcceptCapability()],
+        signal: init.signal,
+      })
+    : null;
+
+  // The XCTest agent build (build-for-testing, destination
+  // "generic/platform=iOS Simulator") does not need a booted device, so
+  // kick it off now to overlap with the boot/waitForBoot sequence below.
+  // It is awaited (not raced) inside the try block further down so build
+  // errors are still surfaced; the .catch here only prevents an
+  // unhandled-rejection warning if boot fails first and this promise is
+  // left to settle unobserved in the meantime.
+  const preparePromise = xctestAgent?.prepare();
+  preparePromise?.catch((error: unknown) => {
+    iosInstanceLogger.debug(
+      'XCTest agent prepare failed while overlapping with simulator boot (surfaced later): %s',
+      error
+    );
+  });
+
   const simulatorStatus = await simctl.getSimulatorStatus(udid);
   let startedByHarness = false;
 
@@ -127,20 +154,9 @@ export const getAppleSimulatorPlatformInstance = async (
     `localhost:${harnessConfig.metroPort}`
   );
 
-  const xctestAgent = permissionsEnabled
-    ? createXCTestAgentController({
-        appBundleId: config.bundleId,
-        target: {
-          kind: 'simulator',
-          id: udid,
-        },
-        capabilities: [createPermissionPromptAutoAcceptCapability()],
-        signal: init.signal,
-      })
-    : null;
-
   let agentStarted = false;
   try {
+    await preparePromise;
     await xctestAgent?.ensureStarted();
     agentStarted = true;
   } finally {
