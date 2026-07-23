@@ -200,6 +200,18 @@ jobs:
           path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-playground
 
+      # Samples host memory pressure (swap usage, compressor, swap in/out) every
+      # 2s across the whole harness run so we can tell whether the 7 GB / 3 vCPU
+      # runner is swapping while simulator + xcodebuild + Metro run together.
+      # Uses a backgrounded nohup process that persists across later steps.
+      - name: Start memory-pressure sampler
+        shell: bash
+        run: |
+          SAMPLE_LOG="$RUNNER_TEMP/mem-pressure.log"
+          nohup bash -c 'while true; do echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="; sysctl -n vm.swapusage; vm_stat; sleep 2; done' > "$SAMPLE_LOG" 2>&1 &
+          echo $! > "$RUNNER_TEMP/mem-sampler.pid"
+          echo "memory sampler PID $(cat "$RUNNER_TEMP/mem-sampler.pid") -> $SAMPLE_LOG"
+
       - name: Run React Native Harness
         uses: ./
         with:
@@ -212,6 +224,47 @@ jobs:
           afterRunHook: |
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
             echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
+
+      - name: Stop sampler and summarize memory pressure
+        if: always()
+        shell: bash
+        run: |
+          PID="$(cat "$RUNNER_TEMP/mem-sampler.pid" 2>/dev/null || true)"
+          if [ -n "$PID" ]; then kill "$PID" 2>/dev/null || true; fi
+          LOG="$RUNNER_TEMP/mem-pressure.log"
+          if [ ! -s "$LOG" ]; then echo "no sampler log found"; exit 0; fi
+
+          PAGE=16384
+          PEAK_SWAP_M="$(grep -o 'used = [0-9.]*M' "$LOG" | sed 's/used = //; s/M//' | sort -n | tail -1)"
+          PEAK_COMP_PAGES="$(grep 'occupied by compressor' "$LOG" | grep -oE '[0-9]+' | sort -n | tail -1)"
+          MIN_FREE_PAGES="$(grep 'Pages free' "$LOG" | grep -oE '[0-9]+' | sort -n | head -1)"
+          FIRST_SWAPOUT="$(grep 'Swapouts' "$LOG" | head -1 | grep -oE '[0-9]+' | head -1)"
+          LAST_SWAPOUT="$(grep 'Swapouts' "$LOG" | tail -1 | grep -oE '[0-9]+' | head -1)"
+          PEAK_SWAP_M="${PEAK_SWAP_M:-0}"; PEAK_COMP_PAGES="${PEAK_COMP_PAGES:-0}"
+          MIN_FREE_PAGES="${MIN_FREE_PAGES:-0}"; FIRST_SWAPOUT="${FIRST_SWAPOUT:-0}"; LAST_SWAPOUT="${LAST_SWAPOUT:-0}"
+          PEAK_COMP_MB=$(( PEAK_COMP_PAGES * PAGE / 1048576 ))
+          MIN_FREE_MB=$(( MIN_FREE_PAGES * PAGE / 1048576 ))
+          SWAPOUT_DELTA=$(( LAST_SWAPOUT - FIRST_SWAPOUT ))
+
+          {
+            echo "### iOS runner memory pressure"
+            echo ""
+            echo "- Peak swap used: **${PEAK_SWAP_M} MB**"
+            echo "- Peak compressed memory: **${PEAK_COMP_MB} MB** (${PEAK_COMP_PAGES} pages)"
+            echo "- Min free memory: **${MIN_FREE_MB} MB** (${MIN_FREE_PAGES} pages)"
+            echo "- Swapouts during run (delta): **${SWAPOUT_DELTA}**"
+            echo "- Runner: macos-latest (3 vCPU / 7 GB), page size ${PAGE} B"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "peak_swap_mb=${PEAK_SWAP_M} peak_compressed_mb=${PEAK_COMP_MB} min_free_mb=${MIN_FREE_MB} swapout_delta=${SWAPOUT_DELTA}"
+
+      - name: Upload memory samples
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mem-pressure-e2e-ios
+          path: ${{ runner.temp }}/mem-pressure.log
+          if-no-files-found: warn
 
       - name: Upload Harness logs
         if: always()
