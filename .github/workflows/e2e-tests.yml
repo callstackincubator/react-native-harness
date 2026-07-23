@@ -200,17 +200,24 @@ jobs:
           path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-playground
 
-      # Samples host memory pressure (swap usage, compressor, swap in/out) every
-      # 2s across the whole harness run so we can tell whether the 7 GB / 3 vCPU
-      # runner is swapping while simulator + xcodebuild + Metro run together.
-      # Uses a backgrounded nohup process that persists across later steps.
+      # Two backgrounded samplers (persist across later steps via nohup):
+      #  1. mem-pressure.log  - system swap/compressor/free every 2s (timeline)
+      #  2. mem-proc.log      - full per-process RSS (`ps -Ao rss,pid,command`)
+      #     every 10s, so we can rank the biggest consumers AND total the ~170
+      #     simulator daemons to see what a `bootout` would reclaim.
+      # Goal: attribute the 7 GB / 3 vCPU pressure to specific processes and
+      # bring them down so Harness fits on the standard macos runner.
       - name: Start memory-pressure sampler
         shell: bash
         run: |
           SAMPLE_LOG="$RUNNER_TEMP/mem-pressure.log"
+          PROC_LOG="$RUNNER_TEMP/mem-proc.log"
           nohup bash -c 'while true; do echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="; sysctl -n vm.swapusage; vm_stat; sleep 2; done' > "$SAMPLE_LOG" 2>&1 &
           echo $! > "$RUNNER_TEMP/mem-sampler.pid"
-          echo "memory sampler PID $(cat "$RUNNER_TEMP/mem-sampler.pid") -> $SAMPLE_LOG"
+          nohup bash -c 'while true; do echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="; ps -Ao rss,pid,command; sleep 10; done' > "$PROC_LOG" 2>&1 &
+          echo $! > "$RUNNER_TEMP/mem-proc.pid"
+          echo "pressure sampler PID $(cat "$RUNNER_TEMP/mem-sampler.pid") -> $SAMPLE_LOG"
+          echo "process  sampler PID $(cat "$RUNNER_TEMP/mem-proc.pid") -> $PROC_LOG"
 
       - name: Run React Native Harness
         uses: ./
@@ -231,6 +238,8 @@ jobs:
         run: |
           PID="$(cat "$RUNNER_TEMP/mem-sampler.pid" 2>/dev/null || true)"
           if [ -n "$PID" ]; then kill "$PID" 2>/dev/null || true; fi
+          PPID_="$(cat "$RUNNER_TEMP/mem-proc.pid" 2>/dev/null || true)"
+          if [ -n "$PPID_" ]; then kill "$PPID_" 2>/dev/null || true; fi
           LOG="$RUNNER_TEMP/mem-pressure.log"
           if [ ! -s "$LOG" ]; then echo "no sampler log found"; exit 0; fi
 
@@ -258,12 +267,42 @@ jobs:
 
           echo "peak_swap_mb=${PEAK_SWAP_M} peak_compressed_mb=${PEAK_COMP_MB} min_free_mb=${MIN_FREE_MB} swapout_delta=${SWAPOUT_DELTA}"
 
+          # Per-process breakdown at the peak-usage snapshot (highest total RSS).
+          PROC_LOG="$RUNNER_TEMP/mem-proc.log"
+          if [ -s "$PROC_LOG" ]; then
+            PEAK_TS="$(awk '/^=== /{ if(cur!=""&&sum>best){best=sum;bts=cur} cur=$2; sum=0; next } { sum+=$1 } END{ if(sum>best){best=sum;bts=cur} print bts }' "$PROC_LOG")"
+            echo "peak-RSS snapshot: $PEAK_TS"
+            {
+              echo ""
+              echo "#### Top processes by RSS at peak ($PEAK_TS)"
+              echo '```'
+              awk -v ts="$PEAK_TS" '$0=="=== "ts" ==="{c=1;next} /^=== /{c=0} c' "$PROC_LOG" \
+                | awk 'NF>=3 && $1 ~ /^[0-9]+$/ {printf "%6d MB  %s\n", $1/1024, substr($0, index($0,$3))}' \
+                | sort -rn | head -15
+              echo '```'
+              echo ""
+              echo "Approx grouped totals at peak (rough; refine from artifact):"
+              echo '```'
+              awk -v ts="$PEAK_TS" '$0=="=== "ts" ==="{c=1;next} /^=== /{c=0} c && $1 ~ /^[0-9]+$/ {
+                  cmd=substr($0, index($0,$3)); r=$1; tot+=r;
+                  if (cmd ~ /CoreSimulator|launchd_sim|SpringBoard|backboardd|testmanagerd|HarnessPlayground|XCTest|SimDevice|\/Devices\//) sim+=r;
+                  else if (cmd ~ /node/) node+=r;
+                  else if (cmd ~ /swift|clang|XCBBuildService|xcodebuild|[Xx]code|ld$/) build+=r;
+                  else other+=r;
+                }
+                END { printf "simulator=%d MB  node(metro+harness)=%d MB  xcodebuild/compilers=%d MB  other=%d MB  sum-RSS=%d MB\n", sim/1024, node/1024, build/1024, other/1024, tot/1024 }' "$PROC_LOG"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload memory samples
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mem-pressure-e2e-ios
-          path: ${{ runner.temp }}/mem-pressure.log
+          path: |
+            ${{ runner.temp }}/mem-pressure.log
+            ${{ runner.temp }}/mem-proc.log
           if-no-files-found: warn
 
       - name: Upload Harness logs
