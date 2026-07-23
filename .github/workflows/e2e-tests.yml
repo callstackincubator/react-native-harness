@@ -202,9 +202,9 @@ jobs:
 
       # Two backgrounded samplers (persist across later steps via nohup):
       #  1. mem-pressure.log  - system swap/compressor/free every 2s (timeline)
-      #  2. mem-proc.log      - full per-process RSS (`ps -Ao rss,pid,command`)
-      #     every 10s, so we can rank the biggest consumers AND total the ~170
-      #     simulator daemons to see what a `bootout` would reclaim.
+      #  2. mem-proc.log      - `top -l1 -o mem` every 10s: honest per-process
+      #     physical footprint (phys_footprint, no RSS shared-page double-count)
+      #     + a PhysMem total + process count. Ranks the real consumers.
       # Goal: attribute the 7 GB / 3 vCPU pressure to specific processes and
       # bring them down so Harness fits on the standard macos runner.
       - name: Start memory-pressure sampler
@@ -214,7 +214,7 @@ jobs:
           PROC_LOG="$RUNNER_TEMP/mem-proc.log"
           nohup bash -c 'while true; do echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="; sysctl -n vm.swapusage; vm_stat; sleep 2; done' > "$SAMPLE_LOG" 2>&1 &
           echo $! > "$RUNNER_TEMP/mem-sampler.pid"
-          nohup bash -c 'while true; do echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="; ps -Ao rss,pid,command; sleep 10; done' > "$PROC_LOG" 2>&1 &
+          nohup bash -c 'while true; do echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) nprocs=$(ps -A | wc -l | tr -d " ") ==="; top -l 1 -o mem -n 45 -stats pid,mem,command; sleep 10; done' > "$PROC_LOG" 2>&1 &
           echo $! > "$RUNNER_TEMP/mem-proc.pid"
           echo "pressure sampler PID $(cat "$RUNNER_TEMP/mem-sampler.pid") -> $SAMPLE_LOG"
           echo "process  sampler PID $(cat "$RUNNER_TEMP/mem-proc.pid") -> $PROC_LOG"
@@ -267,32 +267,18 @@ jobs:
 
           echo "peak_swap_mb=${PEAK_SWAP_M} peak_compressed_mb=${PEAK_COMP_MB} min_free_mb=${MIN_FREE_MB} swapout_delta=${SWAPOUT_DELTA}"
 
-          # Per-process breakdown at the peak-usage snapshot (highest total RSS).
+          # Honest physical footprint: top's PhysMem line (no RSS shared-page
+          # double-count). Per-process MEM (phys_footprint) is in the artifact.
           PROC_LOG="$RUNNER_TEMP/mem-proc.log"
           if [ -s "$PROC_LOG" ]; then
-            PEAK_TS="$(awk '/^=== /{ if(cur!=""&&sum>best){best=sum;bts=cur} cur=$2; sum=0; next } { sum+=$1 } END{ if(sum>best){best=sum;bts=cur} print bts }' "$PROC_LOG")"
-            echo "peak-RSS snapshot: $PEAK_TS"
+            PEAK_PHYS="$(grep -o 'PhysMem: [0-9]*[MG] used' "$PROC_LOG" | grep -oE '[0-9]+[MG]' | awk '/G$/{sub(/G/,"");print $1*1024;next}{sub(/M/,"");print}' | sort -n | tail -1)"
+            PEAK_NPROCS="$(grep -oE 'nprocs=[0-9]+' "$PROC_LOG" | grep -oE '[0-9]+' | sort -n | tail -1)"
             {
-              echo ""
-              echo "#### Top processes by RSS at peak ($PEAK_TS)"
-              echo '```'
-              awk -v ts="$PEAK_TS" '$0=="=== "ts" ==="{c=1;next} /^=== /{c=0} c' "$PROC_LOG" \
-                | awk 'NF>=3 && $1 ~ /^[0-9]+$/ {printf "%6d MB  %s\n", $1/1024, substr($0, index($0,$3))}' \
-                | sort -rn | head -15
-              echo '```'
-              echo ""
-              echo "Approx grouped totals at peak (rough; refine from artifact):"
-              echo '```'
-              awk -v ts="$PEAK_TS" '$0=="=== "ts" ==="{c=1;next} /^=== /{c=0} c && $1 ~ /^[0-9]+$/ {
-                  cmd=substr($0, index($0,$3)); r=$1; tot+=r;
-                  if (cmd ~ /CoreSimulator|launchd_sim|SpringBoard|backboardd|testmanagerd|HarnessPlayground|XCTest|SimDevice|\/Devices\//) sim+=r;
-                  else if (cmd ~ /node/) node+=r;
-                  else if (cmd ~ /swift|clang|XCBBuildService|xcodebuild|[Xx]code|ld$/) build+=r;
-                  else other+=r;
-                }
-                END { printf "simulator=%d MB  node(metro+harness)=%d MB  xcodebuild/compilers=%d MB  other=%d MB  sum-RSS=%d MB\n", sim/1024, node/1024, build/1024, other/1024, tot/1024 }' "$PROC_LOG"
-              echo '```'
+              echo "- Peak physical memory used (top PhysMem): **${PEAK_PHYS:-?} MB**"
+              echo "- Peak process count: **${PEAK_NPROCS:-?}**"
+              echo "- Per-process physical footprint (top MEM) in artifact \`mem-proc.log\`"
             } >> "$GITHUB_STEP_SUMMARY"
+            echo "peak_phys_mb=${PEAK_PHYS:-0} peak_nprocs=${PEAK_NPROCS:-0}"
           fi
 
       - name: Upload memory samples
