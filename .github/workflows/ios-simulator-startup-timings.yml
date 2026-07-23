@@ -95,6 +95,7 @@ jobs:
               echo "pages_free=$(vm_pages 'Pages free')"
               echo "pages_wired=$(vm_pages 'Pages wired down')"
               echo "pages_compressor=$(vm_pages 'occupied by compressor')"
+              echo "pages_anon=$(vm_pages 'Anonymous pages')"
               echo "swap_used_mb=$(swap_used_mb)"
               echo "--- vm.swapusage ---"; sysctl -n vm.swapusage
               echo "--- vm_stat ---"; vm_stat
@@ -205,15 +206,26 @@ jobs:
           POST_COMP="$(getval "$POSTBOOT_LOG" pages_compressor)"; POST_COMP="${POST_COMP:-0}"
           PRE_WIRED="$(getval "$PREBOOT_LOG" pages_wired)";       PRE_WIRED="${PRE_WIRED:-0}"
           POST_WIRED="$(getval "$POSTBOOT_LOG" pages_wired)";     POST_WIRED="${POST_WIRED:-0}"
+          PRE_ANON="$(getval "$PREBOOT_LOG" pages_anon)";         PRE_ANON="${PRE_ANON:-0}"
+          POST_ANON="$(getval "$POSTBOOT_LOG" pages_anon)";       POST_ANON="${POST_ANON:-0}"
           PRE_NPROC="$(getval "$PREBOOT_LOG" nprocs)";            PRE_NPROC="${PRE_NPROC:-0}"
           POST_NPROC="$(getval "$POSTBOOT_LOG" nprocs)";          POST_NPROC="${POST_NPROC:-0}"
           PRE_SWAP="$(getval "$PREBOOT_LOG" swap_used_mb)";       PRE_SWAP="${PRE_SWAP:-0}"
           POST_SWAP="$(getval "$POSTBOOT_LOG" swap_used_mb)";     POST_SWAP="${POST_SWAP:-0}"
 
+          # Non-reclaimable memory demand = anonymous + wired + compressed.
+          # This is the honest cost metric: it excludes file-backed cache (which
+          # macOS elastically reclaims) and nets out the anon->compressor shuffle
+          # that a memory-constrained box does under pressure. PhysMem "used" and
+          # "free" are NOT cost proxies here -- they sit pinned near the RAM limit
+          # because cache counts as "used", so their pre/post delta is ~0/noise.
+          PRE_DEMAND_MB=$(( (PRE_ANON + PRE_WIRED + PRE_COMP) * PAGE / 1048576 ))
+          POST_DEMAND_MB=$(( (POST_ANON + POST_WIRED + POST_COMP) * PAGE / 1048576 ))
+          DEMAND_DELTA_MB=$(( POST_DEMAND_MB - PRE_DEMAND_MB ))
           DELTA_PHYS_MB=$(( POST_PHYS - PRE_PHYS ))
-          FREE_DROP_MB=$(( (PRE_FREE - POST_FREE) * PAGE / 1048576 ))
           COMP_DELTA_MB=$(( (POST_COMP - PRE_COMP) * PAGE / 1048576 ))
           WIRED_DELTA_MB=$(( (POST_WIRED - PRE_WIRED) * PAGE / 1048576 ))
+          ANON_DELTA_MB=$(( (POST_ANON - PRE_ANON) * PAGE / 1048576 ))
           NPROC_DELTA=$(( POST_NPROC - PRE_NPROC ))
 
           {
@@ -221,21 +233,23 @@ jobs:
             echo
             echo "Host: **${HW_NCPU} vCPU / ${HW_MEM_MB} MB RAM** · image \`${ImageOS:-unknown}\` \`${ImageVersion:-unknown}\`"
             echo
-            echo "| Metric | Pre-boot | Post-boot (settled ${SETTLE_SECONDS}s) | Delta |"
+            echo "**RAM cost of this simulator ≈ ${DEMAND_DELTA_MB} MB** (idle, settled ${SETTLE_SECONDS}s) — non-reclaimable demand delta (anon+wired+compressed)."
+            echo
+            echo "| Metric (MB) | Pre-boot | Post-boot | Delta |"
             echo "|---|--:|--:|--:|"
-            echo "| PhysMem used (MB) | ${PRE_PHYS} | ${POST_PHYS} | **${DELTA_PHYS_MB}** |"
-            echo "| Free RAM consumed (MB) | — | — | **${FREE_DROP_MB}** |"
-            echo "| Compressed (MB) | $(( PRE_COMP * PAGE / 1048576 )) | $(( POST_COMP * PAGE / 1048576 )) | ${COMP_DELTA_MB} |"
-            echo "| Wired (MB) | $(( PRE_WIRED * PAGE / 1048576 )) | $(( POST_WIRED * PAGE / 1048576 )) | ${WIRED_DELTA_MB} |"
-            echo "| Swap used (MB) | ${PRE_SWAP} | ${POST_SWAP} | — |"
+            echo "| **Demand (anon+wired+comp)** | ${PRE_DEMAND_MB} | ${POST_DEMAND_MB} | **${DEMAND_DELTA_MB}** |"
+            echo "| ↳ Anonymous | $(( PRE_ANON * PAGE / 1048576 )) | $(( POST_ANON * PAGE / 1048576 )) | ${ANON_DELTA_MB} |"
+            echo "| ↳ Wired | $(( PRE_WIRED * PAGE / 1048576 )) | $(( POST_WIRED * PAGE / 1048576 )) | ${WIRED_DELTA_MB} |"
+            echo "| ↳ Compressed | $(( PRE_COMP * PAGE / 1048576 )) | $(( POST_COMP * PAGE / 1048576 )) | ${COMP_DELTA_MB} |"
+            echo "| Swap used | ${PRE_SWAP} | ${POST_SWAP} | — |"
             echo "| Process count | ${PRE_NPROC} | ${POST_NPROC} | ${NPROC_DELTA} |"
+            echo "| PhysMem used (cache-dominated, NOT a cost proxy) | ${PRE_PHYS} | ${POST_PHYS} | ${DELTA_PHYS_MB} |"
             echo
             echo "- Boot duration: **${ELAPSED_SECONDS}s** · migration samples: **${MIGRATION_SAMPLES}**"
-            echo "- **RAM cost of this simulator ≈ ${DELTA_PHYS_MB} MB** (PhysMem delta; cross-check free-drop ${FREE_DROP_MB} MB)"
             echo "- Full snapshots + settle curve + per-process footprint in artifact \`mem-boot-${RUNTIME_SUFFIX}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          echo "delta_phys_mb=${DELTA_PHYS_MB} free_drop_mb=${FREE_DROP_MB} nproc_delta=${NPROC_DELTA} boot_seconds=${ELAPSED_SECONDS}"
+          echo "demand_delta_mb=${DEMAND_DELTA_MB} phys_delta_mb=${DELTA_PHYS_MB} nproc_delta=${NPROC_DELTA} boot_seconds=${ELAPSED_SECONDS}"
 
           if [[ "$BOOT_STATUS" -ne 0 ]]; then
             echo "::error::Simulator failed to finish booting"
