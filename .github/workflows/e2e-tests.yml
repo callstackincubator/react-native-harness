@@ -200,6 +200,84 @@ jobs:
           path: ./apps/playground/ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app
           key: ios-app-playground
 
+      # Free host RAM before Harness. On the 7 GB runner the host + an idle sim
+      # already consume ~5.6 GB (measured), leaving no real headroom, so the
+      # active app + XCTest + xcodebuild + Metro tip the box into compression and
+      # swap. Here we reclaim what is SAFE to kill on a headless CI mac: Spotlight
+      # indexing (mds/mds_stores -- also CPU-heavy) plus a conservative allowlist
+      # of daemons/agents no CI build needs (crash/analytics/diagnostics/iCloud/
+      # Siri/News/Tips/Photos). We deliberately DO NOT touch WindowServer,
+      # CoreSimulator, security/codesign, cfprefsd or launchservicesd -- the
+      # build/sign/render path needs them. Best-effort: every action is `|| true`
+      # so a SIP-protected or absent service never fails the job. The `demand`
+      # metric is anon+wired+compressed (the honest, cache-independent number).
+      - name: Free host RAM before Harness
+        shell: bash
+        run: |
+          set +e
+          PAGE=16384
+          vmp() { vm_stat | awk -v k="$1" -F: '$0 ~ k { gsub(/[^0-9]/,"",$2); print $2; exit }'; }
+          demand_mb() { echo $(( ( $(vmp 'Anonymous pages') + $(vmp 'Pages wired down') + $(vmp 'occupied by compressor') ) * PAGE / 1048576 )); }
+          UID_NUM="$(id -u)"
+
+          top -l 1 -o mem -n 200 -stats pid,mem,command > "$RUNNER_TEMP/host-proc-before.log" 2>&1
+          BEFORE_MB="$(demand_mb)"; BEFORE_N="$(ps -A | wc -l | tr -d ' ')"
+          echo "before: demand=${BEFORE_MB}MB nprocs=${BEFORE_N}"
+
+          # Spotlight: stop indexing (frees mds_stores + reclaims CPU).
+          sudo mdutil -a -i off || true
+
+          # System-domain daemons safe to remove on CI (no build/sign/render need).
+          SYS_DAEMONS=(
+            com.apple.metadata.mds
+            com.apple.spotlightknowledged
+            com.apple.ReportCrash
+            com.apple.ReportCrash.Root
+            com.apple.analyticsd
+            com.apple.osanalytics.osanalyticshelper
+            com.apple.diagnosticd
+            com.apple.cloudd
+            com.apple.bird
+            com.apple.protectedcloudstorage.protectedcloudkeysyncing
+            com.apple.AirPlayXPCHelper
+            com.apple.bluetoothd
+          )
+          for L in "${SYS_DAEMONS[@]}"; do
+            sudo launchctl bootout "system/$L" 2>/dev/null && echo "booted out system/$L" || true
+          done
+
+          # GUI/user-agent-domain services no CI build needs.
+          GUI_AGENTS=(
+            com.apple.suggestd
+            com.apple.parsecd
+            com.apple.knowledge-agent
+            com.apple.assistantd
+            com.apple.Siri.agent
+            com.apple.newsd
+            com.apple.tipsd
+            com.apple.CoreLocationAgent
+            com.apple.cloudphotod
+            com.apple.photoanalysisd
+          )
+          for L in "${GUI_AGENTS[@]}"; do
+            launchctl bootout "gui/$UID_NUM/$L" 2>/dev/null && echo "booted out gui/$UID_NUM/$L" || true
+          done
+
+          sleep 5
+          top -l 1 -o mem -n 200 -stats pid,mem,command > "$RUNNER_TEMP/host-proc-after.log" 2>&1
+          AFTER_MB="$(demand_mb)"; AFTER_N="$(ps -A | wc -l | tr -d ' ')"
+          RECLAIM=$(( BEFORE_MB - AFTER_MB ))
+          echo "after: demand=${AFTER_MB}MB nprocs=${AFTER_N} reclaimed=${RECLAIM}MB"
+
+          {
+            echo "### Host RAM freed before Harness"
+            echo
+            echo "- Non-reclaimable demand: **${BEFORE_MB} MB → ${AFTER_MB} MB** (reclaimed **${RECLAIM} MB**)"
+            echo "- Process count: **${BEFORE_N} → ${AFTER_N}**"
+            echo "- Spotlight indexing disabled; before/after host process dumps in artifact \`mem-pressure-e2e-ios\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          true
+
       # Two backgrounded samplers (persist across later steps via nohup):
       #  1. mem-pressure.log  - system swap/compressor/free every 2s (timeline)
       #  2. mem-proc.log      - `top -l1 -o mem` every 10s: honest per-process
@@ -289,6 +367,8 @@ jobs:
           path: |
             ${{ runner.temp }}/mem-pressure.log
             ${{ runner.temp }}/mem-proc.log
+            ${{ runner.temp }}/host-proc-before.log
+            ${{ runner.temp }}/host-proc-after.log
           if-no-files-found: warn
 
       - name: Upload Harness logs
