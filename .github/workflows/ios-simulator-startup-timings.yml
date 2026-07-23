@@ -53,11 +53,55 @@ jobs:
         env:
           RUNTIME_SUFFIX: ${{ matrix.runtime }}
           DEVICE_NAME: iPhone 17 Pro
+          # Seconds to let the simulator settle after bootstatus completes
+          # before taking the post-boot snapshot (daemons/SpringBoard/widgets
+          # keep spawning for a while after "boot" reports done).
+          SETTLE_SECONDS: '60'
         run: |
           set -euo pipefail
 
           RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.${RUNTIME_SUFFIX}"
           BOOT_LOG="$RUNNER_TEMP/bootstatus-${RUNTIME_SUFFIX}.log"
+          PREBOOT_LOG="$RUNNER_TEMP/mem-preboot-${RUNTIME_SUFFIX}.log"
+          POSTBOOT_LOG="$RUNNER_TEMP/mem-postboot-${RUNTIME_SUFFIX}.log"
+          SETTLE_LOG="$RUNNER_TEMP/mem-settle-${RUNTIME_SUFFIX}.log"
+          PROC_LOG="$RUNNER_TEMP/mem-proc-postboot-${RUNTIME_SUFFIX}.log"
+          PAGE=16384
+
+          # ---- memory snapshot helpers ------------------------------------
+          # phys_footprint via top's PhysMem summary (no RSS shared-page
+          # double-count); vm_stat page counters for the honest breakdown.
+          phys_used_mb() {
+            top -l 1 -n 0 | awk '/PhysMem/ {
+              v=$2; u=tolower(substr(v,length(v),1));
+              n=substr(v,1,length(v)-1)+0;
+              if (u=="g") n*=1024;
+              printf "%d\n", n; exit
+            }'
+          }
+          vm_pages() {  # $1 = key regex -> page count
+            vm_stat | awk -v k="$1" -F: '$0 ~ k { gsub(/[^0-9]/,"",$2); print $2; exit }'
+          }
+          swap_used_mb() {
+            sysctl -n vm.swapusage | sed -n 's/.*used = \([0-9.]*\)M.*/\1/p'
+          }
+          nprocs() { ps -A | wc -l | tr -d ' '; }
+
+          snapshot() {  # $1=label $2=outfile
+            {
+              echo "=== $1 $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
+              echo "nprocs=$(nprocs)"
+              echo "phys_used_mb=$(phys_used_mb)"
+              echo "pages_free=$(vm_pages 'Pages free')"
+              echo "pages_wired=$(vm_pages 'Pages wired down')"
+              echo "pages_compressor=$(vm_pages 'occupied by compressor')"
+              echo "swap_used_mb=$(swap_used_mb)"
+              echo "--- vm.swapusage ---"; sysctl -n vm.swapusage
+              echo "--- vm_stat ---"; vm_stat
+              echo "--- top summary ---"; top -l 1 -n 0 | grep -E 'PhysMem|Processes' || true
+            } | tee "$2"
+          }
+          getval() { grep -m1 "^$2=" "$1" | cut -d= -f2; }
 
           echo "Looking for:"
           echo "  Runtime: $RUNTIME_ID"
@@ -103,8 +147,17 @@ jobs:
           echo "  $RUNTIME_ID"
           echo "  $UDID"
 
-          # Do not erase, recreate, or delete the selected device.
-          xcrun simctl shutdown "$UDID" 2>/dev/null || true
+          # Clean baseline: make sure NO simulator is running before we snapshot
+          # pre-boot memory, so the pre/post delta reflects only this device.
+          xcrun simctl shutdown all 2>/dev/null || true
+          sleep 5
+
+          HW_NCPU="$(sysctl -n hw.ncpu)"
+          HW_MEM_MB="$(( $(sysctl -n hw.memsize) / 1048576 ))"
+          echo "host: ${HW_NCPU} vCPU, ${HW_MEM_MB} MB RAM"
+
+          echo "=== Pre-boot memory snapshot ==="
+          snapshot "PRE-BOOT" "$PREBOOT_LOG"
 
           START_SECONDS="$(date +%s)"
 
@@ -121,26 +174,85 @@ jobs:
           END_SECONDS="$(date +%s)"
           ELAPSED_SECONDS="$((END_SECONDS - START_SECONDS))"
 
+          # Settle: sample memory every 5s so we can see it plateau before the
+          # final post-boot snapshot. Written to an artifact for the full curve.
+          echo "=== Settle (${SETTLE_SECONDS}s) ==="
+          : > "$SETTLE_LOG"
+          SETTLE_ITERS="$(( SETTLE_SECONDS / 5 ))"
+          for i in $(seq 1 "$SETTLE_ITERS"); do
+            LINE="t=$(( i * 5 ))s nprocs=$(nprocs) phys_used_mb=$(phys_used_mb) pages_free=$(vm_pages 'Pages free') pages_compressor=$(vm_pages 'occupied by compressor')"
+            echo "$LINE" | tee -a "$SETTLE_LOG"
+            sleep 5
+          done
+
+          echo "=== Post-boot memory snapshot ==="
+          snapshot "POST-BOOT" "$POSTBOOT_LOG"
+
+          # Per-process physical footprint post-boot (for attribution within
+          # the simulator: SimRenderServer, SpringBoard, widget/poster swarm...).
+          top -l 1 -o mem -n 60 -stats pid,mem,command > "$PROC_LOG" 2>&1 || true
+
           MIGRATION_SAMPLES="$(
             grep -c "Waiting on Data Migration" "$BOOT_LOG" || true
           )"
 
+          # ---- deltas -----------------------------------------------------
+          PRE_PHYS="$(getval "$PREBOOT_LOG" phys_used_mb)";       PRE_PHYS="${PRE_PHYS:-0}"
+          POST_PHYS="$(getval "$POSTBOOT_LOG" phys_used_mb)";     POST_PHYS="${POST_PHYS:-0}"
+          PRE_FREE="$(getval "$PREBOOT_LOG" pages_free)";         PRE_FREE="${PRE_FREE:-0}"
+          POST_FREE="$(getval "$POSTBOOT_LOG" pages_free)";       POST_FREE="${POST_FREE:-0}"
+          PRE_COMP="$(getval "$PREBOOT_LOG" pages_compressor)";   PRE_COMP="${PRE_COMP:-0}"
+          POST_COMP="$(getval "$POSTBOOT_LOG" pages_compressor)"; POST_COMP="${POST_COMP:-0}"
+          PRE_WIRED="$(getval "$PREBOOT_LOG" pages_wired)";       PRE_WIRED="${PRE_WIRED:-0}"
+          POST_WIRED="$(getval "$POSTBOOT_LOG" pages_wired)";     POST_WIRED="${POST_WIRED:-0}"
+          PRE_NPROC="$(getval "$PREBOOT_LOG" nprocs)";            PRE_NPROC="${PRE_NPROC:-0}"
+          POST_NPROC="$(getval "$POSTBOOT_LOG" nprocs)";          POST_NPROC="${POST_NPROC:-0}"
+          PRE_SWAP="$(getval "$PREBOOT_LOG" swap_used_mb)";       PRE_SWAP="${PRE_SWAP:-0}"
+          POST_SWAP="$(getval "$POSTBOOT_LOG" swap_used_mb)";     POST_SWAP="${POST_SWAP:-0}"
+
+          DELTA_PHYS_MB=$(( POST_PHYS - PRE_PHYS ))
+          FREE_DROP_MB=$(( (PRE_FREE - POST_FREE) * PAGE / 1048576 ))
+          COMP_DELTA_MB=$(( (POST_COMP - PRE_COMP) * PAGE / 1048576 ))
+          WIRED_DELTA_MB=$(( (POST_WIRED - PRE_WIRED) * PAGE / 1048576 ))
+          NPROC_DELTA=$(( POST_NPROC - PRE_NPROC ))
+
           {
-            echo "### Existing simulator boot result"
+            echo "### Simulator RAM cost — \`$RUNTIME_SUFFIX\`"
             echo
-            echo "- Runtime: \`$RUNTIME_ID\`"
-            echo "- Device: \`$DEVICE_NAME\`"
-            echo "- UDID: \`$UDID\`"
-            echo "- Duration: **${ELAPSED_SECONDS}s**"
-            echo "- Migration samples: **${MIGRATION_SAMPLES}**"
-            echo "- Runner image: \`${ImageOS:-unknown}\`"
-            echo "- Image version: \`${ImageVersion:-unknown}\`"
+            echo "Host: **${HW_NCPU} vCPU / ${HW_MEM_MB} MB RAM** · image \`${ImageOS:-unknown}\` \`${ImageVersion:-unknown}\`"
+            echo
+            echo "| Metric | Pre-boot | Post-boot (settled ${SETTLE_SECONDS}s) | Delta |"
+            echo "|---|--:|--:|--:|"
+            echo "| PhysMem used (MB) | ${PRE_PHYS} | ${POST_PHYS} | **${DELTA_PHYS_MB}** |"
+            echo "| Free RAM consumed (MB) | — | — | **${FREE_DROP_MB}** |"
+            echo "| Compressed (MB) | $(( PRE_COMP * PAGE / 1048576 )) | $(( POST_COMP * PAGE / 1048576 )) | ${COMP_DELTA_MB} |"
+            echo "| Wired (MB) | $(( PRE_WIRED * PAGE / 1048576 )) | $(( POST_WIRED * PAGE / 1048576 )) | ${WIRED_DELTA_MB} |"
+            echo "| Swap used (MB) | ${PRE_SWAP} | ${POST_SWAP} | — |"
+            echo "| Process count | ${PRE_NPROC} | ${POST_NPROC} | ${NPROC_DELTA} |"
+            echo
+            echo "- Boot duration: **${ELAPSED_SECONDS}s** · migration samples: **${MIGRATION_SAMPLES}**"
+            echo "- **RAM cost of this simulator ≈ ${DELTA_PHYS_MB} MB** (PhysMem delta; cross-check free-drop ${FREE_DROP_MB} MB)"
+            echo "- Full snapshots + settle curve + per-process footprint in artifact \`mem-boot-${RUNTIME_SUFFIX}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "delta_phys_mb=${DELTA_PHYS_MB} free_drop_mb=${FREE_DROP_MB} nproc_delta=${NPROC_DELTA} boot_seconds=${ELAPSED_SECONDS}"
 
           if [[ "$BOOT_STATUS" -ne 0 ]]; then
             echo "::error::Simulator failed to finish booting"
             exit "$BOOT_STATUS"
           fi
+
+      - name: Upload memory snapshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mem-boot-${{ matrix.runtime }}
+          path: |
+            ${{ runner.temp }}/mem-preboot-${{ matrix.runtime }}.log
+            ${{ runner.temp }}/mem-postboot-${{ matrix.runtime }}.log
+            ${{ runner.temp }}/mem-settle-${{ matrix.runtime }}.log
+            ${{ runner.temp }}/mem-proc-postboot-${{ matrix.runtime }}.log
+          if-no-files-found: warn
 
       - name: Shut down iOS 26.5 simulator before caching
         id: shutdown-ios-26-5
