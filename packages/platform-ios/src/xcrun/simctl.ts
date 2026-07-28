@@ -3,7 +3,6 @@ import {
   type CrashArtifactWriter,
 } from '@react-native-harness/platforms';
 import {
-  getTimeoutSignal,
   logger,
   spawn,
   spawnAndForget,
@@ -338,127 +337,6 @@ export const stopApp = async (
 
 export const bootSimulator = async (udid: string): Promise<void> => {
   await spawn('xcrun', ['simctl', 'boot', udid]);
-};
-
-/**
- * Background daemons disabled by `applyLowMemoryProfile` on memory-constrained
- * hosts to reduce RAM pressure inside the simulator guest.
- *
- * This list is deliberately narrow and was chosen so that disabling it never
- * changes observable app behaviour under test. Every daemon that backs a
- * public API a React Native native module could reasonably exercise is
- * intentionally EXCLUDED, e.g.: CoreLocation (`locationd`), the photo
- * library, audio, HealthKit, Wallet, StoreKit, CloudKit, contacts, calendar,
- * telephony (`CommCenter`), permission prompts (`tccd`), and networking
- * (`nsurlsessiond`). What remains is Siri/Spotlight/Suggestions-style
- * background "intelligence" infrastructure with no test-observable effect.
- *
- * `com.apple.analyticsd` and `com.apple.osanalytics.osanalyticshelper` are
- * deliberately KEPT ENABLED (i.e. absent from this list) even though nothing
- * under test calls them directly, because the harness's crash detection
- * relies on them (see `collectCrashReports` in this file) — do not add them.
- */
-const LOW_MEMORY_DISABLED_DAEMON_LABELS = [
-  'com.apple.duetexpertd',
-  'com.apple.proactiveeventtrackerd',
-  'com.apple.triald',
-  'com.apple.knowledge-agent',
-  'com.apple.suggestd',
-  'com.apple.parsecd',
-  'com.apple.spotlightknowledged',
-  'com.apple.corespotlightd',
-  'com.apple.photoanalysisd',
-  'com.apple.mediaanalysisd',
-  'com.apple.followupd',
-  'com.apple.familycircled',
-  'com.apple.icloud.searchpartyd',
-  'com.apple.newsd',
-  'com.apple.tipsd',
-] as const;
-
-/**
- * Timeout for the single `xcrun simctl spawn` call issued by
- * `applyLowMemoryProfile`. In the normal case this call is one process launch
- * plus a trivial in-guest shell loop over ~15 labels, which completes in well
- * under a second. 5s gives generous headroom for process-launch overhead on
- * a loaded, low-core-count CI runner while staying negligible relative to the
- * 300s `platformReadyTimeout` the boot path budgets for — if the call hasn't
- * finished by then, it's abandoned rather than allowed to blow the budget the
- * way the previous 30-process fan-out did.
- */
-const LOW_MEMORY_PROFILE_TIMEOUT_MS = 5_000;
-
-/**
- * Disables and stops a curated set of non-essential background daemons (see
- * `LOW_MEMORY_DISABLED_DAEMON_LABELS`) inside the already-booted simulator
- * identified by `udid`, to reduce RAM pressure on memory-constrained hosts
- * (see `isLowMemoryHost` from `@react-native-harness/tools`).
- *
- * This issues a *single* `xcrun simctl spawn` call that runs a small shell
- * loop inside the guest, rather than one host process per label per
- * `launchctl` verb (30 host processes for the current label list). Spawning
- * 30 concurrent `xcrun` processes on a 3-vCPU CI runner was itself a
- * thundering herd — in one observed CI run it took 3m16s and burned through
- * the entire 300s `platformReadyTimeout`, failing the job. One host process
- * with a cheap in-guest loop avoids that entirely.
- *
- * For each label the loop issues, in order:
- *   1. `launchctl disable` — records per-UDID state in CoreSimulatorService
- *      (persists across boots) preventing the daemon from launching again,
- *      including on-demand relaunches.
- *   2. `launchctl bootout` — stops the daemon's currently-running instance
- *      in place.
- *
- * `disable` runs first so a daemon torn down by `bootout` cannot be
- * immediately relaunched on demand before it is disabled. Together the two
- * calls mean no shutdown/boot cycle is needed for the profile to take
- * effect — see the call site in `instance.ts`.
- *
- * A given label may not exist, or may not be running, on every runtime, so
- * the shell loop appends `|| true` after each `launchctl` invocation to
- * ignore its individual exit status — a missing/renamed label, or a
- * `bootout` against a daemon that was never running, never aborts the loop.
- * The call as a whole is also non-fatal and time-bounded: it goes through
- * `spawnAndForget` (same tolerance used elsewhere in this file for
- * best-effort simctl calls) with a timeout signal, so neither a failure nor a
- * hang of the single spawn can abort or stall the boot path.
- *
- * The label list is a hardcoded, compile-time constant
- * (`LOW_MEMORY_DISABLED_DAEMON_LABELS`), never user input. It is still passed
- * as separate `sh` positional arguments (`"$@"`) rather than interpolated
- * into the script text, so the shell script string itself never depends on
- * the label list and can't be broken by it.
- */
-export const applyLowMemoryProfile = async (udid: string): Promise<void> => {
-  simctlLogger.debug(
-    'applying low-memory profile to %s: disabling and stopping %d background daemons',
-    udid,
-    LOW_MEMORY_DISABLED_DAEMON_LABELS.length,
-  );
-
-  // The script text is fixed; labels are passed as "$@" positional
-  // arguments (see the doc comment above), so nothing is interpolated into
-  // the script string itself.
-  const disableAndBootoutLoopScript =
-    'for label in "$@"; do ' +
-    'launchctl disable "system/$label" || true; ' +
-    'launchctl bootout "system/$label" || true; ' +
-    'done';
-
-  await spawnAndForget(
-    'xcrun',
-    [
-      'simctl',
-      'spawn',
-      udid,
-      'sh',
-      '-c',
-      disableAndBootoutLoopScript,
-      'sh', // becomes $0 inside the script, per sh -c convention
-      ...LOW_MEMORY_DISABLED_DAEMON_LABELS,
-    ],
-    { signal: getTimeoutSignal(LOW_MEMORY_PROFILE_TIMEOUT_MS) },
-  );
 };
 
 export const waitForBoot = async (

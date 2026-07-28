@@ -18,12 +18,7 @@ import * as simctlModule from './xcrun/simctl.js';
 import * as devicectlModule from './xcrun/devicectl.js';
 import { getDeviceName } from './utils.js';
 import { HarnessAppPathError } from './errors.js';
-import {
-  instrumented,
-  isLowMemoryHost,
-  logger,
-  noopDiagnostics,
-} from '@react-native-harness/tools';
+import { instrumented, logger, noopDiagnostics } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { createXCTestAgentController } from './xctest-agent.js';
 import { createPermissionPromptAutoAcceptCapability } from './xctest-agent-capabilities.js';
@@ -117,29 +112,6 @@ export const getAppleSimulatorPlatformInstance = async (
       udid
     );
     await simctl.waitForBoot(udid, init.signal);
-  }
-
-  // `applyLowMemoryProfile` both disables and boots out each daemon inside
-  // the already-booted simulator, so it takes effect immediately with no
-  // shutdown/boot cycle needed.
-  //
-  // This only runs when we booted the simulator ourselves (`startedByHarness`)
-  // and only on memory-constrained hosts, so:
-  //   - high-memory hosts pay nothing extra (no calls at all);
-  //   - a simulator the caller already had booted/booting is left alone —
-  //     mutating a simulator instance that isn't ours (even in place, with
-  //     no reboot) would be a surprising, unrequested side effect on state
-  //     the caller owns.
-  if (startedByHarness && isLowMemoryHost()) {
-    logger.info(
-      'Low-memory host detected: applying low-memory profile to iOS simulator %s...',
-      config.device.name
-    );
-    iosInstanceLogger.debug(
-      'disabling and stopping non-essential background daemons on %s',
-      udid
-    );
-    await simctl.applyLowMemoryProfile(udid);
   }
 
   const isInstalled = await simctl.isAppInstalled(udid, config.bundleId);
