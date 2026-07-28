@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   kill: vi.fn(),
   shutdown: vi.fn(async () => undefined),
   spawn: vi.fn(),
+  spawnStreaming: vi.fn(),
 }));
 
 vi.mock('@react-native-harness/tools', async () => {
@@ -30,6 +31,7 @@ vi.mock('@react-native-harness/tools', async () => {
   return {
     ...actual,
     spawn: mocks.spawn,
+    spawnStreaming: mocks.spawnStreaming,
   };
 });
 
@@ -205,6 +207,10 @@ describe('xctest-agent orchestration', () => {
         });
       }
 
+      return createLongRunningSubprocess().subprocess;
+    });
+
+    mocks.spawnStreaming.mockImplementation((file: string, args?: string[]) => {
       if (file === 'xcodebuild' && args?.[0] === 'test-without-building') {
         const process = createLongRunningSubprocess();
         mocks.activeAgentStops.push(process.stop);
@@ -264,8 +270,8 @@ describe('xctest-agent orchestration', () => {
 
     await controller.prepare();
 
-    expect(mocks.spawn).toHaveBeenNthCalledWith(
-      3,
+    expect(mocks.spawnStreaming).toHaveBeenNthCalledWith(
+      1,
       'xcodebuild',
       expect.arrayContaining([
         'build-for-testing',
@@ -295,8 +301,8 @@ describe('xctest-agent orchestration', () => {
     expect(result.reused).toBe(false);
     expect(result.derivedDataPath).toContain('xctest-agent-simulator-');
     expect(result.xctestrunPath).toContain('.xctestrun');
-    expect(mocks.spawn).toHaveBeenNthCalledWith(
-      3,
+    expect(mocks.spawnStreaming).toHaveBeenNthCalledWith(
+      1,
       'xcodebuild',
       expect.arrayContaining([
         'build-for-testing',
@@ -327,7 +333,7 @@ describe('xctest-agent orchestration', () => {
       destination: 'device',
     });
 
-    const buildCall = mocks.spawn.mock.calls[0];
+    const buildCall = mocks.spawnStreaming.mock.calls[0];
     const buildArgs = buildCall?.[1] ?? [];
 
     expect(buildCall?.[0]).toBe('xcodebuild');
@@ -358,7 +364,7 @@ describe('xctest-agent orchestration', () => {
       },
     });
 
-    const buildCall = mocks.spawn.mock.calls[0];
+    const buildCall = mocks.spawnStreaming.mock.calls[0];
     const buildArgs = buildCall?.[1] ?? [];
 
     expect(buildCall?.[0]).toBe('xcodebuild');
@@ -430,8 +436,9 @@ describe('xctest-agent orchestration', () => {
     await controller.ensureStarted();
     await controller.ensureStarted();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(4);
-    expect(mocks.spawn).toHaveBeenLastCalledWith(
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+    expect(mocks.spawnStreaming).toHaveBeenCalledTimes(2);
+    expect(mocks.spawnStreaming).toHaveBeenLastCalledWith(
       'xcodebuild',
       expect.arrayContaining([
         'test-without-building',
@@ -589,6 +596,10 @@ describe('xctest-agent orchestration', () => {
         });
       }
 
+      return createLongRunningSubprocess().subprocess;
+    });
+
+    mocks.spawnStreaming.mockImplementation((file: string, args?: string[]) => {
       if (file === 'xcodebuild' && args?.[0] === 'test-without-building') {
         return createLongRunningSubprocess({ ignoreSignal: 'SIGTERM' })
           .subprocess;
@@ -650,9 +661,9 @@ describe('xctest-agent orchestration', () => {
 
     await controller.prepare();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(3);
-    expect(mocks.spawn).toHaveBeenNthCalledWith(
-      3,
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+    expect(mocks.spawnStreaming).toHaveBeenNthCalledWith(
+      1,
       'xcodebuild',
       expect.arrayContaining(['build-for-testing'])
     );
@@ -699,8 +710,9 @@ describe('xctest-agent orchestration', () => {
     await controller.prepare();
     await controller.ensureStarted();
 
-    expect(mocks.spawn).toHaveBeenCalledTimes(1);
-    expect(mocks.spawn).toHaveBeenNthCalledWith(
+    expect(mocks.spawn).not.toHaveBeenCalled();
+    expect(mocks.spawnStreaming).toHaveBeenCalledTimes(1);
+    expect(mocks.spawnStreaming).toHaveBeenNthCalledWith(
       1,
       'xcodebuild',
       expect.arrayContaining([
@@ -735,6 +747,7 @@ describe('xctest-agent orchestration', () => {
         'Missing checked-in XCTest agent project'
       );
       expect(mocks.spawn).not.toHaveBeenCalled();
+      expect(mocks.spawnStreaming).not.toHaveBeenCalled();
     } finally {
       fs.renameSync(hiddenProjectPath, projectPath);
     }

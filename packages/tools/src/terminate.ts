@@ -1,4 +1,5 @@
 import type { Subprocess } from 'nano-spawn';
+import type { ChildProcessHandle } from './spawn.js';
 
 // Cancellable so the winning race branch can clear the timer instead of
 // leaving a ref'd setTimeout alive for `forceAfterMs` after the process
@@ -43,7 +44,7 @@ export type TerminateOptions = {
  * Resolves once the process has exited either way.
  */
 export const terminate = async (
-  subprocess: Subprocess,
+  subprocess: Subprocess | ChildProcessHandle,
   { forceAfterMs }: TerminateOptions
 ): Promise<void> => {
   let childProcess: Awaited<Subprocess['nodeChildProcess']>;

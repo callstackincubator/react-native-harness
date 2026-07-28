@@ -4,8 +4,9 @@ import {
   getAvailablePort,
   logger,
   spawn,
+  spawnStreaming,
   terminate,
-  type Subprocess,
+  type StreamingSubprocess,
 } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -671,7 +672,24 @@ export const buildXCTestAgent = async (
     ...signingArgs,
   ];
 
-  await spawn('xcodebuild', buildArgs);
+  const buildLogPath = path.join(derivedDataPath, 'xcodebuild-build.log');
+  const buildProcess = spawnStreaming('xcodebuild', buildArgs);
+  await attachProcessOutputLog({
+    command: ['xcodebuild', ...buildArgs].join(' '),
+    logFilePath: buildLogPath,
+    process: buildProcess,
+  });
+
+  try {
+    await buildProcess;
+  } catch (error) {
+    throw new Error(
+      `Failed to build XCTest agent for ${options.destination} target: ${getErrorMessage(
+        error
+      )} (logs: ${buildLogPath})`,
+      { cause: error }
+    );
+  }
 
   const xctestrunRelativePath = getXCTestRunRelativePath(derivedDataPath);
 
@@ -809,7 +827,7 @@ const waitForGracefulShutdown = async (options: {
   };
 };
 
-const waitForChildProcessExit = async (subprocess: Subprocess) => {
+const waitForChildProcessExit = async (subprocess: StreamingSubprocess) => {
   const childProcess = await subprocess.nodeChildProcess;
 
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
@@ -833,7 +851,7 @@ const waitForChildProcessExit = async (subprocess: Subprocess) => {
 };
 
 const stopProcess = async (options: {
-  process: Subprocess | null;
+  process: StreamingSubprocess | null;
   shutdownTimeoutMs: number;
 }) => {
   if (!options.process) {
@@ -859,7 +877,7 @@ const getErrorMessage = (error: unknown): string => {
 const attachProcessOutputLog = async (options: {
   command: string;
   logFilePath: string;
-  process: Subprocess;
+  process: StreamingSubprocess;
 }) => {
   fs.mkdirSync(path.dirname(options.logFilePath), { recursive: true });
   fs.writeFileSync(
@@ -936,7 +954,7 @@ export const createXCTestAgentController = (options: {
   let preparedDerivedDataPath = getXCTestAgentDerivedDataPath(target.kind);
   let preparedXCTestRunFilePath: string | null = null;
   let prepared = false;
-  let agentProcess: Subprocess | null = null;
+  let agentProcess: StreamingSubprocess | null = null;
   let agentClient: ReturnType<typeof createXCTestAgentClient> | null = null;
   let processTask: Promise<void> | null = null;
 
@@ -1048,7 +1066,7 @@ export const createXCTestAgentController = (options: {
       '-derivedDataPath',
       preparedDerivedDataPath,
     ];
-    agentProcess = spawn('xcodebuild', xcodebuildArgs, {
+    agentProcess = spawnStreaming('xcodebuild', xcodebuildArgs, {
       cwd: getXCTestAgentProjectRoot(),
       env: {
         ...process.env,
