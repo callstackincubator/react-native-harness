@@ -107,15 +107,18 @@ describe('applyLowMemoryProfile', () => {
     vi.restoreAllMocks();
   });
 
-  it('disables every expected daemon label via simctl spawn launchctl disable', async () => {
+  it('disables and boots out every expected daemon label, disable before bootout', async () => {
+    const calls: Array<[string, readonly string[] | undefined]> = [];
     const spawnAndForgetSpy = vi
       .spyOn(tools, 'spawnAndForget')
-      .mockResolvedValue(undefined);
+      .mockImplementation(async (file, args) => {
+        calls.push([file, args]);
+      });
 
     await applyLowMemoryProfile('sim-udid');
 
     expect(spawnAndForgetSpy).toHaveBeenCalledTimes(
-      LOW_MEMORY_DISABLED_DAEMON_LABELS.length,
+      LOW_MEMORY_DISABLED_DAEMON_LABELS.length * 2,
     );
 
     for (const label of LOW_MEMORY_DISABLED_DAEMON_LABELS) {
@@ -127,10 +130,30 @@ describe('applyLowMemoryProfile', () => {
         'disable',
         `system/${label}`,
       ]);
+      expect(spawnAndForgetSpy).toHaveBeenCalledWith('xcrun', [
+        'simctl',
+        'spawn',
+        'sim-udid',
+        'launchctl',
+        'bootout',
+        `system/${label}`,
+      ]);
+
+      // disable must be issued before bootout for the same label, so a
+      // service torn down by bootout cannot be relaunched on demand before
+      // it is disabled.
+      const disableIndex = calls.findIndex(
+        ([, callArgs]) => callArgs?.[4] === 'disable' && callArgs[5] === `system/${label}`,
+      );
+      const bootoutIndex = calls.findIndex(
+        ([, callArgs]) => callArgs?.[4] === 'bootout' && callArgs[5] === `system/${label}`,
+      );
+      expect(disableIndex).toBeGreaterThanOrEqual(0);
+      expect(bootoutIndex).toBeGreaterThan(disableIndex);
     }
 
-    // These must never be disabled: the harness relies on them for crash
-    // detection.
+    // These must never be disabled or booted out: the harness relies on
+    // them for crash detection.
     expect(spawnAndForgetSpy).not.toHaveBeenCalledWith(
       'xcrun',
       expect.arrayContaining(['system/com.apple.analyticsd']),
@@ -143,23 +166,45 @@ describe('applyLowMemoryProfile', () => {
     );
   });
 
-  it('tolerates a failing label without aborting the rest of the profile', async () => {
+  it('tolerates a failing disable or bootout without aborting the rest of the profile', async () => {
     // applyLowMemoryProfile relies on spawnAndForget itself swallowing
     // failures (as it does for every other best-effort simctl call in this
     // file), so a rejection here must not propagate or stop the other calls.
+    // bootout in particular is expected to legitimately fail for labels that
+    // were never running.
     const spawnAndForgetSpy = vi
       .spyOn(tools, 'spawnAndForget')
       .mockImplementation(async (_file, args) => {
         const label = args?.[args.length - 1];
-        if (label === 'system/com.apple.triald') {
+        const action = args?.[args.length - 2];
+        if (label === 'system/com.apple.triald' && action === 'disable') {
           throw new Error('label not found on this runtime');
+        }
+        if (label === 'system/com.apple.suggestd' && action === 'bootout') {
+          throw new Error('service not running');
         }
       });
 
     await expect(applyLowMemoryProfile('sim-udid')).resolves.toBeUndefined();
 
     expect(spawnAndForgetSpy).toHaveBeenCalledTimes(
-      LOW_MEMORY_DISABLED_DAEMON_LABELS.length,
+      LOW_MEMORY_DISABLED_DAEMON_LABELS.length * 2 - 1,
     );
+
+    // The disable failure for triald must not prevent bootout from being
+    // attempted for every *other* label.
+    for (const label of LOW_MEMORY_DISABLED_DAEMON_LABELS) {
+      if (label === 'com.apple.triald') {
+        continue;
+      }
+      expect(spawnAndForgetSpy).toHaveBeenCalledWith('xcrun', [
+        'simctl',
+        'spawn',
+        'sim-udid',
+        'launchctl',
+        'bootout',
+        `system/${label}`,
+      ]);
+    }
   });
 });

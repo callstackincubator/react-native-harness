@@ -376,25 +376,33 @@ const LOW_MEMORY_DISABLED_DAEMON_LABELS = [
 ] as const;
 
 /**
- * Disables a curated set of non-essential background daemons (see
- * `LOW_MEMORY_DISABLED_DAEMON_LABELS`) inside the simulator identified by
- * `udid`, to reduce RAM pressure on memory-constrained hosts (see
- * `isLowMemoryHost` from `@react-native-harness/tools`).
+ * Disables and stops a curated set of non-essential background daemons (see
+ * `LOW_MEMORY_DISABLED_DAEMON_LABELS`) inside the already-booted simulator
+ * identified by `udid`, to reduce RAM pressure on memory-constrained hosts
+ * (see `isLowMemoryHost` from `@react-native-harness/tools`).
  *
- * `launchctl disable` state is recorded per-UDID in CoreSimulatorService and
- * persists across boots, but it has no effect on a daemon that is already
- * running. Callers are responsible for sequencing this so that the daemons
- * are actually not running afterwards (e.g. by cycling the simulator through
- * a shutdown/boot after calling this) — see the call site in `instance.ts`.
+ * For each label this issues, in order:
+ *   1. `launchctl disable` — records per-UDID state in CoreSimulatorService
+ *      (persists across boots) preventing the daemon from launching again,
+ *      including on-demand relaunches.
+ *   2. `launchctl bootout` — stops the daemon's currently-running instance
+ *      in place.
  *
- * A given label may not exist on every runtime, so each `launchctl disable`
- * is issued independently and failures are swallowed via `spawnAndForget`
- * (same tolerance used elsewhere in this file for best-effort simctl calls)
- * so that one missing/renamed label never aborts the rest of the profile.
+ * `disable` runs first so a daemon torn down by `bootout` cannot be
+ * immediately relaunched on demand before it is disabled. Together the two
+ * calls mean no shutdown/boot cycle is needed for the profile to take
+ * effect — see the call site in `instance.ts`.
+ *
+ * A given label may not exist, or may not be running, on every runtime, so
+ * each `launchctl` call is issued independently and failures are swallowed
+ * via `spawnAndForget` (same tolerance used elsewhere in this file for
+ * best-effort simctl calls) so that a missing/renamed label, or a `bootout`
+ * against a daemon that was never running, never aborts the rest of the
+ * profile.
  */
 export const applyLowMemoryProfile = async (udid: string): Promise<void> => {
   simctlLogger.debug(
-    'applying low-memory profile to %s: disabling %d background daemons',
+    'applying low-memory profile to %s: disabling and stopping %d background daemons',
     udid,
     LOW_MEMORY_DISABLED_DAEMON_LABELS.length,
   );
@@ -403,16 +411,28 @@ export const applyLowMemoryProfile = async (udid: string): Promise<void> => {
   // allSettled (rather than all) on top of that is defense-in-depth so that
   // even an unexpected rejection can never abort the labels not yet issued.
   await Promise.allSettled(
-    LOW_MEMORY_DISABLED_DAEMON_LABELS.map((label) =>
-      spawnAndForget('xcrun', [
+    LOW_MEMORY_DISABLED_DAEMON_LABELS.map(async (label) => {
+      // Disable first, so a service torn down by `bootout` below cannot be
+      // immediately relaunched on demand before it is disabled.
+      await spawnAndForget('xcrun', [
         'simctl',
         'spawn',
         udid,
         'launchctl',
         'disable',
         `system/${label}`,
-      ]),
-    ),
+      ]);
+      // Then stop the currently-running instance in place; this legitimately
+      // fails (harmlessly) for labels that weren't running.
+      await spawnAndForget('xcrun', [
+        'simctl',
+        'spawn',
+        udid,
+        'launchctl',
+        'bootout',
+        `system/${label}`,
+      ]);
+    }),
   );
 };
 

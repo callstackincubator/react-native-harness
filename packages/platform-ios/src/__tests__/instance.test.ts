@@ -496,7 +496,7 @@ describe('iOS platform instance dependency validation', () => {
     expect(shutdownSimulator).not.toHaveBeenCalled();
   });
 
-  it('applies the low-memory profile and cycles the boot when starting a shutdown simulator on a low-memory host', async () => {
+  it('applies the low-memory profile in place, with no extra boot cycle, when starting a shutdown simulator on a low-memory host', async () => {
     vi.spyOn(tools, 'isLowMemoryHost').mockReturnValue(true);
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Shutdown');
@@ -546,21 +546,14 @@ describe('iOS platform instance dependency validation', () => {
     );
 
     expect(applyLowMemoryProfile).toHaveBeenCalledWith('sim-udid');
-    expect(bootSimulator).toHaveBeenCalledTimes(2);
-    expect(waitForBoot).toHaveBeenCalledTimes(2);
-    expect(shutdownSimulator).toHaveBeenCalledTimes(1);
+    // Exactly one boot cycle: applyLowMemoryProfile disables and boots out
+    // the daemons in place on the simulator we just booted, so no
+    // shutdown/reboot is needed for it to take effect.
+    expect(bootSimulator).toHaveBeenCalledTimes(1);
+    expect(waitForBoot).toHaveBeenCalledTimes(1);
+    expect(shutdownSimulator).not.toHaveBeenCalled();
 
-    // The profile only takes effect on daemons that haven't started yet, so
-    // it must be applied after the first boot completes and be followed by
-    // a shutdown + reboot cycle before the app is installed/launched.
-    expect(calls).toEqual([
-      'boot',
-      'waitForBoot',
-      'applyLowMemoryProfile',
-      'shutdown',
-      'boot',
-      'waitForBoot',
-    ]);
+    expect(calls).toEqual(['boot', 'waitForBoot', 'applyLowMemoryProfile']);
   });
 
   it('does not apply the low-memory profile to a simulator that was already booted, even on a low-memory host', async () => {

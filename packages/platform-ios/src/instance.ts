@@ -119,32 +119,27 @@ export const getAppleSimulatorPlatformInstance = async (
     await simctl.waitForBoot(udid, init.signal);
   }
 
-  // `launchctl disable` state is per-UDID and persists across boots, but it
-  // never stops a daemon that is already running. Only a boot that starts
-  // after the disable calls actually benefits from them, so this must run
-  // *after* the simulator is up (so `simctl spawn` has something to talk to)
-  // and be followed by a shutdown/boot cycle so the now-disabled daemons
-  // don't carry over from the boot we just waited on.
+  // `applyLowMemoryProfile` both disables and boots out each daemon inside
+  // the already-booted simulator, so it takes effect immediately with no
+  // shutdown/boot cycle needed.
   //
   // This only runs when we booted the simulator ourselves (`startedByHarness`)
   // and only on memory-constrained hosts, so:
-  //   - high-memory hosts pay nothing extra (no calls, no extra boot cycle);
+  //   - high-memory hosts pay nothing extra (no calls at all);
   //   - a simulator the caller already had booted/booting is left alone —
-  //     forcing it through a shutdown/boot here would be a surprising,
-  //     unrequested reboot of a simulator instance that isn't ours.
+  //     mutating a simulator instance that isn't ours (even in place, with
+  //     no reboot) would be a surprising, unrequested side effect on state
+  //     the caller owns.
   if (startedByHarness && isLowMemoryHost()) {
     logger.info(
       'Low-memory host detected: applying low-memory profile to iOS simulator %s...',
       config.device.name
     );
     iosInstanceLogger.debug(
-      'disabling non-essential background daemons on %s and cycling boot so it takes effect',
+      'disabling and stopping non-essential background daemons on %s',
       udid
     );
     await simctl.applyLowMemoryProfile(udid);
-    await simctl.shutdownSimulator(udid);
-    await simctl.bootSimulator(udid);
-    await simctl.waitForBoot(udid, init.signal);
   }
 
   const isInstalled = await simctl.isAppInstalled(udid, config.bundleId);
