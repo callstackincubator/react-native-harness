@@ -339,6 +339,83 @@ export const bootSimulator = async (udid: string): Promise<void> => {
   await spawn('xcrun', ['simctl', 'boot', udid]);
 };
 
+/**
+ * Background daemons disabled by `applyLowMemoryProfile` on memory-constrained
+ * hosts to reduce RAM pressure inside the simulator guest.
+ *
+ * This list is deliberately narrow and was chosen so that disabling it never
+ * changes observable app behaviour under test. Every daemon that backs a
+ * public API a React Native native module could reasonably exercise is
+ * intentionally EXCLUDED, e.g.: CoreLocation (`locationd`), the photo
+ * library, audio, HealthKit, Wallet, StoreKit, CloudKit, contacts, calendar,
+ * telephony (`CommCenter`), permission prompts (`tccd`), and networking
+ * (`nsurlsessiond`). What remains is Siri/Spotlight/Suggestions-style
+ * background "intelligence" infrastructure with no test-observable effect.
+ *
+ * `com.apple.analyticsd` and `com.apple.osanalytics.osanalyticshelper` are
+ * deliberately KEPT ENABLED (i.e. absent from this list) even though nothing
+ * under test calls them directly, because the harness's crash detection
+ * relies on them (see `collectCrashReports` in this file) — do not add them.
+ */
+const LOW_MEMORY_DISABLED_DAEMON_LABELS = [
+  'com.apple.duetexpertd',
+  'com.apple.proactiveeventtrackerd',
+  'com.apple.triald',
+  'com.apple.knowledge-agent',
+  'com.apple.suggestd',
+  'com.apple.parsecd',
+  'com.apple.spotlightknowledged',
+  'com.apple.corespotlightd',
+  'com.apple.photoanalysisd',
+  'com.apple.mediaanalysisd',
+  'com.apple.followupd',
+  'com.apple.familycircled',
+  'com.apple.icloud.searchpartyd',
+  'com.apple.newsd',
+  'com.apple.tipsd',
+] as const;
+
+/**
+ * Disables a curated set of non-essential background daemons (see
+ * `LOW_MEMORY_DISABLED_DAEMON_LABELS`) inside the simulator identified by
+ * `udid`, to reduce RAM pressure on memory-constrained hosts (see
+ * `isLowMemoryHost` from `@react-native-harness/tools`).
+ *
+ * `launchctl disable` state is recorded per-UDID in CoreSimulatorService and
+ * persists across boots, but it has no effect on a daemon that is already
+ * running. Callers are responsible for sequencing this so that the daemons
+ * are actually not running afterwards (e.g. by cycling the simulator through
+ * a shutdown/boot after calling this) — see the call site in `instance.ts`.
+ *
+ * A given label may not exist on every runtime, so each `launchctl disable`
+ * is issued independently and failures are swallowed via `spawnAndForget`
+ * (same tolerance used elsewhere in this file for best-effort simctl calls)
+ * so that one missing/renamed label never aborts the rest of the profile.
+ */
+export const applyLowMemoryProfile = async (udid: string): Promise<void> => {
+  simctlLogger.debug(
+    'applying low-memory profile to %s: disabling %d background daemons',
+    udid,
+    LOW_MEMORY_DISABLED_DAEMON_LABELS.length,
+  );
+
+  // spawnAndForget already swallows failures for each individual call; using
+  // allSettled (rather than all) on top of that is defense-in-depth so that
+  // even an unexpected rejection can never abort the labels not yet issued.
+  await Promise.allSettled(
+    LOW_MEMORY_DISABLED_DAEMON_LABELS.map((label) =>
+      spawnAndForget('xcrun', [
+        'simctl',
+        'spawn',
+        udid,
+        'launchctl',
+        'disable',
+        `system/${label}`,
+      ]),
+    ),
+  );
+};
+
 export const waitForBoot = async (
   udid: string,
   signal: AbortSignal,

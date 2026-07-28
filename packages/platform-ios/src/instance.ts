@@ -18,7 +18,12 @@ import * as simctlModule from './xcrun/simctl.js';
 import * as devicectlModule from './xcrun/devicectl.js';
 import { getDeviceName } from './utils.js';
 import { HarnessAppPathError } from './errors.js';
-import { instrumented, logger, noopDiagnostics } from '@react-native-harness/tools';
+import {
+  instrumented,
+  isLowMemoryHost,
+  logger,
+  noopDiagnostics,
+} from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { createXCTestAgentController } from './xctest-agent.js';
 import { createPermissionPromptAutoAcceptCapability } from './xctest-agent-capabilities.js';
@@ -111,6 +116,34 @@ export const getAppleSimulatorPlatformInstance = async (
       'waiting for iOS simulator %s to finish booting',
       udid
     );
+    await simctl.waitForBoot(udid, init.signal);
+  }
+
+  // `launchctl disable` state is per-UDID and persists across boots, but it
+  // never stops a daemon that is already running. Only a boot that starts
+  // after the disable calls actually benefits from them, so this must run
+  // *after* the simulator is up (so `simctl spawn` has something to talk to)
+  // and be followed by a shutdown/boot cycle so the now-disabled daemons
+  // don't carry over from the boot we just waited on.
+  //
+  // This only runs when we booted the simulator ourselves (`startedByHarness`)
+  // and only on memory-constrained hosts, so:
+  //   - high-memory hosts pay nothing extra (no calls, no extra boot cycle);
+  //   - a simulator the caller already had booted/booting is left alone —
+  //     forcing it through a shutdown/boot here would be a surprising,
+  //     unrequested reboot of a simulator instance that isn't ours.
+  if (startedByHarness && isLowMemoryHost()) {
+    logger.info(
+      'Low-memory host detected: applying low-memory profile to iOS simulator %s...',
+      config.device.name
+    );
+    iosInstanceLogger.debug(
+      'disabling non-essential background daemons on %s and cycling boot so it takes effect',
+      udid
+    );
+    await simctl.applyLowMemoryProfile(udid);
+    await simctl.shutdownSimulator(udid);
+    await simctl.bootSimulator(udid);
     await simctl.waitForBoot(udid, init.signal);
   }
 

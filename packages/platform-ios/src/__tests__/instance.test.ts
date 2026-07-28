@@ -3,6 +3,7 @@ import {
   DEFAULT_METRO_PORT,
   type Config as HarnessConfig,
 } from '@react-native-harness/config';
+import * as tools from '@react-native-harness/tools';
 import {
   getApplePhysicalDevicePlatformInstance,
   getAppleSimulatorPlatformInstance,
@@ -45,6 +46,9 @@ describe('iOS platform instance dependency validation', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    // Default to a high-memory host so existing behaviour is exercised
+    // unless a test explicitly opts into the low-memory profile.
+    vi.spyOn(tools, 'isLowMemoryHost').mockReturnValue(false);
     xctestAgentMocks.createXCTestAgentController.mockReturnValue({
       prepare: xctestAgentMocks.prepare,
       ensureStarted: xctestAgentMocks.ensureStarted,
@@ -445,6 +449,160 @@ describe('iOS platform instance dependency validation', () => {
         init,
       ),
     ).rejects.toBeInstanceOf(HarnessAppPathError);
+  });
+
+  it('does not apply the low-memory profile or an extra boot cycle on a high-memory host', async () => {
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Shutdown');
+    const bootSimulator = vi
+      .spyOn(simctl, 'bootSimulator')
+      .mockResolvedValue(undefined);
+    const waitForBoot = vi
+      .spyOn(simctl, 'waitForBoot')
+      .mockResolvedValue(undefined);
+    const applyLowMemoryProfile = vi
+      .spyOn(simctl, 'applyLowMemoryProfile')
+      .mockResolvedValue(undefined);
+    const shutdownSimulator = vi
+      .spyOn(simctl, 'shutdownSimulator')
+      .mockResolvedValue(undefined);
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(simctl, 'stopApp').mockResolvedValue(undefined);
+    vi.spyOn(simctl, 'clearHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+
+    await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfig,
+      init,
+    );
+
+    expect(applyLowMemoryProfile).not.toHaveBeenCalled();
+    expect(bootSimulator).toHaveBeenCalledTimes(1);
+    expect(waitForBoot).toHaveBeenCalledTimes(1);
+    // shutdownSimulator is only expected on dispose, not during setup.
+    expect(shutdownSimulator).not.toHaveBeenCalled();
+  });
+
+  it('applies the low-memory profile and cycles the boot when starting a shutdown simulator on a low-memory host', async () => {
+    vi.spyOn(tools, 'isLowMemoryHost').mockReturnValue(true);
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Shutdown');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(simctl, 'stopApp').mockResolvedValue(undefined);
+    vi.spyOn(simctl, 'clearHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+
+    const calls: string[] = [];
+    const bootSimulator = vi
+      .spyOn(simctl, 'bootSimulator')
+      .mockImplementation(async () => {
+        calls.push('boot');
+      });
+    const waitForBoot = vi
+      .spyOn(simctl, 'waitForBoot')
+      .mockImplementation(async () => {
+        calls.push('waitForBoot');
+      });
+    const applyLowMemoryProfile = vi
+      .spyOn(simctl, 'applyLowMemoryProfile')
+      .mockImplementation(async () => {
+        calls.push('applyLowMemoryProfile');
+      });
+    const shutdownSimulator = vi
+      .spyOn(simctl, 'shutdownSimulator')
+      .mockImplementation(async () => {
+        calls.push('shutdown');
+      });
+
+    await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfig,
+      init,
+    );
+
+    expect(applyLowMemoryProfile).toHaveBeenCalledWith('sim-udid');
+    expect(bootSimulator).toHaveBeenCalledTimes(2);
+    expect(waitForBoot).toHaveBeenCalledTimes(2);
+    expect(shutdownSimulator).toHaveBeenCalledTimes(1);
+
+    // The profile only takes effect on daemons that haven't started yet, so
+    // it must be applied after the first boot completes and be followed by
+    // a shutdown + reboot cycle before the app is installed/launched.
+    expect(calls).toEqual([
+      'boot',
+      'waitForBoot',
+      'applyLowMemoryProfile',
+      'shutdown',
+      'boot',
+      'waitForBoot',
+    ]);
+  });
+
+  it('does not apply the low-memory profile to a simulator that was already booted, even on a low-memory host', async () => {
+    vi.spyOn(tools, 'isLowMemoryHost').mockReturnValue(true);
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(simctl, 'stopApp').mockResolvedValue(undefined);
+    vi.spyOn(simctl, 'clearHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+    const bootSimulator = vi
+      .spyOn(simctl, 'bootSimulator')
+      .mockResolvedValue(undefined);
+    const applyLowMemoryProfile = vi
+      .spyOn(simctl, 'applyLowMemoryProfile')
+      .mockResolvedValue(undefined);
+    const shutdownSimulator = vi
+      .spyOn(simctl, 'shutdownSimulator')
+      .mockResolvedValue(undefined);
+
+    await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfig,
+      init,
+    );
+
+    expect(applyLowMemoryProfile).not.toHaveBeenCalled();
+    expect(bootSimulator).not.toHaveBeenCalled();
+    // Never forcibly reboot a simulator the caller already had running.
+    expect(shutdownSimulator).not.toHaveBeenCalled();
   });
 
   it('throws a HarnessAppPathError when HARNESS_APP_PATH points to a missing app', async () => {
