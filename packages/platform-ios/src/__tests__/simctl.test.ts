@@ -107,104 +107,81 @@ describe('applyLowMemoryProfile', () => {
     vi.restoreAllMocks();
   });
 
-  it('disables and boots out every expected daemon label, disable before bootout', async () => {
-    const calls: Array<[string, readonly string[] | undefined]> = [];
+  it('issues a single spawn call whose in-guest script disables then boots out every label', async () => {
     const spawnAndForgetSpy = vi
       .spyOn(tools, 'spawnAndForget')
-      .mockImplementation(async (file, args) => {
-        calls.push([file, args]);
-      });
+      .mockResolvedValue(undefined);
 
     await applyLowMemoryProfile('sim-udid');
 
-    expect(spawnAndForgetSpy).toHaveBeenCalledTimes(
-      LOW_MEMORY_DISABLED_DAEMON_LABELS.length * 2,
-    );
+    // Exactly one host process, not one per label per verb.
+    expect(spawnAndForgetSpy).toHaveBeenCalledTimes(1);
 
-    for (const label of LOW_MEMORY_DISABLED_DAEMON_LABELS) {
-      expect(spawnAndForgetSpy).toHaveBeenCalledWith('xcrun', [
-        'simctl',
-        'spawn',
-        'sim-udid',
-        'launchctl',
-        'disable',
-        `system/${label}`,
-      ]);
-      expect(spawnAndForgetSpy).toHaveBeenCalledWith('xcrun', [
-        'simctl',
-        'spawn',
-        'sim-udid',
-        'launchctl',
-        'bootout',
-        `system/${label}`,
-      ]);
+    const [file, args, options] = spawnAndForgetSpy.mock.calls[0]!;
+    expect(file).toBe('xcrun');
+    expect(args?.slice(0, 4)).toEqual(['simctl', 'spawn', 'sim-udid', 'sh']);
+    expect(args?.[4]).toBe('-c');
 
-      // disable must be issued before bootout for the same label, so a
-      // service torn down by bootout cannot be relaunched on demand before
-      // it is disabled.
-      const disableIndex = calls.findIndex(
-        ([, callArgs]) => callArgs?.[4] === 'disable' && callArgs[5] === `system/${label}`,
-      );
-      const bootoutIndex = calls.findIndex(
-        ([, callArgs]) => callArgs?.[4] === 'bootout' && callArgs[5] === `system/${label}`,
-      );
-      expect(disableIndex).toBeGreaterThanOrEqual(0);
-      expect(bootoutIndex).toBeGreaterThan(disableIndex);
-    }
+    const script = args?.[5] as string;
+    // Labels are passed as trailing positional args (consumed via "$@"
+    // inside the script), never interpolated into the script string.
+    const trailingArgs = args?.slice(6);
+    expect(trailingArgs).toEqual(['sh', ...LOW_MEMORY_DISABLED_DAEMON_LABELS]);
+
+    // The script loops over "$@" generically (one `disable`/`bootout` pair
+    // for whatever label is bound each iteration), so this only needs to be
+    // checked once, not per label.
+    const disableIndex = script.indexOf('launchctl disable "system/$label"');
+    const bootoutIndex = script.indexOf('launchctl bootout "system/$label"');
+    expect(disableIndex).toBeGreaterThanOrEqual(0);
+    expect(bootoutIndex).toBeGreaterThan(disableIndex);
 
     // These must never be disabled or booted out: the harness relies on
     // them for crash detection.
-    expect(spawnAndForgetSpy).not.toHaveBeenCalledWith(
-      'xcrun',
-      expect.arrayContaining(['system/com.apple.analyticsd']),
+    expect(script).not.toContain('analyticsd');
+    expect(script).not.toContain('osanalyticshelper');
+    expect(trailingArgs).not.toContain('com.apple.analyticsd');
+    expect(trailingArgs).not.toContain(
+      'com.apple.osanalytics.osanalyticshelper',
     );
-    expect(spawnAndForgetSpy).not.toHaveBeenCalledWith(
-      'xcrun',
-      expect.arrayContaining([
-        'system/com.apple.osanalytics.osanalyticshelper',
-      ]),
-    );
+
+    // Bounded and abandonable: a timeout signal is passed so a hung spawn
+    // can never stall the boot path.
+    expect(options?.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it('tolerates a failing disable or bootout without aborting the rest of the profile', async () => {
+  it('tolerates the single spawn call failing without throwing', async () => {
     // applyLowMemoryProfile relies on spawnAndForget itself swallowing
-    // failures (as it does for every other best-effort simctl call in this
-    // file), so a rejection here must not propagate or stop the other calls.
-    // bootout in particular is expected to legitimately fail for labels that
-    // were never running.
+    // failures (same as every other best-effort simctl call in this file),
+    // so a rejection here must not propagate.
     const spawnAndForgetSpy = vi
       .spyOn(tools, 'spawnAndForget')
-      .mockImplementation(async (_file, args) => {
-        const label = args?.[args.length - 1];
-        const action = args?.[args.length - 2];
-        if (label === 'system/com.apple.triald' && action === 'disable') {
-          throw new Error('label not found on this runtime');
-        }
-        if (label === 'system/com.apple.suggestd' && action === 'bootout') {
-          throw new Error('service not running');
-        }
-      });
+      .mockResolvedValue(undefined);
 
     await expect(applyLowMemoryProfile('sim-udid')).resolves.toBeUndefined();
+    expect(spawnAndForgetSpy).toHaveBeenCalledTimes(1);
+  });
 
-    expect(spawnAndForgetSpy).toHaveBeenCalledTimes(
-      LOW_MEMORY_DISABLED_DAEMON_LABELS.length * 2 - 1,
-    );
+  it('bounds the call with a short timeout signal so a hung spawn is abandoned', async () => {
+    const controller = new AbortController();
+    const getTimeoutSignalSpy = vi
+      .spyOn(tools, 'getTimeoutSignal')
+      .mockReturnValue(controller.signal);
+    const spawnAndForgetSpy = vi
+      .spyOn(tools, 'spawnAndForget')
+      .mockResolvedValue(undefined);
 
-    // The disable failure for triald must not prevent bootout from being
-    // attempted for every *other* label.
-    for (const label of LOW_MEMORY_DISABLED_DAEMON_LABELS) {
-      if (label === 'com.apple.triald') {
-        continue;
-      }
-      expect(spawnAndForgetSpy).toHaveBeenCalledWith('xcrun', [
-        'simctl',
-        'spawn',
-        'sim-udid',
-        'launchctl',
-        'bootout',
-        `system/${label}`,
-      ]);
-    }
+    await applyLowMemoryProfile('sim-udid');
+
+    // A handful of seconds: enough headroom for one process launch plus a
+    // trivial in-guest loop, but far below the 300s platformReadyTimeout, so
+    // a hung call is abandoned long before it could reproduce the CI outage.
+    expect(getTimeoutSignalSpy).toHaveBeenCalledTimes(1);
+    const timeoutMs = getTimeoutSignalSpy.mock.calls[0]![0];
+    expect(timeoutMs).toBeGreaterThan(1_000);
+    expect(timeoutMs).toBeLessThanOrEqual(30_000);
+
+    const [, , options] = spawnAndForgetSpy.mock.calls[0]!;
+    expect(options?.signal).toBe(controller.signal);
   });
 });

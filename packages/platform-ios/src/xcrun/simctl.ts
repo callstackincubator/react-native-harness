@@ -3,6 +3,7 @@ import {
   type CrashArtifactWriter,
 } from '@react-native-harness/platforms';
 import {
+  getTimeoutSignal,
   logger,
   spawn,
   spawnAndForget,
@@ -376,12 +377,32 @@ const LOW_MEMORY_DISABLED_DAEMON_LABELS = [
 ] as const;
 
 /**
+ * Timeout for the single `xcrun simctl spawn` call issued by
+ * `applyLowMemoryProfile`. In the normal case this call is one process launch
+ * plus a trivial in-guest shell loop over ~15 labels, which completes in well
+ * under a second. 5s gives generous headroom for process-launch overhead on
+ * a loaded, low-core-count CI runner while staying negligible relative to the
+ * 300s `platformReadyTimeout` the boot path budgets for — if the call hasn't
+ * finished by then, it's abandoned rather than allowed to blow the budget the
+ * way the previous 30-process fan-out did.
+ */
+const LOW_MEMORY_PROFILE_TIMEOUT_MS = 5_000;
+
+/**
  * Disables and stops a curated set of non-essential background daemons (see
  * `LOW_MEMORY_DISABLED_DAEMON_LABELS`) inside the already-booted simulator
  * identified by `udid`, to reduce RAM pressure on memory-constrained hosts
  * (see `isLowMemoryHost` from `@react-native-harness/tools`).
  *
- * For each label this issues, in order:
+ * This issues a *single* `xcrun simctl spawn` call that runs a small shell
+ * loop inside the guest, rather than one host process per label per
+ * `launchctl` verb (30 host processes for the current label list). Spawning
+ * 30 concurrent `xcrun` processes on a 3-vCPU CI runner was itself a
+ * thundering herd — in one observed CI run it took 3m16s and burned through
+ * the entire 300s `platformReadyTimeout`, failing the job. One host process
+ * with a cheap in-guest loop avoids that entirely.
+ *
+ * For each label the loop issues, in order:
  *   1. `launchctl disable` — records per-UDID state in CoreSimulatorService
  *      (persists across boots) preventing the daemon from launching again,
  *      including on-demand relaunches.
@@ -394,11 +415,19 @@ const LOW_MEMORY_DISABLED_DAEMON_LABELS = [
  * effect — see the call site in `instance.ts`.
  *
  * A given label may not exist, or may not be running, on every runtime, so
- * each `launchctl` call is issued independently and failures are swallowed
- * via `spawnAndForget` (same tolerance used elsewhere in this file for
- * best-effort simctl calls) so that a missing/renamed label, or a `bootout`
- * against a daemon that was never running, never aborts the rest of the
- * profile.
+ * the shell loop appends `|| true` after each `launchctl` invocation to
+ * ignore its individual exit status — a missing/renamed label, or a
+ * `bootout` against a daemon that was never running, never aborts the loop.
+ * The call as a whole is also non-fatal and time-bounded: it goes through
+ * `spawnAndForget` (same tolerance used elsewhere in this file for
+ * best-effort simctl calls) with a timeout signal, so neither a failure nor a
+ * hang of the single spawn can abort or stall the boot path.
+ *
+ * The label list is a hardcoded, compile-time constant
+ * (`LOW_MEMORY_DISABLED_DAEMON_LABELS`), never user input. It is still passed
+ * as separate `sh` positional arguments (`"$@"`) rather than interpolated
+ * into the script text, so the shell script string itself never depends on
+ * the label list and can't be broken by it.
  */
 export const applyLowMemoryProfile = async (udid: string): Promise<void> => {
   simctlLogger.debug(
@@ -407,32 +436,28 @@ export const applyLowMemoryProfile = async (udid: string): Promise<void> => {
     LOW_MEMORY_DISABLED_DAEMON_LABELS.length,
   );
 
-  // spawnAndForget already swallows failures for each individual call; using
-  // allSettled (rather than all) on top of that is defense-in-depth so that
-  // even an unexpected rejection can never abort the labels not yet issued.
-  await Promise.allSettled(
-    LOW_MEMORY_DISABLED_DAEMON_LABELS.map(async (label) => {
-      // Disable first, so a service torn down by `bootout` below cannot be
-      // immediately relaunched on demand before it is disabled.
-      await spawnAndForget('xcrun', [
-        'simctl',
-        'spawn',
-        udid,
-        'launchctl',
-        'disable',
-        `system/${label}`,
-      ]);
-      // Then stop the currently-running instance in place; this legitimately
-      // fails (harmlessly) for labels that weren't running.
-      await spawnAndForget('xcrun', [
-        'simctl',
-        'spawn',
-        udid,
-        'launchctl',
-        'bootout',
-        `system/${label}`,
-      ]);
-    }),
+  // The script text is fixed; labels are passed as "$@" positional
+  // arguments (see the doc comment above), so nothing is interpolated into
+  // the script string itself.
+  const disableAndBootoutLoopScript =
+    'for label in "$@"; do ' +
+    'launchctl disable "system/$label" || true; ' +
+    'launchctl bootout "system/$label" || true; ' +
+    'done';
+
+  await spawnAndForget(
+    'xcrun',
+    [
+      'simctl',
+      'spawn',
+      udid,
+      'sh',
+      '-c',
+      disableAndBootoutLoopScript,
+      'sh', // becomes $0 inside the script, per sh -c convention
+      ...LOW_MEMORY_DISABLED_DAEMON_LABELS,
+    ],
+    { signal: getTimeoutSignal(LOW_MEMORY_PROFILE_TIMEOUT_MS) },
   );
 };
 
