@@ -13,6 +13,13 @@ export type MetroOptions = {
   projectRoot: string;
   harnessConfig: HarnessConfig;
   websocketEndpoints?: MetroWebSocketEndpoints;
+  /**
+   * Whether Jest is running in watch mode (`--watch` / `--watchAll`). Only
+   * then does Metro need a file watcher; a one-shot run bundles once and
+   * exits, so watching just costs a watchman subscription and the file-map
+   * auto-save timer.
+   */
+  watchMode?: boolean;
 };
 
 export type WaitForMetroHealthOptions = {

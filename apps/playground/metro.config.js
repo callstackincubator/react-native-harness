@@ -1,5 +1,7 @@
 const { withNxMetro } = require('@nx/react-native');
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+const exclusionList =
+  require('metro-config/private/defaults/exclusionList').default;
 const path = require('path');
 const fs = require('fs');
 
@@ -41,6 +43,11 @@ const customConfig = {
   cacheVersion: '@react-native-harness/playground',
   resolver: {
     unstable_enablePackageExports: true,
+    // `withNxMetro` puts the monorepo root in watchFolders, so Nx's local
+    // cache and workspace data (~6k files with watched extensions) would
+    // otherwise be crawled and held in Metro's file map. Nothing resolves
+    // through it.
+    blockList: exclusionList([/\.nx\/.*/]),
   },
   server: {
     ...(defaultConfig.server || {}),

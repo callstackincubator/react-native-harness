@@ -93,7 +93,12 @@ export const getMetroInstance = async (
   options: MetroOptions,
   abortSignal: AbortSignal
 ): Promise<MetroInstance> => {
-  const { projectRoot, harnessConfig, websocketEndpoints = {} } = options;
+  const {
+    projectRoot,
+    harnessConfig,
+    websocketEndpoints = {},
+    watchMode = false,
+  } = options;
   const metroPort = harnessConfig.metroPort;
   const metroBindHost = harnessConfig.host?.trim();
   metroLogger.debug(
@@ -145,7 +150,7 @@ export const getMetroInstance = async (
     unstable_extraMiddleware: [middleware],
     websocketEndpoints,
     ...(metroBindHost ? { host: metroBindHost } : {}),
-    watch: process.env.CI ? false : undefined,
+    watch: watchMode && !process.env.CI,
   });
 
   // Metro <0.83 returns the server directly, while 0.83+ returns an object with the server as a property.

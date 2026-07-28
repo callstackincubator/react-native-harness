@@ -17,6 +17,15 @@ type MinimalMetroConfig = {
       collapse: boolean;
     }>;
   };
+  resolver?: {
+    blockList?: RegExp;
+  };
+  server?: {
+    useGlobalHotkey?: boolean;
+  };
+  transformer?: {
+    unstable_workerThreads?: boolean;
+  };
 };
 
 const { ensureDomainDirectories } = vi.hoisted(() => ({
@@ -122,6 +131,60 @@ describe('withRnHarness', () => {
     ).resolves.toEqual({
       collapse: false,
     });
+  });
+
+  it('trims Metro functionality a harness run does not need', async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+
+    const config = (await withRnHarness(
+      {
+        projectRoot: '/tmp/app',
+        serializer: {},
+        symbolicator: {
+          async customizeFrame() {
+            return {};
+          },
+        },
+      },
+      true,
+    )()) as unknown as MinimalMetroConfig;
+
+    expect(config.server?.useGlobalHotkey).toBe(false);
+    expect(config.transformer?.unstable_workerThreads).toBe(true);
+  });
+
+  it('inherits the project blockList while keeping test files crawlable', async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+
+    const config = (await withRnHarness(
+      {
+        projectRoot: '/tmp/app',
+        // What `exclusionList([/ios\/build\/.*/])` produces: the project's own
+        // exclusion fused with the __tests__ rule that would hide every test.
+        resolver: { blockList: /(ios\/build\/.*|\/__tests__\/.*)$/ },
+        serializer: {},
+        symbolicator: {
+          async customizeFrame() {
+            return {};
+          },
+        },
+      },
+      true,
+    )()) as unknown as MinimalMetroConfig;
+
+    const blockList = config.resolver?.blockList;
+
+    expect(blockList).toBeInstanceOf(RegExp);
+    // The project's own exclusion survives.
+    expect(blockList?.test('/tmp/app/ios/build/Release/a.json')).toBe(true);
+    // Harness's own cache is excluded; its manifest is not.
+    expect(blockList?.test('/tmp/app/.harness/cache/metro/ab')).toBe(true);
+    expect(blockList?.test('/tmp/app/.harness/manifest.js')).toBe(false);
+    // Tests stay crawlable, and nothing else is excluded on harness's behalf.
+    expect(blockList?.test('/tmp/app/src/__tests__/smoke.harness.ts')).toBe(
+      false,
+    );
+    expect(blockList?.test('/tmp/app/.nx/cache/a.js')).toBe(false);
   });
 
   it('caps maxWorkers to leave host cores free for the device under test', async () => {

@@ -605,6 +605,7 @@ export const createHarnessSession = async (
               websocketEndpoints: {
                 [HARNESS_BRIDGE_PATH]: bridge.ws as unknown as MetroWebSocketEndpoint,
               },
+              watchMode: globalConfig.watch || globalConfig.watchAll,
             },
             sessionController.signal,
           ).then((instance) => {

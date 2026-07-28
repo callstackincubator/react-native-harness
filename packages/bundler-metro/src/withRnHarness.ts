@@ -12,6 +12,7 @@ import { logger } from '@react-native-harness/tools';
 import { getHarnessBabelTransformerPath } from './babel-transformer.js';
 import { getHarnessSerializer } from './getHarnessSerializer.js';
 import { getHarnessManifest } from './manifest.js';
+import { getHarnessBlockList } from './metro-block-list.js';
 import { getHarnessCacheStores } from './metro-cache.js';
 import { getCappedMaxWorkers } from './metro-workers.js';
 import { getHarnessResolver } from './resolvers/resolver.js';
@@ -19,6 +20,7 @@ import type { NotReadOnly } from './utils.js';
 
 const require = createRequire(import.meta.url);
 const metroWorkersLogger = logger.child('metro-workers');
+const metroBlockListLogger = logger.child('metro-block-list');
 
 const INTERNAL_CALLSITES_REGEX =
   /(^|[\\/])(node_modules[/\\]@react-native-harness)([\\/]|$)/;
@@ -52,6 +54,16 @@ export const withRnHarness = <T extends MetroConfig>(
     const harnessBabelTransformerPath =
       getHarnessBabelTransformerPath(metroConfig);
 
+    const { blockList: harnessBlockList, dropped: droppedBlockListPatterns } =
+      getHarnessBlockList(metroConfig);
+
+    for (const { pattern } of droppedBlockListPatterns) {
+      metroBlockListLogger.warn(
+        'Ignoring `resolver.blockList` pattern %s because its regex flags conflict with the other blockList patterns.',
+        String(pattern)
+      );
+    }
+
     const hostParallelism = os.availableParallelism();
     const cappedMaxWorkers = getCappedMaxWorkers({
       configuredMaxWorkers: metroConfig.maxWorkers,
@@ -74,6 +86,10 @@ export const withRnHarness = <T extends MetroConfig>(
       server: {
         ...metroConfig.server,
         forwardClientLogs: harnessConfig.forwardClientLogs ?? false,
+        // Metro's global hotkey puts stdin into raw mode to listen for a
+        // dev-server reload key. A harness run is non-interactive and Jest
+        // owns stdin in watch mode, so it is pure overhead here.
+        useGlobalHotkey: false,
       },
       serializer: {
         ...metroConfig.serializer,
@@ -97,13 +113,19 @@ export const withRnHarness = <T extends MetroConfig>(
       },
       resolver: {
         ...metroConfig.resolver,
-        blockList: undefined,
+        blockList: harnessBlockList,
         resolveRequest: harnessResolver,
         useWatchman: process.env.RN_HARNESS_DEBUG_USE_WATCHMAN !== '0',
       },
       transformer: {
         ...metroConfig.transformer,
         babelTransformerPath: harnessBabelTransformerPath,
+        // Run transform workers as threads rather than child processes. Each
+        // child process carries its own Node runtime and Babel instance;
+        // threads share them, which roughly halves peak RSS for a cold
+        // bundle at no cost to build time.
+        unstable_workerThreads:
+          process.env.RN_HARNESS_DEBUG_WORKER_THREADS !== '0',
       },
       symbolicator: {
         ...metroConfig.symbolicator,
