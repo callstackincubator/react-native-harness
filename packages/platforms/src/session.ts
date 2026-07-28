@@ -7,15 +7,34 @@ import type {
 } from './types.js';
 
 export const createBoundedLogBuffer = (limit = 500) => {
-  let logs: AppSessionLog[] = [];
+  // Ring buffer: `buffer[start]` is the oldest entry, and entries wrap
+  // around the fixed-size array instead of reallocating on every push.
+  const buffer: AppSessionLog[] = new Array(limit);
+  let start = 0;
+  let count = 0;
 
   return {
     push: (line: string, occurredAt = Date.now()) => {
-      logs = [...logs, { line, occurredAt }].slice(-limit);
+      const index = (start + count) % limit;
+      buffer[index] = { line, occurredAt };
+      if (count < limit) {
+        count++;
+      } else {
+        // Buffer is full: the slot we just overwrote was the oldest
+        // entry, so advance `start` to the new oldest entry.
+        start = (start + 1) % limit;
+      }
     },
-    getLogs: () => [...logs],
+    getLogs: (): AppSessionLog[] => {
+      const logs: AppSessionLog[] = [];
+      for (let i = 0; i < count; i++) {
+        logs.push(buffer[(start + i) % limit]);
+      }
+      return logs;
+    },
     clear: () => {
-      logs = [];
+      start = 0;
+      count = 0;
     },
   };
 };
