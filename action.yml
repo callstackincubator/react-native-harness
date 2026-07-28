@@ -237,6 +237,17 @@ runs:
         HARNESS_RUNNER: ${{ inputs.runner }}
         HARNESS_APP_PATH: ${{ inputs.app }}
         HARNESS_AVD_CACHING: ${{ inputs.cacheAvd }}
+        # Harness runs Metro in-process (see bundler-metro's factory.ts) and
+        # Jest serially (jest package sets isSerial = true), so Jest, Metro,
+        # and the module graph all share a single V8 heap. macOS runners are
+        # memory-constrained (~7GB/3vCPU alongside the simulator and
+        # xcodebuild/XCTest), and V8's default old-space ceiling is high
+        # enough that it won't feel pressure to collect until the host is
+        # already swapping. Capping it trades a bit of extra GC CPU for
+        # avoiding that swap thrash. Appended (not assigned) so a
+        # caller-supplied NODE_OPTIONS is preserved; if unset, env.NODE_OPTIONS
+        # resolves to an empty string, leaving a harmless leading space.
+        NODE_OPTIONS: ${{ env.NODE_OPTIONS }} --max-old-space-size=1024
       run: |
         export HARNESS_PROJECT_ROOT="$PWD"
 
