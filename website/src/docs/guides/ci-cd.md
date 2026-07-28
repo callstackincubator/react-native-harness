@@ -46,6 +46,7 @@ The action accepts the following inputs:
 - `preRunHook` (optional): Inline shell script run in `bash` immediately before Harness starts
 - `afterRunHook` (optional): Inline shell script run in `bash` immediately after Harness finishes and before artifacts are uploaded
 - `cacheSavePolicy` (optional): When to save a new Metro cache entry -- `default-branch` (default), `always`, or `never`. See [Metro cache](#metro-cache) below
+- `reduceHostMemory` (optional, macOS only): Whether to disable Spotlight indexing, Time Machine local snapshots, and unified-log persistence to free up RAM/CPU/IO on memory-constrained macOS runners. Defaults to `false`. This mutates host state -- disables system services and deletes existing Time Machine local snapshots -- so only enable it on ephemeral CI runners, never on a self-hosted or shared machine
 
 ## Crash Artifacts
 

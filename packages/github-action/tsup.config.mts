@@ -38,5 +38,10 @@ export default defineConfig({
       path.resolve('./src/action.yml'),
       path.resolve(OUT_DIR, '../action.yml')
     );
+    fs.copyFileSync(
+      path.resolve('./src/shared/reduce-host-memory.sh'),
+      path.resolve(OUT_DIR, './shared/reduce-host-memory.sh')
+    );
+    fs.chmodSync(path.resolve(OUT_DIR, './shared/reduce-host-memory.sh'), 0o755);
   },
 });

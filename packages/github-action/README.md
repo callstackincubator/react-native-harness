@@ -33,6 +33,7 @@ The action reads your `rn-harness.config.mjs` file, resolves the `runner` you pa
 - `preRunHook` (optional): Inline shell script run in `bash` immediately before Harness starts
 - `afterRunHook` (optional): Inline shell script run in `bash` immediately after Harness finishes and before artifact upload
 - `cacheSavePolicy` (optional): When to save a new Metro cache entry -- `default-branch` (default), `always`, or `never`
+- `reduceHostMemory` (optional, macOS only): Whether to disable Spotlight indexing, Time Machine local snapshots, and unified-log persistence to free RAM/CPU/IO on memory-constrained macOS runners. Defaults to `false`. This mutates host state (disables system services, deletes existing Time Machine local snapshots) and is intended only for ephemeral CI runners -- do not enable it on a self-hosted or shared machine
 - Crash artifacts persisted to `.harness/crash-reports/` are uploaded automatically when present
 - Metro cache persisted to `.harness/cache/metro/` and `.harness/cache/metro-file-map/` is restored and saved automatically when present. The cache key is computed by `@react-native-harness/cache` from your lockfile(s), Metro/Babel config, the installed `@react-native-harness/bundler-metro` version, and your Harness config's `cache.version` salt -- a new entry is only saved when the run's cache content actually changed and `cacheSavePolicy` allows it
 
