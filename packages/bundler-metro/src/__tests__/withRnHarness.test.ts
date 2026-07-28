@@ -1,5 +1,12 @@
 import os from 'node:os';
-import { describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { getConfig } from '@react-native-harness/config';
 
 type MinimalMetroConfig = {
@@ -9,6 +16,10 @@ type MinimalMetroConfig = {
   cacheStores?: unknown;
   fileMapCacheDirectory?: string;
   hasteMapCacheDirectory?: string;
+  resolver?: {
+    blockList?: RegExp | RegExp[];
+    useWatchman?: boolean;
+  };
   serializer?: {
     isThirdPartyModule?: (module: { path: string }) => boolean;
   };
@@ -62,6 +73,71 @@ vi.mock('../resolvers/resolver.js', () => ({
 }));
 
 describe('withRnHarness', () => {
+  const originalCI = process.env.CI;
+
+  beforeEach(() => {
+    delete process.env.CI;
+  });
+
+  afterEach(() => {
+    if (originalCI === undefined) {
+      delete process.env.CI;
+    } else {
+      process.env.CI = originalCI;
+    }
+  });
+
+  it('disables watchman when CI is set', async () => {
+    process.env.CI = 'true';
+    const { withRnHarness } = await import('../withRnHarness.js');
+
+    const config = (await withRnHarness(
+      {
+        projectRoot: '/tmp/app',
+        serializer: {},
+      },
+      true,
+    )()) as unknown as MinimalMetroConfig;
+
+    expect(config.resolver?.useWatchman).toBe(false);
+  });
+
+  it('leaves useWatchman unchanged outside CI', async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+
+    const config = (await withRnHarness(
+      {
+        projectRoot: '/tmp/app',
+        serializer: {},
+      },
+      true,
+    )()) as unknown as MinimalMetroConfig;
+
+    expect(config.resolver?.useWatchman).toBe(true);
+  });
+
+  it('extends an existing blockList rather than replacing it', async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+
+    const userPattern = /\/fixtures\/.*/;
+
+    const config = (await withRnHarness(
+      {
+        projectRoot: '/tmp/app',
+        serializer: {},
+        resolver: {
+          blockList: userPattern,
+        },
+      },
+      true,
+    )()) as unknown as MinimalMetroConfig;
+
+    const blockList = config.resolver?.blockList;
+    expect(Array.isArray(blockList)).toBe(true);
+    expect(blockList).toContainEqual(userPattern);
+    expect((blockList as RegExp[]).length).toBeGreaterThan(1);
+  });
+
   it('treats installed Harness packages as internal callsites', async () => {
     const { withRnHarness } = await import('../withRnHarness.js');
 

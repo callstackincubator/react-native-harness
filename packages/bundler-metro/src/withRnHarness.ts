@@ -12,6 +12,10 @@ import { logger } from '@react-native-harness/tools';
 import { getHarnessBabelTransformerPath } from './babel-transformer.js';
 import { getHarnessSerializer } from './getHarnessSerializer.js';
 import { getHarnessManifest } from './manifest.js';
+import {
+  HARNESS_METRO_BLOCK_LIST_PATTERNS,
+  mergeHarnessBlockList,
+} from './metro-block-list.js';
 import { getHarnessCacheStores } from './metro-cache.js';
 import { getCappedMaxWorkers } from './metro-workers.js';
 import { getHarnessResolver } from './resolvers/resolver.js';
@@ -67,6 +71,33 @@ export const withRnHarness = <T extends MetroConfig>(
       );
     }
 
+    // In CI, disable the watchman crawler outright: `runServer`'s own
+    // `watch: false` (see factory.ts) only disables file *watching*, but
+    // metro-file-map still prefers watchman for the initial crawl, which
+    // starts a daemon that indexes the whole monorepo in memory. Locally,
+    // watchman is genuinely useful (incremental rebuilds), so leave the
+    // existing debug override untouched there.
+    const isCI = Boolean(process.env.CI);
+    const useWatchman = isCI
+      ? false
+      : process.env.RN_HARNESS_DEBUG_USE_WATCHMAN !== '0';
+
+    if (isCI) {
+      metroWorkersLogger.debug(
+        'Disabling Metro/watchman crawler because CI is set'
+      );
+    }
+
+    const mergedBlockList = mergeHarnessBlockList(
+      metroConfig.resolver?.blockList
+    );
+
+    metroWorkersLogger.debug(
+      'Extending Metro resolver.blockList with %s harness build-output pattern(s) (%s total)',
+      HARNESS_METRO_BLOCK_LIST_PATTERNS.length,
+      mergedBlockList.length
+    );
+
     const patchedConfig: MetroConfig = {
       ...metroConfig,
       cacheVersion: getHarnessCacheVersion(harnessConfig),
@@ -97,9 +128,9 @@ export const withRnHarness = <T extends MetroConfig>(
       },
       resolver: {
         ...metroConfig.resolver,
-        blockList: undefined,
+        blockList: mergedBlockList,
         resolveRequest: harnessResolver,
-        useWatchman: process.env.RN_HARNESS_DEBUG_USE_WATCHMAN !== '0',
+        useWatchman,
       },
       transformer: {
         ...metroConfig.transformer,
