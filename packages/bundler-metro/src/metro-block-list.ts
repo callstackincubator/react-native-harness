@@ -1,23 +1,14 @@
 import type { MetroConfig } from 'metro-config';
+import { escapeRegExp } from '@react-native-harness/tools';
 
 type BlockList = NonNullable<MetroConfig['resolver']>['blockList'];
 
 /**
- * The only directory harness excludes on its own behalf: the cache it creates
- * and maintains under `.harness`, which Metro never needs to resolve or read.
- *
- * Scoped to `.harness/cache` rather than all of `.harness` on purpose --
- * `.harness/manifest.js` is served as a polyfill via
- * `serializer.getPolyfills`, and a module that harness injects into the graph
- * but that is missing from the file map fails the build with
- * `Failed to get the SHA-1 for: <path>`.
- *
- * Nothing else is added here. Excluding third-party directories (build output,
- * tool caches, native dependency trees) is the project's call, expressed
- * through `resolver.blockList` in its own `metro.config.js`, which harness
- * inherits below.
+ * Converts the canonical cache root into a cross-platform regular-expression
+ * source without duplicating knowledge of the cache directory layout.
  */
-const HARNESS_OWNED_EXCLUSIONS = /[/\\]\.harness[/\\]cache(?:[/\\]|$)/;
+const getHarnessCacheRootPatternSource = (harnessCacheRoot: string): string =>
+  escapeRegExp(harnessCacheRoot).replace(/\\\\|\//g, '[/\\\\]');
 
 /**
  * Paths harness must be able to crawl, carved out of whatever the project
@@ -84,7 +75,8 @@ export type BlockListDrop = {
  *   conflicts by dropping a pattern instead of failing the run.
  */
 export const getHarnessBlockList = (
-  metroConfig: MetroConfig
+  metroConfig: MetroConfig,
+  harnessCacheRoot: string
 ): { blockList: RegExp; dropped: BlockListDrop[] } => {
   const dropped: BlockListDrop[] = [];
   const userPatterns = toPatternArray(metroConfig.resolver?.blockList);
@@ -100,7 +92,9 @@ export const getHarnessBlockList = (
   const flags =
     [...flagCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
 
-  const sources = [HARNESS_OWNED_EXCLUSIONS.source];
+  const sources = [
+    `^${getHarnessCacheRootPatternSource(harnessCacheRoot)}(?:[/\\\\]|$)`,
+  ];
   for (const pattern of userPatterns) {
     if (stripStatefulFlags(pattern.flags) === flags) {
       sources.push(carveOutProtectedPaths(pattern.source));

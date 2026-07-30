@@ -18,6 +18,7 @@ export type {
   CrashArtifactWriter,
   HarnessPlatform,
   HarnessPlatformInitOptions,
+  HarnessPlatformRunnerFactory,
   CollectNativeCoverageOptions,
   HarnessPlatformRunner,
   RunTarget,

@@ -4,18 +4,18 @@ import {
   type AppSessionState,
   DeviceNotFoundError,
   AppNotInstalledError,
-  type HarnessPlatformInitOptions,
-  HarnessPlatformRunner,
+  type HarnessPlatformRunnerFactory,
 } from '@react-native-harness/platforms';
+import type { Config as HarnessConfig } from '@react-native-harness/config';
 import { VegaPlatformConfigSchema, type VegaPlatformConfig } from './config.js';
 import * as kepler from './kepler.js';
 
 const APP_EXIT_POLL_INTERVAL_MS = 1000;
 
-const getVegaRunner = async (
-  config: VegaPlatformConfig,
-  init?: HarnessPlatformInitOptions
-): Promise<HarnessPlatformRunner> => {
+const getVegaRunner: HarnessPlatformRunnerFactory<
+  VegaPlatformConfig,
+  HarnessConfig
+> = async (config, _harnessConfig, init) => {
   const parsedConfig = VegaPlatformConfigSchema.parse(config);
   const deviceId = parsedConfig.device.deviceId;
   const bundleId = parsedConfig.bundleId;
@@ -37,10 +37,10 @@ const getVegaRunner = async (
   // poll loop and the app on session teardown, in addition to the normal
   // dispose() path.
   const disposeCurrentAppSessionOnAbort = () => void currentAppSession?.dispose();
-  if (init?.signal.aborted) {
+  if (init.signal.aborted) {
     disposeCurrentAppSessionOnAbort();
   } else {
-    init?.signal.addEventListener('abort', disposeCurrentAppSessionOnAbort, {
+    init.signal.addEventListener('abort', disposeCurrentAppSessionOnAbort, {
       once: true,
     });
   }

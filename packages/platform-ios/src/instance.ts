@@ -31,6 +31,7 @@ import {
   createIosCrashReporter,
   getIosProcessNames,
 } from './crash-reporter.js';
+import { shouldOverlapXCTestBuildAndSimulatorBoot } from './startup-strategy.js';
 
 const iosInstanceLogger = logger.child('ios-instance');
 
@@ -74,58 +75,8 @@ export const getAppleSimulatorPlatformInstance = async (
     throw new DeviceNotFoundError(getDeviceName(config.device));
   }
 
-  const simulatorStatus = await simctl.getSimulatorStatus(udid);
   let startedByHarness = false;
-
-  iosInstanceLogger.debug(
-    'resolved iOS simulator %s with status %s',
-    udid,
-    simulatorStatus
-  );
-
-  if (
-    !simctl.isBootedSimulatorStatus(simulatorStatus) &&
-    !simctl.isBootingSimulatorStatus(simulatorStatus)
-  ) {
-    logger.info('Booting iOS simulator %s...', config.device.name);
-    iosInstanceLogger.debug(
-      'booting iOS simulator %s from status %s',
-      udid,
-      simulatorStatus
-    );
-    await simctl.bootSimulator(udid);
-    startedByHarness = true;
-  }
-
-  if (simctl.isBootedSimulatorStatus(simulatorStatus)) {
-    logger.info('Using booted iOS simulator %s...', config.device.name);
-  } else if (simctl.isBootingSimulatorStatus(simulatorStatus)) {
-    logger.info(
-      'Waiting for iOS simulator %s to finish booting...',
-      config.device.name
-    );
-  }
-
-  if (!simctl.isBootedSimulatorStatus(simulatorStatus)) {
-    iosInstanceLogger.debug(
-      'waiting for iOS simulator %s to finish booting',
-      udid
-    );
-    await simctl.waitForBoot(udid, init.signal);
-  }
-
-  const isInstalled = await simctl.isAppInstalled(udid, config.bundleId);
-
-  if (!isInstalled) {
-    const appPath = getHarnessAppPath();
-    await simctl.installApp(udid, appPath);
-  }
-
-  await simctl.applyHarnessJsLocationOverride(
-    udid,
-    config.bundleId,
-    `localhost:${harnessConfig.metroPort}`
-  );
+  let harnessJsLocationOverrideApplied = false;
 
   const xctestAgent = permissionsEnabled
     ? createXCTestAgentController({
@@ -139,18 +90,101 @@ export const getAppleSimulatorPlatformInstance = async (
       })
     : null;
 
-  let agentStarted = false;
-  try {
-    await xctestAgent?.ensureStarted();
-    agentStarted = true;
-  } finally {
-    if (!agentStarted) {
-      await xctestAgent?.dispose();
-      await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
-      if (startedByHarness) {
-        await simctl.shutdownSimulator(udid);
+  const prepareSimulator = async () => {
+    const simulatorStatus = await simctl.getSimulatorStatus(udid);
+
+    iosInstanceLogger.debug(
+      'resolved iOS simulator %s with status %s',
+      udid,
+      simulatorStatus
+    );
+
+    if (
+      !simctl.isBootedSimulatorStatus(simulatorStatus) &&
+      !simctl.isBootingSimulatorStatus(simulatorStatus)
+    ) {
+      logger.info('Booting iOS simulator %s...', config.device.name);
+      iosInstanceLogger.debug(
+        'booting iOS simulator %s from status %s',
+        udid,
+        simulatorStatus
+      );
+      await simctl.bootSimulator(udid);
+      startedByHarness = true;
+    }
+
+    if (simctl.isBootedSimulatorStatus(simulatorStatus)) {
+      logger.info('Using booted iOS simulator %s...', config.device.name);
+    } else if (simctl.isBootingSimulatorStatus(simulatorStatus)) {
+      logger.info(
+        'Waiting for iOS simulator %s to finish booting...',
+        config.device.name
+      );
+    }
+
+    if (!simctl.isBootedSimulatorStatus(simulatorStatus)) {
+      iosInstanceLogger.debug(
+        'waiting for iOS simulator %s to finish booting',
+        udid
+      );
+      await simctl.waitForBoot(udid, init.signal);
+    }
+
+    const isInstalled = await simctl.isAppInstalled(udid, config.bundleId);
+
+    if (!isInstalled) {
+      const appPath = getHarnessAppPath();
+      await simctl.installApp(udid, appPath);
+    }
+
+    await simctl.applyHarnessJsLocationOverride(
+      udid,
+      config.bundleId,
+      `localhost:${harnessConfig.metroPort}`
+    );
+    harnessJsLocationOverrideApplied = true;
+  };
+
+  if (xctestAgent) {
+    const overlapStartup = shouldOverlapXCTestBuildAndSimulatorBoot();
+    iosInstanceLogger.debug(
+      'selected %s XCTest build and simulator startup strategy',
+      overlapStartup ? 'parallel' : 'sequential'
+    );
+
+    const xctestPreparation = overlapStartup
+      ? xctestAgent.prepare()
+      : undefined;
+    // Observe an early build rejection while preparing the simulator; the
+    // original promise is still awaited below so its error is propagated.
+    void xctestPreparation?.catch(() => undefined);
+
+    let agentStarted = false;
+    try {
+      if (!overlapStartup) {
+        await xctestAgent.prepare();
+      }
+
+      await prepareSimulator();
+      await xctestPreparation;
+      await xctestAgent.ensureStarted();
+      agentStarted = true;
+    } catch (error) {
+      await xctestPreparation?.catch(() => undefined);
+      throw error;
+    } finally {
+      if (!agentStarted) {
+        await xctestAgent.dispose();
+        if (harnessJsLocationOverrideApplied) {
+          await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
+        }
+        if (startedByHarness) {
+          await simctl.shutdownSimulator(udid);
+        }
       }
     }
+  } else {
+    await prepareSimulator();
   }
 
   return {

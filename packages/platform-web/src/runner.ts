@@ -2,16 +2,16 @@ import {
   createAppSessionEmitter,
   type AppSession,
   type AppSessionState,
-  type HarnessPlatformInitOptions,
-  HarnessPlatformRunner,
+  type HarnessPlatformRunnerFactory,
 } from '@react-native-harness/platforms';
+import type { Config as HarnessConfig } from '@react-native-harness/config';
 import { chromium, firefox, webkit, type Browser, type Page } from 'playwright';
 import { WebPlatformConfigSchema, type WebPlatformConfig } from './config.js';
 
-const getWebRunner = async (
-  config: WebPlatformConfig,
-  init?: HarnessPlatformInitOptions
-): Promise<HarnessPlatformRunner> => {
+const getWebRunner: HarnessPlatformRunnerFactory<
+  WebPlatformConfig,
+  HarnessConfig
+> = async (config, _harnessConfig, init) => {
   const parsedConfig = WebPlatformConfigSchema.parse(config);
 
   let browser: Browser | null = null;
@@ -24,10 +24,10 @@ const getWebRunner = async (
     browser = null;
     page = null;
   };
-  if (init?.signal.aborted) {
+  if (init.signal.aborted) {
     closeBrowserOnAbort();
   } else {
-    init?.signal.addEventListener('abort', closeBrowserOnAbort, { once: true });
+    init.signal.addEventListener('abort', closeBrowserOnAbort, { once: true });
   }
 
   const launchBrowser = async () => {

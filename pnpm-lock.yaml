@@ -492,6 +492,9 @@ importers:
 
   packages/platform-vega:
     dependencies:
+      '@react-native-harness/config':
+        specifier: workspace:*
+        version: link:../config
       '@react-native-harness/platforms':
         specifier: workspace:*
         version: link:../platforms
@@ -507,6 +510,9 @@ importers:
 
   packages/platform-web:
     dependencies:
+      '@react-native-harness/config':
+        specifier: workspace:*
+        version: link:../config
       '@react-native-harness/platforms':
         specifier: workspace:*
         version: link:../platforms
