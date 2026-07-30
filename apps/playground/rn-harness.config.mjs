@@ -114,7 +114,7 @@ export default {
     }),
   ],
   defaultRunner: 'android',
-  platformReadyTimeout: 300000,
+  platformReadyTimeout: 600000,
   bridgeTimeout: 120000,
   testTimeout: 10000,
 
