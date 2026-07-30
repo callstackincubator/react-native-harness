@@ -20,28 +20,46 @@ const withBlockList = (
   blockList: NonNullable<MetroConfig['resolver']>['blockList']
 ): MetroConfig => ({ resolver: { blockList } }) as MetroConfig;
 
+const HARNESS_CACHE_ROOT = '/p/.harness/cache';
+
+const getBlockList = (
+  blockList: NonNullable<MetroConfig['resolver']>['blockList']
+) => getHarnessBlockList(withBlockList(blockList), HARNESS_CACHE_ROOT);
+
 describe('getHarnessBlockList', () => {
   describe('harness-owned exclusions', () => {
     it('excludes the cache harness creates under .harness', () => {
-      const { blockList } = getHarnessBlockList(withBlockList(undefined));
+      const { blockList } = getBlockList(undefined);
 
       expect(blockList.test('/p/.harness/cache/metro/ab/cdef')).toBe(true);
       expect(blockList.test('/p/.harness/cache/metro-file-map/map.v1')).toBe(
         true
+      );
+      expect(blockList.test('\\p\\.harness\\cache\\metro\\ab\\cdef')).toBe(
+        true
+      );
+    });
+
+    it('only excludes the canonical cache root', () => {
+      const { blockList } = getBlockList(undefined);
+
+      expect(blockList.test('/other/.harness/cache/metro/ab/cdef')).toBe(false);
+      expect(blockList.test('/p/.harness/cache-backup/metro/ab/cdef')).toBe(
+        false
       );
     });
 
     it('keeps the harness manifest crawlable', () => {
       // The manifest is injected via `serializer.getPolyfills`, so a module
       // missing from the file map fails with `Failed to get the SHA-1`.
-      const { blockList } = getHarnessBlockList(withBlockList(undefined));
+      const { blockList } = getBlockList(undefined);
 
       expect(blockList.test(getHarnessManifestPath('/p'))).toBe(false);
       expect(blockList.test('/p/.harness/manifest.js')).toBe(false);
     });
 
     it('adds nothing else of its own', () => {
-      const { blockList } = getHarnessBlockList(withBlockList(undefined));
+      const { blockList } = getBlockList(undefined);
 
       for (const path of [
         '/p/.nx/cache/a.js',
@@ -60,9 +78,7 @@ describe('getHarnessBlockList', () => {
 
   describe('inheriting the project blockList', () => {
     it('honours a plain project pattern', () => {
-      const { blockList, dropped } = getHarnessBlockList(
-        withBlockList(/[/\\]fixtures[/\\]/)
-      );
+      const { blockList, dropped } = getBlockList(/[/\\]fixtures[/\\]/);
 
       expect(dropped).toEqual([]);
       expect(blockList.test('/p/src/fixtures/big.json')).toBe(true);
@@ -70,9 +86,10 @@ describe('getHarnessBlockList', () => {
     });
 
     it('honours an array of project patterns', () => {
-      const { blockList, dropped } = getHarnessBlockList(
-        withBlockList([/[/\\]fixtures[/\\]/, /\.snap$/])
-      );
+      const { blockList, dropped } = getBlockList([
+        /[/\\]fixtures[/\\]/,
+        /\.snap$/,
+      ]);
 
       expect(dropped).toEqual([]);
       expect(blockList.test('/p/src/fixtures/big.json')).toBe(true);
@@ -80,27 +97,21 @@ describe('getHarnessBlockList', () => {
     });
 
     it('honours an anchored project pattern', () => {
-      const { blockList } = getHarnessBlockList(
-        withBlockList(/^\/p\/vendor\//)
-      );
+      const { blockList } = getBlockList(/^\/p\/vendor\//);
 
       expect(blockList.test('/p/vendor/lib.js')).toBe(true);
       expect(blockList.test('/other/p/vendor/lib.js')).toBe(false);
     });
 
     it('preserves group numbering so backreferences still work', () => {
-      const { blockList } = getHarnessBlockList(
-        withBlockList(/([/\\])dup\1/)
-      );
+      const { blockList } = getBlockList(/([/\\])dup\1/);
 
       expect(blockList.test('/p/dup/dup')).toBe(true);
       expect(blockList.test('/p/dup\\dup')).toBe(false);
     });
 
     it('adopts project flags so a case-insensitive pattern keeps working', () => {
-      const { blockList, dropped } = getHarnessBlockList(
-        withBlockList(/[/\\]FIXTURES[/\\]/i)
-      );
+      const { blockList, dropped } = getBlockList(/[/\\]FIXTURES[/\\]/i);
 
       expect(dropped).toEqual([]);
       expect(blockList.flags).toBe('i');
@@ -110,9 +121,11 @@ describe('getHarnessBlockList', () => {
     it('drops minority-flag patterns instead of letting Metro throw', () => {
       // Metro's array handling throws when combining mismatched flags.
       const minority = /[/\\]other[/\\]/i;
-      const { blockList, dropped } = getHarnessBlockList(
-        withBlockList([/[/\\]a[/\\]/, /[/\\]b[/\\]/, minority])
-      );
+      const { blockList, dropped } = getBlockList([
+        /[/\\]a[/\\]/,
+        /[/\\]b[/\\]/,
+        minority,
+      ]);
 
       expect(dropped).toEqual([
         { pattern: minority, reason: 'incompatible-flags' },
@@ -123,9 +136,7 @@ describe('getHarnessBlockList', () => {
     });
 
     it('is stateless across calls when given a global pattern', () => {
-      const { blockList } = getHarnessBlockList(
-        withBlockList(/[/\\]fixtures[/\\]/g)
-      );
+      const { blockList } = getBlockList(/[/\\]fixtures[/\\]/g);
 
       expect(blockList.test('/p/src/fixtures/a.json')).toBe(true);
       expect(blockList.test('/p/src/fixtures/a.json')).toBe(true);
@@ -134,9 +145,7 @@ describe('getHarnessBlockList', () => {
 
   describe('carving __tests__ out of the inherited blockList', () => {
     it("keeps tests crawlable under Metro's stock blockList", () => {
-      const { blockList, dropped } = getHarnessBlockList(
-        withBlockList(exclusionList())
-      );
+      const { blockList, dropped } = getBlockList(exclusionList());
 
       expect(dropped).toEqual([]);
       expect(blockList.test('/p/src/__tests__/smoke.harness.ts')).toBe(false);
@@ -145,8 +154,8 @@ describe('getHarnessBlockList', () => {
     it("keeps a project's own exclusions while still crawling tests", () => {
       // exclusionList fuses the project's patterns and the __tests__ rule into
       // a single alternation, so the two cannot be separated by inspection.
-      const { blockList, dropped } = getHarnessBlockList(
-        withBlockList(exclusionList([/ios\/build\/.*/]))
+      const { blockList, dropped } = getBlockList(
+        exclusionList([/ios\/build\/.*/])
       );
 
       expect(dropped).toEqual([]);
@@ -156,9 +165,7 @@ describe('getHarnessBlockList', () => {
     });
 
     it('keeps tests crawlable even inside an otherwise excluded directory', () => {
-      const { blockList } = getHarnessBlockList(
-        withBlockList(/[/\\]generated[/\\]/)
-      );
+      const { blockList } = getBlockList(/[/\\]generated[/\\]/);
 
       expect(blockList.test('/p/generated/a.js')).toBe(true);
       expect(blockList.test('/p/generated/__tests__/a.harness.ts')).toBe(false);
@@ -183,7 +190,7 @@ describe('getHarnessBlockList', () => {
       ];
 
       for (const pattern of patterns) {
-        const { blockList } = getHarnessBlockList(withBlockList(pattern));
+        const { blockList } = getBlockList(pattern);
 
         for (const path of paths) {
           const expected =

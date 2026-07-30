@@ -55,7 +55,7 @@ export const withRnHarness = <T extends MetroConfig>(
       getHarnessBabelTransformerPath(metroConfig);
 
     const { blockList: harnessBlockList, dropped: droppedBlockListPatterns } =
-      getHarnessBlockList(metroConfig);
+      getHarnessBlockList(metroConfig, harnessCache.paths.root);
 
     for (const { pattern } of droppedBlockListPatterns) {
       metroBlockListLogger.warn(
