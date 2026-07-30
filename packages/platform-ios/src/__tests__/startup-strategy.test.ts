@@ -13,12 +13,12 @@ import { shouldOverlapXCTestBuildAndSimulatorBoot } from '../startup-strategy.js
 
 describe('shouldOverlapXCTestBuildAndSimulatorBoot', () => {
   it.each([
-    [8 * 1024 ** 3, 7, false],
-    [9 * 1024 ** 3, 6, false],
-    [9 * 1024 ** 3, 7, true],
+    [false, 8 * 1024 ** 3, 7],
+    [false, 9 * 1024 ** 3, 6],
+    [true, 9 * 1024 ** 3, 7],
   ])(
-    'returns %s for %i bytes of memory and %i CPUs',
-    (totalMemoryBytes, availableCpuCount, expected) => {
+    'returns %s when memory is %i bytes and CPU count is %i',
+    (expected, totalMemoryBytes, availableCpuCount) => {
       mocks.getHostCapabilities.mockReturnValue({
         totalMemoryBytes,
         availableCpuCount,

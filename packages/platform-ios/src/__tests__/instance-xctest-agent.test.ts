@@ -256,6 +256,7 @@ describe('iOS XCTest agent runner integration', () => {
   });
 
   it('logs the selected XCTest startup strategy at debug level', async () => {
+    const wasVerbose = logger.isVerbose();
     logger.setVerbose(true);
     const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
@@ -277,7 +278,8 @@ describe('iOS XCTest agent runner integration', () => {
       );
       await instance.dispose();
     } finally {
-      logger.setVerbose(false);
+      logger.setVerbose(wasVerbose);
+      debug.mockRestore();
     }
   });
 
@@ -332,6 +334,37 @@ describe('iOS XCTest agent runner integration', () => {
     await expect(instancePromise).rejects.toThrow(simulatorError);
     expect(mocks.dispose).toHaveBeenCalledTimes(1);
     expect(shutdownSimulator).toHaveBeenCalledWith('sim-udid');
+  });
+
+  it('propagates a parallel XCTest build failure and cleans up simulator preparation', async () => {
+    startupStrategyMocks.shouldOverlapXCTestBuildAndSimulatorBoot.mockReturnValue(
+      true,
+    );
+    const buildError = new Error('build failed');
+    mocks.prepare.mockRejectedValue(buildError);
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+    const clearHarnessJsLocationOverride = vi
+      .spyOn(simctl, 'clearHarnessJsLocationOverride')
+      .mockResolvedValue(undefined);
+
+    await expect(
+      getAppleSimulatorPlatformInstance(
+        simulatorConfig,
+        harnessConfigWithPermissionsEnabled,
+        { signal: new AbortController().signal },
+      ),
+    ).rejects.toThrow(buildError);
+
+    expect(mocks.dispose).toHaveBeenCalledTimes(1);
+    expect(clearHarnessJsLocationOverride).toHaveBeenCalledWith(
+      'sim-udid',
+      'com.harnessplayground',
+    );
   });
 });
 
