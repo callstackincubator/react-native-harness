@@ -5,7 +5,12 @@ import {
   type AppSessionState,
   type AppleAppLaunchOptions,
 } from '@react-native-harness/platforms';
-import { logger, terminate, type Subprocess } from '@react-native-harness/tools';
+import {
+  delay,
+  logger,
+  terminate,
+  type Subprocess,
+} from '@react-native-harness/tools';
 import type { IosCrashReporter } from './crash-reporter.js';
 
 const iosAppSessionLogger = logger.child('ios-app-session');
@@ -26,8 +31,6 @@ type CreateIosAppSessionOptions = {
   signal?: AbortSignal;
 };
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export const createIosAppSession = async ({
   launch,
   stopApp,
@@ -42,6 +45,35 @@ export const createIosAppSession = async ({
   let disposed = false;
   let stopPolling = false;
   let hasObservedRunning = false;
+  let pollDelayTimeout: ReturnType<typeof setTimeout> | null = null;
+  let resolvePollDelay: (() => void) | null = null;
+
+  // Unlike a raced delay() loser (which is fine to just discard), this wait
+  // is directly `await`ed by pollTask with nothing else racing it, so
+  // cancelling it must also resolve the promise immediately — otherwise
+  // dispose() blocks on Promise.allSettled([...pollTask]) for up to
+  // APP_EXIT_POLL_INTERVAL_MS instead of returning right away.
+  const waitForNextPoll = () =>
+    new Promise<void>((resolve) => {
+      resolvePollDelay = () => {
+        resolvePollDelay = null;
+        pollDelayTimeout = null;
+        resolve();
+      };
+
+      pollDelayTimeout = setTimeout(() => {
+        resolvePollDelay?.();
+      }, APP_EXIT_POLL_INTERVAL_MS);
+    });
+
+  const cancelPendingPollDelay = () => {
+    if (pollDelayTimeout) {
+      clearTimeout(pollDelayTimeout);
+      pollDelayTimeout = null;
+    }
+
+    resolvePollDelay?.();
+  };
 
   const setExited = (reason: 'observed-exit' | 'process-gone') => {
     if (disposed || state.status !== 'running') {
@@ -93,21 +125,32 @@ export const createIosAppSession = async ({
         iosAppSessionLogger.debug('iOS app session poll failed', error);
       }
 
-      await sleep(APP_EXIT_POLL_INTERVAL_MS);
+      if (stopPolling) {
+        return;
+      }
+
+      await waitForNextPoll();
     }
   })();
 
-  const launchSettled = await Promise.race([
-    launchProcess.then(
-      () => 'settled' as const,
-      () => 'settled' as const
-    ),
-    sleep(LAUNCH_FAILURE_SETTLE_MS).then(() => 'running' as const),
-  ]);
+  const launchFailureSettleTimer = delay(LAUNCH_FAILURE_SETTLE_MS);
+  let launchSettled: 'settled' | 'running';
+  try {
+    launchSettled = await Promise.race([
+      launchProcess.then(
+        () => 'settled' as const,
+        () => 'settled' as const
+      ),
+      launchFailureSettleTimer.promise.then(() => 'running' as const),
+    ]);
+  } finally {
+    launchFailureSettleTimer.cancel();
+  }
 
   if (launchSettled === 'settled' && !(await isAppRunning())) {
     disposed = true;
     stopPolling = true;
+    cancelPendingPollDelay();
     emitter.clear();
     await Promise.allSettled([logTask, exitTask, pollTask]);
     await launchProcess;
@@ -121,6 +164,7 @@ export const createIosAppSession = async ({
 
     disposed = true;
     stopPolling = true;
+    cancelPendingPollDelay();
     state = { status: 'disposed', occurredAt: Date.now() };
     emitter.clear();
 

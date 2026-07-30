@@ -2,6 +2,7 @@ import {
   createHarnessArtifactDirectory,
   getHarnessCacheRootPath,
   getAvailablePort,
+  delay as cancellableDelay,
   logger,
   spawn,
   terminate,
@@ -734,8 +735,10 @@ const getRuntimeConfiguration = (
   }, getDefaultRuntimeConfiguration());
 };
 
+// Sequential wait between readiness polls; not raced against anything, so
+// the plain (uncancelled) promise is fine here.
 const delay = async (ms: number) => {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+  await cancellableDelay(ms).promise;
 };
 
 const waitForAgentReady = async (options: {
@@ -771,12 +774,17 @@ const waitForShutdown = async (options: {
   }
 
   const timedOut = Symbol('timedOut');
-  const result = await Promise.race([
-    options.processTask.then(() => undefined),
-    delay(options.shutdownTimeoutMs).then(() => timedOut),
-  ]);
+  const shutdownTimer = cancellableDelay(options.shutdownTimeoutMs);
+  try {
+    const result = await Promise.race([
+      options.processTask.then(() => undefined),
+      shutdownTimer.promise.then(() => timedOut),
+    ]);
 
-  return result !== timedOut;
+    return result !== timedOut;
+  } finally {
+    shutdownTimer.cancel();
+  }
 };
 
 const waitForGracefulShutdown = async (options: {
@@ -786,27 +794,32 @@ const waitForGracefulShutdown = async (options: {
 }): Promise<{ didStop: boolean; requestError: unknown | null }> => {
   let requestError: unknown | null = null;
   const timedOut = Symbol('timedOut');
+  const shutdownTimer = cancellableDelay(options.shutdownTimeoutMs);
 
-  const result = await Promise.race([
-    (async () => {
-      try {
-        await options.client.shutdown();
-      } catch (error) {
-        requestError = error;
-      }
+  try {
+    const result = await Promise.race([
+      (async () => {
+        try {
+          await options.client.shutdown();
+        } catch (error) {
+          requestError = error;
+        }
 
-      return await waitForShutdown({
-        processTask: options.processTask,
-        shutdownTimeoutMs: options.shutdownTimeoutMs,
-      });
-    })(),
-    delay(options.shutdownTimeoutMs).then(() => timedOut),
-  ]);
+        return await waitForShutdown({
+          processTask: options.processTask,
+          shutdownTimeoutMs: options.shutdownTimeoutMs,
+        });
+      })(),
+      shutdownTimer.promise.then(() => timedOut),
+    ]);
 
-  return {
-    didStop: result !== timedOut && result === true,
-    requestError,
-  };
+    return {
+      didStop: result !== timedOut && result === true,
+      requestError,
+    };
+  } finally {
+    shutdownTimer.cancel();
+  }
 };
 
 const waitForChildProcessExit = async (subprocess: Subprocess) => {

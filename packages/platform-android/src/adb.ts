@@ -1,8 +1,10 @@
 import { type AndroidAppLaunchOptions } from '@react-native-harness/platforms';
 import {
+  delay,
   logger,
   spawn,
   SubprocessError,
+  waitForAbort,
   type Subprocess,
 } from '@react-native-harness/tools';
 import { spawn as nodeSpawn } from 'node:child_process';
@@ -34,28 +36,6 @@ import {
   AdbPermissionGrantError,
 } from './adb-errors.js';
 
-const wait = async (ms: number): Promise<void> => {
-  await new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-};
-
-const waitForAbort = (signal: AbortSignal): Promise<never> => {
-  if (signal.aborted) {
-    return Promise.reject(signal.reason);
-  }
-
-  return new Promise((_, reject) => {
-    signal.addEventListener(
-      'abort',
-      () => {
-        reject(signal.reason);
-      },
-      { once: true }
-    );
-  });
-};
-
 const waitWithSignal = async (
   ms: number,
   signal: AbortSignal
@@ -64,7 +44,18 @@ const waitWithSignal = async (
     throw signal.reason;
   }
 
-  await Promise.race([wait(ms), waitForAbort(signal)]);
+  // Both sides of this race must be torn down explicitly when they lose:
+  // an uncancelled timer keeps a ref'd Timeout alive, and an uncancelled
+  // abort wait leaks a listener on `signal`, which is a session-lifetime
+  // signal here and gets polled against once per second.
+  const timer = delay(ms);
+  const abort = waitForAbort(signal);
+  try {
+    await Promise.race([timer.promise, abort.promise]);
+  } finally {
+    timer.cancel();
+    abort.cancel();
+  }
 };
 
 const EMULATOR_STARTUP_OBSERVATION_TIMEOUT_MS = 5000;
@@ -617,13 +608,19 @@ export const startEmulator = async (
       throw error;
     });
 
-  const observationTimeout = wait(EMULATOR_STARTUP_OBSERVATION_TIMEOUT_MS).then(
+  const observationTimer = delay(EMULATOR_STARTUP_OBSERVATION_TIMEOUT_MS);
+  const observationTimeout = observationTimer.promise.then(
     () => 'timeout' as const
   );
 
   try {
     await Promise.race([earlyExit, observedBoot, observationTimeout]);
   } finally {
+    // If `earlyExit` or `observedBoot` won the race, this timer would
+    // otherwise sit ref'd in the event loop for the rest of its 5s;
+    // cancelling here is a no-op on the happy "proceed detached" path
+    // where the timer itself won.
+    observationTimer.cancel();
     cleanup();
   }
 

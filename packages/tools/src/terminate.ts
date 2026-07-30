@@ -1,15 +1,5 @@
 import type { Subprocess } from 'nano-spawn';
-
-// Cancellable so the winning race branch can clear the timer instead of
-// leaving a ref'd setTimeout alive for `forceAfterMs` after the process
-// already exited gracefully.
-const delay = (ms: number): { promise: Promise<void>; cancel: () => void } => {
-  let timer: ReturnType<typeof setTimeout>;
-  const promise = new Promise<void>((resolve) => {
-    timer = setTimeout(resolve, ms);
-  });
-  return { promise, cancel: () => clearTimeout(timer) };
-};
+import { delay } from './delay.js';
 
 const waitForExit = (
   childProcess: Awaited<Subprocess['nodeChildProcess']>

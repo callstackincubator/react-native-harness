@@ -12,9 +12,6 @@ import * as kepler from './kepler.js';
 
 const APP_EXIT_POLL_INTERVAL_MS = 1000;
 
-const sleep = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
 const getVegaRunner = async (
   config: VegaPlatformConfig,
   init?: HarnessPlatformInitOptions
@@ -57,6 +54,35 @@ const getVegaRunner = async (
       let state: AppSessionState = { status: 'running' };
       let disposed = false;
       let stopPolling = false;
+      let pollDelayTimeout: ReturnType<typeof setTimeout> | null = null;
+      let resolvePollDelay: (() => void) | null = null;
+
+      // Unlike a raced delay() loser (which is fine to just discard), this
+      // wait is directly `await`ed by pollTask with nothing else racing it,
+      // so cancelling it must also resolve the promise immediately —
+      // otherwise dispose() blocks on `await pollTask` for up to
+      // APP_EXIT_POLL_INTERVAL_MS instead of returning right away.
+      const waitForNextPoll = () =>
+        new Promise<void>((resolve) => {
+          resolvePollDelay = () => {
+            resolvePollDelay = null;
+            pollDelayTimeout = null;
+            resolve();
+          };
+
+          pollDelayTimeout = setTimeout(() => {
+            resolvePollDelay?.();
+          }, APP_EXIT_POLL_INTERVAL_MS);
+        });
+
+      const cancelPendingPollDelay = () => {
+        if (pollDelayTimeout) {
+          clearTimeout(pollDelayTimeout);
+          pollDelayTimeout = null;
+        }
+
+        resolvePollDelay?.();
+      };
 
       const pollTask = (async () => {
         while (!stopPolling) {
@@ -68,7 +94,11 @@ const getVegaRunner = async (
             return;
           }
 
-          await sleep(APP_EXIT_POLL_INTERVAL_MS);
+          if (stopPolling) {
+            return;
+          }
+
+          await waitForNextPoll();
         }
       })();
 
@@ -80,6 +110,7 @@ const getVegaRunner = async (
 
           disposed = true;
           stopPolling = true;
+          cancelPendingPollDelay();
           state = { status: 'disposed', occurredAt: Date.now() };
           emitter.clear();
           await kepler.stopApp(deviceId, bundleId);

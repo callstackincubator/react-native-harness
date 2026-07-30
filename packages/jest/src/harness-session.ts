@@ -41,6 +41,7 @@ import {
   logger,
   getTimeoutSignal,
   ensureSignalsDeliverable,
+  waitForAbort,
   type Diagnostics,
 } from '@react-native-harness/tools';
 import {
@@ -204,22 +205,6 @@ export const getSignalExitCodeForRunState = (
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-const createAbortError = () =>
-  new DOMException('The operation was aborted', 'AbortError');
-
-const waitForAbort = (signal: AbortSignal): Promise<never> => {
-  if (signal.aborted) {
-    return Promise.reject(signal.reason ?? createAbortError());
-  }
-  return new Promise((_, reject) => {
-    signal.addEventListener(
-      'abort',
-      () => reject(signal.reason ?? createAbortError()),
-      { once: true },
-    );
-  });
-};
-
 // Bounds only the init *call* with a readiness timeout; `options.signal` (the
 // session-lifetime signal) is passed to `work` unmodified, so a slow init
 // call keeps observing real session teardown, not a synthetic timeout abort.
@@ -232,12 +217,17 @@ export const withPlatformReadyTimeout = async <T>(options: {
   work: (signal: AbortSignal) => Promise<T>;
 }): Promise<T> => {
   const timeoutSignal = getTimeoutSignal(options.timeout);
-  return await Promise.race([
-    options.work(options.signal),
-    waitForAbort(timeoutSignal).catch(() => {
-      throw new PlatformReadyTimeoutError(options.timeout);
-    }),
-  ]);
+  const abortWait = waitForAbort(timeoutSignal);
+  try {
+    return await Promise.race([
+      options.work(options.signal),
+      abortWait.promise.catch(() => {
+        throw new PlatformReadyTimeoutError(options.timeout);
+      }),
+    ]);
+  } finally {
+    abortWait.cancel();
+  }
 };
 
 type AppReadyOptions = {
@@ -264,15 +254,17 @@ export const waitForStartupCrash = async ({
   signal: AbortSignal;
 }) => {
   if (!detectNativeCrashes) {
-    return await waitForAbort(signal);
+    return await waitForAbort(signal).promise;
   }
 
   const watch = crashMonitor.watch(testFilePath, 'startup');
   watch.promise.catch(ignorePromiseRejection); // suppress unhandled-rejection when abort wins race
+  const abortWait = waitForAbort(signal);
   try {
-    return await Promise.race([watch.promise, waitForAbort(signal)]);
+    return await Promise.race([watch.promise, abortWait.promise]);
   } finally {
     watch.cancel();
+    abortWait.cancel();
   }
 };
 

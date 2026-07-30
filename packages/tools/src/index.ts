@@ -1,4 +1,5 @@
 export * from './abort.js';
+export * from './delay.js';
 export * from './net.js';
 export * from './color.js';
 export * from './logger.js';

@@ -61,6 +61,39 @@ describe('createIosAppSession', () => {
     }
   });
 
+  it('resolves dispose() without waiting out the pending poll delay', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const launchProcess = createPendingLaunchProcess();
+      const isAppRunning = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
+      const stopApp = vi.fn(async () => undefined);
+
+      const sessionPromise = createIosAppSession({
+        launch: () => launchProcess,
+        stopApp,
+        isAppRunning,
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+      const session = await sessionPromise;
+
+      // Let the poll loop enter its 1s wait before tearing down.
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Regression: dispose() used to await the poll task directly, which
+      // was blocked on an uncancelled 1s sleep(). With fake timers and no
+      // advanceTimersByTimeAsync call left below, this await only resolves
+      // if dispose() itself resolves the pending poll delay instead of
+      // waiting for the underlying timer to fire.
+      await session.dispose();
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('disposes the session when the session-lifetime signal aborts', async () => {
     vi.useFakeTimers();
 

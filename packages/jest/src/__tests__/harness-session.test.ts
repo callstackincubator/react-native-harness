@@ -155,6 +155,40 @@ describe('waitForStartupCrash', () => {
     await expect(waitPromise).rejects.toThrow('Aborted');
     expect(watch).not.toHaveBeenCalled();
   });
+
+  it('removes its abort listener on the session signal once the crash watch wins', async () => {
+    let rejectWatch!: (error: unknown) => void;
+    const cancel = vi.fn();
+    const watch = vi.fn(() => ({
+      promise: new Promise<never>((_, reject) => {
+        rejectWatch = reject;
+      }),
+      cancel,
+    }));
+    const crashMonitor = { watch } as unknown as CrashMonitor;
+    const controller = new AbortController();
+    const addSpy = vi.spyOn(controller.signal, 'addEventListener');
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+
+    const waitPromise = waitForStartupCrash({
+      crashMonitor,
+      detectNativeCrashes: true,
+      testFilePath: '/test.harness.ts',
+      signal: controller.signal,
+    });
+
+    // The crash watch wins the race, not the session signal.
+    rejectWatch(new Error('native crash detected'));
+
+    await expect(waitPromise).rejects.toThrow('native crash detected');
+    expect(cancel).toHaveBeenCalledTimes(1);
+
+    // Regression: forgetting to cancel the losing waitForAbort() left its
+    // listener attached to this session-lifetime signal for the rest of
+    // the session — one leaked listener per test file.
+    expect(addSpy).toHaveBeenCalledTimes(1);
+    expect(removeSpy).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('withPlatformReadyTimeout', () => {
