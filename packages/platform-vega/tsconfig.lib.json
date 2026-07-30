@@ -16,6 +16,9 @@
     },
     {
       "path": "../platforms/tsconfig.lib.json"
+    },
+    {
+      "path": "../config/tsconfig.lib.json"
     }
   ]
 }

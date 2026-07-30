@@ -143,6 +143,21 @@ export type HarnessPlatformInitOptions = {
   diagnostics?: Diagnostics;
 };
 
+/**
+ * Shape every platform runner module's default export must satisfy. The
+ * harness session always invokes it as
+ * `module.default(platform.config, runtimeConfig, init)` — annotate each
+ * runner's default export with this type (parameterized by the platform's
+ * config type and its harness config type) so a signature drift like a
+ * missing `harnessConfig` parameter, or an optional `init`, fails to
+ * typecheck instead of throwing at runtime.
+ */
+export type HarnessPlatformRunnerFactory<TConfig, THarnessConfig> = (
+  config: TConfig,
+  harnessConfig: THarnessConfig,
+  init: HarnessPlatformInitOptions
+) => Promise<HarnessPlatformRunner>;
+
 export type HarnessCliCommandContext = {
   cwd: string;
   projectRoot: string;

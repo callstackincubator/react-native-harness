@@ -1,7 +1,4 @@
-import {
-  HarnessPlatformRunner,
-  type HarnessPlatformInitOptions,
-} from '@react-native-harness/platforms';
+import { type HarnessPlatformRunnerFactory } from '@react-native-harness/platforms';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
 import {
   AndroidPlatformConfigSchema,
@@ -17,11 +14,10 @@ import {
   initializeAndroidProcessEnv,
 } from './environment.js';
 
-const getAndroidRunner = async (
-  config: AndroidPlatformConfig,
-  harnessConfig: HarnessConfig,
-  init: HarnessPlatformInitOptions
-): Promise<HarnessPlatformRunner> => {
+const getAndroidRunner: HarnessPlatformRunnerFactory<
+  AndroidPlatformConfig,
+  HarnessConfig
+> = async (config, harnessConfig, init) => {
   const parsedConfig = AndroidPlatformConfigSchema.parse(config);
 
   initializeAndroidProcessEnv();
