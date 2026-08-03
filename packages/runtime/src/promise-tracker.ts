@@ -15,10 +15,6 @@ export type TrackedPromiseRecord = {
 
 type PromiseResolve<T> = (value: T | PromiseLike<T>) => void;
 type PromiseReject = (reason?: unknown) => void;
-type PromiseExecutor<T> = (
-  resolve: PromiseResolve<T>,
-  reject: PromiseReject
-) => void;
 
 // Backstop against unbounded growth if GC can't keep up: never-settling
 // promises created in a hot loop would otherwise OOM the heap. Diagnostics only
@@ -151,115 +147,7 @@ const wrapPromiseCallback = <TArgs extends unknown[], TResult>(
 const createTrackedPromiseConstructor = (): PromiseConstructor => {
   const NativePromise = getOriginalPromise();
 
-  class TrackedPromise<T> extends NativePromise<T> {
-    constructor(executor: PromiseExecutor<T>) {
-      const registration = registerPromise();
-
-      super((resolve, reject) => {
-        try {
-          executor(
-            (value: T | PromiseLike<T>) => {
-              if (isThenable(value)) {
-                runWithoutPromiseTracking(() => {
-                  NativePromise.resolve(value).then(
-                    () => markPromiseSettled(registration.id),
-                    () => markPromiseSettled(registration.id)
-                  );
-                });
-              } else {
-                markPromiseSettled(registration.id);
-              }
-
-              resolve(value);
-            },
-            (reason?: unknown) => {
-              markPromiseSettled(registration.id);
-              reject(reason);
-            }
-          );
-        } catch (error) {
-          markPromiseSettled(registration.id);
-          throw error;
-        }
-      });
-
-      if (registration.id !== null) {
-        promiseIds.set(this, registration.id);
-        promiseFinalization?.register(this, registration.id);
-      }
-
-      if (registration.test) {
-        promiseContexts.set(this, registration.test);
-      }
-    }
-
-    override then<TResult1 = T, TResult2 = never>(
-      onfulfilled?:
-        | ((value: T) => TResult1 | PromiseLike<TResult1>)
-        | undefined
-        | null,
-      onrejected?:
-        | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
-        | undefined
-        | null
-    ): Promise<TResult1 | TResult2> {
-      const context = promiseContexts.get(this);
-      const result = runWithoutPromiseTracking(() =>
-        super.then(
-          wrapPromiseCallback(context, onfulfilled),
-          wrapPromiseCallback(context, onrejected)
-        )
-      ) as Promise<TResult1 | TResult2>;
-
-      return propagatePromiseContext(result, context);
-    }
-
-    override catch<TResult = never>(
-      onrejected?:
-        | ((reason: unknown) => TResult | PromiseLike<TResult>)
-        | undefined
-        | null
-    ): Promise<T | TResult> {
-      const context = promiseContexts.get(this);
-      const result = runWithoutPromiseTracking(() =>
-        super.catch(wrapPromiseCallback(context, onrejected))
-      ) as Promise<T | TResult>;
-
-      return propagatePromiseContext(result, context);
-    }
-
-    override finally(onfinally?: (() => void) | undefined | null): Promise<T> {
-      const context = promiseContexts.get(this);
-
-      if (onfinally == null) {
-        return this.then();
-      }
-
-      return this.then(
-        (value) => {
-          const result = runWithPromiseTrackerTestContext(context, onfinally);
-
-          return runWithoutPromiseTracking(() =>
-            NativePromise.resolve(result).then(() => value)
-          );
-        },
-        (reason: unknown) => {
-          const result = runWithPromiseTrackerTestContext(context, onfinally);
-
-          return runWithoutPromiseTracking(() =>
-            NativePromise.resolve(result).then(() => {
-              throw reason;
-            })
-          );
-        }
-      );
-    }
-  }
-
-  // Keep static Promise factories on Hermes' native Promise path. Inheriting
-  // these methods makes them construct TrackedPromise instances, which can
-  // expose Hermes' internal promise state instead of the settled value.
-  const nativePromiseMethods = [
+  const staticPromiseMethods = new Set<PropertyKey>([
     'resolve',
     'reject',
     'all',
@@ -267,82 +155,220 @@ const createTrackedPromiseConstructor = (): PromiseConstructor => {
     'any',
     'race',
     'try',
-  ] as const;
-
-  for (const methodName of nativePromiseMethods) {
-    const method: unknown = Reflect.get(NativePromise, methodName);
-
-    if (typeof method !== 'function') {
-      continue;
-    }
-
-    Object.defineProperty(TrackedPromise, methodName, {
-      configurable: true,
-      writable: true,
-      value: (...args: unknown[]) =>
-        propagatePromiseContext(
-          Reflect.apply(method, NativePromise, args) as Promise<unknown>,
-          getCurrentPromiseContext(),
-        ),
-    });
-  }
-
-  const withResolvers: unknown = Reflect.get(NativePromise, 'withResolvers');
-
-  if (typeof withResolvers === 'function') {
-    Object.defineProperty(TrackedPromise, 'withResolvers', {
-      configurable: true,
-      writable: true,
-      value: () => {
-        const capability = Reflect.apply(withResolvers, NativePromise, []) as {
-          promise: Promise<unknown>;
-        };
-        propagatePromiseContext(
-          capability.promise,
-          getCurrentPromiseContext(),
-        );
-        return capability;
-      },
-    });
-  }
+    'withResolvers',
+  ]);
+  const staticMethodWrappers = new Map<
+    PropertyKey,
+    { method: unknown; wrapper: unknown }
+  >();
 
   function propagatePromiseContext<T>(
     promise: Promise<T>,
     context: PromiseTrackerTestContext | undefined,
+    decorate = false,
   ): Promise<T> {
-    if (!context) {
-      return promise;
+    if (context) {
+      promiseContexts.set(promise, context);
     }
 
-    promiseContexts.set(promise, context);
+    if ((context || decorate) && Object.isExtensible(promise)) {
+      const properties: PropertyDescriptorMap = {};
 
-    if (
-      !(promise instanceof TrackedPromise) &&
-      Object.isExtensible(promise)
-    ) {
-      Object.defineProperties(promise, {
-        then: {
+      if (promise.then === NativePromise.prototype.then) {
+        properties.then = {
           configurable: true,
           writable: true,
-          value: TrackedPromise.prototype.then,
-        },
-        catch: {
+          value: trackedThen,
+        };
+      }
+
+      if (promise.catch === NativePromise.prototype.catch) {
+        properties.catch = {
           configurable: true,
           writable: true,
-          value: TrackedPromise.prototype.catch,
-        },
-        finally: {
+          value: trackedCatch,
+        };
+      }
+
+      if (promise.finally === NativePromise.prototype.finally) {
+        properties.finally = {
           configurable: true,
           writable: true,
-          value: TrackedPromise.prototype.finally,
-        },
-      });
+          value: trackedFinally,
+        };
+      }
+
+      Object.defineProperties(promise, properties);
     }
 
     return promise;
   }
 
-  return TrackedPromise as PromiseConstructor;
+  function trackedThen<T, TResult1 = T, TResult2 = never>(
+    this: Promise<T>,
+    onfulfilled?:
+      | ((value: T) => TResult1 | PromiseLike<TResult1>)
+      | undefined
+      | null,
+    onrejected?:
+      | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+      | undefined
+      | null,
+  ): Promise<TResult1 | TResult2> {
+    const context = promiseContexts.get(this);
+    const result = runWithoutPromiseTracking(() =>
+      NativePromise.prototype.then.call(
+        this,
+        wrapPromiseCallback(context, onfulfilled),
+        wrapPromiseCallback(context, onrejected),
+      ),
+    ) as Promise<TResult1 | TResult2>;
+
+    return propagatePromiseContext(result, context, true);
+  }
+
+  function trackedCatch<T, TResult = never>(
+    this: Promise<T>,
+    onrejected?:
+      | ((reason: unknown) => TResult | PromiseLike<TResult>)
+      | undefined
+      | null,
+  ): Promise<T | TResult> {
+    return trackedThen.call(this, undefined, onrejected) as Promise<T | TResult>;
+  }
+
+  function trackedFinally<T>(
+    this: Promise<T>,
+    onfinally?: (() => void) | undefined | null,
+  ): Promise<T> {
+    const context = promiseContexts.get(this);
+
+    if (onfinally == null) {
+      return trackedThen.call(this) as Promise<T>;
+    }
+
+    return trackedThen.call(
+      this,
+      (value: unknown) => {
+        const result = runWithPromiseTrackerTestContext(context, onfinally);
+
+        return runWithoutPromiseTracking(() =>
+          NativePromise.resolve(result).then(() => value as T),
+        );
+      },
+      (reason: unknown) => {
+        const result = runWithPromiseTrackerTestContext(context, onfinally);
+
+        return runWithoutPromiseTracking(() =>
+          NativePromise.resolve(result).then(() => {
+            throw reason;
+          }),
+        );
+      },
+    ) as Promise<T>;
+  }
+
+  const handler: ProxyHandler<PromiseConstructor> = {
+    construct(target, args, newTarget) {
+      const executor = args[0];
+
+      if (typeof executor !== 'function') {
+        return Reflect.construct(target, args, newTarget);
+      }
+
+      const registration = registerPromise();
+      let promise: Promise<unknown>;
+
+      try {
+        promise = Reflect.construct(
+          target,
+          [
+            (resolve: PromiseResolve<unknown>, reject: PromiseReject) => {
+              try {
+                executor(
+                  (value: unknown | PromiseLike<unknown>) => {
+                    if (isThenable(value)) {
+                      runWithoutPromiseTracking(() => {
+                        NativePromise.resolve(value).then(
+                          () => markPromiseSettled(registration.id),
+                          () => markPromiseSettled(registration.id),
+                        );
+                      });
+                    } else {
+                      markPromiseSettled(registration.id);
+                    }
+
+                    resolve(value);
+                  },
+                  (reason?: unknown) => {
+                    markPromiseSettled(registration.id);
+                    reject(reason);
+                  },
+                );
+              } catch (error) {
+                markPromiseSettled(registration.id);
+                throw error;
+              }
+            },
+          ],
+          newTarget,
+        ) as Promise<unknown>;
+      } catch (error) {
+        markPromiseSettled(registration.id);
+        throw error;
+      }
+
+      if (newTarget === TrackedPromise && Object.isExtensible(promise)) {
+        Object.defineProperty(promise, 'constructor', {
+          configurable: true,
+          writable: true,
+          value: TrackedPromise,
+        });
+      }
+
+      if (registration.id !== null) {
+        promiseIds.set(promise, registration.id);
+        promiseFinalization?.register(promise, registration.id);
+      }
+
+      return propagatePromiseContext(promise, registration.test, true);
+    },
+    get(target, property, receiver) {
+      const value: unknown = Reflect.get(target, property, receiver);
+
+      if (
+        receiver !== TrackedPromise ||
+        !staticPromiseMethods.has(property) ||
+        typeof value !== 'function'
+      ) {
+        return value;
+      }
+
+      const cached = staticMethodWrappers.get(property);
+      if (cached?.method === value) {
+        return cached.wrapper;
+      }
+
+      const wrapper = function (this: unknown, ...args: unknown[]) {
+        const result: unknown = Reflect.apply(value, this, args);
+        const context = getCurrentPromiseContext();
+
+        if (property === 'withResolvers') {
+          const capability = result as { promise: Promise<unknown> };
+          propagatePromiseContext(capability.promise, context);
+          return capability;
+        }
+
+        return propagatePromiseContext(result as Promise<unknown>, context);
+      };
+
+      staticMethodWrappers.set(property, { method: value, wrapper });
+      return wrapper;
+    },
+  };
+
+  const TrackedPromise = new Proxy(NativePromise, handler);
+  return TrackedPromise;
 };
 
 export const installPromiseTracker = (): void => {

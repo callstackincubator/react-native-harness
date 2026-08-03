@@ -35,6 +35,49 @@ describe('promise tracker', () => {
     expect(pending[0].stack).toContain('Promise created');
   });
 
+  it('preserves native Promise instances created through the global constructor', () => {
+    const NativePromise = globalThis.Promise;
+    installPromiseTracker();
+
+    const promise = new Promise(() => undefined);
+
+    expect(Object.getPrototypeOf(promise)).toBe(NativePromise.prototype);
+    expect(promise).toBeInstanceOf(Promise);
+    expect(promise.constructor).toBe(Promise);
+    expect(Promise.resolve(promise)).toBe(promise);
+    expect(Object.keys(promise)).toEqual([]);
+  });
+
+  it('preserves custom Promise subclass behavior', async () => {
+    installPromiseTracker();
+
+    let usedCustomThen = false;
+    class CustomPromise<T> extends Promise<T> {
+      override then<TResult1 = T, TResult2 = never>(
+        onfulfilled?:
+          | ((value: T) => TResult1 | PromiseLike<TResult1>)
+          | undefined
+          | null,
+        onrejected?:
+          | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+          | undefined
+          | null,
+      ): Promise<TResult1 | TResult2> {
+        usedCustomThen = true;
+        return super.then(onfulfilled, onrejected);
+      }
+    }
+
+    const promise = new CustomPromise<number>((resolve) => resolve(55));
+
+    expect(Object.getPrototypeOf(promise)).toBe(CustomPromise.prototype);
+    expect(promise).toBeInstanceOf(CustomPromise);
+    expect(promise.constructor).toBe(CustomPromise);
+    expect(CustomPromise.resolve(promise)).toBe(promise);
+    await expect(promise.then((value) => value)).resolves.toBe(55);
+    expect(usedCustomThen).toBe(true);
+  });
+
   it('removes promises when they resolve', async () => {
     installPromiseTracker();
 
