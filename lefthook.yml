@@ -11,7 +11,7 @@ pre-push:
   parallel: true
   commands:
     test:
-      run: pnpm nx affected -t test --base=origin/main --head=HEAD
+      run: pnpm nx affected -t test --base=origin/main --head=HEAD --outputStyle=static
 
     build:
-      run: pnpm nx affected -t build --base=origin/main --head=HEAD
+      run: pnpm nx affected -t build --base=origin/main --head=HEAD --outputStyle=static
