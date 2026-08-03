@@ -211,11 +211,7 @@ const createTrackedPromiseConstructor = (): PromiseConstructor => {
         )
       ) as Promise<TResult1 | TResult2>;
 
-      if (context && typeof result === 'object') {
-        promiseContexts.set(result, context);
-      }
-
-      return result;
+      return propagatePromiseContext(result, context);
     }
 
     override catch<TResult = never>(
@@ -229,11 +225,7 @@ const createTrackedPromiseConstructor = (): PromiseConstructor => {
         super.catch(wrapPromiseCallback(context, onrejected))
       ) as Promise<T | TResult>;
 
-      if (context && typeof result === 'object') {
-        promiseContexts.set(result, context);
-      }
-
-      return result;
+      return propagatePromiseContext(result, context);
     }
 
     override finally(onfinally?: (() => void) | undefined | null): Promise<T> {
@@ -262,6 +254,92 @@ const createTrackedPromiseConstructor = (): PromiseConstructor => {
         }
       );
     }
+  }
+
+  // Keep static Promise factories on Hermes' native Promise path. Inheriting
+  // these methods makes them construct TrackedPromise instances, which can
+  // expose Hermes' internal promise state instead of the settled value.
+  const nativePromiseMethods = [
+    'resolve',
+    'reject',
+    'all',
+    'allSettled',
+    'any',
+    'race',
+    'try',
+  ] as const;
+
+  for (const methodName of nativePromiseMethods) {
+    const method: unknown = Reflect.get(NativePromise, methodName);
+
+    if (typeof method !== 'function') {
+      continue;
+    }
+
+    Object.defineProperty(TrackedPromise, methodName, {
+      configurable: true,
+      writable: true,
+      value: (...args: unknown[]) =>
+        propagatePromiseContext(
+          Reflect.apply(method, NativePromise, args) as Promise<unknown>,
+          getCurrentPromiseContext(),
+        ),
+    });
+  }
+
+  const withResolvers: unknown = Reflect.get(NativePromise, 'withResolvers');
+
+  if (typeof withResolvers === 'function') {
+    Object.defineProperty(TrackedPromise, 'withResolvers', {
+      configurable: true,
+      writable: true,
+      value: () => {
+        const capability = Reflect.apply(withResolvers, NativePromise, []) as {
+          promise: Promise<unknown>;
+        };
+        propagatePromiseContext(
+          capability.promise,
+          getCurrentPromiseContext(),
+        );
+        return capability;
+      },
+    });
+  }
+
+  function propagatePromiseContext<T>(
+    promise: Promise<T>,
+    context: PromiseTrackerTestContext | undefined,
+  ): Promise<T> {
+    if (!context) {
+      return promise;
+    }
+
+    promiseContexts.set(promise, context);
+
+    if (
+      !(promise instanceof TrackedPromise) &&
+      Object.isExtensible(promise)
+    ) {
+      Object.defineProperties(promise, {
+        then: {
+          configurable: true,
+          writable: true,
+          value: TrackedPromise.prototype.then,
+        },
+        catch: {
+          configurable: true,
+          writable: true,
+          value: TrackedPromise.prototype.catch,
+        },
+        finally: {
+          configurable: true,
+          writable: true,
+          value: TrackedPromise.prototype.finally,
+        },
+      });
+    }
+
+    return promise;
   }
 
   return TrackedPromise as PromiseConstructor;

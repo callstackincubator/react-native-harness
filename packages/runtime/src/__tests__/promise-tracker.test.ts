@@ -43,6 +43,74 @@ describe('promise tracker', () => {
     expect(getPendingPromises()).toHaveLength(0);
   });
 
+  it('preserves native Promise static method behavior', async () => {
+    const NativePromise = globalThis.Promise;
+    installPromiseTracker();
+
+    const resolvedValue = Promise.resolve(55);
+    const resolvedUndefined = Promise.resolve();
+    const rejected = Promise.reject('failed');
+    const all = Promise.all([55]);
+    const allSettled = Promise.allSettled([55]);
+    const any = Promise.any([55]);
+    const race = Promise.race([55]);
+    const nativeWithResolvers: unknown = Reflect.get(
+      NativePromise,
+      'withResolvers',
+    );
+    const trackedWithResolvers: unknown = Reflect.get(
+      Promise,
+      'withResolvers',
+    );
+    const withResolvers =
+      typeof nativeWithResolvers === 'function' &&
+      typeof trackedWithResolvers === 'function'
+        ? (Reflect.apply(trackedWithResolvers, Promise, []) as {
+            promise: Promise<number>;
+            resolve: (value: number) => void;
+          })
+        : null;
+    const nativeTry: unknown = Reflect.get(NativePromise, 'try');
+    const trackedTry: unknown = Reflect.get(Promise, 'try');
+    const tried =
+      typeof nativeTry === 'function' && typeof trackedTry === 'function'
+        ? (Reflect.apply(trackedTry, Promise, [() => 55]) as Promise<number>)
+        : null;
+    const rejectedAssertion = expect(rejected).rejects.toBe('failed');
+
+    for (const promise of [
+      resolvedValue,
+      resolvedUndefined,
+      rejected,
+      all,
+      allSettled,
+      any,
+      race,
+      ...(withResolvers ? [withResolvers.promise] : []),
+      ...(tried ? [tried] : []),
+    ]) {
+      expect(Object.getPrototypeOf(promise)).toBe(NativePromise.prototype);
+    }
+
+    withResolvers?.resolve(55);
+
+    await expect(resolvedValue).resolves.toBe(55);
+    await expect(resolvedUndefined).resolves.toBeUndefined();
+    await rejectedAssertion;
+    await expect(all).resolves.toEqual([55]);
+    await expect(allSettled).resolves.toEqual([
+      { status: 'fulfilled', value: 55 },
+    ]);
+    await expect(any).resolves.toBe(55);
+    await expect(race).resolves.toBe(55);
+    if (withResolvers) {
+      await expect(withResolvers.promise).resolves.toBe(55);
+    }
+    if (tried) {
+      await expect(tried).resolves.toBe(55);
+    }
+  });
+
   it('keeps promises pending while their resolved thenable is pending', () => {
     installPromiseTracker();
 
