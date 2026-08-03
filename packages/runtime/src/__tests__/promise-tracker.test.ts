@@ -154,6 +154,18 @@ describe('promise tracker', () => {
     }
   });
 
+  it('resolves values when Promise.resolve is invoked without a receiver', async () => {
+    installPromiseTracker();
+
+    const resolve = Promise.resolve;
+
+    await expect(Reflect.apply(resolve, undefined, [55])).resolves.toBe(55);
+    await expect(Reflect.apply(resolve, undefined, [])).resolves.toBeUndefined();
+    await expect(
+      Reflect.apply(resolve, undefined, [undefined]),
+    ).resolves.toBeUndefined();
+  });
+
   it('keeps promises pending while their resolved thenable is pending', () => {
     installPromiseTracker();
 

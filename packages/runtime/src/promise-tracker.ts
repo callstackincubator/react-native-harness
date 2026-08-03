@@ -350,7 +350,8 @@ const createTrackedPromiseConstructor = (): PromiseConstructor => {
       }
 
       const wrapper = function (this: unknown, ...args: unknown[]) {
-        const result: unknown = Reflect.apply(value, this, args);
+        const methodReceiver = this == null ? NativePromise : this;
+        const result: unknown = Reflect.apply(value, methodReceiver, args);
         const context = getCurrentPromiseContext();
 
         if (property === 'withResolvers') {
