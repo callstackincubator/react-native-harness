@@ -348,6 +348,9 @@ var createNoopDiagnostics = () => {
 };
 var noopDiagnostics = createNoopDiagnostics();
 
+// ../tools/dist/host-capabilities.js
+var import_node_os = __toESM(require("os"), 1);
+
 // ../cache/dist/paths.js
 var import_node_path7 = __toESM(require("path"), 1);
 var HARNESS_DIRNAME = ".harness";

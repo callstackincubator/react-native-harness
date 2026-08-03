@@ -4384,6 +4384,9 @@ var getDeviceCoreBudget = (hostParallelism) => {
   return Math.min(Math.max(Math.floor(hostParallelism / 2), MIN_DEVICE_CORE_BUDGET), MAX_DEVICE_CORE_BUDGET);
 };
 
+// ../tools/dist/host-capabilities.js
+var import_node_os = __toESM(require("os"), 1);
+
 // ../plugins/dist/utils.js
 var isHookTree = (value) => {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -4614,12 +4617,12 @@ var getConfig = async (dir) => {
 var import_promises3 = require("fs/promises");
 
 // ../platform-android/dist/emulator-startup.js
-var import_node_os2 = __toESM(require("os"), 1);
+var import_node_os3 = __toESM(require("os"), 1);
 
 // ../platform-android/dist/environment.js
 var import_node_fs7 = require("fs");
 var import_promises = require("fs/promises");
-var import_node_os = __toESM(require("os"), 1);
+var import_node_os2 = __toESM(require("os"), 1);
 var import_node_path8 = __toESM(require("path"), 1);
 var import_promises2 = require("stream/promises");
 var import_node_https = __toESM(require("https"), 1);
@@ -4639,7 +4642,7 @@ var getHostAndroidSystemImageArch = (architecture = process.arch) => {
 // ../platform-android/dist/emulator-startup.js
 var emulatorStartupLogger = logger.child("android-emulator-startup");
 var getEmulatorCpuCores = () => {
-  return getDeviceCoreBudget(import_node_os2.default.availableParallelism());
+  return getDeviceCoreBudget(import_node_os3.default.availableParallelism());
 };
 
 // ../platform-android/dist/adb.js

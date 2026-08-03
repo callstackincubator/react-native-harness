@@ -348,6 +348,9 @@ var createNoopDiagnostics = () => {
 };
 var noopDiagnostics = createNoopDiagnostics();
 
+// ../tools/dist/host-capabilities.js
+var import_node_os = __toESM(require("os"), 1);
+
 // ../cache/dist/paths.js
 var import_node_path7 = __toESM(require("path"), 1);
 var HARNESS_DIRNAME = ".harness";
@@ -5067,9 +5070,9 @@ var run = async () => {
       isDefaultBranch: process.env.IS_DEFAULT_BRANCH === "true"
     };
     const cache = createHarnessCache({ projectRoot: resolvedProjectRoot });
-    const os = process.env.RUNNER_OS ?? process.platform;
+    const os2 = process.env.RUNNER_OS ?? process.platform;
     const savePlan = cache.planSave(before, policy, {
-      metro: { os, staticInputs }
+      metro: { os: os2, staticInputs }
     });
     cache.writeKeysFile(savePlan);
     const metroPlan = savePlan.domains.metro;
