@@ -2,7 +2,7 @@
   "name": "@react-native-harness/github-action",
   "private": true,
   "description": "GitHub Actions for React Native Harness",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "type": "commonjs",
   "exports": {
     "./package.json": "./package.json"

@@ -1,3 +1,14 @@
+## 1.4.1 (2026-08-04)
+
+### 🩹 Fixes
+
+- Published packages exclude test outputs and local build artifacts. ([#179](https://github.com/callstackincubator/react-native-harness/pull/179))
+- Harness tracks pending work while preserving native Promise instances so native modules return their settled values on Hermes. ([#180](https://github.com/callstackincubator/react-native-harness/pull/180))
+
+### ❤️ Thank You
+
+- Szymon Chmal @V3RON
+
 ## 1.4.0 (2026-08-03)
 
 ### 🚀 Features

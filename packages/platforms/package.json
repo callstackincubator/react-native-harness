@@ -1,7 +1,7 @@
 {
   "name": "@react-native-harness/platforms",
   "description": "Core platform abstractions for React Native Harness",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
