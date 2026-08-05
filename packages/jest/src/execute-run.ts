@@ -32,6 +32,7 @@ import {
 import { formatHarnessErrorMessage } from './format-harness-error.js';
 import { logger } from '@react-native-harness/tools';
 import { printSummary, writeTraceFile } from './diagnostics/index.js';
+import { toJestStatus } from './toJestStatus.js';
 
 const diagnosticsLogger = logger.child('diagnostics');
 
@@ -109,7 +110,7 @@ const emitHarnessTestFinished = async (
     location,
     numPassingAsserts: event.status === 'passed' ? 1 : 0,
     startedAt: event.startedAt,
-    status: event.status,
+    status: toJestStatus(event.status),
     title: event.name,
   };
 

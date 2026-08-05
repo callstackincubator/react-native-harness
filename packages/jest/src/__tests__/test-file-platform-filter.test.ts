@@ -73,7 +73,7 @@ describe('createPlatformSkippedTestResult', () => {
     expect(result.testResults).toHaveLength(1);
     expect(result.testResults[0]).toEqual(
       expect.objectContaining({
-        status: 'skipped',
+        status: 'pending',
         title: 'swift.ios.harness.ts',
         fullName: 'swift.ios.harness.ts',
       }),

@@ -1,4 +1,6 @@
-import type { Status, TestResult } from '@jest/test-result';
+import type { TestResult } from '@jest/test-result';
+import type { TestResultStatus } from '@react-native-harness/bridge';
+import { toJestStatus } from './toJestStatus.js';
 
 export type Options = {
   stats: {
@@ -17,7 +19,7 @@ export type Options = {
     testPath?: string;
     title?: string;
     fullName?: string;
-    status: Status;
+    status: TestResultStatus;
     location?: {
       column: number;
       line: number;
@@ -75,7 +77,7 @@ const getTestResults = ({
       failureMessages: actualErrorMessage ? [actualErrorMessage] : [],
       fullName: test.fullName || test.testPath || jestTestPath || '',
       numPassingAsserts: test.status === 'passed' ? 1 : 0,
-      status: test.status,
+      status: toJestStatus(test.status),
       title: test.title || '',
       location: test.location,
     };

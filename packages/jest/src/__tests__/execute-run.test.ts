@@ -418,6 +418,61 @@ describe('executeRun', () => {
       ]);
     });
 
+    it.each([
+      ['it.skip', 'skip', 0],
+      ['context.skip', undefined, 5],
+    ] as const)('reports %s to Jest as pending', async (_label, declarationMode, duration) => {
+      let testRunnerListener:
+        | ((event: TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent) => void)
+        | undefined;
+      const { emitEvent, calls: emittedEvents } = makeEmitEvent();
+      const session = makeSession({
+        onTestRunnerEvent: vi.fn((listener) => {
+          testRunnerListener = listener as typeof testRunnerListener;
+          return () => undefined;
+        }),
+      });
+
+      mockRunHarnessTestFile.mockImplementation(async () => {
+        testRunnerListener?.({
+          type: 'test-started',
+          file: 'example.ts',
+          suite: 'suite',
+          name: 'does not run',
+          ancestorTitles: ['suite'],
+          fullName: 'suite does not run',
+          startedAt: 10,
+          declarationMode,
+        });
+        testRunnerListener?.({
+          type: 'test-finished',
+          file: 'example.ts',
+          suite: 'suite',
+          name: 'does not run',
+          ancestorTitles: ['suite'],
+          fullName: 'suite does not run',
+          startedAt: 10,
+          declarationMode,
+          duration,
+          status: 'skipped',
+        });
+
+        return makeFileRunResult();
+      });
+
+      await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
+
+      expect(emittedEvents).toContainEqual([
+        'test-case-result',
+        'example.ts',
+        expect.objectContaining({
+          fullName: 'suite does not run',
+          numPassingAsserts: 0,
+          status: 'pending',
+        }),
+      ]);
+    });
+
     it('includes pending promise diagnostics in live test-case failures', async () => {
       let testRunnerListener:
         | ((event: TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent) => void)
