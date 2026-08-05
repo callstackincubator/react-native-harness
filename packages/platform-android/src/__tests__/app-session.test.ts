@@ -1,19 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import type { Subprocess } from '@react-native-harness/tools';
+import type { OwnedProcess, Subprocess } from '@react-native-harness/tools';
 import { createAndroidAppSession } from '../app-session.js';
 
 // Mimics nano-spawn: the async iterator only ends once its abort signal
 // fires, matching how startLogcat's real subprocess reacts to abort.
-const createAbortableLogcatProcess = (signal: AbortSignal): Subprocess =>
-  ({
+const createAbortableLogcatProcess = (): OwnedProcess => {
+  const controller = new AbortController();
+  const subprocess = {
     [Symbol.asyncIterator]: () => ({
       next: () =>
         new Promise<{ done: true; value: undefined }>((resolve) => {
-          if (signal.aborted) {
+          if (controller.signal.aborted) {
             resolve({ done: true, value: undefined });
             return;
           }
-          signal.addEventListener(
+          controller.signal.addEventListener(
             'abort',
             () => resolve({ done: true, value: undefined }),
             { once: true }
@@ -21,11 +22,13 @@ const createAbortableLogcatProcess = (signal: AbortSignal): Subprocess =>
         }),
     }),
     catch: () => undefined,
-  }) as unknown as Subprocess;
+  } as unknown as Subprocess;
+  return { subprocess, dispose: async () => controller.abort() };
+};
 
 describe('createAndroidAppSession', () => {
-  it('combines the session-lifetime signal with its own logcat abort controller', async () => {
-    let capturedSignal: AbortSignal | undefined;
+  it('disposes logcat when the session signal aborts', async () => {
+    let disposed = false;
     const controller = new AbortController();
 
     const session = await createAndroidAppSession({
@@ -35,24 +38,20 @@ describe('createAndroidAppSession', () => {
       stopApp: async () => undefined,
       getAppPid: async () => null,
       getLogcatTimestamp: async () => '00:00:00.000',
-      startLogcat: (_args, options) => {
-        capturedSignal = options.signal;
-        return createAbortableLogcatProcess(options.signal);
-      },
+      startLogcat: () => ({
+        ...createAbortableLogcatProcess(),
+        dispose: async () => { disposed = true; },
+      }),
       signal: controller.signal,
     });
 
-    expect(capturedSignal?.aborted).toBe(false);
-
     controller.abort();
-
-    expect(capturedSignal?.aborted).toBe(true);
-
     await session.dispose();
+    expect(disposed).toBe(true);
   });
 
-  it('still aborts the logcat signal via dispose() with no external signal provided', async () => {
-    let capturedSignal: AbortSignal | undefined;
+  it('disposes logcat with no external signal provided', async () => {
+    let disposed = false;
 
     const session = await createAndroidAppSession({
       appUid: 1,
@@ -61,16 +60,13 @@ describe('createAndroidAppSession', () => {
       stopApp: async () => undefined,
       getAppPid: async () => null,
       getLogcatTimestamp: async () => '00:00:00.000',
-      startLogcat: (_args, options) => {
-        capturedSignal = options.signal;
-        return createAbortableLogcatProcess(options.signal);
-      },
+      startLogcat: () => ({
+        ...createAbortableLogcatProcess(),
+        dispose: async () => { disposed = true; },
+      }),
     });
 
-    expect(capturedSignal?.aborted).toBe(false);
-
     await session.dispose();
-
-    expect(capturedSignal?.aborted).toBe(true);
+    expect(disposed).toBe(true);
   });
 });

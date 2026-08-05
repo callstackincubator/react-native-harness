@@ -8,7 +8,7 @@ import {
 import {
   escapeRegExp,
   logger,
-  type Subprocess,
+  type OwnedProcess,
 } from '@react-native-harness/tools';
 import { createAndroidCrashReporter } from './crash-reporter.js';
 
@@ -75,9 +75,8 @@ type CreateAndroidAppSessionOptions = {
   getAppPid: () => Promise<number | null>;
   getLogcatTimestamp: () => Promise<string>;
   startLogcat: (
-    args: readonly string[],
-    options: { signal: AbortSignal }
-  ) => Subprocess;
+    args: readonly string[]
+  ) => OwnedProcess;
   getDropboxOutput?: () => Promise<string>;
   getExitInfo?: () => Promise<string>;
   crashArtifactWriter?: CrashArtifactWriter;
@@ -196,20 +195,8 @@ export const createAndroidAppSession = async ({
 
   const logcatTimestamp = await getLogcatTimestamp();
   const sessionStartedAt = Date.now();
-  const logcatAbortController = new AbortController();
-  const logcatSignal = signal
-    ? AbortSignal.any([signal, logcatAbortController.signal])
-    : logcatAbortController.signal;
-  const logcatProcess = startLogcat(getLogcatArgs(appUid, logcatTimestamp), {
-    signal: logcatSignal,
-  });
-  // Aborting is nano-spawn's own cancellation path, so the resulting
-  // SubprocessError is settled the same way regardless of which of the
-  // merged stdout/stderr iterators observes it first. Without this, killing
-  // the underlying process directly can make both iterators reject at once,
-  // and nano-spawn's internal `Promise.race` only reports one of them,
-  // leaving the other an unhandled rejection.
-  logcatProcess.catch(() => undefined);
+  const ownedLogcatProcess = startLogcat(getLogcatArgs(appUid, logcatTimestamp));
+  const logcatProcess = ownedLogcatProcess.subprocess;
   const crashReporter = createAndroidCrashReporter({
     bundleId,
     crashArtifactWriter,
@@ -255,7 +242,7 @@ export const createAndroidAppSession = async ({
     disposed = true;
     stopPolling = true;
     emitter.clear();
-    logcatAbortController.abort();
+    await ownedLogcatProcess.dispose();
     await Promise.allSettled([logTask]);
     throw error;
   }
@@ -285,8 +272,9 @@ export const createAndroidAppSession = async ({
     }
   })();
 
-  return {
-    dispose: async () => {
+  let disposePromise: Promise<void> | undefined;
+  const dispose = () =>
+    (disposePromise ??= (async () => {
       if (disposed) {
         return;
       }
@@ -303,10 +291,27 @@ export const createAndroidAppSession = async ({
       cancelPendingPollDelay();
 
       emitter.clear();
-      logcatAbortController.abort();
+      await ownedLogcatProcess.dispose();
       await stopApp();
       await Promise.allSettled([logTask, pollTask]);
-    },
+    })());
+
+  if (signal?.aborted) {
+    void dispose().catch((error) =>
+      androidAppSessionLogger.debug('Android session abort cleanup failed', error)
+    );
+  } else {
+    signal?.addEventListener(
+      'abort',
+      () => void dispose().catch((error) =>
+        androidAppSessionLogger.debug('Android session abort cleanup failed', error)
+      ),
+      { once: true }
+    );
+  }
+
+  return {
+    dispose,
     getState: async () => state,
     getLogs: () => logBuffer.getLogs(),
     getCrashDetails: crashReporter.getCrashDetails,

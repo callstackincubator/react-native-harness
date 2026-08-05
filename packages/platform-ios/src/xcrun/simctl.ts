@@ -6,8 +6,9 @@ import {
   logger,
   spawn,
   spawnAndForget,
+  spawnOwnedProcess,
   SubprocessError,
-  type Subprocess,
+  type OwnedProcess,
 } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { homedir } from 'node:os';
@@ -305,11 +306,11 @@ export const launchAppProcess = (
   udid: string,
   bundleId: string,
   options?: AppleAppLaunchOptions,
-): Subprocess => {
+): OwnedProcess => {
   const environment = getSimctlChildEnvironment(options);
   const argumentsList = options?.arguments ?? [];
 
-  return spawn(
+  return spawnOwnedProcess(
     'xcrun',
     [
       'simctl',
@@ -371,8 +372,8 @@ export const diagnose = async (
 export const streamLogs = (
   udid: string,
   predicate: string,
-): Subprocess =>
-  spawn(
+): OwnedProcess =>
+  spawnOwnedProcess(
     'xcrun',
     [
       'simctl',

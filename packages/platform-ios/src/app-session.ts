@@ -8,18 +8,16 @@ import {
 import {
   delay,
   logger,
-  terminate,
-  type Subprocess,
+  type OwnedProcess,
 } from '@react-native-harness/tools';
 import type { IosCrashReporter } from './crash-reporter.js';
 
 const iosAppSessionLogger = logger.child('ios-app-session');
 const APP_EXIT_POLL_INTERVAL_MS = 1000;
 const LAUNCH_FAILURE_SETTLE_MS = 100;
-const LAUNCH_PROCESS_FORCE_KILL_AFTER_MS = 2000;
 
 type CreateIosAppSessionOptions = {
-  launch: () => Subprocess;
+  launch: () => OwnedProcess;
   stopApp: () => Promise<void>;
   isAppRunning: () => Promise<boolean>;
   crashReporter?: IosCrashReporter;
@@ -40,7 +38,8 @@ export const createIosAppSession = async ({
 }: CreateIosAppSessionOptions): Promise<AppSession> => {
   const emitter = createAppSessionEmitter();
   const logBuffer = createBoundedLogBuffer();
-  const launchProcess = launch();
+  const ownedLaunchProcess = launch();
+  const launchProcess = ownedLaunchProcess.subprocess;
   let state: AppSessionState = { status: 'running' };
   let disposed = false;
   let stopPolling = false;
@@ -168,17 +167,23 @@ export const createIosAppSession = async ({
     state = { status: 'disposed', occurredAt: Date.now() };
     emitter.clear();
 
-    await terminate(launchProcess, {
-      forceAfterMs: LAUNCH_PROCESS_FORCE_KILL_AFTER_MS,
-    });
+    await ownedLaunchProcess.dispose();
     await stopApp();
     await Promise.allSettled([logTask, exitTask, pollTask]);
   };
 
   if (signal?.aborted) {
-    void dispose();
+    void dispose().catch((error) =>
+      iosAppSessionLogger.debug('iOS session abort cleanup failed', error)
+    );
   } else {
-    signal?.addEventListener('abort', () => void dispose(), { once: true });
+    signal?.addEventListener(
+      'abort',
+      () => void dispose().catch((error) =>
+        iosAppSessionLogger.debug('iOS session abort cleanup failed', error)
+      ),
+      { once: true }
+    );
   }
 
   return {

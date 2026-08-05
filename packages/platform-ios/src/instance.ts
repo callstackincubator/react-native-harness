@@ -258,7 +258,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
     );
   }
 
-  const device = await devicectl.getDevice(config.device.name);
+  const device = await devicectl.getDevice(config.device.name, init?.signal);
 
   if (!device) {
     throw new DeviceNotFoundError(getDeviceName(config.device));

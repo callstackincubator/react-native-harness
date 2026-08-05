@@ -1,8 +1,15 @@
-import type { Options, Subprocess } from 'nano-spawn';
+import type { Options, Result, Subprocess } from 'nano-spawn';
 import nanoSpawn, { SubprocessError } from 'nano-spawn';
 import { logger } from './logger.js';
 
 export type SpawnOptions = Options;
+export type RunCommandOptions = Omit<
+  SpawnOptions,
+  'signal' | 'timeout' | 'killSignal'
+> & {
+  signal: AbortSignal;
+  timeoutMs: number;
+};
 const spawnLogger = logger.child('spawn');
 
 let signalsDeliverableEnsured = false;
@@ -40,6 +47,23 @@ export const spawn = (
   spawnLogger.debug('running command: %s', command);
   return nanoSpawn(file, args, { ...defaultOptions, ...options });
 };
+
+/**
+ * Runs a command with the two bounds every finite Harness command needs.
+ * Keep this separate from `spawn`: streams and other owned processes have a
+ * different lifecycle and must be disposed by their domain owner.
+ */
+export const runCommand = (
+  file: string,
+  args: readonly string[],
+  { signal, timeoutMs, ...options }: RunCommandOptions
+): Promise<Result> =>
+  spawn(file, args, {
+    ...options,
+    signal,
+    timeout: timeoutMs,
+    killSignal: 'SIGKILL',
+  });
 
 export const spawnAndForget = async (
   file: string,

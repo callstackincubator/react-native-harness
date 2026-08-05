@@ -1,5 +1,9 @@
 import { type AppleAppLaunchOptions } from '@react-native-harness/platforms';
-import { spawn, type Subprocess } from '@react-native-harness/tools';
+import {
+  runCommand,
+  spawnOwnedProcess,
+  type OwnedProcess,
+} from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,32 +13,45 @@ import {
   DeviceNotFoundError,
 } from './devicectl-errors.js';
 
+const DEVICECTL_NATIVE_TIMEOUT_SECONDS = 60;
+const DEVICECTL_TIMEOUT_MS = 65_000;
+
+const commandSignal = (signal?: AbortSignal) =>
+  signal ?? new AbortController().signal;
+
 export const devicectl = async <TOutput>(
   command: string,
-  args: string[]
+  args: string[],
+  options?: { signal?: AbortSignal }
 ): Promise<TOutput> => {
   const tempFile = join(tmpdir(), `devicectl-${randomUUID()}.json`);
   const separatorIndex = args.indexOf('--');
   const argsWithJsonOutput =
     separatorIndex === -1
-      ? [...args, '--json-output', tempFile]
+      ? [...args, '--timeout', String(DEVICECTL_NATIVE_TIMEOUT_SECONDS), '--json-output', tempFile]
       : [
           ...args.slice(0, separatorIndex),
+          '--timeout',
+          String(DEVICECTL_NATIVE_TIMEOUT_SECONDS),
           '--json-output',
           tempFile,
           ...args.slice(separatorIndex),
         ];
 
-  await spawn('xcrun', ['devicectl', command, ...argsWithJsonOutput]);
+  try {
+    await runCommand('xcrun', ['devicectl', command, ...argsWithJsonOutput], {
+      signal: commandSignal(options?.signal),
+      timeoutMs: DEVICECTL_TIMEOUT_MS,
+    });
 
-  if (!fs.existsSync(tempFile)) {
-    throw new Error(`devicectl did not produce JSON output at ${tempFile}`);
+    if (!fs.existsSync(tempFile)) {
+      throw new Error(`devicectl did not produce JSON output at ${tempFile}`);
+    }
+
+    return JSON.parse(fs.readFileSync(tempFile, 'utf8')).result;
+  } finally {
+    fs.rmSync(tempFile, { force: true });
   }
-
-  const output = fs.readFileSync(tempFile, 'utf8');
-  fs.unlinkSync(tempFile);
-
-  return JSON.parse(output).result;
 };
 
 export type AppleDeviceInfo = {
@@ -71,10 +88,10 @@ type AppleDeviceNetworkProperties = {
   ipAddress?: string;
 };
 
-export const listDevices = async (): Promise<AppleDeviceInfo[]> => {
+export const listDevices = async (signal?: AbortSignal): Promise<AppleDeviceInfo[]> => {
   const result = await devicectl<{ devices: AppleDeviceInfo[] }>('list', [
     'devices',
-  ]);
+  ], { signal });
   return result.devices;
 };
 
@@ -85,14 +102,15 @@ type AppleDeviceDetailsResult =
     };
 
 export const getDeviceDetails = async (
-  identifier: string
+  identifier: string,
+  signal?: AbortSignal
 ): Promise<AppleDeviceInfo> => {
   const result = await devicectl<AppleDeviceDetailsResult>('device', [
     'info',
     'details',
     '--device',
     identifier,
-  ]);
+  ], { signal });
 
   return 'device' in result ? result.device : result;
 };
@@ -213,8 +231,8 @@ export const launchAppProcess = (
   identifier: string,
   bundleId: string,
   options?: AppleAppLaunchOptions
-): Subprocess =>
-  spawn(
+): OwnedProcess =>
+  spawnOwnedProcess(
     'xcrun',
     [
       'devicectl',
@@ -377,9 +395,10 @@ export const isMatchingDevice = (
 };
 
 export const getDevice = async (
-  identifier: string
+  identifier: string,
+  signal?: AbortSignal
 ): Promise<AppleDeviceInfo | null> => {
-  const devices = await listDevices();
+  const devices = await listDevices(signal);
   const matchingDevice = devices.find((device) => {
     return isMatchingDevice(device, identifier);
   });

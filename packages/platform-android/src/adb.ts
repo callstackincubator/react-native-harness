@@ -3,9 +3,10 @@ import {
   delay,
   logger,
   spawn,
+  spawnOwnedProcess,
   SubprocessError,
   waitForAbort,
-  type Subprocess,
+  type OwnedProcess,
 } from '@react-native-harness/tools';
 import { spawn as nodeSpawn } from 'node:child_process';
 import type { ChildProcessByStdio } from 'node:child_process';
@@ -789,13 +790,11 @@ export const getLogcatTimestamp = async (adbId: string): Promise<string> => {
 
 export const startLogcat = (
   adbId: string,
-  args: readonly string[],
-  options?: { signal?: AbortSignal }
-): Subprocess =>
-  spawn(getAdbBinaryPath(), ['-s', adbId, ...args], {
+  args: readonly string[]
+): OwnedProcess =>
+  spawnOwnedProcess(getAdbBinaryPath(), ['-s', adbId, ...args], {
     stdout: 'pipe',
     stderr: 'pipe',
-    signal: options?.signal,
   });
 
 export const DROPBOX_CRASH_TAGS = [

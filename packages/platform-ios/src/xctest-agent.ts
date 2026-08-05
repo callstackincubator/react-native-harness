@@ -5,7 +5,8 @@ import {
   delay as cancellableDelay,
   logger,
   spawn,
-  terminate,
+  spawnOwnedProcess,
+  type OwnedProcess,
   type Subprocess,
 } from '@react-native-harness/tools';
 import fs from 'node:fs';
@@ -35,7 +36,6 @@ const XCTEST_AGENT_XCTESTRUN_FILE_ENV = 'HARNESS_IOS_XCTESTRUN_FILE';
 const XCTEST_AGENT_DERIVED_DATA_PATH_ENV =
   'HARNESS_IOS_XCTEST_DERIVED_DATA_PATH';
 const XCTEST_AGENT_STARTUP_TIMEOUT_MS = 120_000;
-const XCTEST_AGENT_SHUTDOWN_TIMEOUT_MS = 30_000;
 const XCTEST_AGENT_STARTUP_POLL_INTERVAL_MS = 250;
 const HARNESS_DIRNAME = '.harness';
 const XCTEST_AGENT_BUILD_DIRNAME = 'xctest-agent';
@@ -765,63 +765,6 @@ const waitForAgentReady = async (options: {
   );
 };
 
-const waitForShutdown = async (options: {
-  processTask: Promise<void> | null;
-  shutdownTimeoutMs: number;
-}): Promise<boolean> => {
-  if (!options.processTask) {
-    return true;
-  }
-
-  const timedOut = Symbol('timedOut');
-  const shutdownTimer = cancellableDelay(options.shutdownTimeoutMs);
-  try {
-    const result = await Promise.race([
-      options.processTask.then(() => undefined),
-      shutdownTimer.promise.then(() => timedOut),
-    ]);
-
-    return result !== timedOut;
-  } finally {
-    shutdownTimer.cancel();
-  }
-};
-
-const waitForGracefulShutdown = async (options: {
-  client: ReturnType<typeof createXCTestAgentClient>;
-  processTask: Promise<void> | null;
-  shutdownTimeoutMs: number;
-}): Promise<{ didStop: boolean; requestError: unknown | null }> => {
-  let requestError: unknown | null = null;
-  const timedOut = Symbol('timedOut');
-  const shutdownTimer = cancellableDelay(options.shutdownTimeoutMs);
-
-  try {
-    const result = await Promise.race([
-      (async () => {
-        try {
-          await options.client.shutdown();
-        } catch (error) {
-          requestError = error;
-        }
-
-        return await waitForShutdown({
-          processTask: options.processTask,
-          shutdownTimeoutMs: options.shutdownTimeoutMs,
-        });
-      })(),
-      shutdownTimer.promise.then(() => timedOut),
-    ]);
-
-    return {
-      didStop: result !== timedOut && result === true,
-      requestError,
-    };
-  } finally {
-    shutdownTimer.cancel();
-  }
-};
-
 const waitForChildProcessExit = async (subprocess: Subprocess) => {
   const childProcess = await subprocess.nodeChildProcess;
 
@@ -846,14 +789,13 @@ const waitForChildProcessExit = async (subprocess: Subprocess) => {
 };
 
 const stopProcess = async (options: {
-  process: Subprocess | null;
-  shutdownTimeoutMs: number;
+  process: OwnedProcess | null;
 }) => {
   if (!options.process) {
     return;
   }
 
-  await terminate(options.process, { forceAfterMs: options.shutdownTimeoutMs });
+  await options.process.dispose();
 };
 
 const toTestRunnerEnv = (env: Record<string, string>): Record<string, string> =>
@@ -925,8 +867,9 @@ export const createXCTestAgentController = (options: {
   target: XCTestAgentTarget;
   capabilities?: XCTestAgentCapability[];
   port?: number;
-  shutdownTimeoutMs?: number;
   startupTimeoutMs?: number;
+  /** @deprecated Process shutdown is immediate; retained for API compatibility. */
+  shutdownTimeoutMs?: number;
   /** Session-lifetime abort signal (see HarnessPlatformInitOptions.signal). */
   signal?: AbortSignal;
 }): XCTestAgentController => {
@@ -934,8 +877,6 @@ export const createXCTestAgentController = (options: {
   const capabilities = options.capabilities ?? [];
   const startupTimeoutMs =
     options.startupTimeoutMs ?? XCTEST_AGENT_STARTUP_TIMEOUT_MS;
-  const shutdownTimeoutMs =
-    options.shutdownTimeoutMs ?? XCTEST_AGENT_SHUTDOWN_TIMEOUT_MS;
   const logArtifacts = createHarnessArtifactDirectory({
     artifactType: 'logs',
     bundleId: options.appBundleId,
@@ -949,9 +890,8 @@ export const createXCTestAgentController = (options: {
   let preparedDerivedDataPath = getXCTestAgentDerivedDataPath(target.kind);
   let preparedXCTestRunFilePath: string | null = null;
   let prepared = false;
-  let agentProcess: Subprocess | null = null;
+  let agentProcess: OwnedProcess | null = null;
   let agentClient: ReturnType<typeof createXCTestAgentClient> | null = null;
-  let processTask: Promise<void> | null = null;
 
   const getLaunchEnvironment = (): Record<string, string> => {
     const tickIntervalMs = getEnvironmentPath(XCTEST_AGENT_TICK_INTERVAL_MS_ENV);
@@ -1061,7 +1001,7 @@ export const createXCTestAgentController = (options: {
       '-derivedDataPath',
       preparedDerivedDataPath,
     ];
-    agentProcess = spawn('xcodebuild', xcodebuildArgs, {
+    agentProcess = spawnOwnedProcess('xcodebuild', xcodebuildArgs, {
       cwd: getXCTestAgentProjectRoot(),
       env: {
         ...process.env,
@@ -1074,7 +1014,7 @@ export const createXCTestAgentController = (options: {
     void attachProcessOutputLog({
       command: ['xcodebuild', ...xcodebuildArgs].join(' '),
       logFilePath: xcodebuildLogPath,
-      process: agentProcess,
+      process: agentProcess.subprocess,
     });
     xctestAgentLogger.info(
       'Saving XCTest agent xcodebuild logs to %s',
@@ -1082,8 +1022,8 @@ export const createXCTestAgentController = (options: {
     );
 
     const currentProcess = agentProcess;
-    if (typeof currentProcess.catch === 'function') {
-      void currentProcess.catch((error) => {
+    if (typeof currentProcess.subprocess.catch === 'function') {
+      void currentProcess.subprocess.catch((error) => {
         xctestAgentLogger.debug('XCTest agent process stopped', error);
       });
     }
@@ -1091,11 +1031,10 @@ export const createXCTestAgentController = (options: {
     const client = createXCTestAgentClient(transport);
     agentClient = client;
 
-    processTask = waitForChildProcessExit(currentProcess).finally(() => {
+    void waitForChildProcessExit(currentProcess.subprocess).finally(() => {
       if (agentProcess === currentProcess) {
         agentProcess = null;
         agentClient = null;
-        processTask = null;
       }
     });
 
@@ -1114,7 +1053,7 @@ export const createXCTestAgentController = (options: {
       );
       await transport.dispose();
       agentClient = null;
-      await stopProcess({ process: currentProcess, shutdownTimeoutMs });
+      await stopProcess({ process: currentProcess });
       throw error;
     }
   };
@@ -1122,62 +1061,16 @@ export const createXCTestAgentController = (options: {
   const stop = async () => {
     const currentProcess = agentProcess;
     const currentClient = agentClient;
-    const currentProcessTask = processTask;
     agentProcess = null;
     agentClient = null;
-    processTask = null;
 
     xctestAgentLogger.info(
       'Stopping XCTest agent session for %s target',
       target.kind
     );
 
-    if (currentClient) {
-      try {
-        xctestAgentLogger.info(
-          'Requesting XCTest agent graceful shutdown for %s target',
-          target.kind,
-        );
-
-        const gracefulShutdown = await waitForGracefulShutdown({
-          client: currentClient,
-          processTask: currentProcessTask,
-          shutdownTimeoutMs,
-        });
-
-        if (gracefulShutdown.didStop) {
-          xctestAgentLogger.info(
-            'XCTest agent session for %s target stopped gracefully',
-            target.kind,
-          );
-          await currentClient.dispose();
-          return;
-        }
-
-        if (gracefulShutdown.requestError) {
-          xctestAgentLogger.warn(
-            'XCTest agent graceful shutdown request failed for %s: %s',
-            target.kind,
-            getErrorMessage(gracefulShutdown.requestError),
-          );
-        }
-
-        xctestAgentLogger.warn(
-          'XCTest agent session for %s target did not stop gracefully after %dms; terminating xcodebuild',
-          target.kind,
-          shutdownTimeoutMs,
-        );
-      } catch (error) {
-        xctestAgentLogger.warn(
-          'XCTest agent graceful shutdown failed for %s: %s',
-          target.kind,
-          getErrorMessage(error),
-        );
-      }
-    }
-
     await currentClient?.dispose();
-    await stopProcess({ process: currentProcess, shutdownTimeoutMs });
+    await stopProcess({ process: currentProcess });
   };
 
   // Guards against the abort listener below redundantly re-running stop()
@@ -1193,11 +1086,17 @@ export const createXCTestAgentController = (options: {
   };
 
   if (options.signal?.aborted) {
-    void dispose();
+    void dispose().catch((error) =>
+      xctestAgentLogger.debug('XCTest abort cleanup failed', error)
+    );
   } else {
-    options.signal?.addEventListener('abort', () => void dispose(), {
-      once: true,
-    });
+    options.signal?.addEventListener(
+      'abort',
+      () => void dispose().catch((error) =>
+        xctestAgentLogger.debug('XCTest abort cleanup failed', error)
+      ),
+      { once: true }
+    );
   }
 
   return {

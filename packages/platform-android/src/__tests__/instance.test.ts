@@ -3,7 +3,7 @@ import {
   DEFAULT_METRO_PORT,
   type Config as HarnessConfig,
 } from '@react-native-harness/config';
-import type { Subprocess } from '@react-native-harness/tools';
+import type { OwnedProcess, Subprocess } from '@react-native-harness/tools';
 import {
   getAndroidEmulatorPlatformInstance,
   getAndroidPhysicalDevicePlatformInstance,
@@ -15,7 +15,7 @@ import { HarnessAppPathError, HarnessEmulatorConfigError } from '../errors.js';
 import * as emulatorStartup from '../emulator-startup.js';
 const { getEmulatorCpuCores } = emulatorStartup;
 
-const createLogcatProcess = (lines: string[] = []): Subprocess => {
+const createLogcatProcess = (lines: string[] = []): OwnedProcess => {
   // Mirrors nano-spawn's real Subprocess, which is both a Promise and an
   // async iterable, since app-session.ts relies on it being thenable.
   const process = Object.assign(Promise.resolve(undefined), {
@@ -29,7 +29,7 @@ const createLogcatProcess = (lines: string[] = []): Subprocess => {
     },
   });
 
-  return process as unknown as Subprocess;
+  return { subprocess: process as unknown as Subprocess, dispose: async () => undefined };
 };
 
 const harnessConfig = {
