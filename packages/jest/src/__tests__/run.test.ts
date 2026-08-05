@@ -78,6 +78,11 @@ describe('runHarnessTestFile', () => {
       ...createHarnessResult(),
       tests: [
         {
+          name: 'passes',
+          status: 'passed',
+          duration: 1,
+        },
+        {
           name: 'declaration skip',
           status: 'skipped',
           duration: 0,
@@ -100,6 +105,7 @@ describe('runHarnessTestFile', () => {
 
     expect(jestResult.numPendingTests).toBe(2);
     expect(jestResult.testResults).toEqual([
+      expect.objectContaining({ title: 'passes', status: 'passed' }),
       expect.objectContaining({ title: 'declaration skip', status: 'pending' }),
       expect.objectContaining({ title: 'runtime skip', status: 'pending' }),
     ]);
