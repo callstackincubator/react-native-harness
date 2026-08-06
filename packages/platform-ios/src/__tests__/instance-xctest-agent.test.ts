@@ -95,10 +95,9 @@ describe('iOS XCTest agent runner integration', () => {
         kind: 'simulator',
         id: 'sim-udid',
       },
-      signal: initSignal,
     });
     expect(mocks.prepare).toHaveBeenCalledTimes(1);
-    expect(mocks.ensureStarted).toHaveBeenCalledTimes(1);
+    expect(mocks.ensureStarted).toHaveBeenCalledWith(initSignal);
     expect(mocks.dispose).toHaveBeenCalledTimes(1);
   });
 

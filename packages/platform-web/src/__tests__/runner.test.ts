@@ -72,7 +72,7 @@ describe('getWebRunner', () => {
     expect(session.dispose).toBeTypeOf('function');
   });
 
-  it('closes the browser when the init signal aborts after session creation', async () => {
+  it('does not close the browser when the init signal aborts after session creation', async () => {
     const { default: getWebRunner } = await import('../runner.js');
     const controller = new AbortController();
 
@@ -84,6 +84,8 @@ describe('getWebRunner', () => {
 
     controller.abort();
 
-    expect(closeMock).toHaveBeenCalled();
+    expect(closeMock).not.toHaveBeenCalled();
+    await runner.dispose();
+    expect(closeMock).toHaveBeenCalledOnce();
   });
 });

@@ -80,13 +80,6 @@ type CreateAndroidAppSessionOptions = {
   getDropboxOutput?: () => Promise<string>;
   getExitInfo?: () => Promise<string>;
   crashArtifactWriter?: CrashArtifactWriter;
-  /**
-   * Session-lifetime abort signal (see HarnessPlatformInitOptions.signal).
-   * Combined with the app session's own logcatAbortController so that
-   * aborting the session stops the logcat stream even if dispose() hasn't
-   * been called yet (e.g. SIGTERM during teardown of other resources).
-   */
-  signal?: AbortSignal;
 };
 
 export const createAndroidAppSession = async ({
@@ -100,7 +93,6 @@ export const createAndroidAppSession = async ({
   getDropboxOutput,
   getExitInfo,
   crashArtifactWriter,
-  signal,
 }: CreateAndroidAppSessionOptions): Promise<AppSession> => {
   const emitter = createAppSessionEmitter();
   const logBuffer = createBoundedLogBuffer();
@@ -295,20 +287,6 @@ export const createAndroidAppSession = async ({
       await stopApp();
       await Promise.allSettled([logTask, pollTask]);
     })());
-
-  if (signal?.aborted) {
-    void dispose().catch((error) =>
-      androidAppSessionLogger.debug('Android session abort cleanup failed', error)
-    );
-  } else {
-    signal?.addEventListener(
-      'abort',
-      () => void dispose().catch((error) =>
-        androidAppSessionLogger.debug('Android session abort cleanup failed', error)
-      ),
-      { once: true }
-    );
-  }
 
   return {
     dispose,

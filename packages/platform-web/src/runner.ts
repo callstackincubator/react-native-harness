@@ -11,24 +11,13 @@ import { WebPlatformConfigSchema, type WebPlatformConfig } from './config.js';
 const getWebRunner: HarnessPlatformRunnerFactory<
   WebPlatformConfig,
   HarnessConfig
-> = async (config, _harnessConfig, init) => {
+> = async (config, _harnessConfig, _init) => {
+  void _harnessConfig;
+  void _init;
   const parsedConfig = WebPlatformConfigSchema.parse(config);
 
   let browser: Browser | null = null;
   let page: Page | null = null;
-
-  // Session-lifetime signal (see HarnessPlatformInitOptions.signal): close the
-  // browser on session teardown, in addition to the normal dispose() path.
-  const closeBrowserOnAbort = () => {
-    void browser?.close();
-    browser = null;
-    page = null;
-  };
-  if (init.signal.aborted) {
-    closeBrowserOnAbort();
-  } else {
-    init.signal.addEventListener('abort', closeBrowserOnAbort, { once: true });
-  }
 
   const launchBrowser = async () => {
     const browserType = {

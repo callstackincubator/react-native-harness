@@ -487,10 +487,9 @@ describe('xctest-agent orchestration', () => {
         kind: 'simulator',
         id: 'sim-999',
       },
-      signal: signal.signal,
     });
 
-    const starting = controller.ensureStarted();
+    const starting = controller.ensureStarted(signal.signal);
     await vi.waitFor(() => expect(mocks.health).toHaveBeenCalledOnce());
     signal.abort();
 

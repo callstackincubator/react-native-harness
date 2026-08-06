@@ -69,6 +69,21 @@ describe('terminate', () => {
     expect(childProcess.kill).toHaveBeenNthCalledWith(2, 'SIGKILL');
   });
 
+  it('returns after the post-SIGKILL bound when close is never observed', async () => {
+    vi.useFakeTimers();
+    const childProcess = createMockChildProcess();
+    const done = terminate(createMockSubprocess(childProcess), {
+      forceAfterMs: 1_000,
+      settleAfterForceMs: 500,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    await done;
+
+    expect(childProcess.kill).toHaveBeenNthCalledWith(1, 'SIGTERM');
+    expect(childProcess.kill).toHaveBeenNthCalledWith(2, 'SIGKILL');
+  });
+
   it('clears the force-kill timer once the process exits gracefully', async () => {
     vi.useFakeTimers();
     const childProcess = createMockChildProcess({ exitOnKill: 'SIGTERM' });

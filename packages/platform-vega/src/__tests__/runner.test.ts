@@ -40,7 +40,7 @@ describe('getVegaRunner', () => {
     expect(runner.dispose).toBeTypeOf('function');
   });
 
-  it('stops the app when the init signal aborts after session creation', async () => {
+  it('does not stop the app when the init signal aborts after session creation', async () => {
     const { default: getVegaRunner } = await import('../runner.js');
     const controller = new AbortController();
 
@@ -52,6 +52,8 @@ describe('getVegaRunner', () => {
 
     controller.abort();
 
-    expect(stopAppMock).toHaveBeenCalled();
+    expect(stopAppMock).not.toHaveBeenCalled();
+    await runner.dispose();
+    expect(stopAppMock).toHaveBeenCalledOnce();
   });
 });

@@ -301,7 +301,6 @@ export const getAndroidEmulatorPlatformInstance = async (
         getDropboxOutput: () => adb.getDropboxPrint(adbId),
         getExitInfo: () => adb.getActivityExitInfo(adbId, config.bundleId),
         crashArtifactWriter: init.crashArtifactWriter,
-        signal: init.signal,
       });
     },
     dispose: async () => {
@@ -375,7 +374,6 @@ export const getAndroidPhysicalDevicePlatformInstance = async (
         getDropboxOutput: () => adb.getDropboxPrint(adbId),
         getExitInfo: () => adb.getActivityExitInfo(adbId, config.bundleId),
         crashArtifactWriter: init?.crashArtifactWriter,
-        signal: init?.signal,
       });
     },
     dispose: async () => {

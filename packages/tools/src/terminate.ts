@@ -25,6 +25,8 @@ const waitForExit = (
 export type TerminateOptions = {
   /** How long to wait after SIGTERM before escalating to SIGKILL. */
   forceAfterMs: number;
+  /** Maximum wait after SIGKILL before disposal returns. */
+  settleAfterForceMs?: number;
 };
 
 /**
@@ -34,7 +36,7 @@ export type TerminateOptions = {
  */
 export const terminate = async (
   subprocess: Subprocess,
-  { forceAfterMs }: TerminateOptions
+  { forceAfterMs, settleAfterForceMs = forceAfterMs }: TerminateOptions
 ): Promise<void> => {
   let childProcess: Awaited<Subprocess['nodeChildProcess']>;
   try {
@@ -65,6 +67,11 @@ export const terminate = async (
     } catch {
       // Ignore termination failures for already-ended processes.
     }
-    await exited;
+    const settleTimeout = delay(settleAfterForceMs);
+    try {
+      await Promise.race([exited, settleTimeout.promise]);
+    } finally {
+      settleTimeout.cancel();
+    }
   }
 };

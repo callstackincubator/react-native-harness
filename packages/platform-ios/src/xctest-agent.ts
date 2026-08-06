@@ -116,7 +116,7 @@ type ExternalXCTestConfiguration = {
 
 export type XCTestAgentController = {
   prepare: () => Promise<void>;
-  ensureStarted: () => Promise<void>;
+  ensureStarted: (signal?: AbortSignal) => Promise<void>;
   stop: () => Promise<void>;
   dispose: () => Promise<void>;
 };
@@ -897,10 +897,8 @@ export const createXCTestAgentController = (options: {
   capabilities?: XCTestAgentCapability[];
   port?: number;
   startupTimeoutMs?: number;
-  /** @deprecated Process shutdown is immediate; retained for API compatibility. */
+  /** Maximum time for the XCTest client to close gracefully. */
   shutdownTimeoutMs?: number;
-  /** Session-lifetime abort signal (see HarnessPlatformInitOptions.signal). */
-  signal?: AbortSignal;
 }): XCTestAgentController => {
   const { target } = options;
   const capabilities = options.capabilities ?? [];
@@ -993,7 +991,7 @@ export const createXCTestAgentController = (options: {
     prepared = true;
   };
 
-  const ensureStarted = async () => {
+  const ensureStarted = async (signal?: AbortSignal) => {
     await prepare();
 
     if (agentProcess && agentClient) {
@@ -1071,7 +1069,7 @@ export const createXCTestAgentController = (options: {
       await waitForAgentReady({
         client,
         startupTimeoutMs,
-        signal: options.signal,
+        signal,
       });
       await client.configurePermissions(runtimeConfiguration.permissions);
     } catch (error) {
@@ -1099,35 +1097,21 @@ export const createXCTestAgentController = (options: {
       target.kind
     );
 
-    await currentClient?.dispose();
-    await stopProcess({ process: currentProcess });
-  };
-
-  // Guards against the abort listener below redundantly re-running stop()
-  // when the caller has already disposed the controller explicitly (the
-  // normal teardown path always aborts the session signal afterwards too).
-  let disposed = false;
-  const dispose = async () => {
-    if (disposed) {
-      return;
+    const shutdownTimeout = cancellableDelay(options.shutdownTimeoutMs ?? 5_000);
+    try {
+      if (currentClient) {
+        await Promise.race([currentClient.dispose(), shutdownTimeout.promise]);
+      }
+    } finally {
+      shutdownTimeout.cancel();
+      // xcodebuild must always be terminated, including when graceful client
+      // shutdown rejects or times out.
+      await stopProcess({ process: currentProcess });
     }
-    disposed = true;
-    await stop();
   };
 
-  if (options.signal?.aborted) {
-    void dispose().catch((error) =>
-      xctestAgentLogger.debug('XCTest abort cleanup failed', error)
-    );
-  } else {
-    options.signal?.addEventListener(
-      'abort',
-      () => void dispose().catch((error) =>
-        xctestAgentLogger.debug('XCTest abort cleanup failed', error)
-      ),
-      { once: true }
-    );
-  }
+  let disposePromise: Promise<void> | undefined;
+  const dispose = () => (disposePromise ??= stop());
 
   return {
     prepare,

@@ -95,52 +95,47 @@ describe('createIosAppSession', () => {
     }
   });
 
-  it('disposes the session when the session-lifetime signal aborts', async () => {
+  it('does not dispose the session before explicit disposal', async () => {
     vi.useFakeTimers();
 
     try {
       const launchProcess = createPendingLaunchProcess();
       const isAppRunning = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
       const stopApp = vi.fn(async () => undefined);
-      const controller = new AbortController();
 
       const sessionPromise = createIosAppSession({
         launch: () => launchProcess,
         stopApp,
         isAppRunning,
-        signal: controller.signal,
       });
 
       await vi.advanceTimersByTimeAsync(100);
       const session = await sessionPromise;
 
-      controller.abort();
       await vi.advanceTimersByTimeAsync(1000);
 
       await expect(session.getState()).resolves.toMatchObject({
-        status: 'disposed',
+        status: 'running',
       });
+      expect(stopApp).not.toHaveBeenCalled();
+      await session.dispose();
       expect(stopApp).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('disposes immediately when created with an already-aborted signal', async () => {
+  it('remains running until explicitly disposed', async () => {
     vi.useFakeTimers();
 
     try {
       const launchProcess = createPendingLaunchProcess();
       const isAppRunning = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
       const stopApp = vi.fn(async () => undefined);
-      const controller = new AbortController();
-      controller.abort();
-
       const sessionPromise = createIosAppSession({
         launch: () => launchProcess,
         stopApp,
         isAppRunning,
-        signal: controller.signal,
       });
 
       await vi.advanceTimersByTimeAsync(100);
@@ -148,8 +143,10 @@ describe('createIosAppSession', () => {
       await vi.advanceTimersByTimeAsync(1000);
 
       await expect(session.getState()).resolves.toMatchObject({
-        status: 'disposed',
+        status: 'running',
       });
+      expect(stopApp).not.toHaveBeenCalled();
+      await session.dispose();
       expect(stopApp).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();

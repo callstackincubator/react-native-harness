@@ -558,8 +558,7 @@ describe('Android platform instance', () => {
         '--uid=10234',
         '-T',
         '01-01 00:00:00.000',
-      ],
-      { signal: expect.any(AbortSignal) }
+      ]
     );
     expect(startLogcat.mock.invocationCallOrder[0]).toBeLessThan(
       startApp.mock.invocationCallOrder[0]
@@ -696,8 +695,7 @@ describe('Android platform instance', () => {
         '--uid=10234',
         '-T',
         '01-01 00:00:00.000',
-      ],
-      { signal: expect.any(AbortSignal) }
+      ]
     );
     await expect(appSession.getState()).resolves.toEqual({
       status: 'running',

@@ -38,6 +38,7 @@ import {
 import {
   createCrashArtifactWriter,
   createDiagnostics,
+  delay,
   logger,
   getTimeoutSignal,
   ensureSignalsDeliverable,
@@ -94,6 +95,25 @@ const ignorePromiseRejection = () => undefined;
 const isBridgeDisconnectError = (error: unknown) =>
   error instanceof Error && error.message === 'App bridge disconnected';
 const TEST_RUN_BRIDGE_STABILITY_WAIT_MS = 500;
+const DISPOSE_HOOK_TIMEOUT_MS = 5_000;
+
+const waitForBoundedSettlement = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<PromiseSettledResult<T> | null> => {
+  const timeout = delay(timeoutMs);
+  try {
+    return await Promise.race([
+      promise.then(
+        (value) => ({ status: 'fulfilled', value }) as const,
+        (reason) => ({ status: 'rejected', reason }) as const
+      ),
+      timeout.promise.then(() => null),
+    ]);
+  } finally {
+    timeout.cancel();
+  }
+};
 
 type DisconnectObservableBridge = {
   readonly connection: AppConnection | null;
@@ -588,7 +608,11 @@ export const createHarnessSession = async (
 
     let metroInstance: MetroInstance;
     let platformInstance: HarnessPlatformRunner;
-    const initialized = { metro: null as MetroInstance | null };
+    const initialized = {
+      metro: null as MetroInstance | null,
+      platform: null as HarnessPlatformRunner | null,
+    };
+    let initializationCancelled = false;
     // Noop until the Metro instance resolves and the deriver is attached.
     let disposeMetroDiagnostics: () => void = () => undefined;
 
@@ -606,6 +630,9 @@ export const createHarnessSession = async (
             },
             sessionController.signal,
           ).then((instance) => {
+            if (initializationCancelled) {
+              return instance.dispose().then(() => instance);
+            }
             initialized.metro = instance;
             sessionLogger.debug('Metro initialized');
             // Attach the Metro diagnostics deriver before the eager prewarm
@@ -644,6 +671,10 @@ export const createHarnessSession = async (
                     diagnostics,
                   } satisfies HarnessPlatformInitOptions),
                 ).then((instance) => {
+                  if (initializationCancelled) {
+                    return instance.dispose().then(() => instance);
+                  }
+                  initialized.platform = instance;
                   sessionLogger.debug('platform runner initialized');
                   return instance;
                 });
@@ -653,10 +684,16 @@ export const createHarnessSession = async (
         ),
       ]);
     } catch (error) {
-      // Only bridge and the Metro diagnostics listener need cleanup here;
-      // leases are released by the outer catch.
+      // Roll back every resource whose initialization won a concurrent race.
+      // Leases are released by the outer catch.
+      initializationCancelled = true;
+      sessionController.abort();
       disposeMetroDiagnostics();
-      await Promise.allSettled([bridge.dispose(), initialized.metro?.dispose()]);
+      await Promise.allSettled([
+        bridge.dispose(),
+        initialized.metro?.dispose(),
+        initialized.platform?.dispose(),
+      ]);
       throw error;
     }
 
@@ -765,7 +802,11 @@ export const createHarnessSession = async (
       const disposeSpan = diagnostics.start('dispose.total', { reason });
       let hookError: unknown;
 
-      try {
+      // Abort only cancels finite/in-flight work. Ownership remains explicit
+      // below, so this cannot race a platform or app-session disposal path.
+      sessionController.abort();
+
+      const hookWork = (async () => {
         await hooks.drain();
         await pluginManager.callHook('harness:after-run', {
           runId: currentRun?.runId,
@@ -783,8 +824,17 @@ export const createHarnessSession = async (
           error: currentRun?.error,
         });
         await hooks.drain();
-      } catch (error) {
-        hookError = error;
+      })();
+      const hookResult = await waitForBoundedSettlement(
+        hookWork,
+        DISPOSE_HOOK_TIMEOUT_MS
+      );
+      if (hookResult === null) {
+        hookError = new Error(
+          `Timed out after ${DISPOSE_HOOK_TIMEOUT_MS}ms while running disposal hooks.`
+        );
+      } else if (hookResult.status === 'rejected') {
+        hookError = hookResult.reason;
       }
 
       if (runtimeConfig.forwardClientLogs) {
@@ -815,26 +865,23 @@ export const createHarnessSession = async (
         }
       }
 
-      let cleanupError: unknown;
-      try {
-        // The app session (and its logcat/device log stream) must be fully
-        // torn down before the platform is disposed: platform disposal can
-        // shut down the device/emulator, and doing that concurrently with
-        // the app session's own cleanup races the device's log stream
-        // against the device disappearing out from under it.
-        await Promise.all([crashMonitor.dispose(), disposeCurrentAppSession()]);
-        await Promise.all([
-          bridge.dispose(),
-          platformInstance.dispose(),
-          metroInstance.dispose(),
-          metroPortLease?.release(),
-        ]);
-      } catch (error) {
-        cleanupError = error;
-      } finally {
-        await resourceLease.release();
-        sessionController.abort();
-      }
+      // The app session (and its log streams) must finish before platform
+      // disposal can remove the underlying device. Run independent cleanup
+      // all-settled so one failure cannot strand another owned resource.
+      const appCleanup = await Promise.allSettled([
+        crashMonitor.dispose(),
+        disposeCurrentAppSession(),
+      ]);
+      const infrastructureCleanup = await Promise.allSettled([
+        bridge.dispose(),
+        platformInstance.dispose(),
+        metroInstance.dispose(),
+        metroPortLease?.release(),
+      ]);
+      const leaseCleanup = await Promise.allSettled([resourceLease.release()]);
+      const cleanupError = [...appCleanup, ...infrastructureCleanup, ...leaseCleanup]
+        .find((result): result is PromiseRejectedResult => result.status === 'rejected')
+        ?.reason;
 
       sessionLogger.debug('session resources disposed');
 

@@ -15,7 +15,9 @@ const APP_EXIT_POLL_INTERVAL_MS = 1000;
 const getVegaRunner: HarnessPlatformRunnerFactory<
   VegaPlatformConfig,
   HarnessConfig
-> = async (config, _harnessConfig, init) => {
+> = async (config, _harnessConfig, _init) => {
+  void _harnessConfig;
+  void _init;
   const parsedConfig = VegaPlatformConfigSchema.parse(config);
   const deviceId = parsedConfig.device.deviceId;
   const bundleId = parsedConfig.bundleId;
@@ -29,20 +31,6 @@ const getVegaRunner: HarnessPlatformRunnerFactory<
 
   if (!isInstalled) {
     throw new AppNotInstalledError(bundleId, deviceId);
-  }
-
-  let currentAppSession: AppSession | null = null;
-
-  // Session-lifetime signal (see HarnessPlatformInitOptions.signal): stop the
-  // poll loop and the app on session teardown, in addition to the normal
-  // dispose() path.
-  const disposeCurrentAppSessionOnAbort = () => void currentAppSession?.dispose();
-  if (init.signal.aborted) {
-    disposeCurrentAppSessionOnAbort();
-  } else {
-    init.signal.addEventListener('abort', disposeCurrentAppSessionOnAbort, {
-      once: true,
-    });
   }
 
   return {
@@ -122,7 +110,6 @@ const getVegaRunner: HarnessPlatformRunnerFactory<
         removeListener: emitter.removeListener,
       };
 
-      currentAppSession = session;
       return session;
     },
     dispose: async () => {

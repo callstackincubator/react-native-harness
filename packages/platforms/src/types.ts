@@ -126,12 +126,8 @@ export type HarnessPlatformRunner = {
 
 export type HarnessPlatformInitOptions = {
   /**
-   * Session-lifetime abort signal: it aborts when the harness session
-   * disposes (normal shutdown, error, or SIGINT/SIGTERM), not on a
-   * readiness/init timeout. Runners should hold onto it for as long as the
-   * session lives — e.g. to abort long-lived child processes and streams
-   * (device logs, launch processes, agent connections) on session teardown —
-   * rather than treating it as scoped to the init() call itself.
+   * Cancels finite initialization and readiness work. It is not an ownership
+   * or disposal signal: runners must explicitly dispose resources they own.
    */
   signal: AbortSignal;
   crashArtifactWriter?: CrashArtifactWriter;

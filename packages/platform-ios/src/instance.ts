@@ -86,7 +86,6 @@ export const getAppleSimulatorPlatformInstance = async (
           id: udid,
         },
         capabilities: [createPermissionPromptAutoAcceptCapability()],
-        signal: init.signal,
       })
     : null;
 
@@ -167,7 +166,7 @@ export const getAppleSimulatorPlatformInstance = async (
 
       await prepareSimulator();
       await xctestPreparation;
-      await xctestAgent.ensureStarted();
+      await xctestAgent.ensureStarted(init.signal);
       agentStarted = true;
     } catch (error) {
       await xctestPreparation?.catch(() => undefined);
@@ -215,7 +214,6 @@ export const getAppleSimulatorPlatformInstance = async (
         stopApp: () => simctl.stopApp(udid, config.bundleId),
         isAppRunning: () => simctl.isAppRunning(udid, config.bundleId),
         crashReporter,
-        signal: init.signal,
       });
     },
     dispose: async () => {
@@ -285,14 +283,13 @@ export const getApplePhysicalDevicePlatformInstance = async (
             codeSign: config.device.codeSign,
           },
           capabilities: [createPermissionPromptAutoAcceptCapability()],
-          signal: init?.signal,
         })
       : null;
 
   if (xctestAgent) {
     let agentStarted = false;
     try {
-      await xctestAgent.ensureStarted();
+      await xctestAgent.ensureStarted(init?.signal);
       agentStarted = true;
     } finally {
       if (!agentStarted) {
@@ -328,7 +325,6 @@ export const getApplePhysicalDevicePlatformInstance = async (
         stopApp: () => devicectl.stopApp(deviceId, config.bundleId),
         isAppRunning: () => devicectl.isAppRunning(deviceId, config.bundleId),
         crashReporter,
-        signal: init?.signal,
       });
     },
     dispose: async () => {

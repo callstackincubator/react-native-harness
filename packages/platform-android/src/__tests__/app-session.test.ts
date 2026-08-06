@@ -27,9 +27,8 @@ const createAbortableLogcatProcess = (): OwnedProcess => {
 };
 
 describe('createAndroidAppSession', () => {
-  it('disposes logcat when the session signal aborts', async () => {
+  it('disposes logcat only through the explicit disposal path', async () => {
     let disposed = false;
-    const controller = new AbortController();
 
     const session = await createAndroidAppSession({
       appUid: 1,
@@ -38,14 +37,18 @@ describe('createAndroidAppSession', () => {
       stopApp: async () => undefined,
       getAppPid: async () => null,
       getLogcatTimestamp: async () => '00:00:00.000',
-      startLogcat: () => ({
-        ...createAbortableLogcatProcess(),
-        dispose: async () => { disposed = true; },
-      }),
-      signal: controller.signal,
+      startLogcat: () => {
+        const process = createAbortableLogcatProcess();
+        return {
+          ...process,
+          dispose: async () => {
+            disposed = true;
+            await process.dispose();
+          },
+        };
+      },
     });
 
-    controller.abort();
     await session.dispose();
     expect(disposed).toBe(true);
   });
@@ -60,10 +63,16 @@ describe('createAndroidAppSession', () => {
       stopApp: async () => undefined,
       getAppPid: async () => null,
       getLogcatTimestamp: async () => '00:00:00.000',
-      startLogcat: () => ({
-        ...createAbortableLogcatProcess(),
-        dispose: async () => { disposed = true; },
-      }),
+      startLogcat: () => {
+        const process = createAbortableLogcatProcess();
+        return {
+          ...process,
+          dispose: async () => {
+            disposed = true;
+            await process.dispose();
+          },
+        };
+      },
     });
 
     await session.dispose();

@@ -21,12 +21,6 @@ type CreateIosAppSessionOptions = {
   stopApp: () => Promise<void>;
   isAppRunning: () => Promise<boolean>;
   crashReporter?: IosCrashReporter;
-  /**
-   * Session-lifetime abort signal (see HarnessPlatformInitOptions.signal).
-   * Terminates the `--console` launch process on session teardown, in
-   * addition to the normal dispose() path.
-   */
-  signal?: AbortSignal;
 };
 
 export const createIosAppSession = async ({
@@ -34,7 +28,6 @@ export const createIosAppSession = async ({
   stopApp,
   isAppRunning,
   crashReporter,
-  signal,
 }: CreateIosAppSessionOptions): Promise<AppSession> => {
   const emitter = createAppSessionEmitter();
   const logBuffer = createBoundedLogBuffer();
@@ -156,35 +149,21 @@ export const createIosAppSession = async ({
     throw new Error('The iOS app launch finished before the app was running.');
   }
 
-  const dispose = async () => {
-    if (disposed) {
-      return;
-    }
+  let disposePromise: Promise<void> | undefined;
+  const dispose = () =>
+    (disposePromise ??= (async () => {
+      if (disposed) return;
 
-    disposed = true;
-    stopPolling = true;
-    cancelPendingPollDelay();
-    state = { status: 'disposed', occurredAt: Date.now() };
-    emitter.clear();
+      disposed = true;
+      stopPolling = true;
+      cancelPendingPollDelay();
+      state = { status: 'disposed', occurredAt: Date.now() };
+      emitter.clear();
 
-    await ownedLaunchProcess.dispose();
-    await stopApp();
-    await Promise.allSettled([logTask, exitTask, pollTask]);
-  };
-
-  if (signal?.aborted) {
-    void dispose().catch((error) =>
-      iosAppSessionLogger.debug('iOS session abort cleanup failed', error)
-    );
-  } else {
-    signal?.addEventListener(
-      'abort',
-      () => void dispose().catch((error) =>
-        iosAppSessionLogger.debug('iOS session abort cleanup failed', error)
-      ),
-      { once: true }
-    );
-  }
+      await ownedLaunchProcess.dispose();
+      await stopApp();
+      await Promise.allSettled([logTask, exitTask, pollTask]);
+    })());
 
   return {
     dispose,
