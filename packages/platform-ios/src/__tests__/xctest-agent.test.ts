@@ -478,6 +478,26 @@ describe('xctest-agent orchestration', () => {
     expect(mocks.disposeClient).toHaveBeenCalledTimes(1);
   });
 
+  it('aborts an in-flight readiness request when the session is cancelled', async () => {
+    const signal = new AbortController();
+    mocks.health.mockImplementation(() => new Promise(() => undefined));
+    const controller = createXCTestAgentController({
+      port: 49152,
+      target: {
+        kind: 'simulator',
+        id: 'sim-999',
+      },
+      signal: signal.signal,
+    });
+
+    const starting = controller.ensureStarted();
+    await vi.waitFor(() => expect(mocks.health).toHaveBeenCalledOnce());
+    signal.abort();
+
+    await expect(starting).rejects.toMatchObject({ name: 'AbortError' });
+    expect(mocks.disposeClient).toHaveBeenCalledOnce();
+  });
+
   it('selects the device transport for physical devices', async () => {
     const controller = createXCTestAgentController({
       port: 49153,

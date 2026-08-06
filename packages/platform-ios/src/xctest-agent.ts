@@ -6,6 +6,7 @@ import {
   logger,
   spawn,
   spawnOwnedProcess,
+  waitForAbort,
   type OwnedProcess,
   type Subprocess,
 } from '@react-native-harness/tools';
@@ -735,26 +736,54 @@ const getRuntimeConfiguration = (
   }, getDefaultRuntimeConfiguration());
 };
 
-// Sequential wait between readiness polls; not raced against anything, so
-// the plain (uncancelled) promise is fine here.
-const delay = async (ms: number) => {
-  await cancellableDelay(ms).promise;
+const delay = async (ms: number, signal?: AbortSignal) => {
+  if (!signal) {
+    await cancellableDelay(ms).promise;
+    return;
+  }
+
+  signal.throwIfAborted();
+  const abortWait = waitForAbort(signal);
+  const timeout = cancellableDelay(ms);
+  try {
+    await Promise.race([timeout.promise, abortWait.promise]);
+  } finally {
+    abortWait.cancel();
+    timeout.cancel();
+  }
+};
+
+const waitForAbortable = async <T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> => {
+  if (!signal) {
+    return await promise;
+  }
+
+  signal.throwIfAborted();
+  const abortWait = waitForAbort(signal);
+  try {
+    return await Promise.race([promise, abortWait.promise]);
+  } finally {
+    abortWait.cancel();
+  }
 };
 
 const waitForAgentReady = async (options: {
   client: ReturnType<typeof createXCTestAgentClient>;
   startupTimeoutMs: number;
+  signal?: AbortSignal;
 }) => {
   const deadline = Date.now() + options.startupTimeoutMs;
   let lastError: unknown = null;
 
   while (Date.now() < deadline) {
+    options.signal?.throwIfAborted();
     try {
-      await options.client.health();
+      await waitForAbortable(options.client.health(), options.signal);
+      options.signal?.throwIfAborted();
       return;
     } catch (error) {
       lastError = error;
-      await delay(XCTEST_AGENT_STARTUP_POLL_INTERVAL_MS);
+      await delay(XCTEST_AGENT_STARTUP_POLL_INTERVAL_MS, options.signal);
     }
   }
 
@@ -1042,6 +1071,7 @@ export const createXCTestAgentController = (options: {
       await waitForAgentReady({
         client,
         startupTimeoutMs,
+        signal: options.signal,
       });
       await client.configurePermissions(runtimeConfiguration.permissions);
     } catch (error) {

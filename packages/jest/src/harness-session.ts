@@ -487,7 +487,11 @@ export const createHarnessSession = async (
   // child the runner threads it into.
   ensureSignalsDeliverable();
   const sessionController = new AbortController();
-  const onEarlySignal = () => sessionController.abort();
+  let receivedEarlySignal = false;
+  const onEarlySignal = () => {
+    receivedEarlySignal = true;
+    sessionController.abort();
+  };
   process.once('SIGTERM', onEarlySignal);
   process.once('SIGINT', onEarlySignal);
 
@@ -584,6 +588,7 @@ export const createHarnessSession = async (
 
     let metroInstance: MetroInstance;
     let platformInstance: HarnessPlatformRunner;
+    const initialized = { metro: null as MetroInstance | null };
     // Noop until the Metro instance resolves and the deriver is attached.
     let disposeMetroDiagnostics: () => void = () => undefined;
 
@@ -601,6 +606,7 @@ export const createHarnessSession = async (
             },
             sessionController.signal,
           ).then((instance) => {
+            initialized.metro = instance;
             sessionLogger.debug('Metro initialized');
             // Attach the Metro diagnostics deriver before the eager prewarm
             // fires so its bundle build/request events land in the trace.
@@ -650,7 +656,7 @@ export const createHarnessSession = async (
       // Only bridge and the Metro diagnostics listener need cleanup here;
       // leases are released by the outer catch.
       disposeMetroDiagnostics();
-      await bridge.dispose();
+      await Promise.allSettled([bridge.dispose(), initialized.metro?.dispose()]);
       throw error;
     }
 
@@ -1102,6 +1108,9 @@ export const createHarnessSession = async (
     // (e.g. a platform init call abandoned after a readiness timeout race).
     sessionController.abort();
     await Promise.allSettled([resourceLease.release(), metroPortLease?.release()]);
+    if (receivedEarlySignal) {
+      process.exit(1);
+    }
     throw error;
   }
 };

@@ -167,9 +167,22 @@ export const getMetroInstance = async (
     socket.on('close', () => sockets.delete(socket));
   });
 
-  abortSignal.throwIfAborted();
+  const closeServer = () =>
+    new Promise<void>((resolve) => {
+      server.close(() => resolve());
+      server.closeAllConnections();
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+    });
 
-  await ready;
+  try {
+    abortSignal.throwIfAborted();
+    await ready;
+  } catch (error) {
+    await closeServer();
+    throw error;
+  }
 
   metroLogger.debug('Metro server is running');
 
@@ -265,15 +278,10 @@ export const getMetroInstance = async (
     },
     getPrewarmState: () => prewarmState,
     isBuildInFlight: () => buildsInFlight > 0,
-    dispose: () =>
-      new Promise<void>((resolve) => {
-        reporter.removeListener(onBundleRequestObserved);
-        reporter.removeListener(onBuildEvent);
-        server.close(() => resolve());
-        server.closeAllConnections();
-        for (const socket of sockets) {
-          socket.destroy();
-        }
-      }),
+    dispose: () => {
+      reporter.removeListener(onBundleRequestObserved);
+      reporter.removeListener(onBuildEvent);
+      return closeServer();
+    },
   };
 };
