@@ -96,7 +96,7 @@ describe('iOS XCTest agent runner integration', () => {
         id: 'sim-udid',
       },
     });
-    expect(mocks.prepare).toHaveBeenCalledTimes(1);
+    expect(mocks.prepare).toHaveBeenCalledWith(initSignal);
     expect(mocks.ensureStarted).toHaveBeenCalledWith(initSignal);
     expect(mocks.dispose).toHaveBeenCalledTimes(1);
   });

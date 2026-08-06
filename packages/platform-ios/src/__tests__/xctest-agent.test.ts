@@ -30,6 +30,22 @@ vi.mock('@react-native-harness/tools', async () => {
   return {
     ...actual,
     spawn: mocks.spawn,
+    spawnOwnedProcess: (
+      file: string,
+      args: string[],
+      options?: Record<string, unknown>
+    ) => {
+      const subprocess = mocks.spawn(file, args, options);
+      let disposePromise: Promise<void> | undefined;
+
+      return {
+        subprocess,
+        dispose: () =>
+          (disposePromise ??= actual.terminate(subprocess, {
+            forceAfterMs: 1_000,
+          })),
+      };
+    },
   };
 });
 
@@ -89,13 +105,14 @@ const createLongRunningSubprocess = (options?: {
 
   const stop = () => {
     stopped = true;
+    childProcess.exitCode = 0;
     for (const listener of listeners) {
       listener();
     }
   };
 
   const childProcess = {
-    exitCode: null,
+    exitCode: null as number | null,
     kill: vi.fn((signal?: NodeJS.Signals) => {
       mocks.kill(signal);
 
@@ -142,6 +159,17 @@ const createLongRunningSubprocess = (options?: {
 describe('xctest-agent orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.health.mockResolvedValue({
+      permissions: {
+        autoAcceptPermissions: false,
+      },
+      status: 'ok',
+    });
+    mocks.configurePermissions.mockResolvedValue({
+      autoAcceptPermissions: true,
+    });
+    mocks.disposeClient.mockResolvedValue(undefined);
+    mocks.disposeTransport.mockResolvedValue(undefined);
     tempProjectRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), 'rn-harness-xctest-agent-')
     );
@@ -240,6 +268,10 @@ describe('xctest-agent orchestration', () => {
   });
 
   afterEach(() => {
+    for (const stop of mocks.activeAgentStops) {
+      stop();
+    }
+    mocks.activeAgentStops.length = 0;
     restoreEnvVar(
       'HARNESS_IOS_XCTESTRUN_FILE',
       originalExternalXCTestRunFile
@@ -271,7 +303,8 @@ describe('xctest-agent orchestration', () => {
         'build-for-testing',
         '-destination',
         'generic/platform=iOS Simulator',
-      ])
+      ]),
+      { cwd: projectRoot, signal: undefined }
     );
     const cacheDirectories = fs.readdirSync(simulatorCacheRoot);
     expect(cacheDirectories).toHaveLength(1);
@@ -302,7 +335,8 @@ describe('xctest-agent orchestration', () => {
         'build-for-testing',
         '-destination',
         'generic/platform=iOS Simulator',
-      ])
+      ]),
+      { cwd: projectRoot, signal: undefined }
     );
   });
 
@@ -497,6 +531,40 @@ describe('xctest-agent orchestration', () => {
     expect(mocks.disposeClient).toHaveBeenCalledOnce();
   });
 
+  it('aborts the finite XCTest build when preparation is cancelled', async () => {
+    const controller = new AbortController();
+    let buildSignal: AbortSignal | undefined;
+    mocks.spawn.mockImplementation(
+      (file: string, args?: string[], options?: { signal?: AbortSignal }) => {
+        if (file === 'xcodebuild' && args?.[0] === 'build-for-testing') {
+          buildSignal = options?.signal;
+          return new Promise<never>((_, reject) => {
+            buildSignal?.addEventListener(
+              'abort',
+              () => reject(buildSignal?.reason),
+              { once: true }
+            );
+          });
+        }
+
+        return createLongRunningSubprocess().subprocess;
+      }
+    );
+    const xctest = createXCTestAgentController({
+      target: {
+        kind: 'device',
+        id: 'device-555',
+      },
+    });
+
+    const preparing = xctest.prepare(controller.signal);
+    await vi.waitFor(() => expect(buildSignal).toBeDefined());
+    controller.abort();
+
+    await expect(preparing).rejects.toMatchObject({ name: 'AbortError' });
+    expect(buildSignal?.aborted).toBe(true);
+  });
+
   it('selects the device transport for physical devices', async () => {
     const controller = createXCTestAgentController({
       port: 49153,
@@ -513,6 +581,7 @@ describe('xctest-agent orchestration', () => {
       deviceId: 'device-555',
       port: 49153,
     });
+    await controller.dispose();
   });
 
   it('requests graceful shutdown during disposal', async () => {
@@ -701,7 +770,8 @@ describe('xctest-agent orchestration', () => {
     expect(mocks.spawn).toHaveBeenNthCalledWith(
       3,
       'xcodebuild',
-      expect.arrayContaining(['build-for-testing'])
+      expect.arrayContaining(['build-for-testing']),
+      { cwd: projectRoot, signal: undefined }
     );
   });
 

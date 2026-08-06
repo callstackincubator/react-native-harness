@@ -56,6 +56,7 @@ export type BuildXCTestAgentOptions = {
   destination: XCTestAgentBuildDestination;
   signing?: XCTestAgentBuildSigning;
   projectRoot?: string;
+  signal?: AbortSignal;
 };
 
 export type BuildXCTestAgentResult = {
@@ -115,7 +116,7 @@ type ExternalXCTestConfiguration = {
 };
 
 export type XCTestAgentController = {
-  prepare: () => Promise<void>;
+  prepare: (signal?: AbortSignal) => Promise<void>;
   ensureStarted: (signal?: AbortSignal) => Promise<void>;
   stop: () => Promise<void>;
   dispose: () => Promise<void>;
@@ -479,27 +480,31 @@ const findReusableSimulatorBuildArtifacts = (
   return null;
 };
 
-const getCurrentXcodeVersion = async (): Promise<string> => {
-  const { stdout } = await spawn('xcodebuild', ['-version']);
+const getCurrentXcodeVersion = async (
+  signal?: AbortSignal
+): Promise<string> => {
+  const { stdout } = await spawn('xcodebuild', ['-version'], { signal });
   return stdout.trim();
 };
 
-const getCurrentSimulatorSdkVersion = async (): Promise<string> => {
-  const { stdout } = await spawn('xcodebuild', [
-    '-version',
-    '-sdk',
-    'iphonesimulator',
-    'SDKVersion',
-  ]);
+const getCurrentSimulatorSdkVersion = async (
+  signal?: AbortSignal
+): Promise<string> => {
+  const { stdout } = await spawn(
+    'xcodebuild',
+    ['-version', '-sdk', 'iphonesimulator', 'SDKVersion'],
+    { signal }
+  );
   return stdout.trim();
 };
 
 const getSimulatorCacheContext = async (
-  buildInputsHash: string
+  buildInputsHash: string,
+  signal?: AbortSignal
 ): Promise<SimulatorXCTestAgentCacheContext> => {
   const [xcodeVersion, simulatorSdkVersion] = await Promise.all([
-    getCurrentXcodeVersion(),
-    getCurrentSimulatorSdkVersion(),
+    getCurrentXcodeVersion(signal),
+    getCurrentSimulatorSdkVersion(signal),
   ]);
 
   return {
@@ -586,7 +591,10 @@ export const buildXCTestAgent = async (
   assertXCTestAgentProjectExists();
 
   if (options.destination === 'simulator') {
-    simulatorCacheContext = await getSimulatorCacheContext(buildInputsHash);
+    simulatorCacheContext = await getSimulatorCacheContext(
+      buildInputsHash,
+      options.signal
+    );
     const reusableDerivedDataPath = findReusableSimulatorBuildArtifacts(
       simulatorCacheContext,
       projectRoot
@@ -673,7 +681,10 @@ export const buildXCTestAgent = async (
     ...signingArgs,
   ];
 
-  await spawn('xcodebuild', buildArgs);
+  await spawn('xcodebuild', buildArgs, {
+    cwd: getXCTestAgentProjectRoot(),
+    signal: options.signal,
+  });
 
   const xctestrunRelativePath = getXCTestRunRelativePath(derivedDataPath);
 
@@ -952,7 +963,7 @@ export const createXCTestAgentController = (options: {
     });
   };
 
-  const prepare = async () => {
+  const prepare = async (signal?: AbortSignal) => {
     if (prepared) {
       return;
     }
@@ -984,6 +995,7 @@ export const createXCTestAgentController = (options: {
     const buildResult = await buildXCTestAgent({
       destination: target.kind,
       signing,
+      signal,
     });
 
     preparedDerivedDataPath = buildResult.derivedDataPath;
@@ -992,7 +1004,7 @@ export const createXCTestAgentController = (options: {
   };
 
   const ensureStarted = async (signal?: AbortSignal) => {
-    await prepare();
+    await prepare(signal);
 
     if (agentProcess && agentClient) {
       return;
@@ -1079,7 +1091,7 @@ export const createXCTestAgentController = (options: {
         getErrorMessage(error),
         xcodebuildLogPath
       );
-      await transport.dispose();
+      await client.dispose();
       agentClient = null;
       await stopProcess({ process: currentProcess });
       throw error;
@@ -1098,15 +1110,30 @@ export const createXCTestAgentController = (options: {
     );
 
     const shutdownTimeout = cancellableDelay(options.shutdownTimeoutMs ?? 5_000);
+    let gracefulShutdownCompleted = false;
     try {
       if (currentClient) {
-        await Promise.race([currentClient.dispose(), shutdownTimeout.promise]);
+        const gracefulExit = currentProcess
+          ? waitForChildProcessExit(currentProcess.subprocess)
+          : Promise.resolve();
+        await Promise.race([
+          (async () => {
+            await currentClient.shutdown();
+            await gracefulExit;
+            gracefulShutdownCompleted = true;
+          })(),
+          shutdownTimeout.promise,
+        ]);
       }
     } finally {
       shutdownTimeout.cancel();
-      // xcodebuild must always be terminated, including when graceful client
-      // shutdown rejects or times out.
-      await stopProcess({ process: currentProcess });
+      try {
+        await currentClient?.dispose();
+      } finally {
+        if (!gracefulShutdownCompleted) {
+          await stopProcess({ process: currentProcess });
+        }
+      }
     }
   };
 

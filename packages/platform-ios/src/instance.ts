@@ -152,7 +152,7 @@ export const getAppleSimulatorPlatformInstance = async (
     );
 
     const xctestPreparation = overlapStartup
-      ? xctestAgent.prepare()
+      ? xctestAgent.prepare(init.signal)
       : undefined;
     // Observe an early build rejection while preparing the simulator; the
     // original promise is still awaited below so its error is propagated.
@@ -161,7 +161,7 @@ export const getAppleSimulatorPlatformInstance = async (
     let agentStarted = false;
     try {
       if (!overlapStartup) {
-        await xctestAgent.prepare();
+        await xctestAgent.prepare(init.signal);
       }
 
       await prepareSimulator();
