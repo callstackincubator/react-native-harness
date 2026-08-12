@@ -7,7 +7,7 @@ export type RunSetupFilesOptions = {
   setupFilesAfterEnv: string[];
   events: EventEmitter<BundlerEvents>;
   bundler: Bundler;
-  evaluateModule: (moduleJs: string, filePath: string) => void;
+  evaluateModule: (moduleJs: string, filePath: string) => void | Promise<void>;
 };
 
 export const runSetupFiles = async ({
@@ -33,7 +33,7 @@ export const runSetupFiles = async ({
         setupType: 'setupFiles',
         duration: Date.now() - startTime,
       });
-      evaluateModule(setupModuleJs, setupFile);
+      await evaluateModule(setupModuleJs, setupFile);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -64,7 +64,7 @@ export const runSetupFiles = async ({
         setupType: 'setupFilesAfterEnv',
         duration: Date.now() - startTime,
       });
-      evaluateModule(setupModuleJs, setupFile);
+      await evaluateModule(setupModuleJs, setupFile);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';

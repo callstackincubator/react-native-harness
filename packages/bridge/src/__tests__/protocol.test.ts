@@ -43,6 +43,30 @@ describe('bridge protocol', () => {
     });
   });
 
+  it('round-trips busy messages', () => {
+    const raw = serializeBridgeMessage({
+      type: 'busy',
+      busy: true,
+      label: 'evaluating example.harness.tsx',
+    });
+
+    expect(parseBridgeMessage(raw)).toEqual({
+      type: 'busy',
+      busy: true,
+      label: 'evaluating example.harness.tsx',
+    });
+
+    expect(
+      parseBridgeMessage(serializeBridgeMessage({ type: 'busy', busy: false })),
+    ).toEqual({ type: 'busy', busy: false });
+  });
+
+  it('rejects busy messages without a boolean flag', () => {
+    expect(() => parseBridgeMessage('{"type":"busy","busy":"yes"}')).toThrow(
+      'Invalid bridge message: busy must be a boolean',
+    );
+  });
+
   it('rejects malformed messages', () => {
     expect(() => parseBridgeMessage('{"type":"invoke","id":"1"}')).toThrow(
       'Invalid bridge message: id must be a number',

@@ -219,6 +219,7 @@ export const createRpcPeer = <
         case 'ready':
         case 'ping':
         case 'pong':
+        case 'busy':
           return message;
       }
     },

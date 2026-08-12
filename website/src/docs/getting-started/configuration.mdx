@@ -98,6 +98,8 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `webSocketPort`                    | Deprecated. Bridge traffic now uses `metroPort`; this option is ignored.                                                                                  |
 | `platformReadyTimeout`             | Platform-ready timeout in milliseconds (default: `300000`).                                                                                               |
 | `bridgeTimeout`                    | Bridge timeout in milliseconds (default: `60000`).                                                                                                        |
+| `heartbeatInterval`                | How often Harness pings the app to check that its JS thread is alive, in milliseconds (default: `5000`).                                                   |
+| `heartbeatTimeout`                 | How long the app may go without answering a heartbeat ping before the run fails as unresponsive, in milliseconds (default: `20000`).                       |
 | `testTimeout`                      | Runtime timeout for each test case and suite hook in milliseconds (default: `5000`). Harness config takes precedence over Jest `testTimeout`.             |
 | `bundleStartTimeout`               | Bundle start timeout in milliseconds (default: `60000`).                                                                                                  |
 | `maxAppRestarts`                   | Maximum number of automatic app relaunch attempts while Harness is waiting for startup (default: `2`).                                                    |
@@ -234,6 +236,23 @@ Increase this value if Harness times out before the app runtime reports ready, e
 
 - Slower app startup after launch
 - Apps that take longer to load the Metro bundle and initialize the Harness runtime
+
+## Heartbeat
+
+While a test file runs, Harness pings the app every `heartbeatInterval` milliseconds and expects a reply within `heartbeatTimeout` milliseconds. The reply is produced on the app's JS thread, so a missing reply means the app was killed, crashed, lost its connection, or blocked its JS thread.
+
+```javascript
+{
+  heartbeatInterval: 5000,   // ping every 5 seconds
+  heartbeatTimeout: 30000,   // fail after 30 seconds of silence
+}
+```
+
+**Defaults:** `heartbeatInterval` 5000 (5 seconds), `heartbeatTimeout` 20000 (20 seconds)
+
+Harness automatically suspends the heartbeat around phases where the runtime knows it is about to block the JS thread — most importantly the synchronous evaluation of a freshly bundled test file, which on a large module graph can take longer than the heartbeat timeout on its own. You should not need to change these values.
+
+Raise `heartbeatTimeout` if a run still fails with `app heartbeat timed out` even though no crash report was written to `.harness/crash-reports`, which means the app never actually crashed.
 
 ## Test Timeout
 

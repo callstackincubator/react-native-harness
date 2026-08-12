@@ -35,6 +35,15 @@ export type HarnessHandle = {
     options: ImageSnapshotOptions,
     runner: string,
   ) => Promise<{ pass: boolean; message: string }>;
+  /**
+   * Tell the harness that the JS thread is about to block (or has stopped
+   * blocking). Heartbeat pings cannot be answered from a blocked thread, so
+   * the server suspends the heartbeat for the duration.
+   *
+   * Must be called *before* the blocking work starts, and the caller must yield
+   * to the event loop afterwards so the message actually reaches the socket.
+   */
+  setBusy: (busy: boolean, label?: string) => void;
   disconnect: () => void;
 };
 
@@ -192,6 +201,13 @@ export const connectToHarness = (
             options,
             runner,
           ),
+        setBusy: (busy, label) => {
+          if (transport.state !== 'open') {
+            return;
+          }
+
+          transport.send(serializeBridgeMessage({ type: 'busy', busy, label }));
+        },
         disconnect: () => {
           closePeer(new Error('Harness connection closed by client'));
           transport.close();

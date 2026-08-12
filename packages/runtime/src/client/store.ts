@@ -6,6 +6,8 @@ export const setHandle = (h: HarnessHandle): void => {
   handle = h;
 };
 
+export const tryGetHandle = (): HarnessHandle | null => handle;
+
 export const getHandle = (): HarnessHandle => {
   if (!handle) {
     throw new Error(

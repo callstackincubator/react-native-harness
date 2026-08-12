@@ -14,7 +14,11 @@ import { getTestRunner, TestRunner } from '../runner/index.js';
 import { getTestCollector, TestCollector } from '../collector/index.js';
 import { combineEventEmitters, EventEmitter } from '../utils/emitter.js';
 import { getWSServer } from './getWSServer.js';
-import { getBundler, evaluateModule, Bundler } from '../bundler/index.js';
+import {
+  getBundler,
+  evaluateModuleAsync,
+  Bundler,
+} from '../bundler/index.js';
 import { markTestsAsSkippedByName } from '../filtering/index.js';
 import { setup } from '../render/setup.js';
 import { runSetupFiles } from './setup-files.js';
@@ -77,7 +81,7 @@ export const getClient = async (): Promise<HarnessHandle> => {
           setupFilesAfterEnv: [],
           events: events as EventEmitter<BundlerEvents>,
           bundler: bundler as Bundler,
-          evaluateModule,
+          evaluateModule: evaluateModuleAsync,
         });
 
         const moduleJs = await bundler.getModule(path);
@@ -87,11 +91,11 @@ export const getClient = async (): Promise<HarnessHandle> => {
             setupFilesAfterEnv: options.setupFilesAfterEnv ?? [],
             events: events as EventEmitter<BundlerEvents>,
             bundler: bundler as Bundler,
-            evaluateModule,
+            evaluateModule: evaluateModuleAsync,
           });
 
           setup();
-          evaluateModule(moduleJs, path);
+          await evaluateModuleAsync(moduleJs, path);
         }, path);
 
         const processedTestSuite = options.testNamePattern
