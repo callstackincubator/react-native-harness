@@ -48,10 +48,23 @@ export type BridgePongMessage = {
   id: number;
 };
 
+/**
+ * Sent by the app right before (and right after) a phase that blocks the JS
+ * thread, such as the synchronous `eval()` of a freshly bundled test module.
+ * While the app is busy it cannot answer pings, so the server suspends the
+ * heartbeat instead of treating the silence as a dead app.
+ */
+export type BridgeBusyMessage = {
+  type: 'busy';
+  busy: boolean;
+  label?: string;
+};
+
 export type BridgeControlMessage =
   | BridgeReadyMessage
   | BridgePingMessage
-  | BridgePongMessage;
+  | BridgePongMessage
+  | BridgeBusyMessage;
 
 export type BridgeMessage<Event extends { type: string } = BridgeEvents> =
   | BridgeInvokeMessage
@@ -175,6 +188,17 @@ export const parseBridgeMessage = (raw: string): BridgeMessage => {
     case 'pong': {
       readNumber(parsed.id, 'id');
       return parsed as BridgePingMessage | BridgePongMessage;
+    }
+    case 'busy': {
+      if (typeof parsed.busy !== 'boolean') {
+        throw new Error('Invalid bridge message: busy must be a boolean');
+      }
+
+      if (parsed.label !== undefined) {
+        readString(parsed.label, 'label');
+      }
+
+      return parsed as BridgeBusyMessage;
     }
     default:
       throw new Error(`Invalid bridge message: unknown type ${messageType}`);

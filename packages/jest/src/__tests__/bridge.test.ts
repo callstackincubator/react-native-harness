@@ -6,8 +6,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HarnessBridge } from '@react-native-harness/bridge/server';
 import { createHarnessBridge } from '@react-native-harness/bridge/server';
-import { connectToHarness } from '@react-native-harness/bridge/client';
-import type { HarnessContext } from '@react-native-harness/bridge';
+import {
+  connectToHarness,
+  createWebSocketClientTransport,
+} from '@react-native-harness/bridge/client';
+import type {
+  BridgeTransport,
+  HarnessContext,
+} from '@react-native-harness/bridge';
 import type { TestSuiteResult } from '@react-native-harness/bridge';
 
 const makeContext = (): HarnessContext => ({
@@ -208,6 +214,166 @@ describe('bridge: createHarnessBridge + connectToHarness', () => {
         expect.objectContaining({ type: 'collection-started', file: 'example.ts' }),
       );
       handle.disconnect();
+    });
+  });
+
+  describe('heartbeat and blocking phases', () => {
+    /**
+     * Simulates an app whose JS thread is blocked: the socket stays open, but
+     * no `pong` is produced. A real app blocks inside the synchronous `eval()`
+     * of a freshly bundled test module, which can easily outlast the heartbeat
+     * timeout on a large module graph. We cannot block the event loop here --
+     * server and client share it in this test -- so we drop the pongs instead.
+     */
+    const connectBlockable = async (
+      port: number,
+      callbacks: Parameters<typeof connectToHarness>[1],
+    ) => {
+      const inner = createWebSocketClientTransport(`ws://127.0.0.1:${port}`);
+      let jsThreadBlocked = false;
+
+      const transport: BridgeTransport = {
+        get state() {
+          return inner.state;
+        },
+        send: (message) => {
+          if (
+            jsThreadBlocked &&
+            typeof message === 'string' &&
+            (JSON.parse(message) as { type: string }).type === 'pong'
+          ) {
+            return;
+          }
+
+          inner.send(message);
+        },
+        close: (code, reason) => inner.close(code, reason),
+        onOpen: (listener) => inner.onOpen(listener),
+        onMessage: (listener) => inner.onMessage(listener),
+        onClose: (listener) => inner.onClose(listener),
+        onError: (listener) => inner.onError(listener),
+      };
+
+      const handle = await connectToHarness(
+        `ws://127.0.0.1:${port}`,
+        callbacks,
+        { transport },
+      );
+
+      return {
+        handle,
+        blockJsThread: () => {
+          jsThreadBlocked = true;
+        },
+        unblockJsThread: () => {
+          jsThreadBlocked = false;
+        },
+      };
+    };
+
+    const createHeartbeatBridge = () =>
+      createHarnessBridge({
+        port: 0,
+        heartbeat: { intervalMs: 20, timeoutMs: 60, maxSuspendMs: 5_000 },
+        context: makeContext(),
+      });
+
+    const suiteResult: TestSuiteResult = {
+      name: 'suite',
+      tests: [{ name: 'passes', status: 'passed', duration: 1 }],
+      suites: [],
+      status: 'passed',
+      duration: 1,
+    };
+
+    it('fails the run when the app goes silent without announcing a blocking phase', async () => {
+      const hbBridge = await createHeartbeatBridge();
+      const port = (hbBridge.ws.address() as { port: number }).port;
+
+      try {
+        const app = await connectBlockable(port, {
+          runTests: async () => {
+            app.blockJsThread();
+            await new Promise((r) => setTimeout(r, 300));
+            return suiteResult;
+          },
+          resetEnvironment: vi.fn(),
+        });
+        app.handle.reportReady(device);
+
+        const conn = await hbBridge.nextConnection();
+
+        await expect(
+          conn.runTests('example.ts', { runner: '/runner.js' }),
+        ).rejects.toThrow('The app stopped answering harness heartbeats');
+      } finally {
+        hbBridge.dispose();
+      }
+    });
+
+    it('completes the run when the app announces the blocking phase first', async () => {
+      const hbBridge = await createHeartbeatBridge();
+      const port = (hbBridge.ws.address() as { port: number }).port;
+
+      try {
+        const app = await connectBlockable(port, {
+          runTests: async () => {
+            // Sent *before* the thread blocks, exactly as the runtime does
+            // around `eval()` of a bundled module.
+            app.handle.setBusy(true, 'evaluating example.harness.tsx');
+            app.blockJsThread();
+            // Several heartbeat timeouts' worth of silence.
+            await new Promise((r) => setTimeout(r, 300));
+            app.unblockJsThread();
+            app.handle.setBusy(false);
+            return suiteResult;
+          },
+          resetEnvironment: vi.fn(),
+        });
+        app.handle.reportReady(device);
+
+        const conn = await hbBridge.nextConnection();
+        const result = await conn.runTests('example.ts', {
+          runner: '/runner.js',
+        });
+
+        expect(result.tests[0].name).toBe('passes');
+        app.handle.disconnect();
+      } finally {
+        hbBridge.dispose();
+      }
+    });
+
+    it('names the blocking phase when the app stays blocked past the suspension limit', async () => {
+      const hbBridge = await createHarnessBridge({
+        port: 0,
+        heartbeat: { intervalMs: 20, timeoutMs: 60, maxSuspendMs: 100 },
+        context: makeContext(),
+      });
+      const port = (hbBridge.ws.address() as { port: number }).port;
+
+      try {
+        const app = await connectBlockable(port, {
+          runTests: async () => {
+            app.handle.setBusy(true, 'evaluating example.harness.tsx');
+            app.blockJsThread();
+            await new Promise((r) => setTimeout(r, 1_000));
+            return suiteResult;
+          },
+          resetEnvironment: vi.fn(),
+        });
+        app.handle.reportReady(device);
+
+        const conn = await hbBridge.nextConnection();
+
+        await expect(
+          conn.runTests('example.ts', { runner: '/runner.js' }),
+        ).rejects.toThrow(
+          'The app last reported it was busy with: evaluating example.harness.tsx.',
+        );
+      } finally {
+        hbBridge.dispose();
+      }
     });
   });
 

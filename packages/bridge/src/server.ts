@@ -58,8 +58,18 @@ type TransportOptions =
   | { port: number; host?: string }
   | { server: HttpServer | HttpsServer; path?: string };
 
+export type HarnessBridgeHeartbeatOptions = {
+  /** How often to ping the app. Defaults to 5s. */
+  intervalMs?: number;
+  /** How long to wait for a pong before declaring the app unresponsive. Defaults to 20s. */
+  timeoutMs?: number;
+  /** Upper bound on a single app-requested heartbeat suspension. Defaults to 5min. */
+  maxSuspendMs?: number;
+};
+
 export type HarnessBridgeOptions = TransportOptions & {
   timeout?: number;
+  heartbeat?: HarnessBridgeHeartbeatOptions;
   context: HarnessContext;
 };
 
@@ -111,7 +121,7 @@ const receiveScreenshot = async (
 export const createHarnessBridge = async (
   options: HarnessBridgeOptions,
 ): Promise<HarnessBridge> => {
-  const { timeout, context, ...transportOptions } = options;
+  const { timeout, heartbeat: heartbeatOptions, context, ...transportOptions } = options;
   const wss = await createWss(transportOptions);
   bridgeLogger.debug('bridge server ready');
 
@@ -167,13 +177,33 @@ export const createHarnessBridge = async (
       },
     });
 
+    // Tracks the app-reported blocking phase (see `BridgeBusyMessage`), so a
+    // heartbeat timeout can name what the JS thread was busy with.
+    let busyLabel: string | null = null;
+
     const heartbeat = createHeartbeat({
+      intervalMs: heartbeatOptions?.intervalMs,
+      timeoutMs: heartbeatOptions?.timeoutMs,
+      maxSuspendMs: heartbeatOptions?.maxSuspendMs,
       sendPing: (id) => {
         transport.send(serializeBridgeMessage({ type: 'ping', id }));
       },
+      onSuspendExpired: () => {
+        bridgeLogger.warn(
+          'app has been busy for too long%s, resuming heartbeat',
+          busyLabel ? ` (${busyLabel})` : '',
+        );
+      },
       onTimeout: () => {
         bridgeLogger.warn('app heartbeat timed out');
-        disconnect(new AppBridgeDisconnectedError('heartbeat-timeout'));
+        disconnect(
+          new AppBridgeDisconnectedError(
+            'heartbeat-timeout',
+            busyLabel
+              ? `The app last reported it was busy with: ${busyLabel}.`
+              : undefined,
+          ),
+        );
       },
     });
 
@@ -249,6 +279,24 @@ export const createHarnessBridge = async (
         }
         case 'pong': {
           heartbeat.notifyPong(controlMessage.id);
+          return;
+        }
+        case 'busy': {
+          if (controlMessage.busy) {
+            busyLabel = controlMessage.label ?? null;
+            bridgeLogger.debug(
+              'app entering blocking phase%s, suspending heartbeat',
+              busyLabel ? `: ${busyLabel}` : '',
+            );
+            heartbeat.suspend();
+          } else {
+            bridgeLogger.debug(
+              'app left blocking phase%s, resuming heartbeat',
+              busyLabel ? `: ${busyLabel}` : '',
+            );
+            busyLabel = null;
+            heartbeat.resume();
+          }
           return;
         }
       }

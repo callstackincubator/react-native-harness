@@ -4448,6 +4448,8 @@ var ConfigSchema = external_exports.object({
   metroPort: external_exports.number().int("Metro port must be an integer").min(1, "Metro port must be at least 1").max(65535, "Metro port must be at most 65535").optional().default(DEFAULT_METRO_PORT),
   webSocketPort: external_exports.number().optional().describe("Deprecated. Bridge traffic now uses metroPort and this value is ignored."),
   bridgeTimeout: external_exports.number().min(1e3, "Bridge timeout must be at least 1 second").default(6e4),
+  heartbeatInterval: external_exports.number().min(100, "Heartbeat interval must be at least 100ms").default(5e3).describe("How often the harness pings the app to check that its JS thread is still alive."),
+  heartbeatTimeout: external_exports.number().min(1e3, "Heartbeat timeout must be at least 1 second").default(2e4).describe("How long the app may go without answering a heartbeat ping before the run fails as unresponsive. The harness suspends the heartbeat around phases the app reports as blocking (such as evaluating a test bundle), so raise this only if a run still times out with no crash report."),
   testTimeout: external_exports.number().min(1e3, "Test timeout must be at least 1 second").default(5e3),
   platformReadyTimeout: external_exports.number().min(1e3, "Platform ready timeout must be at least 1 second").default(3e5),
   bundleStartTimeout: external_exports.number().min(1e3, "Bundle start timeout must be at least 1 second").default(6e4),

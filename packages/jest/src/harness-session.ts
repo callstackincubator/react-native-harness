@@ -601,6 +601,10 @@ export const createHarnessSession = async (
       createHarnessBridge({
         noServer: true,
         timeout: runtimeConfig.bridgeTimeout,
+        heartbeat: {
+          intervalMs: runtimeConfig.heartbeatInterval,
+          timeoutMs: runtimeConfig.heartbeatTimeout,
+        },
         context,
       })
     );

@@ -56,6 +56,24 @@ export const ConfigSchema = z
       .min(1000, 'Bridge timeout must be at least 1 second')
       .default(60000),
 
+    heartbeatInterval: z
+      .number()
+      .min(100, 'Heartbeat interval must be at least 100ms')
+      .default(5000)
+      .describe(
+        'How often the harness pings the app to check that its JS thread is still alive.'
+      ),
+
+    heartbeatTimeout: z
+      .number()
+      .min(1000, 'Heartbeat timeout must be at least 1 second')
+      .default(20000)
+      .describe(
+        'How long the app may go without answering a heartbeat ping before the run fails as unresponsive. ' +
+          'The harness suspends the heartbeat around phases the app reports as blocking (such as evaluating a ' +
+          'test bundle), so raise this only if a run still times out with no crash report.'
+      ),
+
     testTimeout: z
       .number()
       .min(1000, 'Test timeout must be at least 1 second')
