@@ -51,15 +51,97 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Detect Package Manager
+      id: detect-pm
+      shell: bash
+      working-directory: ${{ inputs.projectRoot || '.' }}
+      run: |
+        if [ -n "${{ inputs.packageManager }}" ]; then
+          case "${{ inputs.packageManager }}" in
+            pnpm)
+              echo "manager=pnpm" >> $GITHUB_OUTPUT
+              echo "runner=pnpm exec " >> $GITHUB_OUTPUT
+              ;;
+            yarn)
+              echo "manager=yarn" >> $GITHUB_OUTPUT
+              echo "runner=yarn " >> $GITHUB_OUTPUT
+              ;;
+            bun)
+              echo "manager=bun" >> $GITHUB_OUTPUT
+              echo "runner=bunx " >> $GITHUB_OUTPUT
+              ;;
+            deno)
+              echo "manager=deno" >> $GITHUB_OUTPUT
+              echo "runner=deno run -A npm:" >> $GITHUB_OUTPUT
+              ;;
+            npm)
+              echo "manager=npm" >> $GITHUB_OUTPUT
+              echo "runner=npx " >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "Error: Unsupported packageManager '${{ inputs.packageManager }}'"
+              echo "Supported values: npm, yarn, pnpm, bun, deno"
+              exit 1
+              ;;
+          esac
+        elif [ -f "pnpm-lock.yaml" ]; then
+          echo "manager=pnpm" >> $GITHUB_OUTPUT
+          echo "runner=pnpm exec " >> $GITHUB_OUTPUT
+        elif [ -f "yarn.lock" ]; then
+          echo "manager=yarn" >> $GITHUB_OUTPUT
+          echo "runner=yarn " >> $GITHUB_OUTPUT
+        elif [ -f "bun.lock" ] || [ -f "bun.lockb" ]; then
+          echo "manager=bun" >> $GITHUB_OUTPUT
+          echo "runner=bunx " >> $GITHUB_OUTPUT
+        elif [ -f "deno.lock" ]; then
+          echo "manager=deno" >> $GITHUB_OUTPUT
+          echo "runner=deno run -A npm:" >> $GITHUB_OUTPUT
+        else
+          echo "manager=npm" >> $GITHUB_OUTPUT
+          echo "runner=npx " >> $GITHUB_OUTPUT
+        fi
+    # This action invokes the project's own installed react-native-harness CLI
+    # (via `harness ci ...`) instead of shipping bundled scripts, so the
+    # action ref and the installed package version must be compatible. On an
+    # older, pre-`ci`-subcommand CLI, `harness ci load-config` falls through
+    # to the Jest CLI and treats `ci` as a test path pattern -- silently
+    # running (zero) tests instead of failing -- so this guard must run
+    # before any `harness ci ...` step is invoked.
+    - name: Verify react-native-harness CLI version
+      shell: bash
+      working-directory: ${{ inputs.projectRoot || '.' }}
+      run: |
+        # The `harness ci <subcommand>` interface this action relies on ships
+        # starting with 1.5.0 (see the version plan for this change). On an
+        # older CLI, `harness ci load-config` falls through to the Jest CLI
+        # instead of failing, so this floor must match the exact release
+        # that introduced `ci`, not the release this action.yml happens to
+        # be edited in.
+        MIN_VERSION="1.5.0"
+        INSTALLED_VERSION=$(node -p "require(require.resolve('react-native-harness/package.json',{paths:[process.cwd()]})).version" 2>/dev/null)
+        if [ -z "$INSTALLED_VERSION" ]; then
+          echo "Error: could not resolve the 'react-native-harness' package in this project."
+          echo "This action requires react-native-harness >= $MIN_VERSION to be installed. Pin the action ref to the same release as the installed package."
+          exit 1
+        fi
+        # Note: `sort -V` ranks a prerelease like "1.5.0-beta.1" below
+        # "1.5.0", so a prerelease of the very release that introduces `ci`
+        # would be (correctly, if conservatively) rejected here.
+        LOWEST=$(printf '%s\n%s\n' "$MIN_VERSION" "$INSTALLED_VERSION" | sort -V | head -n1)
+        if [ "$LOWEST" != "$MIN_VERSION" ]; then
+          echo "Error: This action requires react-native-harness >= $MIN_VERSION (found $INSTALLED_VERSION). Pin the action ref to the same release as the installed package."
+          exit 1
+        fi
     - name: Load React Native Harness configuration
       id: load-config
       shell: bash
+      working-directory: ${{ inputs.projectRoot || '.' }}
       env:
         INPUT_RUNNER: ${{ inputs.runner }}
         INPUT_PROJECTROOT: ${{ inputs.projectRoot }}
         HARNESS_AVD_CACHING: ${{ inputs.cacheAvd }}
       run: |
-        node ${{ github.action_path }}/actions/shared/index.cjs
+        ${{ steps.detect-pm.outputs.runner }}react-native-harness ci load-config
     - name: Verify native app input
       if: fromJson(steps.load-config.outputs.config).platformId != 'web'
       shell: bash
@@ -72,10 +154,11 @@ runs:
     - name: Plan Metro cache restore
       id: plan-metro-restore
       shell: bash
+      working-directory: ${{ steps.load-config.outputs.projectRoot }}
       env:
         INPUT_PROJECTROOT: ${{ steps.load-config.outputs.projectRoot }}
       run: |
-        node ${{ github.action_path }}/actions/shared/plan-restore.cjs
+        ${{ steps.detect-pm.outputs.runner }}react-native-harness ci plan-metro-restore
     - name: Restore Metro cache (.harness/cache/metro)
       id: restore-metro
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -95,13 +178,14 @@ runs:
     - name: Snapshot Metro cache
       id: snapshot-metro-restore
       shell: bash
+      working-directory: ${{ steps.load-config.outputs.projectRoot }}
       env:
         INPUT_PROJECTROOT: ${{ steps.load-config.outputs.projectRoot }}
         # Empty on a cache miss; snapshot-metro.cjs uses it to report whether
         # the Metro cache was actually restored and from which key.
         METRO_RESTORED_KEY: ${{ steps.restore-metro.outputs.cache-matched-key }}
       run: |
-        node ${{ github.action_path }}/actions/shared/snapshot-metro.cjs
+        ${{ steps.detect-pm.outputs.runner }}react-native-harness ci snapshot-metro
     - name: Restore Harness cache
       id: cache-harness-restore
       if: fromJson(steps.load-config.outputs.config).platformId == 'ios'
@@ -178,55 +262,6 @@ runs:
       run: npx playwright install --with-deps chromium
 
     # ── Shared ───────────────────────────────────────────────────────────────
-    - name: Detect Package Manager
-      id: detect-pm
-      shell: bash
-      working-directory: ${{ steps.load-config.outputs.projectRoot }}
-      run: |
-        if [ -n "${{ inputs.packageManager }}" ]; then
-          case "${{ inputs.packageManager }}" in
-            pnpm)
-              echo "manager=pnpm" >> $GITHUB_OUTPUT
-              echo "runner=pnpm exec " >> $GITHUB_OUTPUT
-              ;;
-            yarn)
-              echo "manager=yarn" >> $GITHUB_OUTPUT
-              echo "runner=yarn " >> $GITHUB_OUTPUT
-              ;;
-            bun)
-              echo "manager=bun" >> $GITHUB_OUTPUT
-              echo "runner=bunx " >> $GITHUB_OUTPUT
-              ;;
-            deno)
-              echo "manager=deno" >> $GITHUB_OUTPUT
-              echo "runner=deno run -A npm:" >> $GITHUB_OUTPUT
-              ;;
-            npm)
-              echo "manager=npm" >> $GITHUB_OUTPUT
-              echo "runner=npx " >> $GITHUB_OUTPUT
-              ;;
-            *)
-              echo "Error: Unsupported packageManager '${{ inputs.packageManager }}'"
-              echo "Supported values: npm, yarn, pnpm, bun, deno"
-              exit 1
-              ;;
-          esac
-        elif [ -f "pnpm-lock.yaml" ]; then
-          echo "manager=pnpm" >> $GITHUB_OUTPUT
-          echo "runner=pnpm exec " >> $GITHUB_OUTPUT
-        elif [ -f "yarn.lock" ]; then
-          echo "manager=yarn" >> $GITHUB_OUTPUT
-          echo "runner=yarn " >> $GITHUB_OUTPUT
-        elif [ -f "bun.lock" ] || [ -f "bun.lockb" ]; then
-          echo "manager=bun" >> $GITHUB_OUTPUT
-          echo "runner=bunx " >> $GITHUB_OUTPUT
-        elif [ -f "deno.lock" ]; then
-          echo "manager=deno" >> $GITHUB_OUTPUT
-          echo "runner=deno run -A npm:" >> $GITHUB_OUTPUT
-        else
-          echo "manager=npm" >> $GITHUB_OUTPUT
-          echo "runner=npx " >> $GITHUB_OUTPUT
-        fi
     - name: Run E2E tests
       id: run-tests
       shell: bash
@@ -277,13 +312,14 @@ runs:
       id: plan-metro-save
       if: always()
       shell: bash
+      working-directory: ${{ steps.load-config.outputs.projectRoot }}
       env:
         INPUT_PROJECTROOT: ${{ steps.load-config.outputs.projectRoot }}
         INPUT_METRO_SNAPSHOT: ${{ steps.snapshot-metro-restore.outputs.metroSnapshot }}
         INPUT_CACHESAVEPOLICY: ${{ inputs.cacheSavePolicy }}
         IS_DEFAULT_BRANCH: ${{ github.ref_name == github.event.repository.default_branch }}
       run: |
-        node ${{ github.action_path }}/actions/shared/plan-save.cjs
+        ${{ steps.detect-pm.outputs.runner }}react-native-harness ci plan-metro-save
     - name: Save Metro cache
       if: always() && steps.plan-metro-save.outputs.metroShouldSave == 'true'
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0

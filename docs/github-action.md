@@ -1,16 +1,12 @@
-![harness-banner](https://react-native-harness.dev/harness-banner.jpg)
+# GitHub Action for React Native Harness
 
-### GitHub Action for React Native Harness
+GitHub Action that simplifies running React Native Harness tests in CI/CD environments. It lives at the repository root (`action.yml`) and handles the setup of emulators, simulators, browsers, and test execution automatically based on the selected Harness runner.
 
-[![mit licence][license-badge]][license]
-[![Chat][chat-badge]][chat]
-[![PRs Welcome][prs-welcome-badge]][prs-welcome]
-
-GitHub Action that simplifies running React Native Harness tests in CI/CD environments. It lives at the repository root and handles the setup of emulators, simulators, browsers, and test execution automatically based on the selected Harness runner.
+For a narrative walkthrough with a complete example workflow, see the [CI/CD guide](https://react-native-harness.dev/docs/guides/ci-cd) on the docs site. This page is the action's own reference documentation.
 
 ## Action
 
-Pin the action ref to the **same release as the `react-native-harness` package** in your project’s `package.json` (for example `1.0.0` in dependencies → `@v1.0.0` on the action). The action and npm releases are cut from the same repo; keeping versions aligned avoids drift between what `pnpm install` / `npm ci` resolves and what the workflow runs.
+Pin the action ref to the **same release as the `react-native-harness` package** in your project's `package.json` (for example `1.0.0` in dependencies → `@v1.0.0` on the action). The action and npm releases are cut from the same repo; keeping versions aligned avoids drift between what `pnpm install` / `npm ci` resolves and what the workflow runs.
 
 Use a [release tag](https://github.com/callstackincubator/react-native-harness/releases) for normal CI, or `@main` only if you intentionally track the default branch.
 
@@ -20,6 +16,10 @@ Use a [release tag](https://github.com/callstackincubator/react-native-harness/r
 ```
 
 The action reads your `rn-harness.config.mjs` file, resolves the `runner` you pass in, and uses that runner's `platformId` to decide which platform-specific setup to execute.
+
+### Version coupling
+
+Starting with this release, the action invokes your project's own installed `react-native-harness` CLI (via `harness ci <subcommand>`) instead of shipping its own bundled scripts. This means action `@vX` requires `react-native-harness >= X` to be installed in the project the workflow runs against. The action verifies this itself as one of its first steps and fails with a clear error (rather than silently misbehaving) when the installed CLI is missing or too old.
 
 ## Inputs
 
@@ -110,17 +110,3 @@ Runner configuration requirements:
 The action is designed to work with your existing React Native Harness configuration. It automatically reads `rn-harness.config.mjs` to determine device and platform settings, so you don't need to hardcode emulator or simulator configuration in workflow files.
 
 For complete workflow examples, see the [CI/CD documentation](https://react-native-harness.dev/docs/guides/ci-cd).
-
-## Made with ❤️ at Callstack
-
-`@react-native-harness/github-action` is an open source project and will always remain free to use. If you think it's cool, please star it 🌟. [Callstack][callstack-readme-with-love] is a group of React and React Native geeks, contact us at [hello@callstack.com](mailto:hello@callstack.com) if you need any help with these or just want to say hi!
-
-Like the project? ⚛️ [Join the team](https://callstack.com/careers/?utm_campaign=Senior_RN&utm_source=github&utm_medium=readme) who does amazing stuff for clients and drives React Native Open Source! 🔥
-
-[callstack-readme-with-love]: https://callstack.com/?utm_source=github.com&utm_medium=referral&utm_campaign=react-native-harness&utm_term=readme-with-love
-[license-badge]: https://img.shields.io/npm/l/@react-native-harness/github-action?style=for-the-badge
-[license]: https://github.com/callstackincubator/react-native-harness/blob/main/LICENSE
-[prs-welcome-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge
-[prs-welcome]: ../../CONTRIBUTING.md
-[chat-badge]: https://img.shields.io/discord/426714625279524876.svg?style=for-the-badge
-[chat]: https://discord.gg/xgGt7KAjxv

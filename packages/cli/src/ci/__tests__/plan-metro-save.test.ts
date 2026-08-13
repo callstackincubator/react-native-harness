@@ -80,7 +80,7 @@ describe('plan-save', () => {
   });
 
   it('writes metroShouldSave and metroSaveKey to GITHUB_OUTPUT', async () => {
-    await import('../plan-save.js');
+    await (await import('../plan-metro-save.js')).runPlanMetroSave();
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe('plan-save', () => {
   });
 
   it('parses the metroSnapshot input and builds the SavePolicy from env/input', async () => {
-    await import('../plan-save.js');
+    await (await import('../plan-metro-save.js')).runPlanMetroSave();
 
     await vi.waitFor(() => {
       expect(planSaveMock).toHaveBeenCalled();
@@ -110,7 +110,7 @@ describe('plan-save', () => {
   it('treats an unparseable metroSnapshot input as an empty snapshot instead of throwing', async () => {
     process.env.INPUT_METRO_SNAPSHOT = 'not json';
 
-    await import('../plan-save.js');
+    await (await import('../plan-metro-save.js')).runPlanMetroSave();
 
     await vi.waitFor(() => {
       expect(planSaveMock).toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe('plan-save', () => {
   it('defaults an unrecognized cacheSavePolicy input to "default-branch"', async () => {
     process.env.INPUT_CACHESAVEPOLICY = 'bogus';
 
-    await import('../plan-save.js');
+    await (await import('../plan-metro-save.js')).runPlanMetroSave();
 
     await vi.waitFor(() => {
       expect(planSaveMock).toHaveBeenCalled();
@@ -156,7 +156,7 @@ describe('plan-save', () => {
       },
     });
 
-    await import('../plan-save.js');
+    await (await import('../plan-metro-save.js')).runPlanMetroSave();
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
@@ -179,7 +179,7 @@ describe('plan-save', () => {
       },
     });
 
-    await import('../plan-save.js');
+    await (await import('../plan-metro-save.js')).runPlanMetroSave();
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
@@ -203,7 +203,7 @@ describe('plan-save', () => {
       },
     });
 
-    await import('../plan-save.js');
+    await (await import('../plan-metro-save.js')).runPlanMetroSave();
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
@@ -227,7 +227,7 @@ describe('plan-save', () => {
       },
     });
 
-    await import('../plan-save.js');
+    await (await import('../plan-metro-save.js')).runPlanMetroSave();
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
@@ -241,7 +241,7 @@ describe('plan-save', () => {
   it('fails loudly (process.exit(1)) when GITHUB_OUTPUT is not set', async () => {
     delete process.env.GITHUB_OUTPUT;
 
-    await import('../plan-save.js');
+    await (await import('../plan-metro-save.js')).runPlanMetroSave();
 
     await vi.waitFor(() => {
       expect(process.exit).toHaveBeenCalledWith(1);

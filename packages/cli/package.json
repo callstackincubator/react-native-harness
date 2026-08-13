@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@react-native-harness/bridge": "workspace:*",
+    "@react-native-harness/cache": "workspace:*",
     "@react-native-harness/config": "workspace:*",
     "@react-native-harness/platforms": "workspace:*",
     "@react-native-harness/tools": "workspace:*",

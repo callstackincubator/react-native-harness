@@ -13,7 +13,10 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../platform-web/tsconfig.lib.json"
+      "path": "../jest/tsconfig.lib.json"
+    },
+    {
+      "path": "../bundler-metro/tsconfig.lib.json"
     },
     {
       "path": "../tools/tsconfig.lib.json"
@@ -25,7 +28,13 @@
       "path": "../config/tsconfig.lib.json"
     },
     {
+      "path": "../cache/tsconfig.lib.json"
+    },
+    {
       "path": "../bridge/tsconfig.lib.json"
+    },
+    {
+      "path": "../platform-web/tsconfig.lib.json"
     },
     {
       "path": "../platform-ios/tsconfig.lib.json"

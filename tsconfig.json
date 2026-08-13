@@ -58,9 +58,6 @@
       "path": "./packages/bundler-metro"
     },
     {
-      "path": "./packages/github-action"
-    },
-    {
       "path": "./packages/ui"
     },
     {

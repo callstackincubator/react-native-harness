@@ -59,7 +59,7 @@ describe('snapshot-metro', () => {
   });
 
   it('writes the current cache snapshot to GITHUB_OUTPUT as metroSnapshot', async () => {
-    await import('../snapshot-metro.js');
+    await (await import('../snapshot-metro.js')).runSnapshotMetro();
 
     await vi.waitFor(() => {
       expect(snapshotMock).toHaveBeenCalled();
@@ -80,7 +80,7 @@ describe('snapshot-metro', () => {
       ],
     });
 
-    await import('../snapshot-metro.js');
+    await (await import('../snapshot-metro.js')).runSnapshotMetro();
 
     await vi.waitFor(() => {
       expect(snapshotMock).toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe('snapshot-metro', () => {
   it('reports a cold start when no cache entry matched', async () => {
     delete process.env.METRO_RESTORED_KEY;
 
-    await import('../snapshot-metro.js');
+    await (await import('../snapshot-metro.js')).runSnapshotMetro();
 
     await vi.waitFor(() => {
       expect(snapshotMock).toHaveBeenCalled();
@@ -108,7 +108,7 @@ describe('snapshot-metro', () => {
   it('fails loudly (process.exit(1)) when GITHUB_OUTPUT is not set', async () => {
     delete process.env.GITHUB_OUTPUT;
 
-    await import('../snapshot-metro.js');
+    await (await import('../snapshot-metro.js')).runSnapshotMetro();
 
     await vi.waitFor(() => {
       expect(process.exit).toHaveBeenCalledWith(1);

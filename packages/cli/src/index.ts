@@ -83,6 +83,63 @@ Examples:
   harness skill get core`);
 };
 
+const CI_SUBCOMMANDS = [
+  'load-config',
+  'plan-metro-restore',
+  'snapshot-metro',
+  'plan-metro-save',
+] as const;
+
+const printCiUsage = () => {
+  console.error(`Usage: harness ci <command>
+
+Commands:
+  load-config           Load and resolve the Harness config for a runner
+  plan-metro-restore    Plan a Metro cache restore
+  snapshot-metro        Snapshot the Metro cache after restore
+  plan-metro-save       Plan a Metro cache save
+
+These commands are invoked by the react-native-harness GitHub Action and are
+not intended to be run manually.`);
+};
+
+const runCiCommand = async () => {
+  const [, , , subcommand] = process.argv;
+
+  if (
+    subcommand === undefined ||
+    !CI_SUBCOMMANDS.includes(subcommand as (typeof CI_SUBCOMMANDS)[number])
+  ) {
+    printCiUsage();
+    process.exit(1);
+  }
+
+  switch (subcommand) {
+    case 'load-config': {
+      const { runLoadConfig } = await import('./ci/load-config.js');
+      await runLoadConfig();
+      return;
+    }
+    case 'plan-metro-restore': {
+      const { runPlanMetroRestore } = await import(
+        './ci/plan-metro-restore.js'
+      );
+      await runPlanMetroRestore();
+      return;
+    }
+    case 'snapshot-metro': {
+      const { runSnapshotMetro } = await import('./ci/snapshot-metro.js');
+      await runSnapshotMetro();
+      return;
+    }
+    case 'plan-metro-save': {
+      const { runPlanMetroSave } = await import('./ci/plan-metro-save.js');
+      await runPlanMetroSave();
+      return;
+    }
+  }
+};
+
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
     return error.message;
@@ -206,6 +263,11 @@ const main = async () => {
 
   if (process.argv.includes('init')) {
     runInitWizard();
+    return;
+  }
+
+  if (process.argv[2] === 'ci') {
+    await runCiCommand();
     return;
   }
 

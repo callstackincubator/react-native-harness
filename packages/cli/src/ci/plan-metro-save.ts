@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import {
   createHarnessCache,
   type CacheSnapshot,
@@ -9,6 +8,7 @@ import {
 import { getConfig } from '@react-native-harness/config';
 import { formatMegabytes } from './format-bytes.js';
 import { resolveMetroStaticInputs } from './metro-cache-inputs.js';
+import { resolveProjectRoot } from './workspace-root.js';
 
 const parseSnapshot = (raw: string | undefined): CacheSnapshot => {
   if (!raw) {
@@ -74,13 +74,11 @@ const logMetroSaveDecision = (
   );
 };
 
-const run = async (): Promise<void> => {
+export const runPlanMetroSave = async (): Promise<void> => {
   try {
     const projectRootInput = process.env.INPUT_PROJECTROOT;
 
-    const projectRoot = projectRootInput
-      ? path.resolve(projectRootInput)
-      : process.cwd();
+    const projectRoot = resolveProjectRoot(projectRootInput);
 
     console.info(`Planning Metro cache save for: ${projectRoot}`);
 
@@ -133,5 +131,3 @@ const run = async (): Promise<void> => {
     process.exit(1);
   }
 };
-
-run();

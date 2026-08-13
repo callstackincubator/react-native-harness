@@ -1,10 +1,28 @@
 import { getConfig } from '@react-native-harness/config';
-import {
-  getEmulatorCpuCores,
-  getHostAndroidSystemImageArch,
-} from '@react-native-harness/platform-android';
-import path from 'node:path';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import { relativeToWorkspaceRoot, resolveProjectRoot } from './workspace-root.js';
+
+/**
+ * `@react-native-harness/platform-android` is only a devDependency of this
+ * package (the published CLI must not crash on Android-less/web-only
+ * projects), so it's never imported at the top level. It's resolved from the
+ * consuming project instead -- a project with an Android runner necessarily
+ * has the package installed -- mirroring how metro-cache-inputs.ts resolves
+ * @react-native-harness/bundler-metro from the consuming project.
+ */
+const loadPlatformAndroid = async (
+  projectRoot: string
+): Promise<
+  typeof import('@react-native-harness/platform-android')
+> => {
+  const require = createRequire(import.meta.url);
+  const platformAndroidEntry = require.resolve(
+    '@react-native-harness/platform-android',
+    { paths: [projectRoot] }
+  );
+  return import(platformAndroidEntry);
+};
 
 const resolveAvdCachingEnabled = ({
   snapshotEnabled,
@@ -21,6 +39,7 @@ const resolveAvdCachingEnabled = ({
 const getNormalizedAvdCacheConfig = ({
   emulator,
   hostArch,
+  getEmulatorCpuCores,
 }: {
   emulator: {
     name: string;
@@ -32,6 +51,7 @@ const getNormalizedAvdCacheConfig = ({
     };
   };
   hostArch: 'x86_64' | 'arm64-v8a' | 'armeabi-v7a';
+  getEmulatorCpuCores: () => number;
 }) => {
   const avd = emulator.avd;
 
@@ -53,8 +73,9 @@ const getNormalizedAvdCacheConfig = ({
   };
 };
 
-const getResolvedRunner = (
-  runner: Awaited<ReturnType<typeof getConfig>>['config']['runners'][number]
+const getResolvedRunner = async (
+  runner: Awaited<ReturnType<typeof getConfig>>['config']['runners'][number],
+  projectRoot: string
 ) => {
   if (
     runner.platformId !== 'android' ||
@@ -66,6 +87,9 @@ const getResolvedRunner = (
   const avdCachingEnabled = resolveAvdCachingEnabled({
     snapshotEnabled: runner.config.device.avd?.snapshot?.enabled,
   });
+
+  const { getEmulatorCpuCores, getHostAndroidSystemImageArch } =
+    await loadPlatformAndroid(projectRoot);
 
   return {
     ...runner,
@@ -81,12 +105,13 @@ const getResolvedRunner = (
       avdCacheConfig: getNormalizedAvdCacheConfig({
         emulator: runner.config.device,
         hostArch: getHostAndroidSystemImageArch(),
+        getEmulatorCpuCores,
       }),
     },
   };
 };
 
-const run = async (): Promise<void> => {
+export const runLoadConfig = async (): Promise<void> => {
   try {
     const projectRootInput = process.env.INPUT_PROJECTROOT;
     const runnerInput = process.env.INPUT_RUNNER;
@@ -95,9 +120,7 @@ const run = async (): Promise<void> => {
       throw new Error('Runner input is required');
     }
 
-    const projectRoot = projectRootInput
-      ? path.resolve(projectRootInput)
-      : process.cwd();
+    const projectRoot = resolveProjectRoot(projectRootInput);
 
     console.info(`Loading React Native Harness config from: ${projectRoot}`);
 
@@ -116,9 +139,8 @@ const run = async (): Promise<void> => {
       throw new Error('GITHUB_OUTPUT environment variable is not set');
     }
 
-    const resolvedRunner = getResolvedRunner(runner);
-    const relativeProjectRoot =
-      path.relative(process.cwd(), resolvedProjectRoot) || '.';
+    const resolvedRunner = await getResolvedRunner(runner, resolvedProjectRoot);
+    const relativeProjectRoot = relativeToWorkspaceRoot(resolvedProjectRoot);
     const output = `config=${JSON.stringify(
       resolvedRunner
     )}\nprojectRoot=${relativeProjectRoot}\n`;
@@ -133,5 +155,3 @@ const run = async (): Promise<void> => {
     process.exit(1);
   }
 };
-
-run();

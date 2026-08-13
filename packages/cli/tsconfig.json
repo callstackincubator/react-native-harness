@@ -4,7 +4,10 @@
   "include": [],
   "references": [
     {
-      "path": "../platform-web"
+      "path": "../jest"
+    },
+    {
+      "path": "../bundler-metro"
     },
     {
       "path": "../tools"
@@ -16,7 +19,13 @@
       "path": "../config"
     },
     {
+      "path": "../cache"
+    },
+    {
       "path": "../bridge"
+    },
+    {
+      "path": "../platform-web"
     },
     {
       "path": "../platform-ios"

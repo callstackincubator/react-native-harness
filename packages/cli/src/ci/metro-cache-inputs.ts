@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { computeMetroStaticInputs } from '@react-native-harness/cache';
+
+const require = createRequire(import.meta.url);
 
 const FALLBACK_BUNDLER_METRO_VERSION = 'unknown';
 

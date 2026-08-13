@@ -77,7 +77,7 @@ describe('plan-restore', () => {
   });
 
   it('writes metroRestoreKey and metroRestorePrefixes (as JSON) to GITHUB_OUTPUT', async () => {
-    await import('../plan-restore.js');
+    await (await import('../plan-metro-restore.js')).runPlanMetroRestore();
 
     await vi.waitFor(() => {
       expect(writeKeysFileMock).toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe('plan-restore', () => {
   });
 
   it('calls planRestore with the os and staticInputs assembled from the Metro key recipe', async () => {
-    await import('../plan-restore.js');
+    await (await import('../plan-metro-restore.js')).runPlanMetroRestore();
 
     await vi.waitFor(() => {
       expect(planRestoreMock).toHaveBeenCalled();
@@ -111,7 +111,7 @@ describe('plan-restore', () => {
   it('fails loudly (process.exit(1)) when GITHUB_OUTPUT is not set', async () => {
     delete process.env.GITHUB_OUTPUT;
 
-    await import('../plan-restore.js');
+    await (await import('../plan-metro-restore.js')).runPlanMetroRestore();
 
     await vi.waitFor(() => {
       expect(process.exit).toHaveBeenCalledWith(1);
