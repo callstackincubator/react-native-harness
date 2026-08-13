@@ -101,35 +101,39 @@ runs:
           echo "runner=npx " >> $GITHUB_OUTPUT
         fi
     # This action invokes the project's own installed react-native-harness CLI
-    # (via `harness ci ...`) instead of shipping bundled scripts, so the
-    # action ref and the installed package version must be compatible. On an
-    # older, pre-`ci`-subcommand CLI, `harness ci load-config` falls through
-    # to the Jest CLI and treats `ci` as a test path pattern -- silently
-    # running (zero) tests instead of failing -- so this guard must run
-    # before any `harness ci ...` step is invoked.
-    - name: Verify react-native-harness CLI version
+    # (via `harness ci ...`) instead of shipping bundled scripts, so a CLI
+    # that predates that interface must be rejected before it's ever
+    # invoked. On such a CLI, `harness ci load-config` falls through to the
+    # Jest CLI and treats `ci` as a test path pattern -- silently running
+    # (zero) tests instead of failing -- so this guard must run before any
+    # `harness ci ...` step, and it must NOT probe support by invoking
+    # `harness ci` itself and inspecting the result.
+    - name: Verify react-native-harness supports this action's CLI interface
       shell: bash
       working-directory: ${{ inputs.projectRoot || '.' }}
       run: |
-        # The `harness ci <subcommand>` interface this action relies on ships
-        # starting with 1.5.0 (see the version plan for this change). On an
-        # older CLI, `harness ci load-config` falls through to the Jest CLI
-        # instead of failing, so this floor must match the exact release
-        # that introduced `ci`, not the release this action.yml happens to
-        # be edited in.
-        MIN_VERSION="1.5.0"
+        # Support is detected via an explicit capability marker
+        # (harnessActionProtocol) on the 'react-native-harness' package.json,
+        # not by comparing version numbers: a version floor can't be
+        # satisfied by the very release that introduces the capability it
+        # requires (this repo's own pre-release CI installs the in-tree
+        # workspace version), and it would also reject semver-correct
+        # prereleases of that release. Bump REQUIRED_PROTOCOL only when a
+        # change to the `harness ci` contract is breaking for this action.
+        REQUIRED_PROTOCOL=1
         INSTALLED_VERSION=$(node -p "require(require.resolve('react-native-harness/package.json',{paths:[process.cwd()]})).version" 2>/dev/null)
         if [ -z "$INSTALLED_VERSION" ]; then
           echo "Error: could not resolve the 'react-native-harness' package in this project."
-          echo "This action requires react-native-harness >= $MIN_VERSION to be installed. Pin the action ref to the same release as the installed package."
+          echo "Pin the action ref to the same release as the installed react-native-harness package."
           exit 1
         fi
-        # Note: `sort -V` ranks a prerelease like "1.5.0-beta.1" below
-        # "1.5.0", so a prerelease of the very release that introduces `ci`
-        # would be (correctly, if conservatively) rejected here.
-        LOWEST=$(printf '%s\n%s\n' "$MIN_VERSION" "$INSTALLED_VERSION" | sort -V | head -n1)
-        if [ "$LOWEST" != "$MIN_VERSION" ]; then
-          echo "Error: This action requires react-native-harness >= $MIN_VERSION (found $INSTALLED_VERSION). Pin the action ref to the same release as the installed package."
+        PROTOCOL=$(node -p "require(require.resolve('react-native-harness/package.json',{paths:[process.cwd()]})).harnessActionProtocol || 0" 2>/dev/null)
+        if [ -z "$PROTOCOL" ]; then
+          PROTOCOL=0
+        fi
+        if [ "$PROTOCOL" -lt "$REQUIRED_PROTOCOL" ]; then
+          echo "Error: the installed react-native-harness ($INSTALLED_VERSION) predates this action's CLI-based interface (harness ci)."
+          echo "Align the action ref with the react-native-harness version installed in this project."
           exit 1
         fi
     - name: Load React Native Harness configuration

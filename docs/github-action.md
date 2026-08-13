@@ -19,7 +19,9 @@ The action reads your `rn-harness.config.mjs` file, resolves the `runner` you pa
 
 ### Version coupling
 
-Starting with this release, the action invokes your project's own installed `react-native-harness` CLI (via `harness ci <subcommand>`) instead of shipping its own bundled scripts. This means action `@vX` requires `react-native-harness >= X` to be installed in the project the workflow runs against. The action verifies this itself as one of its first steps and fails with a clear error (rather than silently misbehaving) when the installed CLI is missing or too old.
+Starting with this release, the action invokes your project's own installed `react-native-harness` CLI (via `harness ci <subcommand>`) instead of shipping its own bundled scripts. This means the action requires a `react-native-harness` install that supports that interface. Rather than comparing version numbers, the action checks for an explicit `harnessActionProtocol` capability marker in the installed package's `package.json` -- this avoids drift between "which release added the interface" and a hard-coded version floor, and correctly accepts prereleases of a compatible release. The action verifies this itself as one of its first steps and fails with a clear error (rather than silently misbehaving) when the installed CLI predates the CLI-based interface or can't be resolved at all.
+
+Keeping the action ref aligned with the `react-native-harness` version in your project's `package.json` (as described above) remains the right practice -- it just isn't what the action's compatibility check itself relies on.
 
 ## Inputs
 

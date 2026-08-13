@@ -19,7 +19,7 @@ React Native Harness provides an official GitHub Action that simplifies running 
 - `callstackincubator/react-native-harness`
 
 :::tip Versioning
-Pin the action to the **same [release tag](https://github.com/callstackincubator/react-native-harness/releases) as the `react-native-harness` version in your `package.json`** (for example package `1.0.0` → `uses: callstackincubator/react-native-harness@v1.0.0`). The composite action and the npm package are released together; matching them avoids subtle mismatches between CLI behavior and the workflow steps. The action invokes your project's own installed `react-native-harness` CLI rather than shipping bundled scripts, so action `@vX` requires `react-native-harness >= X` to be installed -- the action checks this itself and fails with a clear error on a mismatch.
+Pin the action to the **same [release tag](https://github.com/callstackincubator/react-native-harness/releases) as the `react-native-harness` version in your `package.json`** (for example package `1.0.0` → `uses: callstackincubator/react-native-harness@v1.0.0`). The composite action and the npm package are released together; matching them avoids subtle mismatches between CLI behavior and the workflow steps. The action invokes your project's own installed `react-native-harness` CLI rather than shipping bundled scripts, so it requires an install that supports that interface -- it checks this itself via a capability marker in the installed package (not a version comparison) and fails with a clear error when the installed CLI predates it.
 :::
 
 The action automatically:

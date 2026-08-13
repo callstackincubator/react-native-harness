@@ -1,6 +1,10 @@
 {
   "name": "react-native-harness",
   "version": "1.4.1",
+  "comments": {
+    "harnessActionProtocol": "Capability marker read by the callstackincubator/react-native-harness GitHub Action (see action.yml's 'Verify react-native-harness supports this action's CLI interface' step) to confirm the installed CLI supports the `harness ci <subcommand>` interface the action invokes, instead of comparing version numbers. Bump only on a breaking change to that `harness ci` contract."
+  },
+  "harnessActionProtocol": 1,
   "bin": {
     "react-native-harness": "./bin.js",
     "harness": "./bin.js"
