@@ -70,6 +70,39 @@ boot_vm() {
   fi
 }
 
+# A fresh guest only has password auth, and ssh refuses to read a password from
+# a pipe. sshpass is the usual answer, but it needs a Homebrew tap; /usr/bin/expect
+# ships with macOS, so fall back to it rather than require the install.
+install_bench_key() {
+  local ip="$1" key remote
+  key="$(cat "$BENCH_KEY.pub")"
+  # Inline the key instead of piping it, so neither path has to drive stdin.
+  remote="mkdir -p ~/.ssh && printf '%s\n' '$key' > ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys"
+
+  if command -v sshpass >/dev/null; then
+    sshpass -p admin ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      -o PubkeyAuthentication=no "$GUEST_USER@$ip" "$remote"
+  elif [ -x /usr/bin/expect ]; then
+    /usr/bin/expect -f - "$GUEST_USER@$ip" "$remote" <<'EXP'
+      set timeout 90
+      set dest [lindex $argv 0]
+      set remote [lindex $argv 1]
+      spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                -o PubkeyAuthentication=no $dest $remote
+      expect {
+        -re {[Pp]assword:} { send "admin\r" }
+        timeout { puts "timed out waiting for password prompt"; exit 1 }
+        eof     { puts "connection closed before password prompt"; exit 1 }
+      }
+      expect eof
+      catch wait result
+      exit [lindex $result 3]
+EXP
+  else
+    die "need sshpass (brew install hudochenkov/sshpass/sshpass) or /usr/bin/expect"
+  fi
+}
+
 vm_exists() { tart list --format json | grep -q "\"$1\""; }
 lockfile_sha() { shasum -a 256 "$REPO_ROOT/pnpm-lock.yaml" | cut -d' ' -f1; }
 
@@ -200,16 +233,12 @@ cmd_base() {
   local ip; ip="$(tart ip "$BASE_VM" --wait 300)"
 
   log "guest at $ip — installing the bench SSH key (guest password: admin)"
-  command -v sshpass >/dev/null || die "sshpass not installed (brew install hudochenkov/sshpass/sshpass) — needed to answer the guest's password prompt non-interactively"
   [ -f "$BENCH_KEY" ] || ssh-keygen -t ed25519 -N "" -C harness-local-bench -f "$BENCH_KEY"
 
   # Deliberately not ssh-copy-id: it pushes every key it finds, and ssh only
   # offers default-named keys anyway, so a non-default personal key would be
   # installed and then never used.
-  sshpass -p admin ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    -o PubkeyAuthentication=no "$GUEST_USER@$ip" \
-    'mkdir -p ~/.ssh && cat > ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys' \
-    < "$BENCH_KEY.pub"
+  install_bench_key "$ip"
 
   ssh "${SSH_OPTS[@]}" "$GUEST_USER@$ip" bash -s <<'GUEST'
     set -uo pipefail

@@ -24,7 +24,7 @@ runner's storage; and Apple Silicon generation affects per-core speed.
 
 - Apple Silicon, ~150 GB free
 - `brew install cirruslabs/cli/tart`
-- `brew install hudochenkov/sshpass/sshpass`
+- `sshpass` (optional — falls back to the `/usr/bin/expect` that ships with macOS)
 - **Xcode 26.4.1** at `/Applications/Xcode.app` (only for `prebuild`)
 
 `xcode-select` may point elsewhere; `prebuild` sets `DEVELOPER_DIR` itself.
