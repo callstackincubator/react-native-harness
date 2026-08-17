@@ -66,6 +66,13 @@ from Metro, so TypeScript-only changes do not need it.
 | `BENCH_IMAGE` | `…macos-tahoe-xcode:26.4.1` | base image |
 | `BENCH_KEY` | `~/.ssh/id_harness_bench` | generated on first `base` |
 
+Each `tart clone` gets a random MAC, so each run would take a fresh DHCP lease
+from macOS's small, slow-to-reclaim `bootpd` pool — exhausting it mid-batch and
+surfacing as `ECONNRESET` on ssh/rsync to the guest. The bench pins a
+deterministic MAC per VM name after cloning, so each role reuses one lease
+(verified: same IP across clone/delete cycles). `BENCH_NET=softnet` is the
+upstream fix but needs root.
+
 `taskpolicy` does **not** throttle guest I/O (measured: no effect). For precise
 bandwidth control, tart can boot from an NBD URL backed by a rate-limited
 server (`--disk nbd://…`).

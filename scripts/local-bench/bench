@@ -115,6 +115,31 @@ EXP
   fi
 }
 
+# `tart clone` assigns a fresh random MAC, so every run takes a new DHCP lease.
+# macOS's bootpd serves long leases from a small pool and never reclaims the ones
+# belonging to deleted VMs, so a batch exhausts it and later VMs get no usable
+# address — surfacing as ECONNRESET on ssh/rsync. Softnet fixes this properly but
+# needs root, so instead pin a deterministic MAC per VM name: each role then
+# reuses one lease forever. Distinct per name, so roles can still coexist.
+pin_mac() {
+  local vm="$1"
+  local cfg="${TART_HOME:-$HOME/.tart}/vms/$vm/config.json"
+  [ -f "$cfg" ] || { log "no config.json for $vm — skipping MAC pin"; return 0; }
+  python3 - "$cfg" "$vm" <<'PY'
+import hashlib, json, sys
+cfg, name = sys.argv[1], sys.argv[2]
+digest = hashlib.sha256(name.encode()).digest()
+# 0x02 prefix: locally administered, unicast.
+mac = "02:" + ":".join(f"{b:02x}" for b in digest[:5])
+with open(cfg) as fh:
+    data = json.load(fh)
+data["macAddress"] = mac
+with open(cfg, "w") as fh:
+    json.dump(data, fh)
+print(mac)
+PY
+}
+
 vm_exists() { tart list --format json | grep -q "\"$1\""; }
 lockfile_sha() { shasum -a 256 "$REPO_ROOT/pnpm-lock.yaml" | cut -d' ' -f1; }
 
@@ -311,6 +336,7 @@ cmd_warm() {
   log "cloning $BASE_VM -> $WARM_VM"
   tart clone "$BASE_VM" "$WARM_VM"
   tart set "$WARM_VM" --cpu "$CPU" --memory "$MEMORY"
+  log "pinned MAC: $(pin_mac "$WARM_VM")"
 
   TARGET_VM="$WARM_VM"
   trap 'tart stop "$WARM_VM" 2>/dev/null || true' EXIT
@@ -372,6 +398,7 @@ cmd_run() {
   vm_exists "$RUN_VM" && { tart stop "$RUN_VM" 2>/dev/null || true; tart delete "$RUN_VM"; }
   log "cloning $source_vm -> $RUN_VM"
   tart clone "$source_vm" "$RUN_VM"
+  log "pinned MAC: $(pin_mac "$RUN_VM")"
 
   # Sizing lives on `tart set`, not `tart run` — passing --cpu/--memory to run
   # makes it misparse the value as the VM name.
@@ -439,6 +466,7 @@ cmd_dev() {
       log "cloning $src -> $DEV_VM"
       tart clone "$src" "$DEV_VM"
       tart set "$DEV_VM" --cpu "$CPU" --memory "$MEMORY"
+      log "pinned MAC: $(pin_mac "$DEV_VM")"
 
       log "booting at ${CPU} vCPU / ${MEMORY} MB (macos-latest spec)"
       # Fully detached: the VM must outlive this command, and an inherited
