@@ -62,6 +62,7 @@ from Metro, so TypeScript-only changes do not need it.
 | `BENCH_CPU` | `3` | vCPU count; matches the hosted runner |
 | `BENCH_MEMORY` | `7168` | MB; matches the hosted runner |
 | `BENCH_DISK_OPTS` | *(empty)* | e.g. `caching=uncached,sync=full` — measured ~1.9x slower I/O |
+| `BENCH_NET` | *(empty)* | `softnet` shortens DHCP leases; fixes ECONNRESET from ephemeral-VM churn (needs the `softnet` binary) |
 | `BENCH_IMAGE` | `…macos-tahoe-xcode:26.4.1` | base image |
 | `BENCH_KEY` | `~/.ssh/id_harness_bench` | generated on first `base` |
 

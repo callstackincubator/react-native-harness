@@ -32,6 +32,12 @@ XCODE="${BENCH_XCODE:-/Applications/Xcode.app}"   # must be 26.4.1, as CI pins
 # For precise MB/s instead of a coarse mode, tart can also boot from an NBD URL
 # (--disk nbd://...) backed by a rate-limited server.
 DISK_OPTS="${BENCH_DISK_OPTS:-}"
+# Every `bench run` takes a DHCP lease and destroys the VM without releasing it.
+# macOS's bootpd hands out long leases from a small pool, so a batch of runs can
+# exhaust it and new VMs get no address or a stale one — seen as ECONNRESET on
+# ssh/rsync to the guest. Set BENCH_NET=softnet to use tart's Softnet, which
+# shortens lease times (needs the separate softnet binary on PATH).
+NET="${BENCH_NET:-}"
 GUEST_USER="admin"
 # A dedicated throwaway keypair: ssh only offers default-named keys, and we do
 # not want a personal/work key landing in disposable VMs.
@@ -62,6 +68,12 @@ boot_vm() {
   local -a opts=(--no-graphics)
   [ -n "$DISK_OPTS" ] && opts+=(--root-disk-opts="$DISK_OPTS")
   [ -n "$DISK_OPTS" ] && log "root disk: $DISK_OPTS"
+  if [ "$NET" = "softnet" ]; then
+    command -v softnet >/dev/null || \
+      die "BENCH_NET=softnet needs the softnet binary on PATH (brew install cirruslabs/cli/softnet, or grab the release binary)"
+    opts+=(--net-softnet)
+    log "network: softnet"
+  fi
   if [ "$detached" -eq 1 ]; then
     nohup tart run "${opts[@]}" "$vm" >/dev/null 2>&1 &
     disown
