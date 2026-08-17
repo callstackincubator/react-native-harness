@@ -1,0 +1,454 @@
+#!/usr/bin/env bash
+#
+# Local testing bench for Harness on a Tart VM matching the macos-latest runner.
+#
+#   bench prebuild   build the .app + xctest agent on this host (needs Xcode 26.4.1)
+#   bench base       create the base VM once (image + toolchain check)
+#   bench warm       base + node_modules + artifacts, for fast iteration
+#   bench run        clone a fresh VM, sync the branch, build, run Harness
+#   bench dev        up|run|shell|down — one long-lived VM, re-synced in place
+#   bench shell      same as run, but drop into a shell instead of running Harness
+#   bench clean      remove leftover run clones
+#
+set -euo pipefail
+
+# ── config ───────────────────────────────────────────────────────────────────
+# macos-tahoe-xcode:26.4.1 pins the exact Xcode CI uses (67.6 GB).
+# macos-runner:tahoe is the closer match to the GitHub runner image, but it is
+# 194.8 GB and its rolling tag makes no promise about the Xcode version.
+IMAGE="${BENCH_IMAGE:-ghcr.io/cirruslabs/macos-tahoe-xcode:26.4.1}"
+BASE_VM="${BENCH_BASE_VM:-harness-base}"
+WARM_VM="${BENCH_WARM_VM:-harness-warm}"
+RUN_VM="${BENCH_RUN_VM:-harness-run}"
+DEV_VM="${BENCH_DEV_VM:-harness-dev}"
+CPU="${BENCH_CPU:-3}"        # macos-26-arm64 hosted runner spec
+MEMORY="${BENCH_MEMORY:-7168}"
+XCODE="${BENCH_XCODE:-/Applications/Xcode.app}"   # must be 26.4.1, as CI pins
+# Local NVMe is much faster than the hosted runner's storage, which is the main
+# way this bench stays more forgiving than CI. taskpolicy does NOT help (the VM's
+# I/O is not attributable to the host process — measured: no effect), but the
+# root disk's caching/sync mode does: caching=uncached,sync=full measured ~1.9x
+# slower on a 6 GB write+sync (4.3s -> 8.1s). Empty = spec-faithful default.
+# For precise MB/s instead of a coarse mode, tart can also boot from an NBD URL
+# (--disk nbd://...) backed by a rate-limited server.
+DISK_OPTS="${BENCH_DISK_OPTS:-}"
+GUEST_USER="admin"
+# A dedicated throwaway keypair: ssh only offers default-named keys, and we do
+# not want a personal/work key landing in disposable VMs.
+BENCH_KEY="${BENCH_KEY:-$HOME/.ssh/id_harness_bench}"
+
+PROJECT_REL="apps/playground"
+APP_REL="ios/build/Build/Products/Debug-iphonesimulator/HarnessPlayground.app"
+RUNNER="ios"
+
+REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+ARTIFACTS="$REPO_ROOT/.bench"
+GUEST_REPO="/Users/$GUEST_USER/work/react-native-harness"
+
+log() { printf '\033[1;34m[bench]\033[0m %s\n' "$*"; }
+die() { printf '\033[1;31m[bench]\033[0m %s\n' "$*" >&2; exit 1; }
+
+SSH_OPTS=(-i "$BENCH_KEY" -o IdentitiesOnly=yes
+          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+SSH_E="ssh -i $BENCH_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+guest_ip() { tart ip "$1" --wait 120; }
+# TARGET_VM lets `warm` reuse the same helpers as `run`.
+gssh() { ssh "${SSH_OPTS[@]}" -q "$GUEST_USER@$(guest_ip "${TARGET_VM:-$RUN_VM}")" "$@"; }
+
+# Boot a VM, honouring the optional root-disk throttle.
+boot_vm() {
+  local vm="$1" detached="${2:-0}"
+  local -a opts=(--no-graphics)
+  [ -n "$DISK_OPTS" ] && opts+=(--root-disk-opts="$DISK_OPTS")
+  [ -n "$DISK_OPTS" ] && log "root disk: $DISK_OPTS"
+  if [ "$detached" -eq 1 ]; then
+    nohup tart run "${opts[@]}" "$vm" >/dev/null 2>&1 &
+    disown
+  else
+    tart run "${opts[@]}" "$vm" &
+  fi
+}
+
+vm_exists() { tart list --format json | grep -q "\"$1\""; }
+lockfile_sha() { shasum -a 256 "$REPO_ROOT/pnpm-lock.yaml" | cut -d' ' -f1; }
+
+# Push the working tree the way CI checks it out (see cmd_run for rationale).
+sync_tree() {
+  local ip="$1"
+  gssh "mkdir -p $GUEST_REPO"
+  rsync -az --delete \
+    --filter=':- .gitignore' \
+    --exclude 'node_modules' --exclude '.bench' --exclude '.harness' \
+    -e "$SSH_E" \
+    "$REPO_ROOT/" "$GUEST_USER@$ip:$GUEST_REPO/"
+}
+
+# Push the host-built app and the single xctest agent variant. rsync skips
+# unchanged files, so on a warm clone this is close to free.
+push_artifacts() {
+  local ip="$1"
+  gssh "mkdir -p $GUEST_REPO/$PROJECT_REL/$(dirname "$APP_REL") $GUEST_REPO/$PROJECT_REL/.harness/cache"
+  rsync -az -e "$SSH_E" "$ARTIFACTS/HarnessPlayground.app" \
+    "$GUEST_USER@$ip:$GUEST_REPO/$PROJECT_REL/$(dirname "$APP_REL")/"
+  [ -d "$ARTIFACTS/harness-cache" ] && rsync -az -e "$SSH_E" "$ARTIFACTS/harness-cache/" \
+    "$GUEST_USER@$ip:$GUEST_REPO/$PROJECT_REL/.harness/cache/"
+  return 0
+}
+
+# Kept in one place so `run` and `dev run` cannot drift apart.
+build_guest() {
+  log "installing and building Harness in the guest (this is what's under test)"
+  gssh bash -lc "'cd $GUEST_REPO && pnpm install && pnpm nx run-many -t build --projects=\"packages/*\"'"
+}
+
+run_harness() {
+  log "running Harness"
+  gssh bash -lc "'
+    cd $GUEST_REPO/$PROJECT_REL
+    export HARNESS_PROJECT_ROOT=\"\$PWD\"
+    export HARNESS_APP_PATH=$APP_REL
+    export HARNESS_DEBUG=true
+    export RN_HARNESS_DIAGNOSTICS=true
+    pnpm react-native-harness --harnessRunner $RUNNER
+  '"
+}
+
+collect_output() {
+  local ip="$1" status="$2"
+  local out="$ARTIFACTS/out/$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$out"
+  log "pulling logs and diagnostics"
+  # Skip cache/ — that is the agent cache we pushed in, not a result.
+  rsync -az -e "$SSH_E" --exclude 'cache' \
+    "$GUEST_USER@$ip:$GUEST_REPO/$PROJECT_REL/.harness/" "$out/" 2>/dev/null || true
+  log "exit $status — output in ${out#"$REPO_ROOT/"}"
+}
+
+# ── prebuild: produce the artifacts the VM must not build itself ─────────────
+cmd_prebuild() {
+  [ -d "$XCODE" ] || die "Xcode not found at $XCODE"
+  local version
+  version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+             "$XCODE/Contents/Info.plist")"
+  log "using Xcode $version (CI pins 26.4.1)"
+  [ "$version" = "26.4.1" ] || log "WARNING: version differs from CI — the app may not run on the guest simulator"
+
+  export DEVELOPER_DIR="$XCODE/Contents/Developer"
+  mkdir -p "$ARTIFACTS"
+
+  log "building workspace packages"
+  (cd "$REPO_ROOT" && pnpm install && pnpm nx run-many -t build --projects="packages/*")
+
+  log "pod install"
+  (cd "$REPO_ROOT/$PROJECT_REL/ios" && pod install)
+
+  log "building HarnessPlayground.app"
+  (cd "$REPO_ROOT/$PROJECT_REL" && pnpm react-native build-ios --buildFolder ./build --verbose)
+
+  log "harvesting app"
+  rm -rf "$ARTIFACTS/HarnessPlayground.app"
+  cp -R "$REPO_ROOT/$PROJECT_REL/$APP_REL" "$ARTIFACTS/HarnessPlayground.app"
+
+  # The xctest agent has no standalone build entry point — Harness produces it
+  # as a side effect and caches it exactly the way action.yml:198 does.
+  log "running Harness once locally to populate the xctest agent cache"
+  (
+    cd "$REPO_ROOT/$PROJECT_REL"
+    export HARNESS_PROJECT_ROOT="$PWD"
+    export HARNESS_APP_PATH="$APP_REL"
+    pnpm react-native-harness --harnessRunner "$RUNNER" || \
+      log "local run failed — the agent cache may still be usable, check below"
+  )
+
+  rm -rf "$ARTIFACTS/harness-cache"
+  if compgen -G "$REPO_ROOT/$PROJECT_REL/.harness/cache/xctest-agent-simulator-*" >/dev/null; then
+    mkdir -p "$ARTIFACTS/harness-cache"
+    # Harvest only the newest variant — the one the run above just used. The
+    # host accumulates one per (Xcode, SDK, buildInputsHash) combination, and
+    # shipping all of them costs ~178 MB each for no benefit. Each variant
+    # carries its own cache.json, which drives Harness's validity check.
+    # Not `ls -dt`: `ls` may resolve to eza, where -t means --time FIELD.
+    local newest
+    newest="$(find "$REPO_ROOT/$PROJECT_REL/.harness/cache" -maxdepth 1 -type d \
+              -name 'xctest-agent-simulator-*' -exec stat -f '%m %N' {} + \
+              | sort -rn | head -1 | cut -d' ' -f2-)"
+    [ -n "$newest" ] || die "could not identify the newest xctest agent variant"
+    cp -R "$newest" "$ARTIFACTS/harness-cache/"
+    log "agent cache harvested: $(basename "$newest") ($(du -sh "$newest" | cut -f1))"
+  else
+    die "no xctest-agent-simulator-* produced; nothing to reuse"
+  fi
+
+  log "artifacts ready in .bench/"
+}
+
+# ── base: the VM we clone from, never booted directly ────────────────────────
+cmd_base() {
+  command -v tart >/dev/null || die "tart not installed (brew install cirruslabs/cli/tart)"
+
+  if tart list --format json | grep -q "\"$BASE_VM\""; then
+    log "$BASE_VM already exists — delete it first to rebuild"
+    return
+  fi
+
+  log "cloning $IMAGE (large, expect a long download)"
+  tart clone "$IMAGE" "$BASE_VM"
+
+  log "booting to provision"
+  boot_vm "$BASE_VM"
+  local ip; ip="$(tart ip "$BASE_VM" --wait 300)"
+
+  log "guest at $ip — installing the bench SSH key (guest password: admin)"
+  command -v sshpass >/dev/null || die "sshpass not installed (brew install hudochenkov/sshpass/sshpass) — needed to answer the guest's password prompt non-interactively"
+  [ -f "$BENCH_KEY" ] || ssh-keygen -t ed25519 -N "" -C harness-local-bench -f "$BENCH_KEY"
+
+  # Deliberately not ssh-copy-id: it pushes every key it finds, and ssh only
+  # offers default-named keys anyway, so a non-default personal key would be
+  # installed and then never used.
+  sshpass -p admin ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o PubkeyAuthentication=no "$GUEST_USER@$ip" \
+    'mkdir -p ~/.ssh && cat > ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys' \
+    < "$BENCH_KEY.pub"
+
+  ssh "${SSH_OPTS[@]}" "$GUEST_USER@$ip" bash -s <<'GUEST'
+    set -uo pipefail
+    # ssh runs a non-login shell, so Homebrew's profile shellenv never loads.
+    export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+    echo "── Xcode present in guest ──"
+    for a in /Applications/Xcode*.app; do
+      [ -d "$a" ] || { echo "NONE"; break; }
+      printf '%s -> ' "$a"
+      /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$a/Contents/Info.plist"
+    done
+    echo "── simulator runtimes ──"
+    xcrun simctl list runtimes || true
+    echo "── toolchain ──"
+    for t in node pnpm watchman brew; do
+      printf '%s -> %s\n' "$t" "$(command -v "$t" || echo MISSING)"
+    done
+    node --version 2>/dev/null || true
+    pnpm --version 2>/dev/null || true
+
+    echo "── provisioning ──"
+    # The image ships Xcode + node, but not pnpm or watchman.
+    command -v pnpm     >/dev/null || npm install -g pnpm
+    command -v watchman >/dev/null || brew install watchman
+
+    # Later steps use `bash -lc`, so make Homebrew's PATH survive into login shells.
+    for f in ~/.bash_profile ~/.zprofile; do
+      touch "$f"
+      grep -qF 'brew shellenv' "$f" || echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "$f"
+    done
+
+    echo "── final ──"
+    for t in node pnpm watchman; do
+      printf '%-9s %s\n' "$t" "$(command -v "$t" || echo MISSING)"
+    done
+GUEST
+
+  log "verifying the login shell resolves the toolchain (what 'bench run' uses)"
+  ssh "${SSH_OPTS[@]}" "$GUEST_USER@$ip" "bash -lc 'command -v node pnpm watchman'" \
+    || die "guest login shell cannot resolve the toolchain — provisioning did not stick"
+
+  cat <<EOF
+
+Guest provisioned. Confirm above that it has Xcode 26.4.1 and an iOS 26.4
+runtime (rn-harness.config.mjs targets iPhone 17 Pro / 26.4), then:
+
+  tart stop $BASE_VM      # clones inherit this state
+EOF
+}
+
+# ── warm: base + node_modules + artifacts, so runs skip the slow install ─────
+cmd_warm() {
+  vm_exists "$BASE_VM" || die "no $BASE_VM — run: bench base"
+  [ -d "$ARTIFACTS/HarnessPlayground.app" ] || die "no prebuilt app — run: bench prebuild"
+
+  vm_exists "$WARM_VM" && { tart stop "$WARM_VM" 2>/dev/null || true; tart delete "$WARM_VM"; }
+  log "cloning $BASE_VM -> $WARM_VM"
+  tart clone "$BASE_VM" "$WARM_VM"
+  tart set "$WARM_VM" --cpu "$CPU" --memory "$MEMORY"
+
+  TARGET_VM="$WARM_VM"
+  trap 'tart stop "$WARM_VM" 2>/dev/null || true' EXIT
+
+  boot_vm "$WARM_VM"
+  local ip; ip="$(guest_ip "$WARM_VM")"
+  log "guest at $ip"
+
+  log "syncing tree"
+  sync_tree "$ip"
+
+  # The point of warm: pay pnpm install and the nx cache once, not per run.
+  log "installing dependencies and building packages (the expensive part)"
+  gssh bash -lc "'cd $GUEST_REPO && pnpm install && pnpm nx run-many -t build --projects=\"packages/*\"'"
+
+  log "pushing app and xctest agent cache"
+  push_artifacts "$ip"
+
+  # Recorded so `run` can warn when the warm VM's node_modules went stale.
+  gssh "printf '%s' '$(lockfile_sha)' > ~/.bench-lockfile-sha"
+
+  log "stopping $WARM_VM — 'bench run' will clone from it"
+  tart stop "$WARM_VM" 2>/dev/null || true
+  trap - EXIT
+  log "warm snapshot ready"
+}
+
+# ── run: one disposable iteration ────────────────────────────────────────────
+cmd_run() {
+  local keep=0 do_run=1
+  for arg in "$@"; do
+    case "$arg" in
+      --keep) keep=1 ;;
+      --shell) do_run=0; keep=1 ;;
+      *) die "unknown flag $arg" ;;
+    esac
+  done
+
+  [ -d "$ARTIFACTS/HarnessPlayground.app" ] || die "no prebuilt app — run: bench prebuild"
+
+  # Prefer the warm snapshot: it already carries node_modules, the nx cache and
+  # the artifacts, which is the difference between a ~3 min and a ~30 s setup.
+  local source_vm="$WARM_VM" warm=1
+  if ! vm_exists "$WARM_VM"; then
+    source_vm="$BASE_VM"; warm=0
+    vm_exists "$BASE_VM" || die "no $BASE_VM — run: bench base"
+    log "no $WARM_VM — falling back to $BASE_VM (build it with: bench warm)"
+  fi
+
+  # Without this, any mid-run failure leaves the clone booted and orphaned.
+  KEEP_VM="$keep"
+  trap 'if [ "${KEEP_VM:-0}" -eq 1 ]; then
+          log "VM kept: ssh -i $BENCH_KEY $GUEST_USER@$(tart ip "$RUN_VM" 2>/dev/null || echo "?")"
+        else
+          tart stop "$RUN_VM" 2>/dev/null || true
+          tart delete "$RUN_VM" 2>/dev/null || true
+        fi' EXIT
+
+  vm_exists "$RUN_VM" && { tart stop "$RUN_VM" 2>/dev/null || true; tart delete "$RUN_VM"; }
+  log "cloning $source_vm -> $RUN_VM"
+  tart clone "$source_vm" "$RUN_VM"
+
+  # Sizing lives on `tart set`, not `tart run` — passing --cpu/--memory to run
+  # makes it misparse the value as the VM name.
+  tart set "$RUN_VM" --cpu "$CPU" --memory "$MEMORY"
+
+  log "booting at ${CPU} vCPU / ${MEMORY} MB (macos-latest spec)"
+  boot_vm "$RUN_VM"
+  local ip; ip="$(guest_ip "$RUN_VM")"
+  log "guest at $ip"
+
+  # On a warm clone rsync only sends what changed since the snapshot.
+  log "syncing working tree (current branch, including uncommitted changes)"
+  sync_tree "$ip"
+
+  if [ "$warm" -eq 1 ]; then
+    local want have
+    want="$(lockfile_sha)"
+    have="$(gssh 'cat ~/.bench-lockfile-sha 2>/dev/null' || true)"
+    [ "$want" = "$have" ] || \
+      log "WARNING: pnpm-lock.yaml changed since $WARM_VM was built — rebuild it with: bench warm"
+  fi
+
+  # pnpm install stays in the loop even when warm: it is a no-op against an
+  # up-to-date node_modules, and it is what CI runs.
+  build_guest
+  log "pushing prebuilt app and xctest agent cache"
+  push_artifacts "$ip"
+
+  if [ "$do_run" -eq 0 ]; then
+    log "shell mode — connect with: ssh -i $BENCH_KEY $GUEST_USER@$ip"
+    log "VM left running; destroy with: bench clean"
+    return
+  fi
+
+  local status=0
+  run_harness || status=$?
+  collect_output "$ip" "$status"
+  # Teardown is handled by the EXIT trap, so it also runs on failure.
+  return "$status"
+}
+
+cmd_clean() {
+  tart stop "$RUN_VM" 2>/dev/null || true
+  tart delete "$RUN_VM" 2>/dev/null || true
+  log "removed $RUN_VM"
+}
+
+# ── dev: one long-lived VM, re-synced in place ───────────────────────────────
+# `run` pays clone + boot + teardown (~52 s) for a clean VM every time. `dev`
+# trades that isolation for speed. Because the failure we are chasing is a
+# timing flake, keep using `run` for anything you will draw conclusions from —
+# accumulated simulator state can both mask and manufacture that race.
+cmd_dev() {
+  local sub="${1:-}"; shift || true
+  TARGET_VM="$DEV_VM"
+
+  case "$sub" in
+    up)
+      vm_exists "$DEV_VM" && die "$DEV_VM already exists — use: bench dev run (or dev down)"
+      [ -d "$ARTIFACTS/HarnessPlayground.app" ] || die "no prebuilt app — run: bench prebuild"
+
+      local src="$WARM_VM"
+      vm_exists "$WARM_VM" || { src="$BASE_VM"; vm_exists "$BASE_VM" || die "no $BASE_VM — run: bench base"; }
+
+      log "cloning $src -> $DEV_VM"
+      tart clone "$src" "$DEV_VM"
+      tart set "$DEV_VM" --cpu "$CPU" --memory "$MEMORY"
+
+      log "booting at ${CPU} vCPU / ${MEMORY} MB (macos-latest spec)"
+      # Fully detached: the VM must outlive this command, and an inherited
+      # stdout would keep the caller's pipe open forever.
+      boot_vm "$DEV_VM" 1
+      local ip; ip="$(guest_ip "$DEV_VM")"
+      log "guest at $ip"
+
+      sync_tree "$ip"
+      build_guest
+      push_artifacts "$ip"
+      log "dev VM ready — iterate with: bench dev run"
+      ;;
+
+    run)
+      vm_exists "$DEV_VM" || die "no $DEV_VM — start it with: bench dev up"
+      local ip; ip="$(guest_ip "$DEV_VM")"
+
+      log "syncing changes to $DEV_VM at $ip"
+      sync_tree "$ip"
+      build_guest
+      push_artifacts "$ip"
+
+      local status=0
+      run_harness || status=$?
+      collect_output "$ip" "$status"
+      return "$status"
+      ;;
+
+    shell)
+      vm_exists "$DEV_VM" || die "no $DEV_VM — start it with: bench dev up"
+      exec ssh "${SSH_OPTS[@]}" "$GUEST_USER@$(guest_ip "$DEV_VM")"
+      ;;
+
+    down)
+      tart stop "$DEV_VM" 2>/dev/null || true
+      tart delete "$DEV_VM" 2>/dev/null || true
+      log "removed $DEV_VM"
+      ;;
+
+    *) die "usage: bench dev {up|run|shell|down}" ;;
+  esac
+}
+
+case "${1:-}" in
+  prebuild) shift; cmd_prebuild "$@" ;;
+  base)     shift; cmd_base "$@" ;;
+  warm)     shift; cmd_warm "$@" ;;
+  run)      shift; cmd_run "$@" ;;
+  dev)      shift; cmd_dev "$@" ;;
+  shell)    shift; cmd_run --shell "$@" ;;
+  clean)    shift; cmd_clean "$@" ;;
+  *) sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac

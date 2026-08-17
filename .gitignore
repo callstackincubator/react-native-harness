@@ -128,3 +128,6 @@ npm-debug.*
 *.mobileprovision
 *.orig.*
 web-build/
+
+# local Harness test bench artifacts
+.bench/
