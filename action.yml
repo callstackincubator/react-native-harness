@@ -1,12 +1,15 @@
 name: React Native Harness
-description: Run React Native Harness tests on iOS, Android or Web
+description: Run React Native Harness tests on iOS, Android, Web or Windows
 inputs:
   runner:
     description: The runner to use (must match a runner name defined in your harness config)
     required: true
     type: string
   app:
-    description: The path to the app (.app for iOS, .apk for Android). Not required for web.
+    description: >-
+      The path to the built app (.app for iOS, .apk for Android). Not required
+      for web, or for Windows (deploy the app with `react-native run-windows`
+      before this action runs).
     required: false
     type: string
   projectRoot:
@@ -147,7 +150,9 @@ runs:
       run: |
         ${{ steps.detect-pm.outputs.runner }}react-native-harness ci load-config
     - name: Verify native app input
-      if: fromJson(steps.load-config.outputs.config).platformId != 'web'
+      # Windows, like web, takes no `app` path: the harness launches an
+      # already-deployed MSIX package by its identity.
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId != 'web' && fromJson(steps.load-config.outputs.config).platformId != 'windows' }}
       shell: bash
       run: |
         if [ -z "${{ inputs.app }}" ]; then
@@ -264,6 +269,10 @@ runs:
       if: fromJson(steps.load-config.outputs.config).platformId == 'web'
       shell: bash
       run: npx playwright install --with-deps chromium
+    # ── Windows ──────────────────────────────────────────────────────────────
+    # Nothing to set up here: run the workflow on a `windows-*` runner and
+    # deploy the app with `react-native run-windows --no-launch` in an earlier
+    # step. The harness launches the deployed package and tracks its process.
 
     # ── Shared ───────────────────────────────────────────────────────────────
     - name: Run E2E tests
@@ -277,7 +286,10 @@ runs:
         HARNESS_APP_PATH: ${{ inputs.app }}
         HARNESS_AVD_CACHING: ${{ inputs.cacheAvd }}
       run: |
-        export HARNESS_PROJECT_ROOT="$PWD"
+        # `pwd -W` prints the native Windows path under Git Bash, so child
+        # processes get `D:/...` rather than an unusable `/d/...` msys path;
+        # it fails on Linux/macOS, where plain `pwd` is already correct.
+        export HARNESS_PROJECT_ROOT="$(pwd -W 2>/dev/null || pwd)"
 
         set +e
         ${{ steps.detect-pm.outputs.runner }}react-native-harness --harnessRunner ${{ inputs.runner }} ${{ inputs.harnessArgs }}

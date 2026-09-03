@@ -24,6 +24,7 @@ export type {
   RunTarget,
   VegaAppLaunchOptions,
   WebAppLaunchOptions,
+  WindowsAppLaunchOptions,
 } from './types.js';
 export {
   createAppSessionEmitter,

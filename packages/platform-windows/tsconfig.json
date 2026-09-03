@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "../tools"
+    },
+    {
+      "path": "../platforms"
+    },
+    {
+      "path": "../config"
+    },
+    {
+      "path": "../bundler-metro"
+    },
+    {
+      "path": "./tsconfig.lib.json"
+    }
+  ]
+}

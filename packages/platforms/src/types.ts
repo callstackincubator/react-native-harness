@@ -105,11 +105,14 @@ export type WebAppLaunchOptions = Record<string, never>;
 
 export type VegaAppLaunchOptions = Record<string, never>;
 
+export type WindowsAppLaunchOptions = Record<string, never>;
+
 export type AppLaunchOptions =
   | AndroidAppLaunchOptions
   | AppleAppLaunchOptions
   | WebAppLaunchOptions
-  | VegaAppLaunchOptions;
+  | VegaAppLaunchOptions
+  | WindowsAppLaunchOptions;
 
 export type CollectNativeCoverageOptions = {
   pods: string[];

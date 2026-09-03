@@ -513,6 +513,34 @@ importers:
         specifier: ^3.25.67
         version: 3.25.67
 
+  packages/platform-windows:
+    dependencies:
+      '@react-native-harness/bundler-metro':
+        specifier: workspace:*
+        version: link:../bundler-metro
+      '@react-native-harness/config':
+        specifier: workspace:*
+        version: link:../config
+      '@react-native-harness/platforms':
+        specifier: workspace:*
+        version: link:../platforms
+      '@react-native-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
+      zod:
+        specifier: ^3.25.67
+        version: 3.25.67
+    devDependencies:
+      metro-config:
+        specifier: '*'
+        version: 0.83.3
+      metro-resolver:
+        specifier: '*'
+        version: 0.83.3
+
   packages/platforms:
     dependencies:
       '@react-native-harness/tools':
@@ -4114,6 +4142,7 @@ packages:
   cron-parser@4.9.0:
     resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
     engines: {node: '>=12.0.0'}
+    deprecated: v4 is no longer maintained, upgrade to v5
 
   cross-fetch@3.2.0:
     resolution: {integrity: sha512-Q+xVJLoGOeIMXZmbUK4HYk+69cQH6LudR0Vu/pRm2YlU/hDV9CiS0gKUMaWY5f2NeUH9C1nV3bsTlCo0FsTV1Q==}
@@ -4654,6 +4683,7 @@ packages:
   eslint@9.29.0:
     resolution: {integrity: sha512-GsGizj2Y1rCWDu6XoEekL3RLilp0voSePurjZIkxL3wlm5o5EC9VpgaP7lrCvjnkuLvzFBQWB3vWB3K5KQTveQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

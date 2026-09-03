@@ -1,5 +1,7 @@
 export { getMetroInstance } from './factory.js';
 export type {
+  MetroConfigEnhancer,
+  MetroConfigEnhancerContext,
   MetroInstance,
   MetroFactory,
   MetroOptions,
