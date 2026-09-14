@@ -33,7 +33,6 @@
 
 ### ❤️ Thank You
 
-- Claude Sonnet 5
 - Marc Rousavy @mrousavy
 - Stanislav Doskalenko @StasDoskalenko
 - Szymon Chmal @V3RON
