@@ -83,6 +83,9 @@ Creates a physical Apple device configuration.
 - macOS with Xcode installed
 - iOS Simulator or physical device connected
 - React Native project configured for iOS
+- Node.js 22.12 or newer
+
+Permission prompt automation (`permissions: true`) is powered by [agent-device](https://github.com/callstack/agent-device), which Harness loads only when the flag is enabled. See the [permissions guide](https://react-native-harness.dev/docs/guides/permissions) for details, including physical device signing.
 
 Harness uses Apple-native Xcode tooling for crash diagnostics: `simctl diagnose` on simulators and `devicectl` crash log / diagnose flows on physical devices. Native crash monitoring stays internal to the platform package, so the implementation can evolve without changing the public API.
 

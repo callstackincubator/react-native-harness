@@ -14,15 +14,15 @@ import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const xctestAgentMocks = vi.hoisted(() => ({
-  createXCTestAgentController: vi.fn(),
+const permissionAgentMocks = vi.hoisted(() => ({
+  createIosPermissionAgent: vi.fn(),
   dispose: vi.fn(async () => undefined),
-  ensureStarted: vi.fn(async () => undefined),
   prepare: vi.fn(async () => undefined),
+  setAppRunning: vi.fn(),
 }));
 
-vi.mock('../xctest-agent.js', () => ({
-  createXCTestAgentController: xctestAgentMocks.createXCTestAgentController,
+vi.mock('../permission-agent.js', () => ({
+  createIosPermissionAgent: permissionAgentMocks.createIosPermissionAgent,
 }));
 
 const harnessConfig = {
@@ -45,11 +45,11 @@ describe('iOS platform instance dependency validation', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
-    xctestAgentMocks.createXCTestAgentController.mockReturnValue({
-      prepare: xctestAgentMocks.prepare,
-      ensureStarted: xctestAgentMocks.ensureStarted,
-      stop: vi.fn(async () => undefined),
-      dispose: xctestAgentMocks.dispose,
+    permissionAgentMocks.prepare.mockResolvedValue(undefined);
+    permissionAgentMocks.createIosPermissionAgent.mockReturnValue({
+      prepare: permissionAgentMocks.prepare,
+      setAppRunning: permissionAgentMocks.setAppRunning,
+      dispose: permissionAgentMocks.dispose,
     });
   });
 
@@ -76,7 +76,7 @@ describe('iOS platform instance dependency validation', () => {
     ).resolves.toBeDefined();
   });
 
-  it('does not start the simulator XCTest agent when permissions are disabled', async () => {
+  it('does not start iOS permission automation when permissions are disabled', async () => {
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
@@ -98,7 +98,9 @@ describe('iOS platform instance dependency validation', () => {
       init,
     );
 
-    expect(xctestAgentMocks.createXCTestAgentController).not.toHaveBeenCalled();
+    expect(
+      permissionAgentMocks.createIosPermissionAgent,
+    ).not.toHaveBeenCalled();
   });
 
   it('discovers the physical device directly through devicectl', async () => {
@@ -125,10 +127,10 @@ describe('iOS platform instance dependency validation', () => {
     await expect(
       getApplePhysicalDevicePlatformInstance(config, harnessConfig),
     ).resolves.toBeDefined();
-    expect(getDevice).toHaveBeenCalledWith('My iPhone');
+    expect(getDevice).toHaveBeenCalledWith('My iPhone', undefined);
   });
 
-  it('does not start the physical-device XCTest agent when permissions are disabled', async () => {
+  it('does not start physical-device permission automation when permissions are disabled', async () => {
     vi.spyOn(devicectl, 'getDevice').mockResolvedValue({
       identifier: 'physical-device-id',
       deviceProperties: {
@@ -156,7 +158,9 @@ describe('iOS platform instance dependency validation', () => {
       harnessConfig,
     );
 
-    expect(xctestAgentMocks.createXCTestAgentController).not.toHaveBeenCalled();
+    expect(
+      permissionAgentMocks.createIosPermissionAgent,
+    ).not.toHaveBeenCalled();
   });
 
   it('skips physical crash monitoring setup when native crash detection is disabled', async () => {

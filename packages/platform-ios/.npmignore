@@ -3,5 +3,3 @@
 **/*.test.*
 **/*.tsbuildinfo
 dist/*.tsbuildinfo
-xctest-agent/build/
-xctest-agent/**/xcuserdata/

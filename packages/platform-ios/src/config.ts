@@ -15,6 +15,12 @@ export const ApplePhysicalDeviceCodeSignSchema = z.object({
   teamId: z.string().min(1, 'Team ID is required'),
   signingIdentity: z.string().optional(),
   provisioningProfile: z.string().optional(),
+  /**
+   * Bundle id used for the agent-device XCUITest runner on physical devices.
+   * Personal teams cannot sign the runner's default id; set an id covered by
+   * your provisioning profile instead.
+   */
+  runnerBundleId: z.string().optional(),
 });
 
 export const ApplePhysicalDeviceSchema = z.object({

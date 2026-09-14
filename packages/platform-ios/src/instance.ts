@@ -20,8 +20,7 @@ import { getDeviceName } from './utils.js';
 import { HarnessAppPathError } from './errors.js';
 import { instrumented, logger, noopDiagnostics } from '@react-native-harness/tools';
 import fs from 'node:fs';
-import { createXCTestAgentController } from './xctest-agent.js';
-import { createPermissionPromptAutoAcceptCapability } from './xctest-agent-capabilities.js';
+import { createIosPermissionAgent } from './permission-agent.js';
 import {
   collectNativeCoverage,
   cleanProfrawDir,
@@ -31,7 +30,6 @@ import {
   createIosCrashReporter,
   getIosProcessNames,
 } from './crash-reporter.js';
-import { shouldOverlapXCTestBuildAndSimulatorBoot } from './startup-strategy.js';
 
 const iosInstanceLogger = logger.child('ios-instance');
 
@@ -78,14 +76,13 @@ export const getAppleSimulatorPlatformInstance = async (
   let startedByHarness = false;
   let harnessJsLocationOverrideApplied = false;
 
-  const xctestAgent = permissionsEnabled
-    ? createXCTestAgentController({
+  const permissionAgent = permissionsEnabled
+    ? createIosPermissionAgent({
         appBundleId: config.bundleId,
         target: {
           kind: 'simulator',
-          id: udid,
+          udid,
         },
-        capabilities: [createPermissionPromptAutoAcceptCapability()],
       })
     : null;
 
@@ -144,36 +141,18 @@ export const getAppleSimulatorPlatformInstance = async (
     harnessJsLocationOverrideApplied = true;
   };
 
-  if (xctestAgent) {
-    const overlapStartup = shouldOverlapXCTestBuildAndSimulatorBoot();
-    iosInstanceLogger.debug(
-      'selected %s XCTest build and simulator startup strategy',
-      overlapStartup ? 'parallel' : 'sequential'
-    );
+  await prepareSimulator();
 
-    const xctestPreparation = overlapStartup
-      ? xctestAgent.prepare(init.signal)
-      : undefined;
-    // Observe an early build rejection while preparing the simulator; the
-    // original promise is still awaited below so its error is propagated.
-    void xctestPreparation?.catch(() => undefined);
-
+  if (permissionAgent) {
+    // agent-device needs a booted target, so the runner is prepared after the
+    // simulator is up; its build is cached between runs.
     let agentStarted = false;
     try {
-      if (!overlapStartup) {
-        await xctestAgent.prepare(init.signal);
-      }
-
-      await prepareSimulator();
-      await xctestPreparation;
-      await xctestAgent.ensureStarted(init.signal);
+      await permissionAgent.prepare(init.signal);
       agentStarted = true;
-    } catch (error) {
-      await xctestPreparation?.catch(() => undefined);
-      throw error;
     } finally {
       if (!agentStarted) {
-        await xctestAgent.dispose();
+        await permissionAgent.dispose();
         if (harnessJsLocationOverrideApplied) {
           await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
         }
@@ -182,8 +161,6 @@ export const getAppleSimulatorPlatformInstance = async (
         }
       }
     }
-  } else {
-    await prepareSimulator();
   }
 
   return {
@@ -214,10 +191,11 @@ export const getAppleSimulatorPlatformInstance = async (
         stopApp: () => simctl.stopApp(udid, config.bundleId),
         isAppRunning: () => simctl.isAppRunning(udid, config.bundleId),
         crashReporter,
+        onAppRunningChange: (running) => permissionAgent?.setAppRunning(running),
       });
     },
     dispose: async () => {
-      await xctestAgent?.dispose();
+      await permissionAgent?.dispose();
       await simctl.stopApp(udid, config.bundleId);
       await simctl.clearHarnessJsLocationOverride(udid, config.bundleId);
 
@@ -273,32 +251,31 @@ export const getApplePhysicalDevicePlatformInstance = async (
     );
   }
 
-  const xctestAgent =
+  const permissionAgent =
     permissionsEnabled && config.device.codeSign
-      ? createXCTestAgentController({
+      ? createIosPermissionAgent({
           appBundleId: config.bundleId,
           target: {
             kind: 'device',
-            id: device.hardwareProperties.udid,
+            udid: device.hardwareProperties.udid,
             codeSign: config.device.codeSign,
           },
-          capabilities: [createPermissionPromptAutoAcceptCapability()],
         })
       : null;
 
-  if (xctestAgent) {
+  if (permissionAgent) {
     let agentStarted = false;
     try {
-      await xctestAgent.ensureStarted(init?.signal);
+      await permissionAgent.prepare(init?.signal);
       agentStarted = true;
     } finally {
       if (!agentStarted) {
-        await xctestAgent.dispose();
+        await permissionAgent.dispose();
       }
     }
   } else if (permissionsEnabled) {
     iosInstanceLogger.info(
-      'Skipping XCTest agent for physical device (no codeSign config provided)'
+      'Skipping iOS permission automation for physical device (no codeSign config provided)'
     );
   }
 
@@ -325,10 +302,11 @@ export const getApplePhysicalDevicePlatformInstance = async (
         stopApp: () => devicectl.stopApp(deviceId, config.bundleId),
         isAppRunning: () => devicectl.isAppRunning(deviceId, config.bundleId),
         crashReporter,
+        onAppRunningChange: (running) => permissionAgent?.setAppRunning(running),
       });
     },
     dispose: async () => {
-      await xctestAgent?.dispose();
+      await permissionAgent?.dispose();
       await devicectl.stopApp(deviceId, config.bundleId);
     },
   };

@@ -152,4 +152,38 @@ describe('createIosAppSession', () => {
       vi.useRealTimers();
     }
   });
+  it('reports the observed app run state to onAppRunningChange', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const launchProcess = createPendingLaunchProcess();
+      const isAppRunning = vi
+        .fn<() => Promise<boolean>>()
+        .mockResolvedValue(true);
+      const onAppRunningChange = vi.fn();
+
+      const sessionPromise = createIosAppSession({
+        launch: () => launchProcess,
+        stopApp: vi.fn(async () => undefined),
+        isAppRunning,
+        onAppRunningChange,
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+      const session = await sessionPromise;
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(onAppRunningChange).toHaveBeenCalledWith(true);
+      // Deduplicated: repeated polls of an unchanged state emit nothing.
+      expect(onAppRunningChange).toHaveBeenCalledTimes(1);
+
+      const disposePromise = session.dispose();
+      await vi.advanceTimersByTimeAsync(1000);
+      await disposePromise;
+
+      expect(onAppRunningChange).toHaveBeenLastCalledWith(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

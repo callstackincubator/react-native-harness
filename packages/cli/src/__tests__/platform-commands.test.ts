@@ -20,7 +20,7 @@ describe('platform CLI command discovery', () => {
   it('runs a discovered platform command', async () => {
     const moduleUrl = createCommandModuleUrl(`
       export const commands = [{
-        name: 'xctest',
+        name: 'diagnostics',
         async run(args, context) {
           globalThis.__platformCommandCall = { args, context };
         }
@@ -63,7 +63,7 @@ describe('platform CLI command discovery', () => {
 
     expect(
       await runPlatformCommand({
-        argv: ['xctest', 'build', '--destination', 'simulator'],
+        argv: ['diagnostics', 'build', '--destination', 'simulator'],
         cwd: '/tmp/project',
         loadConfig,
       })
@@ -80,7 +80,7 @@ describe('platform CLI command discovery', () => {
   it('deduplicates platform CLI modules across runners', async () => {
     const moduleUrl = createCommandModuleUrl(`
       export const commands = [{
-        name: 'xctest',
+        name: 'diagnostics',
         async run() {}
       }];
     `);
@@ -171,7 +171,7 @@ describe('platform CLI command discovery', () => {
 
     await expect(
       runPlatformCommand({
-        argv: ['xctest', 'build'],
+        argv: ['diagnostics', 'build'],
         cwd: '/tmp/project',
         loadConfig,
       })
@@ -181,14 +181,14 @@ describe('platform CLI command discovery', () => {
   it('throws when two platform modules define the same command', async () => {
     const firstModuleUrl = createCommandModuleUrl(`
       export const commands = [{
-        name: 'xctest',
+        name: 'diagnostics',
         async run() {}
       }];
     `);
     const secondModuleUrl = createCommandModuleUrl(`
       // second module
       export const commands = [{
-        name: 'xctest',
+        name: 'diagnostics',
         async run() {}
       }];
     `);
@@ -239,6 +239,6 @@ describe('platform CLI command discovery', () => {
         cwd: '/tmp/project',
         loadConfig,
       })
-    ).rejects.toThrow("Duplicate platform CLI command 'xctest'");
+    ).rejects.toThrow("Duplicate platform CLI command 'diagnostics'");
   });
 });

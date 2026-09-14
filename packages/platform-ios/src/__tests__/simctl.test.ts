@@ -46,15 +46,17 @@ describe('simctl startup', () => {
   });
 
   it('starts simulator log streaming with the provided predicate', () => {
-    const subprocess = {} as ReturnType<typeof tools.spawn>;
-    const spawnSpy = vi.spyOn(tools, 'spawn').mockReturnValue(subprocess);
+    const ownedProcess = {} as ReturnType<typeof tools.spawnOwnedProcess>;
+    const spawnSpy = vi
+      .spyOn(tools, 'spawnOwnedProcess')
+      .mockReturnValue(ownedProcess);
 
     expect(
       streamLogs(
         'sim-udid',
         'process == "HarnessPlayground" OR process == "com.harnessplayground"'
       )
-    ).toBe(subprocess);
+    ).toBe(ownedProcess);
 
     expect(spawnSpy).toHaveBeenCalledWith(
       'xcrun',
