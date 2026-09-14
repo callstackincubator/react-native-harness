@@ -61,5 +61,8 @@
     "type": "git",
     "url": "https://github.com/callstackincubator/react-native-harness.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  }
 }

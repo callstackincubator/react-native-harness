@@ -49,5 +49,8 @@
     "@react-native-harness/babel-preset": "workspace:*",
     "@react-native-harness/jest": "workspace:*"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  }
 }

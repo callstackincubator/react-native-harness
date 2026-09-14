@@ -26,5 +26,8 @@
     "@babel/core": "^7.22.0",
     "@types/babel__core": "^7.20.5"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  }
 }

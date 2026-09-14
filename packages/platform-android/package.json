@@ -23,5 +23,8 @@
     "zod": "^3.25.67",
     "tslib": "^2.3.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  }
 }

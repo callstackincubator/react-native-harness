@@ -40,5 +40,8 @@
     "react-native": "*",
     "vite": "^7.2.2"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  }
 }
