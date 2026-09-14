@@ -37,6 +37,15 @@ const IOS_BUNDLE_ID_ENV = 'AGENT_DEVICE_IOS_BUNDLE_ID';
 
 const RUNNER_CACHE_ARTIFACT_NAME = 'agent-device-runner';
 const AGENT_DEVICE_SESSION_NAME = 'harness';
+/**
+ * The session is bound to SpringBoard, never to the app under test: Harness
+ * keeps sole ownership of launching, killing and relaunching that app.
+ * agent-device needs *some* open session because `interactions.press` refuses
+ * to run session-less (`SESSION_NOT_FOUND`), unlike `command.alert`, which
+ * attaches an implicit runner session per call. Binding to SpringBoard also
+ * matches where blocking system modals actually live.
+ */
+const SPRINGBOARD_BUNDLE_ID = 'com.apple.springboard';
 const DEFAULT_WATCHDOG_INTERVAL_MS = 1000;
 /**
  * One `alert get` round trip costs ~4 s against a normal app screen, so the
@@ -597,6 +606,12 @@ export const createIosPermissionAgent = (
       try {
         await client.command.prepare({
           action: 'ios-runner',
+          platform: 'ios',
+          udid: target.udid,
+          timeoutMs: PREPARE_COMMAND_TIMEOUT_MS,
+        });
+        await client.apps.open({
+          app: SPRINGBOARD_BUNDLE_ID,
           platform: 'ios',
           udid: target.udid,
           timeoutMs: PREPARE_COMMAND_TIMEOUT_MS,

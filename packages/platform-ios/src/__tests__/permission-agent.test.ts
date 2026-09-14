@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   alert: vi.fn(),
   press: vi.fn(),
   prepare: vi.fn(),
+  open: vi.fn(),
   spawn: vi.fn(),
 }));
 
@@ -76,11 +77,13 @@ describe('iOS permission agent', () => {
     vi.stubEnv('AGENT_DEVICE_IOS_BUNDLE_ID', '');
 
     mocks.prepare.mockResolvedValue({});
+    mocks.open.mockResolvedValue({});
     mocks.alert.mockRejectedValue(alertNotFoundError());
     mocks.press.mockResolvedValue({});
     mocks.spawn.mockResolvedValue({ stdout: '', stderr: '' });
     mocks.createAgentDeviceClient.mockReturnValue({
       command: { alert: mocks.alert, prepare: mocks.prepare },
+      apps: { open: mocks.open },
       interactions: { press: mocks.press },
     });
   });
@@ -112,6 +115,15 @@ describe('iOS permission agent', () => {
     );
     expect(process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH).toBe(
       path.join(projectRoot, '.harness', 'cache', 'agent-device-runner')
+    );
+    // Bound to SpringBoard, never to the app under test: `press` refuses to
+    // run without an open session, and Harness still owns the app lifecycle.
+    expect(mocks.open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        app: 'com.apple.springboard',
+        platform: 'ios',
+        udid: 'sim-udid',
+      })
     );
 
     await agent.dispose();
