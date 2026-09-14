@@ -89,6 +89,14 @@ const POSITIVE_BUTTON_LABELS = [
 ] as const;
 
 const DEVICE_IN_USE_ERROR_CODE = 'DEVICE_IN_USE';
+/**
+ * agent-device refuses to wipe a derived-data path that came from
+ * `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH`, which Harness always sets. It needs
+ * that wipe whenever the cached runner no longer matches the installed
+ * agent-device version, Xcode or SDK, so Harness does the cleaning itself.
+ */
+const REFUSED_CLEAN_MESSAGE =
+  'Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH';
 const RUNNER_BUSY_ERROR_CODE = 'RUNNER_BUSY';
 const ALERT_NOT_FOUND_RUNNER_ERROR_CODE = 'ALERT_NOT_FOUND';
 
@@ -240,7 +248,9 @@ const applyDaemonEnvironment = ({
 }: {
   runnerDerivedDataPath: string;
   target: IosPermissionAgentTarget;
-}): void => {
+}): { ownsRunnerDerivedDataPath: boolean } => {
+  const ownsRunnerDerivedDataPath =
+    getTrimmedEnvironmentValue(RUNNER_DERIVED_PATH_ENV) === undefined;
   const setIfUnset = (name: string, value: string | undefined) => {
     if (value === undefined || value.length === 0) {
       return;
@@ -260,17 +270,17 @@ const applyDaemonEnvironment = ({
 
   setIfUnset(RUNNER_DERIVED_PATH_ENV, runnerDerivedDataPath);
 
-  if (target.kind !== 'device' || !target.codeSign) {
-    return;
+  if (target.kind === 'device' && target.codeSign) {
+    const { teamId, signingIdentity, provisioningProfile, runnerBundleId } =
+      target.codeSign;
+
+    setIfUnset(IOS_TEAM_ID_ENV, teamId);
+    setIfUnset(IOS_SIGNING_IDENTITY_ENV, signingIdentity);
+    setIfUnset(IOS_PROVISIONING_PROFILE_ENV, provisioningProfile);
+    setIfUnset(IOS_BUNDLE_ID_ENV, runnerBundleId);
   }
 
-  const { teamId, signingIdentity, provisioningProfile, runnerBundleId } =
-    target.codeSign;
-
-  setIfUnset(IOS_TEAM_ID_ENV, teamId);
-  setIfUnset(IOS_SIGNING_IDENTITY_ENV, signingIdentity);
-  setIfUnset(IOS_PROVISIONING_PROFILE_ENV, provisioningProfile);
-  setIfUnset(IOS_BUNDLE_ID_ENV, runnerBundleId);
+  return { ownsRunnerDerivedDataPath };
 };
 
 const getErrorCode = (error: unknown): string | undefined => {
@@ -332,6 +342,9 @@ const isTransientWatchdogError = (error: unknown): boolean => {
 
 export const isDeviceInUseError = (error: unknown): boolean =>
   getErrorCode(error) === DEVICE_IN_USE_ERROR_CODE;
+
+export const isRefusedRunnerCleanError = (error: unknown): boolean =>
+  getErrorMessage(error).includes(REFUSED_CLEAN_MESSAGE);
 
 /**
  * A claimed device is never retried: the owner is a live agent-device session,
@@ -809,12 +822,15 @@ export const createIosPermissionAgent = (
       assertSupportedNodeVersion();
 
       const runnerDerivedDataPath = getRunnerDerivedDataPath(projectRoot);
-      applyDaemonEnvironment({ runnerDerivedDataPath, target });
+      const { ownsRunnerDerivedDataPath } = applyDaemonEnvironment({
+        runnerDerivedDataPath,
+        target,
+      });
       fs.mkdirSync(stateDir, { recursive: true });
 
       const { createAgentDeviceClient } = await import('agent-device');
 
-      client = createAgentDeviceClient({
+      const agentDeviceClient = createAgentDeviceClient({
         stateDir,
         session: AGENT_DEVICE_SESSION_NAME,
         iosXctestrunFile: getExistingPath(XCTESTRUN_FILE_ENV),
@@ -823,6 +839,8 @@ export const createIosPermissionAgent = (
         ),
       });
 
+      client = agentDeviceClient;
+
       permissionAgentLogger.debug(
         'preparing the agent-device iOS runner for %s (state dir %s, budget %d ms)',
         target.udid,
@@ -830,11 +848,11 @@ export const createIosPermissionAgent = (
         prepareTimeoutMs
       );
 
-      try {
-        await runBounded(
+      const prepareRunner = () =>
+        runBounded(
           'preparing the agent-device iOS runner',
           () =>
-            client!.command.prepare({
+            agentDeviceClient.command.prepare({
               action: 'ios-runner',
               platform: 'ios',
               udid: target.udid,
@@ -842,10 +860,35 @@ export const createIosPermissionAgent = (
             }),
           signal
         );
+
+      try {
+        try {
+          await prepareRunner();
+        } catch (error) {
+          // agent-device will not wipe a derived path it did not choose, but
+          // it needs that wipe after an agent-device, Xcode or SDK upgrade.
+          // The directory is Harness's own cache, so clear it and retry once
+          // rather than failing every run until someone deletes it by hand.
+          if (!isRefusedRunnerCleanError(error) || !ownsRunnerDerivedDataPath) {
+            throw error;
+          }
+
+          logger.info(
+            'Rebuilding the cached iOS UI test runner (it no longer matches the installed agent-device or Xcode)...'
+          );
+          permissionAgentLogger.debug(
+            'clearing the stale runner cache at %s',
+            runnerDerivedDataPath
+          );
+          fs.rmSync(runnerDerivedDataPath, { recursive: true, force: true });
+
+          await prepareRunner();
+        }
+
         await runBounded(
           'opening the agent-device SpringBoard session',
           () =>
-            client!.apps.open({
+            agentDeviceClient.apps.open({
               app: SPRINGBOARD_BUNDLE_ID,
               platform: 'ios',
               udid: target.udid,

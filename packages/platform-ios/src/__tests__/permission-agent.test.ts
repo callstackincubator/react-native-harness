@@ -475,6 +475,50 @@ describe('iOS permission agent', () => {
     await agent.dispose();
   });
 
+  it('clears a stale runner cache and retries prepare once', async () => {
+    const runnerCache = path.join(
+      projectRoot,
+      '.harness',
+      'cache',
+      'agent-device-runner'
+    );
+    fs.mkdirSync(runnerCache, { recursive: true });
+    fs.writeFileSync(path.join(runnerCache, 'stale'), 'x');
+
+    mocks.prepare
+      .mockRejectedValueOnce(
+        createAgentDeviceError(
+          'COMMAND_FAILED',
+          'Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH automatically'
+        )
+      )
+      .mockResolvedValue({});
+
+    const agent = createAgent();
+    await agent.prepare();
+
+    expect(mocks.prepare).toHaveBeenCalledTimes(2);
+    expect(fs.existsSync(runnerCache)).toBe(false);
+
+    await agent.dispose();
+  });
+
+  it('does not clear a user-provided runner derived path', async () => {
+    vi.stubEnv('AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH', '/custom/derived');
+    const refusal = createAgentDeviceError(
+      'COMMAND_FAILED',
+      'Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH automatically'
+    );
+    mocks.prepare.mockRejectedValue(refusal);
+
+    const agent = createAgent();
+
+    await expect(agent.prepare()).rejects.toThrow(refusal);
+    expect(mocks.prepare).toHaveBeenCalledTimes(1);
+
+    await agent.dispose();
+  });
+
   it('rejects Node versions below the agent-device floor', () => {
     expect(() => assertSupportedNodeVersion('22.11.0')).toThrow(
       /requires Node\.js 22\.12 or newer/
