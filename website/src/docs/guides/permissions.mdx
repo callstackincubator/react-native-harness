@@ -57,7 +57,9 @@ The watchdog only polls while the app under test is running, so a prompt that ap
 
 #### Reaction time
 
-Each poll is a round trip through the UI test runner and takes roughly four seconds, so a prompt can stay on screen for up to about four seconds before it is dismissed. Tests that assert on post-permission state should allow for that.
+Each poll is a round trip through the UI test runner and takes a few seconds. Most prompts are detected and dismissed in a single round trip; prompts whose buttons Harness has to read first, such as the three-button location sheet, take two. A prompt can therefore sit on screen for several seconds before it is dismissed, and a prompt that appears while a poll is already running waits for that poll to finish first.
+
+Allow for this in tests that assert on post-permission state, and keep in mind that Jest's `testTimeout` bounds the whole test, including the wait for the prompt to be answered.
 
 Set `HARNESS_PERMISSION_WATCHDOG_INTERVAL_MS` to change the gap between polls (default `1000`). The older `HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS` name is still accepted.
 
