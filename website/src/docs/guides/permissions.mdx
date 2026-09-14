@@ -36,7 +36,13 @@ iOS permission automation runs on `agent-device`, which requires Node.js 22.12 o
 ### iOS
 
 The iOS implementation does **not** pre-approve every permission up front.
-Instead, it runs a best-effort watchdog that reads the buttons on the visible system prompt and taps the first known positive one:
+Instead, it runs a best-effort watchdog that answers system prompts as they appear.
+
+Each check first asks agent-device to accept the prompt. That presses a button labelled **OK**, **Allow**, **Yes**, **Continue**, **Done**, **Open** or **Open Settings**, or one starting with **Confirm** — or, on a system alert with a single button, that button, unless it is a dismissal. It never presses **Don't Allow**, **Cancel**, **Close**, **Dismiss**, **Not Now**, **No**, **Keep Browsing** or **Later**.
+
+This is a slightly wider net than the list below: a one-button alert, or a **Yes**/**Done**/**Open** button, is accepted even though it is not a permission prompt in the strict sense.
+
+When agent-device finds no button it is allowed to press — the three-button location sheet (**Allow Once** / **Allow While Using App** / **Don't Allow**) is the common case — Harness reads the prompt's buttons and taps the first one from its own positive list:
 
 - `Allow`
 - `OK`
@@ -57,9 +63,11 @@ The watchdog only polls while the app under test is running, so a prompt that ap
 
 #### Reaction time
 
-Each poll is a round trip through the UI test runner and takes a few seconds. Most prompts are detected and dismissed in a single round trip; prompts whose buttons Harness has to read first, such as the three-button location sheet, take two. A prompt can therefore sit on screen for several seconds before it is dismissed, and a prompt that appears while a poll is already running waits for that poll to finish first.
+Each check is a round trip through the UI test runner and takes a few seconds. Most prompts are detected and dismissed in a single round trip; the ones that fall back to the positive list take two.
 
-Allow for this in tests that assert on post-permission state, and keep in mind that Jest's `testTimeout` bounds the whole test, including the wait for the prompt to be answered.
+A prompt that appears while a check is already running has to wait for that check to finish first, which adds up to another round trip — measured at around five seconds on an iOS 26 simulator.
+
+Budget roughly **10 seconds** for a test that triggers a permission prompt, and remember that Jest's `testTimeout` bounds the whole test, including that wait.
 
 Set `HARNESS_PERMISSION_WATCHDOG_INTERVAL_MS` to change the gap between polls (default `1000`). The older `HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS` name is still accepted.
 

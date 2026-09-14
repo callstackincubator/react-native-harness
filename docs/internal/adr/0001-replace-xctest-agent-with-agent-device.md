@@ -235,3 +235,29 @@ the ADR did not call out as a CLI dependency.
 The list is described as carried over from the Swift watchdog. One label is
 new: `Allow While Using App`, the middle button on the iOS 26 three-button
 location sheet, which the old list did not cover.
+
+### 2026-09-14 — accept-first watchdog, and a wider set of buttons it may press
+
+The "Compatibility and conflicts" table rejects `alert accept` outright because
+it cannot handle three-button sheets. Measured on iOS 26.4, the two-round-trip
+design it mandates (`alert get` then `press`) is too slow for a prompt raised
+inside a test: the playground camera test timed out at its 10 s `testTimeout`.
+
+Each tick now calls `alert accept` first, which detects and presses in one
+round trip (1.4 s measured), and falls back to `alert get` plus a label
+`press` only when accept reports `alert accept button not found` — which is
+exactly the three-button case the table was concerned with. With this, the
+same fresh-install test passes in 7.8 s.
+
+The consequence is a slightly wider net than the Harness positive-label list.
+Per `RunnerTests+Alert.swift`, accept presses a button labelled `ok`, `allow`,
+`yes`, `continue`, `done`, `open`, `open settings` or `confirm*`, or the sole
+button of a one-button alert when its label is not one of `cancel`, `close`,
+`dismiss`, `don't allow`, `not now`, `no`, `keep browsing`, `later`. The two
+lists are disjoint, so a deny or dismiss button is never pressed, but a
+one-button app alert that is not a permission prompt can now be dismissed.
+This is documented in the permissions guide.
+
+A prompt that appears while a tick is already in flight waits for that tick to
+finish, measured at up to ~5 s. The guide tells users to budget ~10 s for a
+test that triggers a prompt.
