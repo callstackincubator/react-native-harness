@@ -4,6 +4,8 @@
   making a change.
 - For version plans, see @./docs/agents/version-plans.md.
 - Before preparing or opening a pull request, see @./docs/agents/pull-requests.md.
+- Architecture decisions are recorded under `docs/internal/adr/`; read the
+  relevant ADR before implementing a change it covers.
 - Preserve unrelated work already present in the working tree.
 - Keep changes focused; do not make opportunistic refactors.
 - Never commit credentials, secrets, generated build output, or local

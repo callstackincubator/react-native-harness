@@ -52,8 +52,8 @@ describe('Apple app launch options', () => {
 
   it('passes console mode to devicectl process launch streams', () => {
     const spawnSpy = vi
-      .spyOn(tools, 'spawn')
-      .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>);
+      .spyOn(tools, 'spawnOwnedProcess')
+      .mockReturnValue({} as ReturnType<typeof tools.spawnOwnedProcess>);
 
     launchDeviceAppProcess('device-id', 'com.example.app', {
       arguments: ['--mode=test'],
@@ -90,6 +90,9 @@ describe('Apple app launch options', () => {
     const spawnSpy = vi
       .spyOn(tools, 'spawn')
       .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>);
+    const spawnOwnedProcessSpy = vi
+      .spyOn(tools, 'spawnOwnedProcess')
+      .mockReturnValue({} as ReturnType<typeof tools.spawnOwnedProcess>);
 
     await startApp('sim-udid', 'com.example.app', {
       arguments: ['--mode=test'],
@@ -115,8 +118,8 @@ describe('Apple app launch options', () => {
       },
     );
 
-    expect(spawnSpy).toHaveBeenNthCalledWith(
-      2,
+    expect(spawnOwnedProcessSpy).toHaveBeenNthCalledWith(
+      1,
       'xcrun',
       [
         'simctl',

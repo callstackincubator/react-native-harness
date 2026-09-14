@@ -123,7 +123,7 @@ runs:
         # workspace version), and it would also reject semver-correct
         # prereleases of that release. Bump REQUIRED_PROTOCOL only when a
         # change to the `harness ci` contract is breaking for this action.
-        REQUIRED_PROTOCOL=1
+        REQUIRED_PROTOCOL=2
         INSTALLED_VERSION=$(node -p "require(require.resolve('react-native-harness/package.json',{paths:[process.cwd()]})).version" 2>/dev/null)
         if [ -z "$INSTALLED_VERSION" ]; then
           echo "Error: could not resolve the 'react-native-harness' package in this project."
@@ -195,15 +195,25 @@ runs:
         METRO_RESTORED_KEY: ${{ steps.restore-metro.outputs.cache-matched-key }}
       run: |
         ${{ steps.detect-pm.outputs.runner }}react-native-harness ci snapshot-metro
-    - name: Restore Harness cache
-      id: cache-harness-restore
+    # agent-device rebuilds its XCUITest runner whenever its own version, Xcode
+    # or the SDK changes, so the key is exact and carries no restore-keys: a
+    # near-miss entry would be ~165 MB of DerivedData the runner cannot reuse.
+    - name: Plan agent-device runner cache
+      id: plan-ios-runner-cache
       if: fromJson(steps.load-config.outputs.config).platformId == 'ios'
+      shell: bash
+      working-directory: ${{ steps.load-config.outputs.projectRoot }}
+      env:
+        INPUT_PROJECTROOT: ${{ steps.load-config.outputs.projectRoot }}
+      run: |
+        ${{ steps.detect-pm.outputs.runner }}react-native-harness ci plan-ios-runner-cache
+    - name: Restore agent-device runner cache (.harness/cache/agent-device-runner)
+      id: cache-ios-runner-restore
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'ios' && steps.plan-ios-runner-cache.outputs.iosRunnerCacheKey != '' }}
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
-        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/xctest-agent-simulator-*
-        key: harness-ios-${{ runner.os }}-${{ hashFiles(format('{0}/.harness/cache/**/cache.json', steps.load-config.outputs.projectRoot)) }}
-        restore-keys: |
-          harness-ios-${{ runner.os }}-
+        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/agent-device-runner
+        key: ${{ steps.plan-ios-runner-cache.outputs.iosRunnerCacheKey }}
 
     # ── iOS ──────────────────────────────────────────────────────────────────
     # iOS simulator boot and app installation are handled by Harness itself.
@@ -318,12 +328,12 @@ runs:
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
-    - name: Save Harness cache
-      if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'ios' && steps.cache-harness-restore.outputs.cache-hit != 'true' }}
+    - name: Save agent-device runner cache
+      if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'ios' && steps.plan-ios-runner-cache.outputs.iosRunnerCacheKey != '' && steps.cache-ios-runner-restore.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
-        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/xctest-agent-simulator-*
-        key: ${{ steps.cache-harness-restore.outputs.cache-primary-key }}
+        path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/agent-device-runner
+        key: ${{ steps.plan-ios-runner-cache.outputs.iosRunnerCacheKey }}
     - name: Plan Metro cache save
       id: plan-metro-save
       if: always()

@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 //
 // Allowlisted until phase 2 migrates them onto this package:
 // - packages/tools/src/harness-artifacts.ts: getHarnessCacheRootPath, used by
-//   platform-ios for the XCTest agent cache.
+//   platform-ios for the agent-device runner cache.
 const ALLOWLIST = new Set(['tools/src/harness-artifacts.ts']);
 
 const findRepoRoot = (start: string): string => {

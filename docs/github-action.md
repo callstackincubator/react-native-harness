@@ -37,13 +37,14 @@ Keeping the action ref aligned with the `react-native-harness` version in your p
 - `cacheSavePolicy` (optional): When to save a new Metro cache entry -- `default-branch` (default), `always`, or `never`
 - Crash artifacts persisted to `.harness/crash-reports/` are uploaded automatically when present
 - Metro cache persisted to `.harness/cache/metro/` and `.harness/cache/metro-file-map/` is restored and saved automatically when present. The cache key is computed by `@react-native-harness/cache` from your lockfile(s), Metro/Babel config, the installed `@react-native-harness/bundler-metro` version, and your Harness config's `cache.version` salt -- a new entry is only saved when the run's cache content actually changed and `cacheSavePolicy` allows it
+- For iOS runners, the `agent-device` UI test runner build in `.harness/cache/agent-device-runner/` is restored and saved automatically. The key is computed by `react-native-harness ci plan-ios-runner-cache` from the installed `agent-device` version and `xcodebuild -version`, with no restore-key prefixes: a near-miss entry cannot be reused by the runner, so an Xcode or `agent-device` upgrade means exactly one cold runner build
 
 ## Behavior
 
 Depending on the selected runner, the action:
 
 - For Android runners, loads and validates your Harness configuration, restores Metro cache, sets up the Android emulator with architecture detection, optionally caches AVD snapshots, installs your app on the emulator, runs the hooks inside the emulator session, and runs the Harness tests
-- For iOS runners, loads and validates your Harness configuration, restores Metro cache, sets up the iOS simulator, installs your app on the simulator, runs the hooks around the Harness invocation, and runs the Harness tests
+- For iOS runners, loads and validates your Harness configuration, restores Metro cache and the `agent-device` runner cache, sets up the iOS simulator, installs your app on the simulator, runs the hooks around the Harness invocation, and runs the Harness tests
 - For web runners, loads and validates your Harness configuration, restores Metro cache, installs Playwright Chromium, runs the hooks around the Harness invocation, and runs the Harness tests
 
 Hook behavior:

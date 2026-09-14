@@ -19,29 +19,73 @@ Harness does not yet support selecting individual permission types or per-platfo
 When `permissions` is `false`:
 
 - Harness does not start permission automation helpers.
-- On iOS, this means the XCTest-based permission helper is not started.
+- On iOS, no permission watchdog and no UI test runner are started.
 
 When `permissions` is `true`:
 
-- On iOS simulators, Harness starts the XCTest agent and enables best-effort permission prompt auto-accept.
-- On iOS physical devices, Harness also starts the XCTest agent when the runner is configured with `device.codeSign`.
+- On iOS simulators, Harness prepares the [agent-device](https://github.com/callstack/agent-device) UI test runner and watches for system permission prompts.
+- On iOS physical devices, Harness does the same when the runner is configured with `device.codeSign`.
 - On Android emulators and physical devices, Harness uses `adb shell pm grant` to automatically grant the app's requested dangerous permissions.
+
+:::info Node.js 22.12 or newer
+iOS permission automation runs on `agent-device`, which requires Node.js 22.12 or newer. Harness fails with a clear error when `permissions: true` is used on an older Node.js.
+:::
 
 ## Platform-Specific Implementation Details
 
 ### iOS
 
 The iOS implementation does **not** pre-approve every permission up front.
-Instead, it runs a best-effort watchdog that taps known positive system-prompt buttons such as:
+Instead, it runs a best-effort watchdog that answers system prompts as they appear.
+
+Each check first asks agent-device to accept the prompt. That presses a button labelled **OK**, **Allow**, **Yes**, **Continue**, **Done**, **Open** or **Open Settings**, or one starting with **Confirm** — or, on a system alert with a single button, that button, unless it is a dismissal. It never presses **Don't Allow**, **Cancel**, **Close**, **Dismiss**, **Not Now**, **No**, **Keep Browsing** or **Later**.
+
+This is a slightly wider net than the list below: a one-button alert, or a **Yes**/**Done**/**Open** button, is accepted even though it is not a permission prompt in the strict sense.
+
+When agent-device finds no button it is allowed to press — the three-button location sheet (**Allow Once** / **Allow While Using App** / **Don't Allow**) is the common case — Harness reads the prompt's buttons and taps the first one from its own positive list:
 
 - `Allow`
 - `OK`
 - `Continue`
+- `Next`
+- `While Using App`
 - `While Using the App`
 - `Always Allow`
 - `Allow Once`
+- `Allow While Using App`
+- `Join`
+- `Pair`
+- `Allow Full Access`
 
 Because this is button-based automation, it should be treated as a practical helper for common prompts rather than a guarantee that every permission dialog will be handled.
+
+The watchdog only polls while the app under test is running, so a prompt that appears on the home screen between test files is not tapped.
+
+#### Reaction time
+
+Each check is a round trip through the UI test runner and takes a few seconds. Most prompts are detected and dismissed in a single round trip; the ones that fall back to the positive list take two.
+
+A prompt that appears while a check is already running has to wait for that check to finish first, which adds up to another round trip — measured at around five seconds on an iOS 26 simulator.
+
+Budget roughly **10 seconds** for a test that triggers a permission prompt, and remember that Jest's `testTimeout` bounds the whole test, including that wait.
+
+Set `HARNESS_PERMISSION_WATCHDOG_INTERVAL_MS` to change the gap between polls (default `1000`). The older `HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS` name is still accepted.
+
+#### Device conflicts
+
+Harness runs its own `agent-device` daemon under `~/.agent-device/harness/`, but device ownership is shared across the whole machine. If you have your own `agent-device` session open on the same simulator or device, Harness fails with a `DEVICE_IN_USE` error naming the owning session and never takes the device over. Close that session, or point Harness at a different device.
+
+#### External and hosted runners
+
+`HARNESS_IOS_XCTESTRUN_FILE` and `HARNESS_IOS_XCTEST_DERIVED_DATA_PATH` still let you inject a prebuilt UI test artifact, for example on a hosted device farm.
+
+The artifact must now be an `AgentDeviceRunner` build. Produce one with:
+
+```bash
+npx agent-device prepare ios-runner --platform ios --udid <udid> --json
+```
+
+and use the `xctestrunPath` it prints. Artifacts built by the removed `harness xctest build` command no longer work.
 
 ### Android
 
@@ -61,7 +105,7 @@ In practice, apps commonly end up having permissions such as camera, microphone,
 
 ## Performance Impact
 
-Enabling `permissions` can make Harness heavier on iOS because it starts an additional XCTest agent session alongside the normal run.
+Enabling `permissions` makes Harness heavier on iOS because it prepares and attaches a UI test runner alongside the normal run.
 
 This can have a negative impact on:
 
@@ -69,7 +113,9 @@ This can have a negative impact on:
 - device preparation time
 - overall run performance
 
-The impact is most important to keep in mind for iOS physical devices, where the XCTest agent requires code signing and extra setup, but the same helper is also started on iOS simulators when permissions are enabled.
+The runner build is cached in `.harness/cache/agent-device-runner` and is reused across runs, so only the first run after an Xcode or `agent-device` upgrade pays for a full build. Attaching a cached runner to a booted simulator costs a few seconds per run.
+
+The impact is most important to keep in mind for iOS physical devices, where the runner requires code signing and extra setup, but the same helper is also started on iOS simulators when permissions are enabled.
 
 ## Physical iOS Devices
 
@@ -85,10 +131,25 @@ applePlatform({
 })
 ```
 
-If `permissions: true` is set without `device.codeSign`, Harness skips the XCTest agent for that physical device.
+If `permissions: true` is set without `device.codeSign`, Harness skips permission automation for that physical device.
+
+The UI test runner is now signed under the `agent-device` bundle identifiers (`com.callstack.agentdevice.runner` and its `.uitests` companion), not the old `HarnessXCTestAgent` ones. Provisioning profiles created for the old identifiers no longer apply.
+
+Personal teams cannot sign those identifiers. Set `codeSign.runnerBundleId` to an identifier your profile covers:
+
+```javascript
+applePhysicalDevice('My iPhone', {
+  codeSign: {
+    teamId: 'TEAMID1234',
+    runnerBundleId: 'com.example.myapp.runner',
+  },
+})
+```
+
+`codeSign.signingIdentity` and `codeSign.provisioningProfile` remain available for manual signing.
 
 ## Recommendation
 
 Leave `permissions` disabled unless your tests actually need system permission prompts to be handled automatically.
 
-That keeps the default Harness startup path lighter and avoids paying the extra iOS XCTest overhead on runs that do not need it.
+That keeps the default Harness startup path lighter and avoids paying the extra iOS UI test runner overhead on runs that do not need it.

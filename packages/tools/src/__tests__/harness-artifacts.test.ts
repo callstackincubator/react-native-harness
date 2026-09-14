@@ -26,7 +26,7 @@ describe('createHarnessArtifactDirectory', () => {
       platformId: 'ios',
       rootDir,
       runTimestamp: '2026-04-29T10-45-31-645Z',
-      runnerName: 'xctest-agent simulator',
+      runnerName: 'permission-agent simulator',
     });
 
     expect(artifacts.rootDir).toBe(path.join(rootDir, 'logs'));
@@ -34,7 +34,7 @@ describe('createHarnessArtifactDirectory', () => {
       path.join(
         rootDir,
         'logs',
-        '2026-04-29T10-45-31-645Z--ios--xctest-agent-simulator--com.harnessplayground.dev'
+        '2026-04-29T10-45-31-645Z--ios--permission-agent-simulator--com.harnessplayground.dev'
       )
     );
     expect(fs.existsSync(artifacts.directoryPath)).toBe(true);
@@ -45,8 +45,8 @@ describe('createHarnessArtifactDirectory', () => {
     expect(getHarnessCacheRootPath(rootDir)).toBe(
       path.join(rootDir, '.harness', 'cache')
     );
-    expect(getHarnessCacheArtifactPath('xctest-agent simulator', rootDir)).toBe(
-      path.join(rootDir, '.harness', 'cache', 'xctest-agent-simulator')
+    expect(getHarnessCacheArtifactPath('agent-device runner', rootDir)).toBe(
+      path.join(rootDir, '.harness', 'cache', 'agent-device-runner')
     );
   });
 });

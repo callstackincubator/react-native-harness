@@ -19,12 +19,12 @@
     "@react-native-harness/config": "workspace:*",
     "@react-native-harness/platforms": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
-    "yargs": "^17.7.2",
-    "zod": "^3.25.67",
-    "tslib": "^2.3.0"
+    "agent-device": "0.21.0",
+    "tslib": "^2.3.0",
+    "zod": "^3.25.67"
   },
-  "devDependencies": {
-    "@types/yargs": "^17.0.32"
-  },
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  }
 }

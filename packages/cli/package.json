@@ -34,5 +34,8 @@
     "@react-native-harness/platform-apple": "workspace:*",
     "@react-native-harness/platform-web": "workspace:*"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  }
 }

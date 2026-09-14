@@ -21,6 +21,12 @@ type CreateIosAppSessionOptions = {
   stopApp: () => Promise<void>;
   isAppRunning: () => Promise<boolean>;
   crashReporter?: IosCrashReporter;
+  /**
+   * Called whenever the observed run state of the app under test changes.
+   * Consumers that must not act while the app is down (the iOS permission
+   * watchdog) gate themselves on this instead of polling the device again.
+   */
+  onAppRunningChange?: (running: boolean) => void;
 };
 
 export const createIosAppSession = async ({
@@ -28,6 +34,7 @@ export const createIosAppSession = async ({
   stopApp,
   isAppRunning,
   crashReporter,
+  onAppRunningChange,
 }: CreateIosAppSessionOptions): Promise<AppSession> => {
   const emitter = createAppSessionEmitter();
   const logBuffer = createBoundedLogBuffer();
@@ -67,7 +74,24 @@ export const createIosAppSession = async ({
     resolvePollDelay?.();
   };
 
+  let reportedRunning: boolean | null = null;
+  const reportRunning = (running: boolean) => {
+    if (reportedRunning === running) {
+      return;
+    }
+
+    reportedRunning = running;
+
+    try {
+      onAppRunningChange?.(running);
+    } catch (error) {
+      iosAppSessionLogger.debug('app running listener failed', error);
+    }
+  };
+
   const setExited = (reason: 'observed-exit' | 'process-gone') => {
+    reportRunning(false);
+
     if (disposed || state.status !== 'running') {
       return;
     }
@@ -109,9 +133,12 @@ export const createIosAppSession = async ({
       try {
         if (await isAppRunning()) {
           hasObservedRunning = true;
+          reportRunning(true);
         } else if (hasObservedRunning) {
           setExited('process-gone');
           return;
+        } else {
+          reportRunning(false);
         }
       } catch (error) {
         iosAppSessionLogger.debug('iOS app session poll failed', error);
@@ -143,6 +170,7 @@ export const createIosAppSession = async ({
     disposed = true;
     stopPolling = true;
     cancelPendingPollDelay();
+    reportRunning(false);
     emitter.clear();
     await Promise.allSettled([logTask, exitTask, pollTask]);
     await launchProcess;
@@ -157,6 +185,7 @@ export const createIosAppSession = async ({
       disposed = true;
       stopPolling = true;
       cancelPendingPollDelay();
+      reportRunning(false);
       state = { status: 'disposed', occurredAt: Date.now() };
       emitter.clear();
 

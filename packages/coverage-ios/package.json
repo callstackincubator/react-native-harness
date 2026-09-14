@@ -36,5 +36,8 @@
   },
   "license": "MIT",
   "author": "Callstack",
-  "homepage": "https://github.com/callstackincubator/react-native-harness"
+  "homepage": "https://github.com/callstackincubator/react-native-harness",
+  "engines": {
+    "node": ">=22.12"
+  }
 }

@@ -88,6 +88,7 @@ const CI_SUBCOMMANDS = [
   'plan-metro-restore',
   'snapshot-metro',
   'plan-metro-save',
+  'plan-ios-runner-cache',
 ] as const;
 
 const printCiUsage = () => {
@@ -98,6 +99,7 @@ Commands:
   plan-metro-restore    Plan a Metro cache restore
   snapshot-metro        Snapshot the Metro cache after restore
   plan-metro-save       Plan a Metro cache save
+  plan-ios-runner-cache Print the agent-device iOS runner cache key
 
 These commands are invoked by the react-native-harness GitHub Action and are
 not intended to be run manually.`);
@@ -135,6 +137,13 @@ const runCiCommand = async () => {
     case 'plan-metro-save': {
       const { runPlanMetroSave } = await import('./ci/plan-metro-save.js');
       await runPlanMetroSave();
+      return;
+    }
+    case 'plan-ios-runner-cache': {
+      const { runPlanIosRunnerCache } = await import(
+        './ci/plan-ios-runner-cache.js'
+      );
+      await runPlanIosRunnerCache();
       return;
     }
   }

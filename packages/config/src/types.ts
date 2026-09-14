@@ -162,7 +162,7 @@ export const ConfigSchema = z
       .optional()
       .default(false)
       .describe(
-        'Enable platform-specific permission prompt automation. When false, Harness does not start permission-handling helpers such as the iOS XCTest agent.'
+        'Enable platform-specific permission prompt automation. When false, Harness does not start permission-handling helpers such as the iOS agent-device permission watchdog.'
       ),
 
     detectNativeCrashes: z.boolean().optional().default(true),
