@@ -83,6 +83,7 @@ export const getAppleSimulatorPlatformInstance = async (
           kind: 'simulator',
           udid,
         },
+        platformReadyTimeoutMs: harnessConfig.platformReadyTimeout,
       })
     : null;
 
@@ -260,6 +261,7 @@ export const getApplePhysicalDevicePlatformInstance = async (
             udid: device.hardwareProperties.udid,
             codeSign: config.device.codeSign,
           },
+          platformReadyTimeoutMs: harnessConfig.platformReadyTimeout,
         })
       : null;
 

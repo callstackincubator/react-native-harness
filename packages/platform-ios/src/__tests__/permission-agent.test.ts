@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
   press: vi.fn(),
   prepare: vi.fn(),
   open: vi.fn(),
-  spawn: vi.fn(),
+  closeSession: vi.fn(),
+  runCommand: vi.fn(),
 }));
 
 vi.mock('agent-device', () => ({
@@ -20,15 +21,17 @@ vi.mock('@react-native-harness/tools', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@react-native-harness/tools')>();
 
-  return { ...actual, spawn: mocks.spawn };
+  return { ...actual, runCommand: mocks.runCommand };
 });
 
 const {
   assertSupportedNodeVersion,
+  buildLabelSelector,
   copyAgentDeviceLogs,
   createIosPermissionAgent,
   getAgentDeviceStateDir,
   getPermissionWatchdogIntervalMs,
+  getPrepareTimeoutMs,
 } = await import('../permission-agent.js');
 
 const createAgentDeviceError = (
@@ -80,10 +83,12 @@ describe('iOS permission agent', () => {
     mocks.open.mockResolvedValue({});
     mocks.alert.mockRejectedValue(alertNotFoundError());
     mocks.press.mockResolvedValue({});
-    mocks.spawn.mockResolvedValue({ stdout: '', stderr: '' });
+    mocks.closeSession.mockResolvedValue({});
+    mocks.runCommand.mockResolvedValue({ stdout: '', stderr: '' });
     mocks.createAgentDeviceClient.mockReturnValue({
       command: { alert: mocks.alert, prepare: mocks.prepare },
       apps: { open: mocks.open },
+      sessions: { close: mocks.closeSession },
       interactions: { press: mocks.press },
     });
   });
@@ -299,7 +304,7 @@ describe('iOS permission agent', () => {
 
     await agent.dispose();
 
-    expect(mocks.spawn).toHaveBeenCalledWith(
+    expect(mocks.runCommand).toHaveBeenCalledWith(
       process.execPath,
       expect.arrayContaining([
         'daemon',
@@ -349,6 +354,127 @@ describe('iOS permission agent', () => {
     await agent.dispose();
   });
 
+  it('never overlaps two runner commands', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    mocks.alert.mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      inFlight -= 1;
+      throw alertNotFoundError();
+    });
+
+    const agent = createAgent();
+    await agent.prepare();
+    agent.setAppRunning(true);
+
+    await vi.waitFor(() =>
+      expect(mocks.alert.mock.calls.length).toBeGreaterThan(2)
+    );
+
+    expect(maxInFlight).toBe(1);
+
+    await agent.dispose();
+  });
+
+  it('stops the daemon without waiting out an in-flight poll', async () => {
+    mocks.alert.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          setTimeout(() => reject(alertNotFoundError()), 5000);
+        })
+    );
+
+    const agent = createAgent();
+    await agent.prepare();
+    agent.setAppRunning(true);
+
+    await vi.waitFor(() => expect(mocks.alert).toHaveBeenCalled());
+
+    const startedAt = Date.now();
+    await agent.dispose();
+    const elapsed = Date.now() - startedAt;
+
+    // The daemon stop runs immediately; only the bounded drain is waited on,
+    // never the poll's own 20 s budget.
+    expect(mocks.runCommand).toHaveBeenCalled();
+    expect(elapsed).toBeLessThan(4000);
+  });
+
+  it('gives up after three consecutive unclassified failures', async () => {
+    mocks.alert.mockRejectedValue(
+      createAgentDeviceError('RUNNER_CRASHED', 'the runner exited', {
+        hint: 'Check runner.log.',
+      })
+    );
+
+    const agent = createAgent();
+    await agent.prepare();
+    agent.setAppRunning(true);
+
+    await vi.waitFor(() =>
+      expect(mocks.alert.mock.calls.length).toBe(3)
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // The loop is gone; no fourth attempt is ever made.
+    expect(mocks.alert.mock.calls.length).toBe(3);
+
+    await agent.dispose();
+  });
+
+  it('taps a padded label using its trimmed form', async () => {
+    mocks.alert.mockResolvedValue({
+      message: 'Allow access?',
+      items: ['  Allow  ', 'Don’t Allow'],
+    });
+
+    const agent = createAgent();
+    await agent.prepare();
+    agent.setAppRunning(true);
+
+    await vi.waitFor(() => expect(mocks.press).toHaveBeenCalled());
+
+    expect(mocks.press).toHaveBeenCalledWith(
+      expect.objectContaining({ selector: 'label="Allow"' })
+    );
+
+    await agent.dispose();
+  });
+
+  it('refuses to build a selector for a label with a quote or backslash', () => {
+    expect(buildLabelSelector('Allow')).toBe('label="Allow"');
+    expect(buildLabelSelector('Allow "Maps"')).toBeUndefined();
+    expect(buildLabelSelector('Allow\\Once')).toBeUndefined();
+  });
+
+  it('derives the prepare budget from platformReadyTimeout', () => {
+    expect(getPrepareTimeoutMs(undefined)).toBe(240_000);
+    expect(getPrepareTimeoutMs(300_000)).toBe(240_000);
+    expect(getPrepareTimeoutMs(600_000)).toBe(480_000);
+    // Never collapses to something unusably small.
+    expect(getPrepareTimeoutMs(1_000)).toBe(30_000);
+  });
+
+  it('keeps user-provided signing environment variables', async () => {
+    vi.stubEnv('AGENT_DEVICE_IOS_TEAM_ID', 'USERTEAM99');
+
+    const agent = createAgent({
+      target: {
+        kind: 'device',
+        udid: 'device-udid',
+        codeSign: { teamId: 'TEAMID1234' },
+      },
+    });
+
+    await agent.prepare();
+
+    expect(process.env.AGENT_DEVICE_IOS_TEAM_ID).toBe('USERTEAM99');
+
+    await agent.dispose();
+  });
+
   it('rejects Node versions below the agent-device floor', () => {
     expect(() => assertSupportedNodeVersion('22.11.0')).toThrow(
       /requires Node\.js 22\.12 or newer/
@@ -358,6 +484,9 @@ describe('iOS permission agent', () => {
     );
     expect(() => assertSupportedNodeVersion('22.12.0')).not.toThrow();
     expect(() => assertSupportedNodeVersion('24.1.0')).not.toThrow();
+    // A newer major qualifies whatever its minor is.
+    expect(() => assertSupportedNodeVersion('24.0.0')).not.toThrow();
+    expect(() => assertSupportedNodeVersion('23')).not.toThrow();
   });
 
   it('reads the watchdog interval from either environment variable', () => {

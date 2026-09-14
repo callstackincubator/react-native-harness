@@ -200,3 +200,38 @@ Also expected:
 - Physical devices: signing via `AGENT_DEVICE_IOS_*` env (`DEVELOPMENT_TEAM`,
   `CODE_SIGN_STYLE` Manual/Automatic). Session-less `alert`/`press` were
   verified on a simulator only; the physical path is merge gate 2.
+
+## Amendments
+
+Corrections and additions found while implementing this ADR. The sections
+above are left as accepted; these entries take precedence where they differ.
+
+### 2026-09-14 — `press` requires an open session
+
+"Verified facts" records that session-less `alert`/`press` were verified on a
+simulator. That holds for `command.alert`, which attaches an implicit runner
+session per call, but **not** for `interactions.press`: with no open session it
+fails `SESSION_NOT_FOUND` ("No active session. Run open first."), with
+`--udid`, `--device` and `--target` selectors alike. The original experiment
+only exercised `press` while a SpringBoard session happened to be open.
+
+Decision point 3 ("Harness never calls `apps.open`") is therefore amended:
+after `command.prepare({ action: 'ios-runner' })`, Harness opens exactly one
+session bound to `com.apple.springboard`. It never opens, launches, kills or
+relaunches the app under test through agent-device; that lifecycle stays
+entirely with `simctl`/`devicectl`, as decided. SpringBoard is also where the
+blocking system modals the watchdog taps actually live.
+
+### 2026-09-14 — the runner cache key runs `xcodebuild -version`
+
+Decision point 7 keys the action.yml cache on the `agent-device` version plus
+`xcodebuild -version`. The `harness ci plan-ios-runner-cache` helper that
+computes the key therefore shells out to `xcodebuild -version` (bounded, and
+degrading to a disabled cache with a CI warning annotation if it fails), which
+the ADR did not call out as a CLI dependency.
+
+### 2026-09-14 — positive-label list gained `Allow While Using App`
+
+The list is described as carried over from the Swift watchdog. One label is
+new: `Allow While Using App`, the middle button on the iOS 26 three-button
+location sheet, which the old list did not cover.

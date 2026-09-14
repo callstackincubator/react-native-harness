@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { getFs } from '@react-native-harness/tools/harness-context';
-import { spawn } from '@react-native-harness/tools';
+import { runCommand } from '@react-native-harness/tools';
 import { resolveProjectRoot } from './workspace-root.js';
 
 /**
@@ -57,9 +57,14 @@ export const resolveAgentDeviceVersion = (
   }
 };
 
+const XCODE_VERSION_TIMEOUT_MS = 60_000;
+
 const getXcodeVersion = async (): Promise<string | null> => {
   try {
-    const { stdout } = await spawn('xcodebuild', ['-version']);
+    const { stdout } = await runCommand('xcodebuild', ['-version'], {
+      signal: AbortSignal.timeout(XCODE_VERSION_TIMEOUT_MS),
+      timeoutMs: XCODE_VERSION_TIMEOUT_MS,
+    });
 
     return stdout.trim();
   } catch {
@@ -87,8 +92,14 @@ export const runPlanIosRunnerCache = async (): Promise<void> => {
     const xcodeVersion = await getXcodeVersion();
 
     if (!agentDeviceVersion || !xcodeVersion) {
-      console.info(
-        'Skipping the agent-device runner cache: could not resolve the installed agent-device version or the Xcode version.'
+      const missing = !agentDeviceVersion
+        ? 'the installed agent-device version'
+        : 'the Xcode version';
+
+      // An annotation, not a failure: the run still works, it just rebuilds
+      // the runner every time, which is worth seeing in the checks UI.
+      console.log(
+        `::warning::agent-device runner caching is disabled for this run: could not resolve ${missing}. Every run will rebuild the iOS UI test runner.`
       );
 
       getFs().appendFileSync(githubOutput, 'iosRunnerCacheKey=\n');

@@ -19,7 +19,7 @@
     "@react-native-harness/config": "workspace:*",
     "@react-native-harness/platforms": "workspace:*",
     "@react-native-harness/tools": "workspace:*",
-    "agent-device": "~0.21.0",
+    "agent-device": "0.21.0",
     "tslib": "^2.3.0",
     "zod": "^3.25.67"
   },

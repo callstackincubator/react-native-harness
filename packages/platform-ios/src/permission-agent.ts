@@ -8,7 +8,7 @@ import {
   delay as cancellableDelay,
   getHarnessCacheArtifactPath,
   logger,
-  spawn,
+  runCommand,
   waitForAbort,
 } from '@react-native-harness/tools';
 import type { ApplePhysicalDeviceCodeSign } from './config.js';
@@ -53,13 +53,25 @@ const DEFAULT_WATCHDOG_INTERVAL_MS = 1000;
  * is treated as a (transient) timeout.
  */
 const ALERT_COMMAND_TIMEOUT_MS = 20_000;
-const PREPARE_COMMAND_TIMEOUT_MS = 600_000;
+/**
+ * Fallback prepare budget when the runner's `platformReadyTimeout` is unknown.
+ * Deliberately below the 300 s default so Harness's own platform-ready timeout
+ * is what surfaces, not a stuck agent-device command.
+ */
+const DEFAULT_PREPARE_TIMEOUT_MS = 240_000;
+const MINIMUM_PREPARE_TIMEOUT_MS = 30_000;
+const SESSION_CLOSE_TIMEOUT_MS = 30_000;
 const DAEMON_STOP_TIMEOUT_MS = 60_000;
+/** How long dispose() waits for an in-flight poll to unwind after the stop. */
+const WATCHDOG_DRAIN_TIMEOUT_MS = 2_000;
+/** Consecutive unclassified failures before the watchdog gives up. */
+const MAX_CONSECUTIVE_UNKNOWN_FAILURES = 3;
 
 /**
- * Buttons the watchdog is allowed to tap, in priority order. Carried over
- * verbatim from the removed in-process XCTest watchdog, which tapped the first
- * of these labels present on the prompt.
+ * Buttons the watchdog is allowed to tap, in priority order. Carried over from
+ * the removed in-process XCTest watchdog, which tapped the first of these
+ * labels present on the prompt. `Allow While Using App` is new: it is the label
+ * iOS 26 uses on the three-button location sheet.
  */
 const POSITIVE_BUTTON_LABELS = [
   'Allow',
@@ -88,6 +100,11 @@ export type IosPermissionAgentOptions = {
   appBundleId?: string;
   target: IosPermissionAgentTarget;
   projectRoot?: string;
+  /**
+   * The runner's `platformReadyTimeout`. The prepare budget is derived from it
+   * so a stuck agent-device command never outlives platform startup.
+   */
+  platformReadyTimeoutMs?: number;
 };
 
 export type IosPermissionAgent = {
@@ -108,17 +125,18 @@ export type IosPermissionAgent = {
 export const assertSupportedNodeVersion = (
   nodeVersion = process.versions.node
 ): void => {
-  const [major, minor] = nodeVersion
+  const [rawMajor, rawMinor] = nodeVersion
     .split('.')
     .map((part) => Number.parseInt(part, 10));
+  const major = Number.isFinite(rawMajor) ? (rawMajor as number) : Number.NaN;
+  const minor = Number.isFinite(rawMinor) ? (rawMinor as number) : 0;
 
-  if (
-    Number.isFinite(major) &&
-    Number.isFinite(minor) &&
-    ((major as number) > MINIMUM_NODE_MAJOR ||
-      ((major as number) === MINIMUM_NODE_MAJOR &&
-        (minor as number) >= MINIMUM_NODE_MINOR))
-  ) {
+  // A newer major always qualifies, whatever its minor is.
+  if (major > MINIMUM_NODE_MAJOR) {
+    return;
+  }
+
+  if (major === MINIMUM_NODE_MAJOR && minor >= MINIMUM_NODE_MINOR) {
     return;
   }
 
@@ -156,6 +174,25 @@ export const getPermissionWatchdogIntervalMs = (): number => {
   return parsed;
 };
 
+export const getPrepareTimeoutMs = (
+  platformReadyTimeoutMs?: number
+): number => {
+  if (
+    platformReadyTimeoutMs === undefined ||
+    !Number.isFinite(platformReadyTimeoutMs) ||
+    platformReadyTimeoutMs <= 0
+  ) {
+    return DEFAULT_PREPARE_TIMEOUT_MS;
+  }
+
+  // Stay clear of the platform-ready deadline so Harness's own timeout, with
+  // its actionable message, is the one that fires first.
+  return Math.max(
+    MINIMUM_PREPARE_TIMEOUT_MS,
+    Math.floor(platformReadyTimeoutMs * 0.8)
+  );
+};
+
 /**
  * Harness runs its own agent-device daemon so it never replaces, or inherits
  * stale signing environment from, a developer's own daemon. Device claims are
@@ -191,10 +228,11 @@ const getExistingPath = (name: string): string | undefined => {
 
 /**
  * The agent-device daemon is spawned lazily by the first client request and
- * inherits that process's environment. agent-device 0.21.0 exposes no
- * `daemon start` subcommand that could be handed a dedicated environment
- * (`agent-device help daemon` documents `daemon stop` only), so the variables
- * the daemon needs are written to `process.env` before the client is created.
+ * inherits that process's environment for its whole lifetime. agent-device
+ * 0.21.0 exposes no `daemon start` subcommand that could be handed a dedicated
+ * environment (`agent-device help daemon` documents `daemon stop` only), so the
+ * variables the daemon needs are written to `process.env` before the client is
+ * created, and a value the user already set is never overwritten.
  */
 const applyDaemonEnvironment = ({
   runnerDerivedDataPath,
@@ -203,9 +241,24 @@ const applyDaemonEnvironment = ({
   runnerDerivedDataPath: string;
   target: IosPermissionAgentTarget;
 }): void => {
-  if (getTrimmedEnvironmentValue(RUNNER_DERIVED_PATH_ENV) === undefined) {
-    process.env[RUNNER_DERIVED_PATH_ENV] = runnerDerivedDataPath;
-  }
+  const setIfUnset = (name: string, value: string | undefined) => {
+    if (value === undefined || value.length === 0) {
+      return;
+    }
+
+    if (getTrimmedEnvironmentValue(name) !== undefined) {
+      permissionAgentLogger.debug(
+        'keeping the existing %s from the environment',
+        name
+      );
+
+      return;
+    }
+
+    process.env[name] = value;
+  };
+
+  setIfUnset(RUNNER_DERIVED_PATH_ENV, runnerDerivedDataPath);
 
   if (target.kind !== 'device' || !target.codeSign) {
     return;
@@ -214,19 +267,10 @@ const applyDaemonEnvironment = ({
   const { teamId, signingIdentity, provisioningProfile, runnerBundleId } =
     target.codeSign;
 
-  process.env[IOS_TEAM_ID_ENV] = teamId;
-
-  if (signingIdentity) {
-    process.env[IOS_SIGNING_IDENTITY_ENV] = signingIdentity;
-  }
-
-  if (provisioningProfile) {
-    process.env[IOS_PROVISIONING_PROFILE_ENV] = provisioningProfile;
-  }
-
-  if (runnerBundleId) {
-    process.env[IOS_BUNDLE_ID_ENV] = runnerBundleId;
-  }
+  setIfUnset(IOS_TEAM_ID_ENV, teamId);
+  setIfUnset(IOS_SIGNING_IDENTITY_ENV, signingIdentity);
+  setIfUnset(IOS_PROVISIONING_PROFILE_ENV, provisioningProfile);
+  setIfUnset(IOS_BUNDLE_ID_ENV, runnerBundleId);
 };
 
 const getErrorCode = (error: unknown): string | undefined => {
@@ -251,9 +295,23 @@ const getErrorDetails = (error: unknown): Record<string, unknown> => {
   return {};
 };
 
+const getErrorHint = (error: unknown): string | undefined => {
+  const { hint } = getErrorDetails(error);
+
+  return typeof hint === 'string' && hint.length > 0 ? hint : undefined;
+};
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 const isAlertNotFoundError = (error: unknown): boolean =>
   getErrorDetails(error).runnerErrorCode === ALERT_NOT_FOUND_RUNNER_ERROR_CODE;
 
+/**
+ * Only these three are expected during a healthy run: no prompt is showing, the
+ * runner is still finishing the previous command, or the round trip ran long.
+ * Everything else is reported, not swallowed.
+ */
 const isTransientWatchdogError = (error: unknown): boolean => {
   if (isAlertNotFoundError(error)) {
     return true;
@@ -269,9 +327,7 @@ const isTransientWatchdogError = (error: unknown): boolean => {
     return true;
   }
 
-  const message = error instanceof Error ? error.message : String(error);
-
-  return /timed out|timeout/i.test(message);
+  return /timed out|timeout/i.test(getErrorMessage(error));
 };
 
 export const isDeviceInUseError = (error: unknown): boolean =>
@@ -282,13 +338,12 @@ export const isDeviceInUseError = (error: unknown): boolean =>
  * usually the developer's own, and quietly taking it over would break it.
  */
 const createDeviceInUseError = (error: unknown): Error => {
-  const message = error instanceof Error ? error.message : String(error);
-  const hint = getErrorDetails(error).hint;
+  const hint = getErrorHint(error);
   const lines = [
-    `agent-device cannot claim this iOS device for permission automation: ${message}`,
+    `agent-device cannot claim this iOS device for permission automation: ${getErrorMessage(error)}`,
   ];
 
-  if (typeof hint === 'string' && hint.length > 0) {
+  if (hint) {
     lines.push(hint);
   }
 
@@ -299,16 +354,33 @@ const createDeviceInUseError = (error: unknown): Error => {
   return new Error(lines.join('\n'));
 };
 
-const findLabelToTap = (items: readonly string[]): string | undefined => {
+export const findLabelToTap = (
+  items: readonly string[]
+): string | undefined => {
   for (const positiveLabel of POSITIVE_BUTTON_LABELS) {
+    // The trimmed label is what gets tapped: agent-device matches the selector
+    // against the button's own label, and surrounding whitespace in the JSON
+    // payload is not part of it.
     const match = items.find((item) => item.trim() === positiveLabel);
 
     if (match !== undefined) {
-      return match;
+      return match.trim();
     }
   }
 
   return undefined;
+};
+
+/**
+ * agent-device selectors are `key="value"` with no documented escape syntax, so
+ * a label carrying a quote or backslash cannot be expressed safely.
+ */
+export const buildLabelSelector = (label: string): string | undefined => {
+  if (/["\\]/.test(label)) {
+    return undefined;
+  }
+
+  return `label="${label}"`;
 };
 
 const getAlertItems = (result: unknown): string[] => {
@@ -392,7 +464,12 @@ export const copyAgentDeviceLogs = ({
 }): string[] => {
   const copied: string[] = [];
 
-  if (copyIfExists(path.join(stateDir, 'daemon.log'), path.join(targetDirectory, 'daemon.log'))) {
+  if (
+    copyIfExists(
+      path.join(stateDir, 'daemon.log'),
+      path.join(targetDirectory, 'daemon.log')
+    )
+  ) {
     copied.push('daemon.log');
   }
 
@@ -431,17 +508,47 @@ export const createIosPermissionAgent = (
   const { target } = options;
   const stateDir = getAgentDeviceStateDir(projectRoot);
   const intervalMs = getPermissionWatchdogIntervalMs();
+  const prepareTimeoutMs = getPrepareTimeoutMs(options.platformReadyTimeoutMs);
+  const daemonStopHint = `agent-device daemon stop --state-dir ${stateDir} --clean`;
 
   const watchdogAbortController = new AbortController();
   let client: AgentDeviceClient | null = null;
   let watchdogTask: Promise<void> | null = null;
   let appRunning = false;
+  let consecutiveUnknownFailures = 0;
   let disposed = false;
   let disposePromise: Promise<void> | undefined;
 
-  const pollOnce = async (): Promise<void> => {
+  /** Reports an unclassified failure; returns true when the loop must stop. */
+  const recordUnknownFailure = (context: string, error: unknown): boolean => {
+    consecutiveUnknownFailures += 1;
+    const code = getErrorCode(error) ?? 'UNKNOWN';
+    const hint = getErrorHint(error);
+
+    permissionAgentLogger.warn(
+      'iOS permission watchdog %s failed (%s): %s%s',
+      context,
+      code,
+      getErrorMessage(error),
+      hint ? ` ${hint}` : ''
+    );
+
+    if (consecutiveUnknownFailures < MAX_CONSECUTIVE_UNKNOWN_FAILURES) {
+      return false;
+    }
+
+    permissionAgentLogger.warn(
+      'iOS permission automation is disabled for the rest of this run after %d consecutive failures. System permission prompts will no longer be dismissed automatically.',
+      consecutiveUnknownFailures
+    );
+
+    return true;
+  };
+
+  /** Resolves false when the watchdog must stop. */
+  const pollOnce = async (): Promise<boolean> => {
     if (!client) {
-      return;
+      return false;
     }
 
     let alertResult: unknown;
@@ -459,18 +566,19 @@ export const createIosPermissionAgent = (
       }
 
       if (isTransientWatchdogError(error)) {
+        consecutiveUnknownFailures = 0;
         permissionAgentLogger.debug(
           'permission watchdog poll skipped: %s',
-          error instanceof Error ? error.message : String(error)
+          getErrorMessage(error)
         );
 
-        return;
+        return true;
       }
 
-      permissionAgentLogger.debug('permission watchdog poll failed', error);
-
-      return;
+      return !recordUnknownFailure('poll', error);
     }
+
+    consecutiveUnknownFailures = 0;
 
     const items = getAlertItems(alertResult);
     const label = findLabelToTap(items);
@@ -481,7 +589,18 @@ export const createIosPermissionAgent = (
         items.join(', ')
       );
 
-      return;
+      return true;
+    }
+
+    const selector = buildLabelSelector(label);
+
+    if (selector === undefined) {
+      permissionAgentLogger.warn(
+        'cannot tap the permission prompt button %j: its label contains a character agent-device selectors cannot express.',
+        label
+      );
+
+      return true;
     }
 
     permissionAgentLogger.debug(
@@ -494,19 +613,27 @@ export const createIosPermissionAgent = (
       await client.interactions.press({
         platform: 'ios',
         udid: target.udid,
-        selector: `label="${label}"`,
+        selector,
       });
     } catch (error) {
       if (isDeviceInUseError(error)) {
         throw createDeviceInUseError(error);
       }
 
-      permissionAgentLogger.debug(
-        'failed to tap "%s" on the permission prompt',
-        label,
-        error
-      );
+      if (isTransientWatchdogError(error)) {
+        permissionAgentLogger.debug(
+          'tapping "%s" was skipped: %s',
+          label,
+          getErrorMessage(error)
+        );
+
+        return true;
+      }
+
+      return !recordUnknownFailure(`tap of "${label}"`, error);
     }
+
+    return true;
   };
 
   // Serialised on purpose: the runner handles one command at a time, and
@@ -516,14 +643,20 @@ export const createIosPermissionAgent = (
 
     while (!signal.aborted) {
       if (appRunning) {
+        let shouldContinue: boolean;
+
         try {
-          await pollOnce();
+          shouldContinue = await pollOnce();
         } catch (error) {
           permissionAgentLogger.error(
             'stopping the iOS permission watchdog: %s',
-            error instanceof Error ? error.message : String(error)
+            getErrorMessage(error)
           );
 
+          return;
+        }
+
+        if (!shouldContinue) {
           return;
         }
       }
@@ -548,19 +681,47 @@ export const createIosPermissionAgent = (
     }
   };
 
+  const closeSession = async (): Promise<void> => {
+    if (!client) {
+      return;
+    }
+
+    // `sessions.close` takes no timeout of its own, and the daemon stop below
+    // is the real guarantee, so this wait is bounded and best-effort.
+    const timeout = cancellableDelay(SESSION_CLOSE_TIMEOUT_MS);
+
+    try {
+      await Promise.race([
+        client.sessions.close().catch((error: unknown) => {
+          permissionAgentLogger.debug(
+            'failed to close the agent-device session',
+            error
+          );
+        }),
+        timeout.promise,
+      ]);
+    } finally {
+      timeout.cancel();
+    }
+  };
+
   const stopDaemon = async (): Promise<void> => {
     let binPath: string;
 
     try {
       binPath = resolveAgentDeviceBinPath();
     } catch (error) {
-      permissionAgentLogger.debug('could not resolve the agent-device CLI', error);
+      permissionAgentLogger.warn(
+        'could not resolve the agent-device CLI, so its daemon was left running: %s Stop it with: %s',
+        getErrorMessage(error),
+        daemonStopHint
+      );
 
       return;
     }
 
     try {
-      await spawn(
+      await runCommand(
         process.execPath,
         [
           binPath,
@@ -571,10 +732,75 @@ export const createIosPermissionAgent = (
           '--clean',
           '--json',
         ],
-        { timeout: DAEMON_STOP_TIMEOUT_MS }
+        {
+          signal: AbortSignal.timeout(DAEMON_STOP_TIMEOUT_MS),
+          timeoutMs: DAEMON_STOP_TIMEOUT_MS,
+        }
       );
     } catch (error) {
-      permissionAgentLogger.debug('failed to stop the agent-device daemon', error);
+      permissionAgentLogger.warn(
+        'failed to stop the agent-device daemon: %s An xcodebuild or AgentDeviceRunner process may still hold the device claim. Stop it with: %s',
+        getErrorMessage(error),
+        daemonStopHint
+      );
+    }
+  };
+
+  const collectLogs = (): void => {
+    try {
+      const logArtifacts = createHarnessArtifactDirectory({
+        artifactType: 'logs',
+        bundleId: options.appBundleId,
+        platformId: 'ios',
+        runnerName: `permission-agent-${target.kind}`,
+      });
+      const copied = copyAgentDeviceLogs({
+        stateDir,
+        targetDirectory: logArtifacts.directoryPath,
+      });
+
+      if (copied.length > 0) {
+        permissionAgentLogger.debug(
+          'copied agent-device logs (%s) to %s',
+          copied.join(', '),
+          logArtifacts.directoryPath
+        );
+      }
+    } catch (error) {
+      permissionAgentLogger.debug('failed to copy agent-device logs', error);
+    }
+  };
+
+  /**
+   * agent-device commands take no abort signal, so cancellation is a race: the
+   * caller stops waiting and the daemon is torn down, which kills the in-flight
+   * xcodebuild/AgentDeviceRunner and releases the host-global device claim.
+   */
+  const runBounded = async <T>(
+    description: string,
+    work: () => Promise<T>,
+    signal?: AbortSignal
+  ): Promise<T> => {
+    if (!signal) {
+      return await work();
+    }
+
+    const abortWait = waitForAbort(signal);
+
+    try {
+      return await Promise.race([work(), abortWait.promise]);
+    } catch (error) {
+      if (signal.aborted) {
+        permissionAgentLogger.debug(
+          'aborted while %s; stopping the agent-device daemon',
+          description
+        );
+        await stopDaemon();
+      }
+
+      throw error;
+    } finally {
+      abortWait.cancel();
     }
   };
 
@@ -598,24 +824,35 @@ export const createIosPermissionAgent = (
       });
 
       permissionAgentLogger.debug(
-        'preparing the agent-device iOS runner for %s (state dir %s)',
+        'preparing the agent-device iOS runner for %s (state dir %s, budget %d ms)',
         target.udid,
-        stateDir
+        stateDir,
+        prepareTimeoutMs
       );
 
       try {
-        await client.command.prepare({
-          action: 'ios-runner',
-          platform: 'ios',
-          udid: target.udid,
-          timeoutMs: PREPARE_COMMAND_TIMEOUT_MS,
-        });
-        await client.apps.open({
-          app: SPRINGBOARD_BUNDLE_ID,
-          platform: 'ios',
-          udid: target.udid,
-          timeoutMs: PREPARE_COMMAND_TIMEOUT_MS,
-        });
+        await runBounded(
+          'preparing the agent-device iOS runner',
+          () =>
+            client!.command.prepare({
+              action: 'ios-runner',
+              platform: 'ios',
+              udid: target.udid,
+              timeoutMs: prepareTimeoutMs,
+            }),
+          signal
+        );
+        await runBounded(
+          'opening the agent-device SpringBoard session',
+          () =>
+            client!.apps.open({
+              app: SPRINGBOARD_BUNDLE_ID,
+              platform: 'ios',
+              udid: target.udid,
+              timeoutMs: prepareTimeoutMs,
+            }),
+          signal
+        );
       } catch (error) {
         if (isDeviceInUseError(error)) {
           throw createDeviceInUseError(error);
@@ -623,8 +860,6 @@ export const createIosPermissionAgent = (
 
         throw error;
       }
-
-      signal?.throwIfAborted();
 
       watchdogTask = runWatchdog();
     },
@@ -641,40 +876,29 @@ export const createIosPermissionAgent = (
         appRunning = false;
         watchdogAbortController.abort();
 
+        // Tear the daemon down first: an in-flight `alert get` can still have
+        // most of its 20 s budget left, and stopping the daemon ends it
+        // immediately instead of making teardown wait it out.
+        await closeSession();
+        client = null;
+        await stopDaemon();
+
         if (watchdogTask) {
-          await watchdogTask.catch(() => undefined);
+          const drain = cancellableDelay(WATCHDOG_DRAIN_TIMEOUT_MS);
+
+          try {
+            await Promise.race([
+              watchdogTask.catch(() => undefined),
+              drain.promise,
+            ]);
+          } finally {
+            drain.cancel();
+          }
+
           watchdogTask = null;
         }
 
-        client = null;
-
-        await stopDaemon();
-
-        try {
-          const logArtifacts = createHarnessArtifactDirectory({
-            artifactType: 'logs',
-            bundleId: options.appBundleId,
-            platformId: 'ios',
-            runnerName: `permission-agent-${target.kind}`,
-          });
-          const copied = copyAgentDeviceLogs({
-            stateDir,
-            targetDirectory: logArtifacts.directoryPath,
-          });
-
-          if (copied.length > 0) {
-            permissionAgentLogger.debug(
-              'copied agent-device logs (%s) to %s',
-              copied.join(', '),
-              logArtifacts.directoryPath
-            );
-          }
-        } catch (error) {
-          permissionAgentLogger.debug(
-            'failed to copy agent-device logs',
-            error
-          );
-        }
+        collectLogs();
       })()),
   };
 };
