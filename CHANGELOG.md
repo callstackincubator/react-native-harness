@@ -1,3 +1,43 @@
+## v1.5.0 (2026-09-14)
+
+### 🚀 Features
+
+- Add an injectable filesystem context and in-memory filesystem helper for hermetic Harness integrations and tests. ([#169](https://github.com/callstackincubator/react-native-harness/pull/169), [#165](https://github.com/callstackincubator/react-native-harness/issues/165))
+- The `react-native-harness` CLI now exposes `harness ci <subcommand>` ([#185](https://github.com/callstackincubator/react-native-harness/pull/185))
+  (`load-config`, `plan-metro-restore`, `snapshot-metro`, `plan-metro-save`),
+  which the official GitHub Action uses to run its configuration and Metro
+  caching steps through your project's own installed CLI instead of bundled
+  scripts checked into the action. As a result, the action now requires a
+  `react-native-harness` install that supports this interface — it checks
+  this itself via a capability marker on the installed package rather than a
+  version number, and fails clearly when the installed CLI predates it. Keep
+  the action ref and the `react-native-harness` package version in sync, as
+  already recommended.
+
+- Platform packages can now adjust the Metro configuration Harness composes for ([#190](https://github.com/callstackincubator/react-native-harness/pull/190), [#187](https://github.com/callstackincubator/react-native-harness/issues/187))
+  their runner, through a `metroConfigEnhancer` module they point at. The bundler
+  wiring a platform's runtime needs — module resolution redirects, additional
+  resolver platforms, its own core initialization — lives in the platform package
+  instead of in the bundler. Nothing changes for platforms that do not set one.
+
+
+### 🩹 Fixes
+
+- Harness now bounds owned CLI processes so cancelled runs do not leave console, logcat, or XCTest children behind. ([#181](https://github.com/callstackincubator/react-native-harness/pull/181))
+- Skipped tests now appear as skipped in Jest output and compatible result consumers. ([#182](https://github.com/callstackincubator/react-native-harness/pull/182))
+- The harness now runs on a Windows host and recognizes React Native Windows as a device platform: ESM (`rn-harness.config.mjs`) configs load correctly when the harness process runs on Windows, and an app reporting `Platform.OS === 'windows'` completes the bridge handshake instead of failing with "Unsupported platform". ([#187](https://github.com/callstackincubator/react-native-harness/pull/187))
+- The `@react-native-harness/platform-windows` package now supplies its own Metro wiring through the `metroConfigEnhancer` hook: the `react-native` -> `react-native-windows` resolver redirect, the `windows` and `native` `resolver.platforms` entries, and React Native Windows' `InitializeCore`. A `windowsPlatform()` runner no longer needs any of this hand-added to `metro.config.js`, and `@react-native-harness/bundler-metro` no longer reads `@react-native-community/cli-config` to detect out-of-tree platforms. iOS and Android runs are unaffected. ([#187](https://github.com/callstackincubator/react-native-harness/pull/187))
+- New `@react-native-harness/platform-windows` package: run harness tests against a deployed React Native Windows app. Add `windowsPlatform({ name, packageName })` to `rn-harness.config.mjs` — the runner resolves the package family name via `Get-AppxPackage`, shell-activates the app by its AUMID, and tracks it by process name. Requires the app to be deployed first (`react-native run-windows`). ([#187](https://github.com/callstackincubator/react-native-harness/pull/187))
+- A resource-lock heartbeat refresh that fails to write (for example the owner file racing a concurrent release, or a transient filesystem error) is now swallowed instead of surfacing as an unhandled rejection — the lock simply goes stale and is reclaimed, as it already would if the refresh were missed. ([#187](https://github.com/callstackincubator/react-native-harness/pull/187))
+- The resource lock a platform runner defines via `getResourceLockKey` is now honored. Concurrent Harness runs that target the same platform but different devices — two iOS simulators, or an emulator and a physical device — no longer queue behind each other; only runs that share a device wait. Previously the key was silently dropped by config validation and every run of a platform serialized on `<platformId>:<runnerName>`. ([#187](https://github.com/callstackincubator/react-native-harness/pull/187))
+
+### ❤️ Thank You
+
+- Claude Sonnet 5
+- Marc Rousavy @mrousavy
+- Stanislav Doskalenko @StasDoskalenko
+- Szymon Chmal @V3RON
+
 ## 1.4.1 (2026-08-04)
 
 ### 🩹 Fixes
