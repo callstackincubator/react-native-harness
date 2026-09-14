@@ -13,5 +13,10 @@
     "type": "file",
     "name": "web",
     "label": "Web"
+  },
+  {
+    "type": "file",
+    "name": "windows",
+    "label": "Windows"
   }
 ]

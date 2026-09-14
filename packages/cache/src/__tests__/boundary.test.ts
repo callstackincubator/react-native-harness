@@ -79,7 +79,10 @@ describe('cache path boundary', () => {
       }
 
       for (const file of collectSourceFiles(srcDir)) {
-        const relativePath = path.relative(packagesRoot, file);
+        const relativePath = path
+          .relative(packagesRoot, file)
+          .split(path.sep)
+          .join('/');
         if (ALLOWLIST.has(relativePath)) {
           continue;
         }

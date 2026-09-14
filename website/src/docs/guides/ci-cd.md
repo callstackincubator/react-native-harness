@@ -36,7 +36,7 @@ The action reads your `rn-harness.config.mjs` file to determine the selected run
 
 The action accepts the following inputs:
 
-- `app` (optional): Path to your built app (`.apk` for Android, `.app` for iOS). Not needed for web runners
+- `app` (optional): Path to your built app (`.apk` for Android, `.app` for iOS). Not needed for web or Windows runners
 - `runner` (required): The runner name from your Harness config (for example `"android"`, `"ios"`, or `"chromium"`)
 - `projectRoot` (optional): The project root directory (defaults to the repository root)
 - `uploadVisualTestArtifacts` (optional): Whether to upload visual test diff and actual images as artifacts
@@ -267,6 +267,50 @@ A new entry is only saved when the run actually changed the cache's contents -- 
 The official action supports web runners as well. At the moment, the action installs Playwright Chromium automatically before running Harness.
 
 If your workflow depends on a different browser setup, make that expectation explicit in your CI configuration.
+
+## Windows in CI
+
+The official action supports the `windows` runner. Run the job on a `windows-*` runner, deploy the app with `react-native run-windows` in an earlier step, then call the action with no `app` input — the Windows runner launches an already-deployed package by its identity (see the [Windows platform guide](/docs/platforms/windows)).
+
+```yaml
+jobs:
+  test-windows:
+    name: Test Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build and deploy the Windows app
+        run: npx react-native run-windows --arch x64 --no-launch --no-packager --logging
+
+      # Keep @v… in sync with the react-native-harness version in package.json
+      - name: Run React Native Harness
+        uses: callstackincubator/react-native-harness@v1.0.0
+        with:
+          runner: windows
+          packageManager: pnpm
+```
+
+The Windows toolchain (Visual Studio with the C++ workload, the Windows SDK, NuGet) is preinstalled on GitHub's `windows-*` images. As with Android and iOS, you can cache the build output between runs so unchanged native modules don't trigger a rebuild.
 
 ## Build Artifact Caching
 

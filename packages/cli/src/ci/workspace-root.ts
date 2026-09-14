@@ -34,6 +34,11 @@ export const resolveProjectRoot = (
  * GITHUB_OUTPUT is relative to the workspace root, matching what
  * downstream non-bash steps (actions/cache, actions/upload-artifact,
  * hashFiles(...)) resolve paths against.
+ *
+ * Emitted with forward slashes so the value is stable across runner OSes:
+ * `actions/cache` globs, `hashFiles()`, and a bash `working-directory` all
+ * accept `/` on Windows, whereas a raw `path.relative` result would be
+ * `apps\foo` there.
  */
 export const relativeToWorkspaceRoot = (target: string): string =>
-  path.relative(getWorkspaceRoot(), target) || '.';
+  (path.relative(getWorkspaceRoot(), target) || '.').split(path.sep).join('/');

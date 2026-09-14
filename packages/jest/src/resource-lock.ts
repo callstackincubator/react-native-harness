@@ -392,8 +392,21 @@ export const createResourceLockManager = (
               return;
             }
 
-            await writeJsonFileAtomic(paths.ownerFilePath, nextMetadata);
-            scopedLogger.debug('refreshed heartbeat for ticket %s', ticketId);
+            try {
+              await writeJsonFileAtomic(paths.ownerFilePath, nextMetadata);
+              scopedLogger.debug('refreshed heartbeat for ticket %s', ticketId);
+            } catch (error) {
+              // A failed refresh is not fatal by design: the lock goes stale
+              // and another holder reclaims it. Swallow it so a transient
+              // write error (e.g. the owner file racing a concurrent release,
+              // or an EPERM on Windows when the directory is being torn down)
+              // never surfaces as an unhandled rejection from this interval.
+              scopedLogger.debug(
+                'heartbeat refresh for ticket %s failed: %s',
+                ticketId,
+                error instanceof Error ? error.message : String(error),
+              );
+            }
           } finally {
             heartbeatInFlight = false;
           }

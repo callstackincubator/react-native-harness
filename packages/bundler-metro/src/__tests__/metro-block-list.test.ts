@@ -22,6 +22,11 @@ const withBlockList = (
 
 const HARNESS_CACHE_ROOT = '/p/.harness/cache';
 
+// Metro's `exclusionList` rewrites `/` in its patterns to `path.sep`, so a
+// blockList inherited from it only matches paths in the host OS's separator.
+// The harness's own patterns match either separator; these need the switch.
+const sys = (posixPath: string) => posixPath.split('/').join(path.sep);
+
 const getBlockList = (
   blockList: NonNullable<MetroConfig['resolver']>['blockList']
 ) => getHarnessBlockList(withBlockList(blockList), HARNESS_CACHE_ROOT);
@@ -148,7 +153,9 @@ describe('getHarnessBlockList', () => {
       const { blockList, dropped } = getBlockList(exclusionList());
 
       expect(dropped).toEqual([]);
-      expect(blockList.test('/p/src/__tests__/smoke.harness.ts')).toBe(false);
+      expect(blockList.test(sys('/p/src/__tests__/smoke.harness.ts'))).toBe(
+        false
+      );
     });
 
     it("keeps a project's own exclusions while still crawling tests", () => {
@@ -159,9 +166,11 @@ describe('getHarnessBlockList', () => {
       );
 
       expect(dropped).toEqual([]);
-      expect(blockList.test('/p/ios/build/Release/x.json')).toBe(true);
-      expect(blockList.test('/p/src/__tests__/smoke.harness.ts')).toBe(false);
-      expect(blockList.test(getHarnessManifestPath('/p'))).toBe(false);
+      expect(blockList.test(sys('/p/ios/build/Release/x.json'))).toBe(true);
+      expect(blockList.test(sys('/p/src/__tests__/smoke.harness.ts'))).toBe(
+        false
+      );
+      expect(blockList.test(getHarnessManifestPath(sys('/p')))).toBe(false);
     });
 
     it('keeps tests crawlable even inside an otherwise excluded directory', () => {
@@ -187,7 +196,7 @@ describe('getHarnessBlockList', () => {
         '/p/vendor/lib.js',
         '/p/src/app.tsx',
         '/p/ios/build/__tests__/nested.harness.ts',
-      ];
+      ].map(sys);
 
       for (const pattern of patterns) {
         const { blockList } = getBlockList(pattern);

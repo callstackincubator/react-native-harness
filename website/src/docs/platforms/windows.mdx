@@ -1,0 +1,87 @@
+import { PackageManagerTabs } from '@theme';
+
+# Windows
+
+React Native Harness runs tests against a deployed [React Native Windows](https://microsoft.github.io/react-native-windows/) app.
+
+## Overview
+
+Unlike Android and iOS, where Harness boots an emulator or simulator, the Windows runner works with an app you have **already deployed** to the machine. Harness resolves the app by its package identity, launches it, and tracks its process for the duration of the run. Build and deploy the app with `react-native run-windows` before invoking Harness.
+
+## Installation
+
+<PackageManagerTabs command="install --save-dev @react-native-harness/platform-windows" />
+
+## Configuration
+
+Import the Windows platform helper in your `rn-harness.config.mjs`:
+
+```javascript
+import { windowsPlatform } from '@react-native-harness/platform-windows';
+
+export default {
+  entryPoint: './index.js',
+  appRegistryComponentName: 'MyApp',
+  runners: [
+    windowsPlatform({
+      name: 'windows',
+      // The Identity/@Name from windows/<App>/Package.appxmanifest
+      packageName: 'MyApp',
+    }),
+  ],
+};
+```
+
+### Options
+
+| Option        | Type     | Default       | Description                                                                                                                              |
+| :------------ | :------- | :------------ | :------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`        | `string` | –             | Unique name for the runner.                                                                                                              |
+| `packageName` | `string` | –             | The `Identity/@Name` from `Package.appxmanifest`. Harness looks the deployed package up with `Get-AppxPackage -Name <packageName>`.       |
+| `appId`       | `string` | `'App'`       | The `Application/@Id` from `Package.appxmanifest`. Combined with the package family name into the AUMID used to activate the app.         |
+| `processName` | `string` | `packageName` | The app's process name (without `.exe`), used to detect whether it is still running.                                                     |
+
+### Finding the package identity
+
+Open `windows/<YourApp>/Package.appxmanifest` and look at the `Identity` and `Application` elements:
+
+```xml
+<Identity Name="MyApp" ... />
+...
+<Applications>
+  <Application Id="App" ... />
+</Applications>
+```
+
+Here `packageName` is `MyApp` and `appId` is `App` (the default).
+
+## Deploying the app
+
+The Windows runner never builds — deploy the app first:
+
+```bash
+npx react-native run-windows --arch x64 --no-launch --no-packager --logging
+```
+
+`--no-launch` registers the MSIX package without starting it (Harness starts it), and `--no-packager` keeps `run-windows` from starting its own Metro server on the port Harness wants.
+
+Then run the tests:
+
+```bash
+npx react-native-harness --harnessRunner windows
+```
+
+## Metro configuration
+
+Harness applies the same out-of-tree platform wiring that `react-native start` does (the `react-native` → `react-native-windows` resolver redirect and the Windows `InitializeCore`), so a plain `metro.config.js` works — you do **not** need to add a `windows` case to `resolver.resolveRequest` or `serializer.getModulesRunBeforeMainModule` yourself.
+
+## Requirements
+
+- Windows 10 or 11.
+- The React Native Windows toolchain (Visual Studio with the C++ workload, the Windows SDK) to build the app.
+- The app deployed via `react-native run-windows` before the run.
+- The harness Metro server reachable at the app's bundle URL (`http://localhost:8081` by default). An RNW **Debug** build points there out of the box.
+
+## CI
+
+The official GitHub Action supports the `windows` runner. Run the job on a `windows-*` runner, deploy the app in an earlier step, then invoke the action without an `app` input — see [Running in CI/CD](/docs/guides/ci-cd#windows-in-ci).

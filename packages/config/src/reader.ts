@@ -6,6 +6,7 @@ import {
 } from './errors.js';
 import path from 'node:path';
 import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { ZodError } from 'zod';
 
@@ -28,7 +29,11 @@ const importUp = async (
 
       try {
         if (ext === '.mjs') {
-          rawConfig = await import(filePathWithExt).then(
+          // A dynamic import() of an absolute path only accepts a file:// URL.
+          // On POSIX the bare path happens to work; on Windows it is read as a
+          // URL and `C:` is rejected as an unknown scheme
+          // (ERR_UNSUPPORTED_ESM_URL_SCHEME). pathToFileURL normalizes both.
+          rawConfig = await import(pathToFileURL(filePathWithExt).href).then(
             (module) => module.default
           );
         } else {

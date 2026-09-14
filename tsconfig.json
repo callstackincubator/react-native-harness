@@ -64,6 +64,9 @@
       "path": "./packages/coverage-ios"
     },
     {
+      "path": "./packages/platform-windows"
+    },
+    {
       "path": "./website"
     }
   ]

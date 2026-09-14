@@ -4,7 +4,10 @@ import { getHarnessManifestPath, getHarnessRootPath } from '../paths.js';
 
 describe('bundler metro paths', () => {
   it('resolves the harness root under the project root', () => {
-    const projectRoot = '/tmp/some-project';
+    // An absolute path on the host OS -- `/tmp/...` is not absolute on
+    // Windows, so `path.resolve` would prepend the cwd drive and the
+    // assertions below would never match.
+    const projectRoot = path.resolve('some-project');
 
     expect(getHarnessRootPath(projectRoot)).toBe(
       path.join(projectRoot, '.harness')

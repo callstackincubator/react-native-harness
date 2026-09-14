@@ -11,7 +11,7 @@ const getPlatform = (): Platform | PlatformKeplerStatic => {
 };
 
 export type DeviceDescriptor = {
-  platform: 'ios' | 'android' | 'vega' | 'web';
+  platform: 'ios' | 'android' | 'vega' | 'web' | 'windows';
   manufacturer: string;
   model: string;
   osVersion: string;
@@ -53,6 +53,15 @@ export const getDeviceDescriptor = (): DeviceDescriptor => {
       manufacturer: '',
       model: '',
       osVersion: '',
+    };
+  }
+
+  if (platform.OS === 'windows') {
+    return {
+      platform: 'windows',
+      manufacturer: '',
+      model: '',
+      osVersion: String(platform.constants?.osVersion ?? ''),
     };
   }
 
