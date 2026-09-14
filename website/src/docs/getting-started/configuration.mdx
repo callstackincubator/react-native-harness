@@ -102,7 +102,7 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `bundleStartTimeout`               | Bundle start timeout in milliseconds (default: `60000`).                                                                                                  |
 | `maxAppRestarts`                   | Maximum number of automatic app relaunch attempts while Harness is waiting for startup (default: `2`).                                                    |
 | `eagerPrewarm`                     | Start building the Metro bundle while the platform is still booting so the first bundle is ready sooner (default: `true`).                                |
-| `permissions`                      | Enable platform-specific permission prompt automation (default: `false`). On iOS, this controls whether Harness starts the XCTest-based permission helper. |
+| `permissions`                      | Enable platform-specific permission prompt automation (default: `false`). On iOS, this controls whether Harness starts the agent-device permission watchdog. Requires Node.js 22.12 or newer. |
 | `resetEnvironmentBetweenTestFiles` | How to reset the environment between test files: `true`/`'process'` restarts the app process (default), `'runtime'` reloads the JS runtime in place (falling back to a process restart on failure), `false` disables resetting. |
 | `detectNativeCrashes`              | Detect native app crashes during startup and test execution (default: `true`).                                                                            |
 | `crashDetectionInterval`           | Interval in milliseconds to check for native crashes (default: `500`).                                                                                    |
@@ -198,7 +198,7 @@ Use the `permissions` flag to opt into Harness-managed permission prompt handlin
 
 **Default:** `false`
 
-When `permissions` is `false`, Harness does not start platform-specific permission automation helpers. On iOS that means no XCTest agent session is started for permission auto-accept. Physical iOS devices still require `device.codeSign` in the runner config when you set `permissions: true`.
+When `permissions` is `false`, Harness does not start platform-specific permission automation helpers. On iOS that means no agent-device UI test runner is prepared for permission auto-accept. Physical iOS devices still require `device.codeSign` in the runner config when you set `permissions: true`, and personal teams may also need `device.codeSign.runnerBundleId`. See the [permissions guide](/docs/guides/permissions).
 
 The platform ready timeout controls how long React Native Harness waits for the selected device, simulator, or emulator to become usable. This includes device discovery, simulator or emulator boot, and platform runtime setup before the app is launched.
 
