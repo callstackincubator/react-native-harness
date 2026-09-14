@@ -10,11 +10,12 @@ import {
 } from '@react-native-harness/tools';
 import { spawn as nodeSpawn } from 'node:child_process';
 import type { ChildProcessByStdio } from 'node:child_process';
-import { access, rm } from 'node:fs/promises';
+import { access, appendFile, rm, writeFile } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
 import {
   getAvdConfigPath,
   getAvdDirectory,
+  getAvdIniPath,
   readAvdConfig,
 } from './avd-config.js';
 import {
@@ -201,12 +202,6 @@ const ensureAvdConfigExists = async (name: string): Promise<string> => {
   return configPath;
 };
 
-const getAvdIniPath = (name: string): string => {
-  const avdHome =
-    process.env.ANDROID_AVD_HOME ?? `${process.env.HOME}/.android/avd`;
-  return `${avdHome}/${name}.ini`;
-};
-
 const ensureAvdIniExists = async ({
   name,
   apiLevel,
@@ -217,10 +212,16 @@ const ensureAvdIniExists = async ({
   const iniPath = getAvdIniPath(name);
 
   const avdDirectory = getAvdDirectory(name);
-  await spawn('bash', [
-    '-lc',
-    `printf '%s\n%s\n%s\n%s\n' 'avd.ini.encoding=UTF-8' 'path=${avdDirectory}' 'path.rel=avd/${name}.avd' 'target=android-${apiLevel}' > "${iniPath}"`,
-  ]);
+  await writeFile(
+    iniPath,
+    [
+      'avd.ini.encoding=UTF-8',
+      `path=${avdDirectory}`,
+      `path.rel=avd/${name}.avd`,
+      `target=android-${apiLevel}`,
+      '',
+    ].join('\n')
+  );
 
   return iniPath;
 };
@@ -500,12 +501,24 @@ export const createAvd = async ({
 
   await verifyAndroidEmulatorSdk(apiLevel);
   await ensureAvdProfileAvailable(profile);
-  await spawn('bash', [
-    '-lc',
-    `printf 'no\n' | "${getAvdManagerBinaryPath()}" create avd --force --name "${name}" --package "${systemImagePackage}" --device "${profile}" -p "${getAvdDirectory(
-      name
-    )}"`,
-  ]);
+  // avdmanager asks whether to create a custom hardware profile; answer "no".
+  await spawn(
+    getAvdManagerBinaryPath(),
+    [
+      'create',
+      'avd',
+      '--force',
+      '--name',
+      name,
+      '--package',
+      systemImagePackage,
+      '--device',
+      profile,
+      '-p',
+      getAvdDirectory(name),
+    ],
+    { stdin: { string: 'no\n' } }
+  );
   await ensureAvdIniExists({ name, apiLevel });
   const configPath = await ensureAvdConfigExists(name);
   // hw.cpu.ncore is baked into config.ini (rather than passed as a `-cores`
@@ -513,30 +526,25 @@ export const createAvd = async ({
   // snapshots require an identical hardware config to load, so the vCPU
   // count must be fixed at AVD-creation time and stay consistent across
   // boots.
-  await spawn('bash', [
-    '-lc',
-    `printf '%s\n%s\n%s\n' 'disk.dataPartition.size=${diskSize}' 'vm.heapSize=${heapSize}' 'hw.cpu.ncore=${getEmulatorCpuCores()}' >> "${configPath}"`,
-  ]);
+  await appendFile(
+    configPath,
+    [
+      `disk.dataPartition.size=${diskSize}`,
+      `vm.heapSize=${heapSize}`,
+      `hw.cpu.ncore=${getEmulatorCpuCores()}`,
+      '',
+    ].join('\n')
+  );
 };
 
 export const deleteAvd = async (name: string): Promise<void> => {
-  await rm(
-    `${
-      process.env.ANDROID_AVD_HOME ?? `${process.env.HOME}/.android/avd`
-    }/${name}.avd`,
-    {
-      force: true,
-      recursive: true,
-    }
-  );
-  await rm(
-    `${
-      process.env.ANDROID_AVD_HOME ?? `${process.env.HOME}/.android/avd`
-    }/${name}.ini`,
-    {
-      force: true,
-    }
-  );
+  await rm(getAvdDirectory(name), {
+    force: true,
+    recursive: true,
+  });
+  await rm(getAvdIniPath(name), {
+    force: true,
+  });
 };
 
 export const startEmulator = async (

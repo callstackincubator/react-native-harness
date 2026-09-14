@@ -38,6 +38,14 @@ export const getDefaultUnixAndroidSdkRoot = ({
     return path.join(homeDirectory, 'Android', 'Sdk');
   }
 
+  if (platform === 'win32') {
+    return path.join(
+      process.env.LOCALAPPDATA ?? path.join(homeDirectory, 'AppData', 'Local'),
+      'Android',
+      'Sdk',
+    );
+  }
+
   return null;
 };
 
@@ -56,9 +64,8 @@ const pathExists = async (filePath: string): Promise<boolean> => {
   }
 };
 
-const quoteShell = (value: string): string => {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-};
+// Enough "y" answers for every license prompt sdkmanager may show.
+const SDK_MANAGER_CONSENT_ANSWERS = 100;
 
 const downloadText = async (url: string): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -217,18 +224,16 @@ const ensureAndroidCommandLineTools = async (
   }
 };
 
-const acceptAndroidLicenses = async (sdkRoot: string): Promise<void> => {
-  const sdkManagerBinaryPath = getSdkManagerBinaryPath(sdkRoot);
-
+// Answers "y" to every prompt, like piping `yes` into sdkmanager.
+const runSdkManagerWithConsent = async (
+  sdkRoot: string,
+  args: readonly string[],
+): Promise<void> => {
   await spawn(
-    'bash',
-    [
-      '-lc',
-      `yes | ${quoteShell(sdkManagerBinaryPath)} --sdk_root=${quoteShell(
-        sdkRoot,
-      )} --licenses >/dev/null`,
-    ],
+    getSdkManagerBinaryPath(sdkRoot),
+    [`--sdk_root=${sdkRoot}`, ...args],
     {
+      stdin: { string: 'y\n'.repeat(SDK_MANAGER_CONSENT_ANSWERS) },
       env: getAndroidProcessEnv({
         ...process.env,
         ANDROID_HOME: sdkRoot,
@@ -236,6 +241,10 @@ const acceptAndroidLicenses = async (sdkRoot: string): Promise<void> => {
       }),
     },
   );
+};
+
+const acceptAndroidLicenses = async (sdkRoot: string): Promise<void> => {
+  await runSdkManagerWithConsent(sdkRoot, ['--licenses']);
 };
 
 const getPackageVerificationPath = (
@@ -290,33 +299,13 @@ const installAndroidSdkPackages = async (
     return;
   }
 
-  const sdkManagerBinaryPath = getSdkManagerBinaryPath(sdkRoot);
-  const packageArgs = packages
-    .map((packageName) => quoteShell(packageName))
-    .join(' ');
-
   androidEnvironmentLogger.info(
     'Installing missing Android SDK packages: %s',
     packages.join(', '),
   );
 
   await acceptAndroidLicenses(sdkRoot);
-  await spawn(
-    'bash',
-    [
-      '-lc',
-      `yes | ${quoteShell(sdkManagerBinaryPath)} --sdk_root=${quoteShell(
-        sdkRoot,
-      )} ${packageArgs}`,
-    ],
-    {
-      env: getAndroidProcessEnv({
-        ...process.env,
-        ANDROID_HOME: sdkRoot,
-        ANDROID_SDK_ROOT: sdkRoot,
-      }),
-    },
-  );
+  await runSdkManagerWithConsent(sdkRoot, packages);
 };
 
 export const getAndroidSdkRoot = (
@@ -535,20 +524,40 @@ export const initializeAndroidProcessEnv = (): void => {
   Object.assign(process.env, getAndroidProcessEnv());
 };
 
+// On Windows, SDK binaries ship as `.exe` and command-line tools as `.bat`.
+// Spawning handles either form, but existence checks need the real file name.
+const getSdkExecutableName = (
+  name: string,
+  windowsExtension: '.exe' | '.bat',
+  platform: NodeJS.Platform = process.platform,
+): string => (platform === 'win32' ? `${name}${windowsExtension}` : name);
+
 export const getAdbBinaryPath = (
   sdkRoot: string = getRequiredAndroidSdkRoot(),
-): string => path.join(sdkRoot, 'platform-tools', 'adb');
+): string =>
+  path.join(sdkRoot, 'platform-tools', getSdkExecutableName('adb', '.exe'));
 
 export const getEmulatorBinaryPath = (
   sdkRoot: string = getRequiredAndroidSdkRoot(),
-): string => path.join(sdkRoot, 'emulator', 'emulator');
+): string =>
+  path.join(sdkRoot, 'emulator', getSdkExecutableName('emulator', '.exe'));
 
 export const getSdkManagerBinaryPath = (
   sdkRoot: string = getRequiredAndroidSdkRoot(),
 ): string =>
-  path.join(sdkRoot, ...CMDLINE_TOOLS_PATH_SEGMENTS, 'bin', 'sdkmanager');
+  path.join(
+    sdkRoot,
+    ...CMDLINE_TOOLS_PATH_SEGMENTS,
+    'bin',
+    getSdkExecutableName('sdkmanager', '.bat'),
+  );
 
 export const getAvdManagerBinaryPath = (
   sdkRoot: string = getRequiredAndroidSdkRoot(),
 ): string =>
-  path.join(sdkRoot, ...CMDLINE_TOOLS_PATH_SEGMENTS, 'bin', 'avdmanager');
+  path.join(
+    sdkRoot,
+    ...CMDLINE_TOOLS_PATH_SEGMENTS,
+    'bin',
+    getSdkExecutableName('avdmanager', '.bat'),
+  );
