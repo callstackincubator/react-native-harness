@@ -66,6 +66,12 @@ const DAEMON_STOP_TIMEOUT_MS = 60_000;
 const WATCHDOG_DRAIN_TIMEOUT_MS = 2_000;
 /** Consecutive unclassified failures before the watchdog gives up. */
 const MAX_CONSECUTIVE_UNKNOWN_FAILURES = 3;
+/**
+ * How many prompts may be dismissed back to back without pausing. A chain of
+ * prompts is normal; an endless one is not, and skipping the gap forever would
+ * turn the loop into a busy wait against the runner.
+ */
+const MAX_CONSECUTIVE_FAST_TICKS = 3;
 
 /**
  * Buttons the watchdog is allowed to tap, in priority order. Carried over from
@@ -97,6 +103,15 @@ const DEVICE_IN_USE_ERROR_CODE = 'DEVICE_IN_USE';
  */
 const REFUSED_CLEAN_MESSAGE =
   'Refusing to clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH';
+/**
+ * The runner reports "no button I am allowed to press" as a bare message with
+ * no code: `RunnerTests+Alert.swift` returns
+ * `ErrorPayload(message: "alert accept button not found")`, and
+ * `ErrorPayload.code` is optional and left unset there (only "no alert at all"
+ * is typed, as `ALERT_NOT_FOUND`). Prose is therefore the only discriminator
+ * available for this case.
+ */
+const ACCEPT_BUTTON_NOT_FOUND_MESSAGE = 'alert accept button not found';
 const RUNNER_BUSY_ERROR_CODE = 'RUNNER_BUSY';
 const ALERT_NOT_FOUND_RUNNER_ERROR_CODE = 'ALERT_NOT_FOUND';
 
@@ -346,6 +361,9 @@ export const isDeviceInUseError = (error: unknown): boolean =>
 export const isRefusedRunnerCleanError = (error: unknown): boolean =>
   getErrorMessage(error).includes(REFUSED_CLEAN_MESSAGE);
 
+export const isAcceptButtonNotFoundError = (error: unknown): boolean =>
+  getErrorMessage(error).includes(ACCEPT_BUTTON_NOT_FOUND_MESSAGE);
+
 /**
  * A claimed device is never retried: the owner is a live agent-device session,
  * usually the developer's own, and quietly taking it over would break it.
@@ -558,16 +576,30 @@ export const createIosPermissionAgent = (
     return true;
   };
 
-  /** Resolves false when the watchdog must stop. */
-  const pollOnce = async (): Promise<boolean> => {
-    if (!client) {
-      return false;
-    }
+  type PollOutcome = {
+    /** False when the watchdog must stop for the rest of the run. */
+    continue: boolean;
+    /** True when a prompt was dismissed, so the next tick runs immediately. */
+    handled: boolean;
+  };
 
+  const CONTINUE: PollOutcome = { continue: true, handled: false };
+  const HANDLED: PollOutcome = { continue: true, handled: true };
+  const STOP: PollOutcome = { continue: false, handled: false };
+
+  /**
+   * Falls back to reading the prompt and tapping a known positive label. This
+   * is what handles the sheets `alert accept` refuses, above all the iOS
+   * location prompt (`Allow Once` / `Allow While Using App` / `Don't Allow`),
+   * where no button carries a label the runner recognises as an accept.
+   */
+  const tapPositiveLabel = async (
+    agentDeviceClient: AgentDeviceClient
+  ): Promise<PollOutcome> => {
     let alertResult: unknown;
 
     try {
-      alertResult = await client.command.alert({
+      alertResult = await agentDeviceClient.command.alert({
         action: 'get',
         platform: 'ios',
         udid: target.udid,
@@ -579,19 +611,16 @@ export const createIosPermissionAgent = (
       }
 
       if (isTransientWatchdogError(error)) {
-        consecutiveUnknownFailures = 0;
         permissionAgentLogger.debug(
-          'permission watchdog poll skipped: %s',
+          'reading the permission prompt was skipped: %s',
           getErrorMessage(error)
         );
 
-        return true;
+        return CONTINUE;
       }
 
-      return !recordUnknownFailure('poll', error);
+      return recordUnknownFailure('prompt read', error) ? STOP : CONTINUE;
     }
-
-    consecutiveUnknownFailures = 0;
 
     const items = getAlertItems(alertResult);
     const label = findLabelToTap(items);
@@ -602,7 +631,7 @@ export const createIosPermissionAgent = (
         items.join(', ')
       );
 
-      return true;
+      return CONTINUE;
     }
 
     const selector = buildLabelSelector(label);
@@ -613,7 +642,7 @@ export const createIosPermissionAgent = (
         label
       );
 
-      return true;
+      return CONTINUE;
     }
 
     permissionAgentLogger.debug(
@@ -623,7 +652,7 @@ export const createIosPermissionAgent = (
     );
 
     try {
-      await client.interactions.press({
+      await agentDeviceClient.interactions.press({
         platform: 'ios',
         udid: target.udid,
         selector,
@@ -640,26 +669,84 @@ export const createIosPermissionAgent = (
           getErrorMessage(error)
         );
 
-        return true;
+        return CONTINUE;
       }
 
-      return !recordUnknownFailure(`tap of "${label}"`, error);
+      return recordUnknownFailure(`tap of "${label}"`, error) ? STOP : CONTINUE;
     }
 
-    return true;
+    return HANDLED;
+  };
+
+  /**
+   * Accept-first: one round trip both detects the prompt and presses its
+   * button, which halves the latency on the common two-button prompts. The
+   * runner cannot press the wrong button doing this — verified against
+   * `RunnerTests+Alert.swift`, whose `chooseAlertButton(_:action:)` for
+   * "accept" returns either a button whose label is in its accept list
+   * (`ok`, `allow`, `yes`, `continue`, `done`, `open`, `open settings`,
+   * `confirm*`) or, only for a single-button alert, that button when its label
+   * is *not* in the dismiss list (`cancel`, `close`, `dismiss`, `don't allow`,
+   * `not now`, `no`, `keep browsing`, `later`). The two lists are disjoint, so
+   * a deny or dismiss button is never activated. Anything it will not press
+   * reports "alert accept button not found" and falls through below.
+   */
+  const pollOnce = async (): Promise<PollOutcome> => {
+    if (!client) {
+      return STOP;
+    }
+
+    const agentDeviceClient = client;
+
+    try {
+      await agentDeviceClient.command.alert({
+        action: 'accept',
+        platform: 'ios',
+        udid: target.udid,
+        timeoutMs: ALERT_COMMAND_TIMEOUT_MS,
+      });
+    } catch (error) {
+      if (isDeviceInUseError(error)) {
+        throw createDeviceInUseError(error);
+      }
+
+      if (isAcceptButtonNotFoundError(error)) {
+        consecutiveUnknownFailures = 0;
+
+        return await tapPositiveLabel(agentDeviceClient);
+      }
+
+      if (isTransientWatchdogError(error)) {
+        consecutiveUnknownFailures = 0;
+        permissionAgentLogger.debug(
+          'permission watchdog poll skipped: %s',
+          getErrorMessage(error)
+        );
+
+        return CONTINUE;
+      }
+
+      return recordUnknownFailure('poll', error) ? STOP : CONTINUE;
+    }
+
+    consecutiveUnknownFailures = 0;
+    permissionAgentLogger.debug('accepted a system permission prompt');
+
+    return HANDLED;
   };
 
   // Serialised on purpose: the runner handles one command at a time, and
   // overlapping requests are what produce RUNNER_BUSY storms.
   const runWatchdog = async (): Promise<void> => {
     const { signal } = watchdogAbortController;
+    let consecutiveFastTicks = 0;
 
     while (!signal.aborted) {
-      if (appRunning) {
-        let shouldContinue: boolean;
+      let outcome: PollOutcome = CONTINUE;
 
+      if (appRunning) {
         try {
-          shouldContinue = await pollOnce();
+          outcome = await pollOnce();
         } catch (error) {
           permissionAgentLogger.error(
             'stopping the iOS permission watchdog: %s',
@@ -669,7 +756,7 @@ export const createIosPermissionAgent = (
           return;
         }
 
-        if (!shouldContinue) {
+        if (!outcome.continue) {
           return;
         }
       }
@@ -677,6 +764,17 @@ export const createIosPermissionAgent = (
       if (signal.aborted) {
         return;
       }
+
+      // A dismissed prompt is often followed straight away by the next one, so
+      // the gap is skipped after a successful accept or tap -- but only a few
+      // times in a row, so a prompt that never actually goes away cannot turn
+      // the loop into a busy wait.
+      if (outcome.handled && consecutiveFastTicks < MAX_CONSECUTIVE_FAST_TICKS) {
+        consecutiveFastTicks += 1;
+        continue;
+      }
+
+      consecutiveFastTicks = 0;
 
       // The interval is the gap between calls, not a fixed period, so a slow
       // round trip never queues another poll behind itself.

@@ -45,6 +45,24 @@ const alertNotFoundError = () =>
     runnerErrorCode: 'ALERT_NOT_FOUND',
   });
 
+/**
+ * What the runner reports when it will not press any button on the prompt.
+ * `ErrorPayload.code` is left unset for this case, so there is no code to
+ * match on.
+ */
+const acceptButtonNotFoundError = () =>
+  createAgentDeviceError('COMMAND_FAILED', 'alert accept button not found');
+
+const promptWithItems = (message: string, items: string[]) => {
+  mocks.alert.mockImplementation(async ({ action }: { action: string }) => {
+    if (action === 'accept') {
+      throw acceptButtonNotFoundError();
+    }
+
+    return { message, items };
+  });
+};
+
 let projectRoot: string;
 let homeDir: string;
 
@@ -82,6 +100,7 @@ describe('iOS permission agent', () => {
     mocks.prepare.mockResolvedValue({});
     mocks.open.mockResolvedValue({});
     mocks.alert.mockRejectedValue(alertNotFoundError());
+    mocks.press.mockResolvedValue({});
     mocks.press.mockResolvedValue({});
     mocks.closeSession.mockResolvedValue({});
     mocks.runCommand.mockResolvedValue({ stdout: '', stderr: '' });
@@ -167,11 +186,39 @@ describe('iOS permission agent', () => {
     await agent.dispose();
   });
 
-  it('taps the first known positive button on a prompt', async () => {
-    mocks.alert.mockResolvedValue({
-      message: 'Allow “Playground” to use your location?',
-      items: ['Allow Once', 'Allow While Using App', 'Don’t Allow'],
-    });
+  it('accepts a prompt in a single round trip when the runner can press it', async () => {
+    mocks.alert.mockResolvedValue({});
+
+    const agent = createAgent();
+    await agent.prepare();
+    agent.setAppRunning(true);
+
+    await vi.waitFor(() => expect(mocks.alert).toHaveBeenCalled());
+
+    expect(mocks.alert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'accept',
+        platform: 'ios',
+        udid: 'sim-udid',
+      })
+    );
+    // One round trip: no `alert get` and no separate press.
+    expect(
+      mocks.alert.mock.calls.filter(
+        ([options]) => (options as { action: string }).action === 'get'
+      )
+    ).toHaveLength(0);
+    expect(mocks.press).not.toHaveBeenCalled();
+
+    await agent.dispose();
+  });
+
+  it('falls back to get + press when accept finds no button it may press', async () => {
+    promptWithItems('Allow “Playground” to use your location?', [
+      'Allow Once',
+      'Allow While Using App',
+      'Don’t Allow',
+    ]);
 
     const agent = createAgent();
     await agent.prepare();
@@ -189,10 +236,7 @@ describe('iOS permission agent', () => {
   });
 
   it('never taps a negative button', async () => {
-    mocks.alert.mockResolvedValue({
-      message: 'Delete everything?',
-      items: ['Don’t Allow', 'Cancel'],
-    });
+    promptWithItems('Delete everything?', ['Don’t Allow', 'Cancel']);
 
     const agent = createAgent();
     await agent.prepare();
@@ -425,10 +469,7 @@ describe('iOS permission agent', () => {
   });
 
   it('taps a padded label using its trimmed form', async () => {
-    mocks.alert.mockResolvedValue({
-      message: 'Allow access?',
-      items: ['  Allow  ', 'Don’t Allow'],
-    });
+    promptWithItems('Allow access?', ['  Allow  ', 'Don’t Allow']);
 
     const agent = createAgent();
     await agent.prepare();
