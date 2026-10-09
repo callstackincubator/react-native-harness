@@ -484,6 +484,9 @@ export const createHarnessSession = async (
 
   const setupStartedAt = Date.now();
   const { harnessConfig, platform, projectRoot, configProjectRoot } = await loadConfig(globalConfig);
+  // Metro platform for prewarm and startup detection. Vega apps request
+  // "kepler" bundles while the harness platform id stays "vega".
+  const bundlePlatform = platform.bundlePlatform ?? platform.platformId;
   applyEnvVars(harnessConfig, globalConfig);
 
   const diagnostics = createDiagnostics({
@@ -649,7 +652,7 @@ export const createHarnessSession = async (
               const prewarmSpan = diagnostics.start('metro.prewarm');
               instance
                 .prewarm({
-                  platform: platform.platformId,
+                  platform: bundlePlatform,
                   signal: sessionController.signal,
                 })
                 .then((completed) => prewarmSpan.end({ completed }))
@@ -731,7 +734,7 @@ export const createHarnessSession = async (
     const appReadyBaseOptions: AppReadyOptions = {
       metroInstance,
       bridge,
-      platformId: platform.platformId,
+      platformId: bundlePlatform,
       bundleStartTimeout: runtimeConfig.bundleStartTimeout ?? 60000,
       readyTimeout: runtimeConfig.bridgeTimeout,
       maxAppRestarts: runtimeConfig.maxAppRestarts ?? 2,

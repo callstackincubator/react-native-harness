@@ -186,6 +186,12 @@ export type HarnessPlatform<TConfig = Record<string, unknown>> = {
    * must satisfy is `MetroConfigEnhancer` in `@react-native-harness/bundler-metro`.
    */
   metroConfigEnhancer?: string;
+  /**
+   * The `platform` value the app requests from Metro when it differs from
+   * `platformId`. Used for bundle prewarming and startup detection. Defaults
+   * to `platformId`.
+   */
+  bundlePlatform?: string;
 };
 
 export type AndroidEmulatorRunTarget = {

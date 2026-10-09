@@ -1,0 +1,25 @@
+schema-version = 1
+
+[package]
+title = "Harness Playground for Vega"
+version = "0.0.1"
+id = "com.harnessplayground.vega"
+
+[os.version]
+min = "1.2"
+target = "1.2"
+
+[needs]
+[[needs.module]]
+id = "/com.amazon.vega.os@IVega_1_2"
+
+[[needs.module]]
+id = "/com.amazon.kepler.keplerscript_4@IKeplerScript_0"
+
+
+[components]
+[[components.interactive]]
+id = "com.harnessplayground.vega.main"
+runtime-module = "/com.amazon.kepler.runtime.react_native_kepler_4@IReactNativeKepler_0"
+launch-type = "singleton"
+categories = ["com.amazon.category.main"]

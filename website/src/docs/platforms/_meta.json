@@ -18,5 +18,10 @@
     "type": "file",
     "name": "windows",
     "label": "Windows"
+  },
+  {
+    "type": "file",
+    "name": "vega",
+    "label": "Vega (Fire TV)"
   }
 ]
