@@ -51,7 +51,7 @@ export default {
 };
 ```
 
-Set `"useSystemJsBundles": false` in the `kepler` section of your `package.json` (Harness serves the whole bundle from Metro), build a Debug package, then point `HARNESS_APP_PATH` at it. The runner
+Build a Debug package, then point `HARNESS_APP_PATH` at it. The runner
 starts the virtual device when needed, installs the package, forwards Metro's
 port to the device and launches the app:
 

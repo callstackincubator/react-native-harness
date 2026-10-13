@@ -9,7 +9,7 @@ A React Native for Vega app used to run React Native Harness on the Vega Virtual
 
 ## How to run React Native Harness?
 
-Build a debug package first. Debug builds load the JavaScript bundle from Metro, which is what Harness needs. The app opts out of Vega system bundles (`kepler.useSystemJsBundles` in `package.json`) because Harness serves the whole bundle itself:
+Build a debug package first. Debug builds load the JavaScript bundle from Metro, which is what Harness needs:
 
 ```sh
 pnpm build:debug

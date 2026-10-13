@@ -361,7 +361,7 @@ For Rock projects:
 
 ## Vega in CI
 
-The Vega SDK and the Vega Virtual Device are not available on GitHub-hosted runners, so Vega jobs need a self-hosted macOS or Ubuntu runner with the SDK installed (`source ~/vega/env` in the runner's shell) and either a virtual device or a Fire TV in developer mode on the runner's network. Build the Debug package in an earlier step and pass it through the `app` input (see the [Vega platform guide](/docs/platforms/vega)). The repository's own `e2e-tests.yml` has an `e2e-vega` job of this shape, gated on `workflow_dispatch` with `platform: vega` and a runner carrying the `vega` label.
+The Vega SDK and the Vega Virtual Device are not available on GitHub-hosted runners, so Vega jobs need a self-hosted macOS or Ubuntu runner with the SDK installed (`source ~/vega/env` in the runner's shell) and either a virtual device or a Fire TV in developer mode on the runner's network. Build the Debug package in an earlier step and pass it through the `app` input (see the [Vega platform guide](/docs/platforms/vega)). The repository's own [`e2e-tests.yml`](https://github.com/callstackincubator/react-native-harness/blob/main/.github/workflows/e2e-tests.yml) has an `e2e-vega` job of this shape, gated on `workflow_dispatch` with `platform: vega` and a runner carrying the `vega` label.
 
 ```yaml
 jobs:

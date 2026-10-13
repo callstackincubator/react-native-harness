@@ -31,7 +31,5 @@ export default {
   bridgeTimeout: 120000,
   testTimeout: 10000,
   resetEnvironmentBetweenTestFiles: 'runtime',
-  unstable__enableMetroCache: true,
   forwardClientLogs: true,
-  disableViewFlattening: true,
 };

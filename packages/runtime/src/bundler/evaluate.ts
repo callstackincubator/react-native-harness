@@ -1,7 +1,15 @@
 import { MalformedModuleError } from './errors.js';
+import type { ModuleId } from '../mocker/types.js';
+
+// Metro emits `__r(123)` by default; custom module id factories (Vega
+// system bundles, for example) emit quoted string ids such as `__r("1a27")`.
+const REQUIRE_CALL_PATTERN = /__r\((\d+|"[^"]*"|'[^']*')\)/g;
+
+const parseModuleId = (raw: string): ModuleId =>
+  raw.startsWith('"') || raw.startsWith("'") ? raw.slice(1, -1) : Number(raw);
 
 export const evaluateModule = (moduleJs: string, modulePath: string): void => {
-  const __rMatches = Array.from(moduleJs.matchAll(/__r\((\d+)\)/g));
+  const __rMatches = Array.from(moduleJs.matchAll(REQUIRE_CALL_PATTERN));
 
   if (__rMatches.length === 0) {
     throw new MalformedModuleError(modulePath, 'No __r function found');
@@ -15,7 +23,7 @@ export const evaluateModule = (moduleJs: string, modulePath: string): void => {
     throw new MalformedModuleError(modulePath, 'No __r parameter found');
   }
 
-  const moduleId = Number(__rParam);
+  const moduleId = parseModuleId(__rParam);
 
   // This is important as if module was already initialized, it would not be re-initialized
   global.__resetModule(moduleId);

@@ -67,19 +67,6 @@ VirtualDevice : tv - aarch64 - OS - amazon-ab123456cd789012
 
 ## Building and deploying the app
 
-Harness serves the whole JavaScript bundle from its own Metro server, so the app must be built as a regular bundle rather than a split "system bundle" one. Opt out of system bundles in the `kepler` section of `package.json`:
-
-```json
-{
-  "kepler": {
-    "projectType": "application",
-    "appName": "MyApp",
-    "targets": ["tv"],
-    "useSystemJsBundles": false
-  }
-}
-```
-
 Harness needs a **Debug** package, because debug builds load the JavaScript bundle from Metro:
 
 ```bash
@@ -115,7 +102,9 @@ The device must be on the same network as your machine.
 
 ## Metro configuration
 
-Harness applies the same out-of-tree platform wiring that `react-native start` gets from `@amazon-devices/kepler-cli-platform` (the `react-native` → `@amazon-devices/react-native-kepler` resolver redirect and the `kepler` platform), so a plain `metro.config.js` works.
+Harness applies the same out-of-tree platform wiring that `react-native start` gets from `@amazon-devices/kepler-cli-platform` (the `react-native` → `@amazon-devices/react-native-kepler` resolver redirect and the `kepler` platform), so a plain `metro.config.js` works. Vega system bundles are honoured too: when the app uses them (the default), Harness applies the plugin's split-bundle config so React Native comes from the OS copy and the app bundle stays small; with `kepler.useSystemJsBundles: false` the whole bundle is served by Harness.
+
+Platform-specific test files use the `vega` suffix, for example `settings.vega.harness.ts`, while `Platform.OS` inside tests is `'kepler'`.
 
 Vega apps load the bundle from `http://localhost:8081` on the device. Harness reverse-forwards that port to its Metro server with `vega device start-port-forwarding`. When Harness has to run Metro on a different port, it maps the ports with the SDK's `vda` tool, and fails with a clear error if `vda` is not available. `vda` identifies devices by adb-style serials, so this fallback works with a single attached device, or with a physical device whose serial `vda` reports; with a virtual device and a Fire TV attached at the same time keep Metro on 8081.
 
@@ -123,9 +112,6 @@ Vega apps load the bundle from `http://localhost:8081` on the device. Harness re
 
 - `@react-native-harness/ui` (`screen`, `userEvent`, screenshots) has no Vega native module yet, so test files importing it fail to load on Vega.
 - Crash detection relies on the app process disappearing and on the device log stream (Vega OS reports the kill reason there, for example `AppNotResponding`). Minidumps are not collected.
-- `Platform.OS` is `'kepler'` inside tests. The platform-specific file suffix for Harness stays `vega`, for example `settings.vega.harness.ts`.
-- React Native for Vega 0.83 runs the New Architecture only.
-- Split "system bundle" builds are not supported yet; set `useSystemJsBundles: false` as shown above.
 
 ## Requirements
 

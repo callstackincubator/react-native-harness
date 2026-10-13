@@ -12,8 +12,7 @@
     "appName": "HarnessPlaygroundVega",
     "targets": [
       "tv"
-    ],
-    "useSystemJsBundles": false
+    ]
   },
   "dependencies": {
     "@amazon-devices/react-native-kepler": "~4.0.0",

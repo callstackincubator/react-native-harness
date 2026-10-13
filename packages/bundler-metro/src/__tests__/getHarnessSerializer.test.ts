@@ -184,6 +184,35 @@ describe('getHarnessSerializer', () => {
     expect((result as { code: string }).code).toContain('test("x", () => {}');
   });
 
+  it('assigns ids to every graph module before the first processModuleFilter call, like Metro does', async () => {
+    const serializer = getHarnessSerializer({
+      harnessEntryPointPath: HARNESS_ENTRY,
+    });
+    const appModule = makeModule(APP_MODULE, 'console.log("app");\n');
+    const preModule = makeModule('/repo/node_modules/metro-runtime/require.js', '// prelude\n');
+    const mainGraph = makeGraph([appModule]);
+    mainGraph.entryPoints.add(HARNESS_ENTRY);
+
+    const seenByIdFactory = new Set<string>();
+    const createModuleId = makeCreateModuleId();
+    const filterCalls: Array<{ path: string; appSeen: boolean }> = [];
+    const bundleOptions = makeBundleOptions({
+      createModuleId: (path) => {
+        seenByIdFactory.add(path);
+        return createModuleId(path);
+      },
+      processModuleFilter: (mod) => {
+        filterCalls.push({ path: mod.path, appSeen: seenByIdFactory.has(APP_MODULE) });
+        return true;
+      },
+    });
+
+    await serializer(HARNESS_ENTRY, [preModule], mainGraph, bundleOptions);
+
+    const firstPreModuleCall = filterCalls.find((call) => call.path === preModule.path);
+    expect(firstPreModuleCall?.appSeen).toBe(true);
+  });
+
   it('does not let a non-matching full bundle serialization clobber the captured set', async () => {
     const serializer = getHarnessSerializer({
       harnessEntryPointPath: HARNESS_ENTRY,
