@@ -161,11 +161,13 @@ const enhanceMetroConfig: MetroConfigEnhancer = (
     ...metroConfig,
     resolver: {
       ...metroConfig.resolver,
-      // Kepler first so its platform files win over the defaults.
       platforms: [
         ...new Set([
-          KEPLER_PLATFORM,
-          ...(metroConfig.resolver?.platforms ?? ['ios', 'android']),
+          ...(metroConfig.resolver?.platforms ?? [
+            KEPLER_PLATFORM,
+            'ios',
+            'android',
+          ]),
           'native',
         ]),
       ],

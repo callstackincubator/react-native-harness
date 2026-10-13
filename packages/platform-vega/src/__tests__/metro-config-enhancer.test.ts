@@ -45,9 +45,9 @@ const baseConfig = (overrides?: Partial<MetroConfig>): MetroConfig =>
   }) as MetroConfig;
 
 describe('vega metroConfigEnhancer', () => {
-  it('adds kepler and native to resolver.platforms without duplicating', () => {
+  it('defaults resolver.platforms to kepler first, then ios, android and native', () => {
     const enhanced = enhanceMetroConfig(
-      baseConfig(),
+      { resolver: {}, serializer: {} } as MetroConfig,
       enhancerContext
     ) as MetroConfig;
 
@@ -57,6 +57,15 @@ describe('vega metroConfigEnhancer', () => {
       'android',
       'native',
     ]);
+  });
+
+  it('keeps a project-defined resolver.platforms list and only ensures native', () => {
+    const enhanced = enhanceMetroConfig(
+      baseConfig({ resolver: { platforms: ['kepler', 'ios'] } }),
+      enhancerContext
+    ) as MetroConfig;
+
+    expect(enhanced.resolver?.platforms).toEqual(['kepler', 'ios', 'native']);
   });
 
   it('redirects react-native imports to the kepler package for the kepler platform', () => {
@@ -191,7 +200,7 @@ describe('vega metroConfigEnhancer', () => {
       const enhanced = enhanceMetroConfig(baseConfig(), enhancerContext) as MetroConfig;
 
       expect(applySystemBundleConfig).not.toHaveBeenCalled();
-      expect(enhanced.resolver?.platforms).toContain('kepler');
+      expect(enhanced.resolver?.resolveRequest).toBeTypeOf('function');
     });
 
     it('falls back to a regular bundle when the Vega CLI plugin is not installed', () => {
@@ -202,7 +211,7 @@ describe('vega metroConfigEnhancer', () => {
 
       const enhanced = enhanceMetroConfig(baseConfig(), enhancerContext) as MetroConfig;
 
-      expect(enhanced.resolver?.platforms).toContain('kepler');
+      expect(enhanced.resolver?.resolveRequest).toBeTypeOf('function');
     });
   });
 });
