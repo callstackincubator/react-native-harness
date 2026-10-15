@@ -1,4 +1,5 @@
 import type { HarnessExpectTestState } from './context.js';
+import { getErrorDiff } from './diff.js';
 
 type SerializedExpectError = {
   name?: string;
@@ -6,7 +7,7 @@ type SerializedExpectError = {
   stack?: string;
 };
 
-const formatErrorMessage = (error: unknown): string => {
+const formatErrorTitle = (error: unknown): string => {
   if (error instanceof Error) {
     return `${error.name}: ${error.message}`;
   }
@@ -19,6 +20,15 @@ const formatErrorMessage = (error: unknown): string => {
   }
 
   return String(error);
+};
+
+// The flattened error has no actual/expected of its own, so each failure
+// keeps its diff next to its message.
+const formatErrorMessage = (error: unknown): string => {
+  const title = formatErrorTitle(error);
+  const diff = getErrorDiff(error);
+
+  return diff ? `${title}\n\n${diff}` : title;
 };
 
 const createExpectError = (errors: unknown[], title?: string): Error => {
