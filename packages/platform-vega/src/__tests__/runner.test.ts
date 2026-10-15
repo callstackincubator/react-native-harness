@@ -34,7 +34,7 @@ const vega = vi.hoisted(() => ({
   isDeviceConnected: vi.fn<() => Promise<boolean>>(),
   isAppInstalled: vi.fn<() => Promise<boolean>>(),
   installApp: vi.fn<() => Promise<void>>(),
-  isAppRunning: vi.fn<() => Promise<boolean>>(),
+  getAppRunState: vi.fn<() => Promise<'running' | 'stopped' | 'unknown'>>(),
   launchApp: vi.fn<() => Promise<void>>(),
   terminateApp: vi.fn<() => Promise<void>>(),
   startPortForwarding: vi.fn<() => OwnedProcess>(),
@@ -75,7 +75,7 @@ beforeEach(() => {
   vega.waitForVirtualDevice.mockResolvedValue('VirtualDevice');
   vega.isDeviceConnected.mockResolvedValue(true);
   vega.isAppInstalled.mockResolvedValue(true);
-  vega.isAppRunning.mockResolvedValue(true);
+  vega.getAppRunState.mockResolvedValue('running');
   vega.launchApp.mockResolvedValue(undefined);
   vega.terminateApp.mockResolvedValue(undefined);
   vega.startPortForwarding.mockImplementation(() => fakeOwnedProcess());

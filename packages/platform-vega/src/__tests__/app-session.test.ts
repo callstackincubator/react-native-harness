@@ -18,7 +18,7 @@ const fakeOwnedProcess = (lines: string[] = []): OwnedProcess => {
 const createOptions = () => ({
   launchApp: vi.fn().mockResolvedValue(undefined),
   terminateApp: vi.fn().mockResolvedValue(undefined),
-  isAppRunning: vi.fn().mockResolvedValue(true),
+  getAppRunState: vi.fn().mockResolvedValue('running'),
   startLogStream: vi.fn(() => fakeOwnedProcess()),
   stopLogStream: vi.fn().mockResolvedValue(undefined),
 });
@@ -26,23 +26,51 @@ const createOptions = () => ({
 describe('createVegaAppSession', () => {
   it('emits app_exited and reports the exited state once the app is gone', async () => {
     const options = createOptions();
-    options.isAppRunning.mockResolvedValue(false);
+    options.getAppRunState.mockResolvedValue('stopped');
     const listener = vi.fn();
 
     const session = await createVegaAppSession({ ...options, startGraceMs: 0 });
     session.addListener(listener);
 
-    await vi.waitFor(() =>
-      expect(listener).toHaveBeenCalledWith({ type: 'app_exited' })
+    // Two confirming polls are needed, one poll interval apart.
+    await vi.waitFor(
+      () => expect(listener).toHaveBeenCalledWith({ type: 'app_exited' }),
+      { timeout: 3000 }
     );
     expect((await session.getState()).status).toBe('exited');
+  });
+
+  it('ignores failed probes and needs consecutive stopped answers before declaring an exit', async () => {
+    vi.useFakeTimers();
+    try {
+      const options = createOptions();
+      options.getAppRunState
+        .mockResolvedValueOnce('running')
+        .mockResolvedValueOnce('unknown')
+        .mockResolvedValueOnce('stopped')
+        .mockResolvedValueOnce('unknown')
+        .mockResolvedValueOnce('stopped')
+        .mockResolvedValue('stopped');
+
+      const session = await createVegaAppSession({ ...options, startGraceMs: 0 });
+
+      // running, unknown, stopped, unknown: still alive after four polls.
+      await vi.advanceTimersByTimeAsync(3 * 1000 + 10);
+      expect((await session.getState()).status).toBe('running');
+
+      // stopped, stopped: now confirmed.
+      await vi.advanceTimersByTimeAsync(2 * 1000 + 10);
+      expect((await session.getState()).status).toBe('exited');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps polling during the start grace window', async () => {
     vi.useFakeTimers();
     try {
       const options = createOptions();
-      options.isAppRunning.mockResolvedValue(false);
+      options.getAppRunState.mockResolvedValue('stopped');
 
       const session = await createVegaAppSession({
         ...options,

@@ -225,6 +225,29 @@ describe('commands', () => {
     await expect(vega.isDeviceConnected('VirtualDevice')).resolves.toBe(false);
   });
 
+  it('reports unknown when the running probe fails instead of claiming the app stopped', async () => {
+    mocks.runCommand.mockRejectedValueOnce(new Error('exit 1'));
+    await expect(
+      vega.getAppRunState('VirtualDevice', 'com.example.app.main')
+    ).resolves.toBe('unknown');
+
+    mocks.runCommand.mockResolvedValueOnce({
+      stdout: 'com.example.app.main is not running on VirtualDevice',
+      stderr: '',
+    });
+    await expect(
+      vega.getAppRunState('VirtualDevice', 'com.example.app.main')
+    ).resolves.toBe('stopped');
+
+    mocks.runCommand.mockResolvedValueOnce({
+      stdout: 'com.example.app.main is running on VirtualDevice',
+      stderr: '',
+    });
+    await expect(
+      vega.getAppRunState('VirtualDevice', 'com.example.app.main')
+    ).resolves.toBe('running');
+  });
+
   it('treats a false answer from is-app-installed as not installed', async () => {
     mocks.runCommand.mockResolvedValueOnce({ stdout: 'false', stderr: '' });
     await expect(

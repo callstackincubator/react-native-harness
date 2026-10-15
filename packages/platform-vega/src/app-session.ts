@@ -5,17 +5,21 @@ import {
   type AppSessionState,
 } from '@react-native-harness/platforms';
 import { logger, type OwnedProcess } from '@react-native-harness/tools';
+import type { VegaAppRunState } from './vega.js';
 
 const log = logger.child('platform-vega');
 
 const APP_EXIT_POLL_INTERVAL_MS = 1000;
 // launch-app can return before the process shows up in is-app-running.
 const APP_START_GRACE_MS = 10_000;
+// A single "not running" answer can come from a half-broken transport, so
+// the exit is only declared after consecutive confirmed answers.
+const APP_EXIT_CONFIRMATIONS = 2;
 
 export type CreateVegaAppSessionOptions = {
   launchApp: () => Promise<void>;
   terminateApp: () => Promise<void>;
-  isAppRunning: () => Promise<boolean>;
+  getAppRunState: () => Promise<VegaAppRunState>;
   startLogStream: () => OwnedProcess;
   stopLogStream: () => Promise<void>;
   startGraceMs?: number;
@@ -24,7 +28,7 @@ export type CreateVegaAppSessionOptions = {
 export const createVegaAppSession = async ({
   launchApp,
   terminateApp,
-  isAppRunning,
+  getAppRunState,
   startLogStream,
   stopLogStream,
   startGraceMs = APP_START_GRACE_MS,
@@ -99,11 +103,19 @@ export const createVegaAppSession = async ({
 
   const launchedAt = Date.now();
 
+  let stoppedAnswers = 0;
+
   const pollTask = (async () => {
     while (!stopPolling) {
-      const running = await isAppRunning();
+      const runState = await getAppRunState();
+      // "unknown" means the probe itself failed; only a confirmed "stopped"
+      // counts, and it has to repeat before the app is declared gone.
+      stoppedAnswers = runState === 'stopped' ? stoppedAnswers + 1 : 0;
 
-      if (!running && Date.now() - launchedAt >= startGraceMs) {
+      if (
+        stoppedAnswers >= APP_EXIT_CONFIRMATIONS &&
+        Date.now() - launchedAt >= startGraceMs
+      ) {
         if (!disposed && state.status === 'running') {
           state = {
             status: 'exited',

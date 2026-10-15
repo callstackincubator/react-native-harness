@@ -120,7 +120,7 @@ const getVegaRunner: HarnessPlatformRunnerFactory<
       return await createVegaAppSession({
         launchApp: () => vega.launchApp(deviceId, componentId),
         terminateApp: () => vega.terminateApp(deviceId, componentId),
-        isAppRunning: () => vega.isAppRunning(deviceId, componentId),
+        getAppRunState: () => vega.getAppRunState(deviceId, componentId),
         startLogStream: () => vega.startLogStream(deviceId),
         stopLogStream: () => vega.stopLogStream(deviceId),
       });

@@ -404,11 +404,21 @@ export const installApp = async (
 };
 
 // Every --appName flag of the Vega CLI takes the interactive component id.
-const isAppState = async (
+export type VegaAppRunState = 'running' | 'stopped' | 'unknown';
+
+const NEGATIVE_ANSWER = /\bfalse\b|not installed|not running/i;
+const POSITIVE_ANSWER = /\btrue\b|is installed|is running/i;
+
+/**
+ * Asks the CLI about an app and keeps "the probe failed" apart from "the app
+ * is gone": a non-zero exit, a timeout, or an unparseable answer is `unknown`,
+ * so callers polling for an exit can retry instead of reporting a crash.
+ */
+const getAppState = async (
   command: 'is-app-installed' | 'is-app-running',
   deviceId: string,
   appName: string
-): Promise<boolean> => {
+): Promise<VegaAppRunState> => {
   const { ok, stdout } = await runVegaQuietly([
     'device',
     command,
@@ -417,14 +427,25 @@ const isAppState = async (
     appName,
   ]);
 
-  return ok && !/\bfalse\b|not installed|not running/i.test(stdout);
+  if (!ok) {
+    return 'unknown';
+  }
+
+  if (NEGATIVE_ANSWER.test(stdout)) {
+    return 'stopped';
+  }
+
+  return POSITIVE_ANSWER.test(stdout) || stdout.trim() === '' ? 'running' : 'unknown';
 };
 
-export const isAppInstalled = (deviceId: string, componentId: string) =>
-  isAppState('is-app-installed', deviceId, componentId);
+export const isAppInstalled = async (
+  deviceId: string,
+  componentId: string
+): Promise<boolean> =>
+  (await getAppState('is-app-installed', deviceId, componentId)) === 'running';
 
-export const isAppRunning = (deviceId: string, componentId: string) =>
-  isAppState('is-app-running', deviceId, componentId);
+export const getAppRunState = (deviceId: string, componentId: string) =>
+  getAppState('is-app-running', deviceId, componentId);
 
 export const launchApp = async (
   deviceId: string,
