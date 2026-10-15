@@ -148,7 +148,8 @@ export type BridgeClientFunctions = {
 
 export type BinaryDataReference = {
   type: 'binary';
-  transferId: number;
+  /** The link channel carrying the bytes. */
+  channelId: string;
   size: number;
   mimeType: 'image/png';
 };

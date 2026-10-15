@@ -1,11 +1,15 @@
-import { createBinaryFrame, generateTransferId } from './binary-transfer.js';
+import { sendBinary } from './binary.js';
+import {
+  connectStandardWebSocket,
+  createLink,
+  globalClock,
+  type LinkConnection,
+  type Logger,
+  type StandardWebSocket,
+  type UplinkTransportConnection,
+} from './link/index.js';
 import { serializeBridgeMessage } from './protocol.js';
 import { createRpcPeer } from './rpc-peer.js';
-import {
-  createRpcTransport,
-  type BridgeTransport,
-} from './transport.js';
-import { createWebSocketClientTransport } from './websocket-client-transport.js';
 import type {
   BridgeClientFunctions,
   BridgeServerFunctions,
@@ -39,184 +43,182 @@ export type HarnessHandle = {
 };
 
 export type ConnectToHarnessOptions = {
-  transport?: BridgeTransport;
+  /** An already open link transport, used instead of dialing `url`. */
+  transport?: UplinkTransportConnection;
+  /** Creates the WebSocket to dial `url` with. Defaults to the global `WebSocket`. */
+  createSocket?: (url: string) => StandardWebSocket;
 };
 
-export { createWebSocketClientTransport };
+export type { UplinkTransportConnection };
 
 const noop = (): void => undefined;
 
-export const connectToHarness = (
+const createConsoleLogger = (): Logger => {
+  const logger: Logger = {
+    debug: noop,
+    info: noop,
+    warn: (message) => console.warn(`[harness] ${message}`),
+    error: (message) => console.error(`[harness] ${message}`),
+    child: () => logger,
+  };
+
+  return logger;
+};
+
+// React Native has no `crypto.randomUUID`, so channel ids come from a counter. Ids only
+// need to be unique among this connection's channels.
+const createChannelIdGenerator = (): (() => string) => {
+  let nextId = 1;
+  return () => `app-${nextId++}`;
+};
+
+const dial = async (
+  url: string,
+  options: ConnectToHarnessOptions,
+): Promise<UplinkTransportConnection> => {
+  if (options.transport) {
+    return options.transport;
+  }
+
+  try {
+    return await connectStandardWebSocket({
+      url,
+      createSocket: options.createSocket,
+    });
+  } catch (error) {
+    const detail =
+      error instanceof Error && error.message ? `: ${error.message}` : '';
+    throw new Error(`Failed to connect to Harness at ${url}${detail}`);
+  }
+};
+
+export const connectToHarness = async (
   url: string,
   callbacks: HarnessCallbacks,
   options: ConnectToHarnessOptions = {},
-): Promise<HarnessHandle> =>
-  new Promise((resolve, reject) => {
-    const transport = options.transport ?? createWebSocketClientTransport(url);
-    let settled = false;
-    let peerClosed = false;
-    let offOpen: () => void = noop;
-    let offError: () => void = noop;
-    let offClose: () => void = noop;
-
-    const cleanup = () => {
-      offOpen();
-      offError();
-      offClose();
-    };
-
-    const fail = (message: string) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      cleanup();
-      reject(new Error(message));
-    };
-
-    const handleOpen = () => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      cleanup();
-
-      const getTransportNotOpenError = () => {
-        return new Error('Harness bridge transport is not open');
-      };
-
-      const rpc = createRpcPeer<
-        BridgeClientFunctions,
-        BridgeServerFunctions,
-        BridgeEvents
-      >({
-        localMethods: callbacks,
-        transport: createRpcTransport(transport),
-      });
-
-      let offMessage: () => void = noop;
-      let offRuntimeClose: () => void = noop;
-      let offRuntimeError: () => void = noop;
-
-      const closePeer = (reason: Error) => {
-        if (peerClosed) {
-          return;
-        }
-
-        peerClosed = true;
-        offMessage();
-        offRuntimeClose();
-        offRuntimeError();
-        rpc.close(reason);
-      };
-
-      const handleMessage = async (data: string) => {
-        const controlMessage = await rpc.handleMessage(data);
-
-        if (!controlMessage) {
-          return;
-        }
-
-        if (controlMessage.type === 'ping') {
-          transport.send(
-            serializeBridgeMessage({ type: 'pong', id: controlMessage.id }),
-          );
-        }
-      };
-
-      offMessage = transport.onMessage((message) => {
-        if (typeof message !== 'string') {
-          return;
-        }
-
-        void handleMessage(message).catch((error) => {
-          closePeer(
-            error instanceof Error
-              ? error
-              : new Error('Received invalid Harness bridge message'),
-          );
-
-          if (transport.state === 'open') {
-            transport.close(1002, 'Invalid message');
-          }
-        });
-      });
-
-      offRuntimeClose = transport.onClose((event) => {
-        closePeer(
-          new Error(
-            `Harness connection closed (code ${event.code}${
-              event.reason ? `, reason: ${event.reason}` : ''
-            })`,
-          ),
-        );
-      });
-
-      offRuntimeError = transport.onError((error) => {
-        closePeer(error);
-      });
-
-      resolve({
-        reportReady: (device) => {
-          try {
-            if (transport.state !== 'open') {
-              throw getTransportNotOpenError();
-            }
-
-            transport.send(serializeBridgeMessage({ type: 'ready', device }));
-          } catch (error) {
-            closePeer(
-              error instanceof Error ? error : getTransportNotOpenError(),
-            );
-          }
-        },
-        emitEvent: (event) => {
-          rpc.sendEvent(event);
-        },
-        transferScreenshot: async (data, metadata) => {
-          const transferId = generateTransferId();
-          transport.send(createBinaryFrame(transferId, data));
-          return rpc.invoke(
-            'device.screenshot.receive',
-            { type: 'binary', transferId, size: data.length, mimeType: 'image/png' },
-            metadata,
-          );
-        },
-        matchImageSnapshot: (screenshot, testPath, options, runner) =>
-          rpc.invoke(
-            'test.matchImageSnapshot',
-            screenshot,
-            testPath,
-            options,
-            runner,
-          ),
-        disconnect: () => {
-          closePeer(new Error('Harness connection closed by client'));
-          transport.close();
-        },
-      });
-    };
-
-    const handleError = (error: Error) => {
-      const detail = error.message ? `: ${error.message}` : '';
-      fail(`Failed to connect to Harness at ${url}${detail}`);
-    };
-
-    const handleClose = (event: { code: number; reason: string }) => {
-      fail(
-        `Harness connection at ${url} closed before becoming ready (code ${event.code}${
-          event.reason ? `, reason: ${event.reason}` : ''
-        })`,
-      );
-    };
-
-    offOpen = transport.onOpen(handleOpen);
-    offError = transport.onError(handleError);
-    offClose = transport.onClose(handleClose);
-
-    if (transport.state === 'open') {
-      handleOpen();
-    }
+): Promise<HarnessHandle> => {
+  const transport = await dial(url, options);
+  const link: LinkConnection = createLink(transport, {
+    end: 'worker',
+    clock: globalClock,
+    logger: createConsoleLogger(),
+    generateId: createChannelIdGenerator(),
   });
+
+  const rpc = createRpcPeer<
+    BridgeClientFunctions,
+    BridgeServerFunctions,
+    BridgeEvents
+  >({
+    localMethods: callbacks,
+    transport: {
+      send: (message) => {
+        void link.write(message);
+      },
+    },
+  });
+
+  let peerClosed = false;
+  let offMessage: () => void = noop;
+  let offClose: () => void = noop;
+  let offError: () => void = noop;
+
+  const getLinkClosedError = () => {
+    return new Error('Harness bridge link is closed');
+  };
+
+  const closePeer = (reason: Error) => {
+    if (peerClosed) {
+      return;
+    }
+
+    peerClosed = true;
+    offMessage();
+    offClose();
+    offError();
+    rpc.close(reason);
+  };
+
+  const handleMessage = async (data: string) => {
+    const controlMessage = await rpc.handleMessage(data);
+
+    if (!controlMessage) {
+      return;
+    }
+
+    if (controlMessage.type === 'ping') {
+      void link.write(
+        serializeBridgeMessage({ type: 'pong', id: controlMessage.id }),
+      );
+    }
+  };
+
+  offMessage = link.onData((message) => {
+    void handleMessage(message).catch((error) => {
+      closePeer(
+        error instanceof Error
+          ? error
+          : new Error('Received invalid Harness bridge message'),
+      );
+      void link.close();
+    });
+  });
+
+  offError = link.onError((error) => {
+    closePeer(error);
+  });
+
+  offClose = link.onClose(() => {
+    closePeer(new Error('Harness connection closed'));
+  });
+
+  return {
+    reportReady: (device) => {
+      if (link.closed) {
+        closePeer(getLinkClosedError());
+        return;
+      }
+
+      void link.write(serializeBridgeMessage({ type: 'ready', device }));
+    },
+    emitEvent: (event) => {
+      rpc.sendEvent(event);
+    },
+    transferScreenshot: async (data, metadata) => {
+      const binary = await sendBinary(link, data);
+
+      try {
+        const [file] = await Promise.all([
+          rpc.invoke(
+            'device.screenshot.receive',
+            {
+              type: 'binary',
+              channelId: binary.channelId,
+              size: data.length,
+              mimeType: 'image/png',
+            },
+            metadata,
+          ),
+          binary.written,
+        ]);
+
+        return file;
+      } catch (error) {
+        binary.abort();
+        throw error;
+      }
+    },
+    matchImageSnapshot: (screenshot, testPath, options, runner) =>
+      rpc.invoke(
+        'test.matchImageSnapshot',
+        screenshot,
+        testPath,
+        options,
+        runner,
+      ),
+    disconnect: () => {
+      closePeer(new Error('Harness connection closed by client'));
+      void link.close();
+    },
+  };
+};

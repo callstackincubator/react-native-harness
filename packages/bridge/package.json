@@ -33,6 +33,7 @@
     "pngjs": "^7.0.0",
     "ssim.js": "^3.5.0",
     "tslib": "^2.3.0",
+    "web-streams-polyfill": "^4.3.0",
     "ws": "^8.18.2"
   },
   "devDependencies": {

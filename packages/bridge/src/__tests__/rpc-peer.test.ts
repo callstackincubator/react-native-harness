@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRpcPeer } from '../rpc-peer.js';
 import type { BridgeEvents } from '../shared.js';
-import type { RpcTransport } from '../transport.js';
+import type { RpcTransport } from '../rpc-peer.js';
 
 type LocalMethods = {
   add: (left: number, right: number) => Promise<number>;
@@ -12,7 +12,6 @@ const createMockTransport = (): RpcTransport & { messages: string[] } => {
   const messages: string[] = [];
 
   return {
-    state: 'open',
     messages,
     send: (message) => {
       messages.push(message);
@@ -27,7 +26,6 @@ describe('rpc-peer', () => {
     const client = createRpcPeer<Record<string, never>, { add: LocalMethods['add'] }, BridgeEvents>({
       localMethods: {},
       transport: {
-        state: 'open',
         send: (message) => {
           if (!serverHandleMessage) {
             throw new Error('Server peer not initialized');
@@ -46,7 +44,6 @@ describe('rpc-peer', () => {
         },
       },
       transport: {
-        state: 'open',
         send: (message) => {
           void client.handleMessage(message);
         },
@@ -77,7 +74,6 @@ describe('rpc-peer', () => {
         },
       },
       transport: {
-        state: 'open',
         send: (message) => {
           void client.handleMessage(message);
         },
@@ -96,7 +92,6 @@ describe('rpc-peer', () => {
     const peer = createRpcPeer<Record<string, never>, Record<string, never>, BridgeEvents>({
       localMethods: {},
       transport: {
-        state: 'open',
         send: (message) => {
           response = message;
         },
