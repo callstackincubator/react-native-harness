@@ -205,6 +205,48 @@ describe('hostResourcesProbe', () => {
     stop();
   });
 
+  it('pauses between runs and resumes with a fresh cpu baseline', async () => {
+    setPlatform('win32');
+    const cpu = (user: number, sys: number, idle: number) =>
+      [{ times: { user, nice: 0, sys, idle, irq: 0 } }] as never;
+    vi.spyOn(os, 'cpus')
+      .mockReturnValueOnce(cpu(100, 50, 850))
+      .mockReturnValueOnce(cpu(300, 100, 1000))
+      .mockReturnValueOnce(cpu(10_000, 5_000, 90_000));
+    const ctx = createProbeContext();
+
+    const stop = hostResourcesProbe.start(ctx);
+    await vi.advanceTimersByTimeAsync(0);
+    ctx.lifecycle.emit({ type: 'phase', phase: 'run.end' });
+    ctx.diagnostics.flush();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(ctx.diagnostics.flush()).toEqual([]);
+
+    ctx.lifecycle.emit({ type: 'phase', phase: 'run.start' });
+    await vi.advanceTimersByTimeAsync(0);
+    // First sample after the pause: no cpu gauges (the gap was idle time).
+    expect(gaugeLabels(ctx)).toEqual(['host.load1', 'host.mem.free']);
+
+    stop();
+  });
+
+  it('resumes sampling on dispose, so teardown is still observed', async () => {
+    setPlatform('win32');
+    const ctx = createProbeContext();
+
+    const stop = hostResourcesProbe.start(ctx);
+    await vi.advanceTimersByTimeAsync(0);
+    ctx.lifecycle.emit({ type: 'phase', phase: 'run.end' });
+    ctx.diagnostics.flush();
+
+    ctx.lifecycle.emit({ type: 'phase', phase: 'dispose' });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(gaugeLabels(ctx)).toContain('host.load1');
+    stop();
+  });
+
   it('stops sampling after the returned stop function is called', async () => {
     setPlatform('darwin');
     vi.mocked(spawn).mockResolvedValue({ stdout: VM_STAT_FIXTURE } as never);

@@ -39,9 +39,15 @@ export type Diagnostics = {
   /**
    * Observes every entry as it is recorded, including entries recorded through
    * child instances. Unlike `flush()`, subscribing does not consume entries, so
-   * a sink can persist them incrementally. Returns a function that unsubscribes.
+   * a sink can persist them incrementally. With `replay`, entries already
+   * recorded and not yet flushed are delivered to the listener first, so a sink
+   * attached late still sees the start of the session. Returns a function that
+   * unsubscribes.
    */
-  subscribe(listener: DiagnosticEntryListener): () => void;
+  subscribe(
+    listener: DiagnosticEntryListener,
+    options?: { replay?: boolean }
+  ): () => void;
   flush(): DiagnosticEntry[];
 };
 
@@ -228,7 +234,15 @@ const createEnabledDiagnostics = (
     );
   };
 
-  const subscribe = (listener: DiagnosticEntryListener): (() => void) => {
+  const subscribe = (
+    listener: DiagnosticEntryListener,
+    options?: { replay?: boolean }
+  ): (() => void) => {
+    if (options?.replay) {
+      for (const entry of [...state.entries]) {
+        listener(entry);
+      }
+    }
     state.listeners.add(listener);
     return () => {
       state.listeners.delete(listener);

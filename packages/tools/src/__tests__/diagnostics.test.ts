@@ -153,6 +153,30 @@ describe('createDiagnostics (enabled)', () => {
     expect(diagnostics.flush()).toHaveLength(4);
   });
 
+  it('subscribe({ replay }) delivers already recorded, unflushed entries first', () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    diagnostics.mark('flushed');
+    diagnostics.flush();
+    diagnostics.mark('early-1');
+    diagnostics.child('ns').gauge('early-2', 1);
+    const seen: string[] = [];
+
+    diagnostics.subscribe((entry) => seen.push(entry.label), { replay: true });
+    diagnostics.mark('late');
+
+    expect(seen).toEqual(['early-1', 'ns.early-2', 'late']);
+  });
+
+  it('subscribe() without replay only sees later entries', () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    diagnostics.mark('early');
+    const seen: string[] = [];
+
+    diagnostics.subscribe((entry) => seen.push(entry.label));
+
+    expect(seen).toEqual([]);
+  });
+
   it('subscribe() isolates listener failures from the observed code', () => {
     const diagnostics = createDiagnostics({ enabled: true });
     const seen: string[] = [];

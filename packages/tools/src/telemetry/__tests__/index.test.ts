@@ -9,6 +9,7 @@ vi.mock('../../spawn.js', () => ({ spawn: vi.fn() }));
 
 describe('startTelemetryProbes', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -81,6 +82,7 @@ describe('startTelemetryProbes', () => {
   });
 
   it('exposes in-flight tracked work through settled()', async () => {
+    vi.useFakeTimers();
     let finished = false;
     const probe: TelemetryProbe = {
       name: 'slow',
@@ -100,9 +102,47 @@ describe('startTelemetryProbes', () => {
 
     const run = startTelemetryProbes([probe], ctx);
     expect(finished).toBe(false);
-    await run.settled();
+    const settled = run.settled();
+    await vi.advanceTimersByTimeAsync(10);
+    await settled;
 
     expect(finished).toBe(true);
+  });
+
+  const slowProbe = (durationMs: number): TelemetryProbe => ({
+    name: 'slow',
+    start: (ctx) => {
+      void ctx.track(
+        new Promise<void>((resolve) => setTimeout(resolve, durationMs))
+      );
+      return () => undefined;
+    },
+  });
+
+  it('dispose() does not wait for work that was already aborted', async () => {
+    vi.useFakeTimers();
+    const ctx = createProbeContext();
+    const run = startTelemetryProbes([slowProbe(4_000)], ctx);
+
+    ctx.controller.abort();
+    let disposed = false;
+    void run.dispose().then(() => (disposed = true));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(disposed).toBe(true);
+  });
+
+  it('dispose() bounds how long it waits for work that was not aborted', async () => {
+    vi.useFakeTimers();
+    const ctx = createProbeContext();
+    const run = startTelemetryProbes([slowProbe(600_000)], ctx);
+
+    let disposed = false;
+    void run.dispose().then(() => (disposed = true));
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(disposed).toBe(false);
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(disposed).toBe(true);
   });
 
   it('does not start probes for an already aborted signal', () => {

@@ -240,7 +240,7 @@ export const getAppleSimulatorPlatformInstance = async (
       });
     },
     createTelemetryCollector: () => ({
-      collect: async (phase): Promise<Record<string, number>> => {
+      collect: async (phase, signal): Promise<Record<string, number>> => {
         // Listing guest services costs a simctl round trip, so only do it at
         // the boundaries where the guest's state is worth recording.
         if (phase !== 'platform.ready' && phase !== 'dispose') {
@@ -249,7 +249,7 @@ export const getAppleSimulatorPlatformInstance = async (
 
         return {
           'ios.simulator.guest_process_count':
-            await simctl.getGuestProcessCount(udid),
+            await simctl.getGuestProcessCount(udid, signal),
         };
       },
     }),

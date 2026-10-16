@@ -32,18 +32,21 @@ export const createPlatformCollectorProbe = ({
   name: 'platform-collector',
   start: (ctx) => {
     const { diagnostics } = ctx;
-    const enqueue = createSerialQueue();
+    const queue = createSerialQueue();
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    ctx.signal.addEventListener('abort', abort, { once: true });
     let collector: TelemetryCollector | undefined;
 
     const stop = onLifecyclePhases(ctx, COLLECTOR_PHASES, ({ phase }) =>
-      enqueue(async () => {
+      queue.run(async () => {
         collector ??= getCollector();
         if (!collector) {
           return;
         }
 
-        const values = await collector.collect(phase);
-        if (ctx.signal.aborted) {
+        const values = await collector.collect(phase, controller.signal);
+        if (controller.signal.aborted) {
           return;
         }
 
@@ -64,6 +67,9 @@ export const createPlatformCollectorProbe = ({
 
     return () => {
       stop();
+      queue.close();
+      controller.abort();
+      ctx.signal.removeEventListener('abort', abort);
       collector?.dispose?.();
     };
   },

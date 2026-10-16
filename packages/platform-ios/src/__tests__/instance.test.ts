@@ -285,16 +285,17 @@ describe('iOS platform instance dependency validation', () => {
     );
     const collector = instance.createTelemetryCollector?.();
 
-    await expect(collector?.collect('platform.ready')).resolves.toEqual({
+    const signal = new AbortController().signal;
+    await expect(collector?.collect('platform.ready', signal)).resolves.toEqual({
       'ios.simulator.guest_process_count': 312,
     });
-    await expect(collector?.collect('dispose')).resolves.toEqual({
+    await expect(collector?.collect('dispose', signal)).resolves.toEqual({
       'ios.simulator.guest_process_count': 312,
     });
-    await expect(collector?.collect('app.ready')).resolves.toEqual({});
-    await expect(collector?.collect('test-file.start')).resolves.toEqual({});
+    await expect(collector?.collect('app.ready', signal)).resolves.toEqual({});
+    await expect(collector?.collect('test-file.start', signal)).resolves.toEqual({});
     expect(getGuestProcessCount).toHaveBeenCalledTimes(2);
-    expect(getGuestProcessCount).toHaveBeenCalledWith('sim-udid');
+    expect(getGuestProcessCount).toHaveBeenCalledWith('sim-udid', signal);
   });
 
   it('records the last bootstatus stage on the waitForBoot span', async () => {

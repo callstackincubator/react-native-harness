@@ -75,13 +75,26 @@ export const processSnapshotProbe: TelemetryProbe = {
     }
 
     const { diagnostics, signal } = ctx;
-    const enqueue = createSerialQueue();
+    const queue = createSerialQueue();
+    // `app.ready` fires after every app relaunch, which can be once per test
+    // file; only the first one is a milestone worth the cost of `top`.
+    let appReadySeen = false;
 
-    return onLifecyclePhases(
+    const stop = onLifecyclePhases(
       ctx,
       ['platform.ready', 'app.ready', 'dispose'],
-      ({ phase }) =>
-        enqueue(async () => {
+      ({ phase }) => {
+        if (phase === 'app.ready') {
+          if (appReadySeen) {
+            return;
+          }
+          appReadySeen = true;
+        }
+
+        return queue.run(async () => {
+          if (signal.aborted) {
+            return;
+          }
           try {
             const { stdout } = await spawn(
               'top',
@@ -115,7 +128,13 @@ export const processSnapshotProbe: TelemetryProbe = {
               error: String(error).slice(0, 200),
             });
           }
-        })
+        });
+      }
     );
+
+    return () => {
+      stop();
+      queue.close();
+    };
   },
 };

@@ -64,6 +64,7 @@ describe('processSnapshotProbe', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -122,13 +123,14 @@ describe('processSnapshotProbe', () => {
   });
 
   it('runs back to back phases one after another', async () => {
+    vi.useFakeTimers();
     setPlatform('darwin');
     let active = 0;
     let maxActive = 0;
     vi.mocked(spawn).mockImplementation((async () => {
       active += 1;
       maxActive = Math.max(maxActive, active);
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
       active -= 1;
       return { stdout: TOP_FIXTURE };
     }) as never);
@@ -137,12 +139,66 @@ describe('processSnapshotProbe', () => {
 
     ctx.lifecycle.emit({ type: 'phase', phase: 'app.ready' });
     ctx.lifecycle.emit({ type: 'phase', phase: 'dispose' });
-    await settle(ctx);
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await vi.advanceTimersByTimeAsync(20_000);
     await settle(ctx);
 
     expect(spawn).toHaveBeenCalledTimes(2);
     expect(maxActive).toBe(1);
+  });
+
+  it('snapshots only the first app.ready, not every relaunch', async () => {
+    setPlatform('darwin');
+    vi.mocked(spawn).mockResolvedValue({ stdout: TOP_FIXTURE } as never);
+    const ctx = createProbeContext();
+    processSnapshotProbe.start(ctx);
+
+    ctx.lifecycle.emit({ type: 'phase', phase: 'app.ready' });
+    await settle(ctx);
+    ctx.lifecycle.emit({ type: 'phase', phase: 'app.ready' });
+    ctx.lifecycle.emit({ type: 'phase', phase: 'app.ready' });
+    await settle(ctx);
+    expect(spawn).toHaveBeenCalledTimes(1);
+
+    ctx.lifecycle.emit({ type: 'phase', phase: 'dispose' });
+    await settle(ctx);
+    expect(spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips queued snapshots once stopped or aborted, without error marks', async () => {
+    vi.useFakeTimers();
+    setPlatform('darwin');
+    vi.mocked(spawn).mockImplementation(
+      (() =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ stdout: TOP_FIXTURE }), 1_000)
+        )) as never
+    );
+    const ctx = createProbeContext();
+    const stop = processSnapshotProbe.start(ctx);
+
+    ctx.lifecycle.emit({ type: 'phase', phase: 'platform.ready' });
+    ctx.lifecycle.emit({ type: 'phase', phase: 'dispose' });
+    await vi.advanceTimersByTimeAsync(0);
+    stop();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await settle(ctx);
+
+    // The running job finishes; the queued one never starts.
+    expect(spawn).toHaveBeenCalledTimes(1);
+
+    const ctx2 = createProbeContext();
+    processSnapshotProbe.start(ctx2);
+    ctx2.lifecycle.emit({ type: 'phase', phase: 'platform.ready' });
+    ctx2.lifecycle.emit({ type: 'phase', phase: 'dispose' });
+    vi.mocked(spawn).mockClear();
+    ctx2.controller.abort();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await settle(ctx2);
+
+    expect(spawn).toHaveBeenCalledTimes(0);
+    expect(
+      ctx2.diagnostics.flush().filter((e) => e.attrs?.error !== undefined)
+    ).toEqual([]);
   });
 
   it('records an error mark instead of throwing when top fails', async () => {

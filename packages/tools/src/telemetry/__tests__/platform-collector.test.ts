@@ -17,7 +17,10 @@ describe('platform collector probe', () => {
     ctx.lifecycle.emit({ type: 'phase', phase: 'platform.ready' });
     await settle(ctx);
 
-    expect(collector.collect).toHaveBeenCalledWith('platform.ready');
+    expect(collector.collect).toHaveBeenCalledWith(
+      'platform.ready',
+      expect.any(AbortSignal)
+    );
     const [gauge, mark] = ctx.diagnostics.flush();
     expect(gauge).toMatchObject({
       label: 'platform.ios.simulator.guest_process_count',
@@ -80,5 +83,52 @@ describe('platform collector probe', () => {
 
     await stop();
     expect(collector.dispose).toHaveBeenCalled();
+  });
+
+  it('aborts the signal handed to collect when stopped, and never collects afterwards', async () => {
+    let received: AbortSignal | undefined;
+    const collect = vi.fn(
+      (_phase: string, signal: AbortSignal) =>
+        new Promise<Record<string, number>>((resolve) => {
+          received = signal;
+          signal.addEventListener('abort', () => resolve({ a: 1 }));
+        })
+    );
+    const collector: TelemetryCollector = { collect, dispose: vi.fn() };
+    const ctx = createProbeContext();
+    const stop = createPlatformCollectorProbe({
+      getCollector: () => collector,
+    }).start(ctx);
+
+    ctx.lifecycle.emit({ type: 'phase', phase: 'platform.ready' });
+    ctx.lifecycle.emit({ type: 'phase', phase: 'dispose' });
+    await Promise.resolve();
+    expect(received?.aborted).toBe(false);
+
+    await stop();
+    await settle(ctx);
+
+    expect(received?.aborted).toBe(true);
+    // The queued dispose collection never ran, and the aborted one reported nothing.
+    expect(collect).toHaveBeenCalledTimes(1);
+    expect(ctx.diagnostics.flush()).toEqual([]);
+  });
+
+  it('aborts the collect signal when the context signal aborts', async () => {
+    let received: AbortSignal | undefined;
+    const collector: TelemetryCollector = {
+      collect: vi.fn(async (_phase, signal) => {
+        received = signal;
+        return {};
+      }),
+    };
+    const ctx = createProbeContext();
+    createPlatformCollectorProbe({ getCollector: () => collector }).start(ctx);
+
+    ctx.lifecycle.emit({ type: 'phase', phase: 'platform.ready' });
+    await settle(ctx);
+    ctx.controller.abort();
+
+    expect(received?.aborted).toBe(true);
   });
 });

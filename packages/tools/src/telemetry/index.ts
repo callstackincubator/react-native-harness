@@ -58,10 +58,18 @@ export const createDefaultProbes = (
   return probes;
 };
 
+// Upper bound on how long dispose() lets in-flight work finish when the
+// caller has not already aborted it.
+const DISPOSE_SETTLE_TIMEOUT_MS = 5000;
+
 export type TelemetryRun = {
   /** Resolves once all lifecycle driven work started so far has finished. */
   settled(): Promise<void>;
-  /** Stops every probe. Safe to call more than once. */
+  /**
+   * Stops every probe. Safe to call more than once. In-flight work is only
+   * waited for (bounded) if the context's signal has not been aborted: an
+   * aborted run has no use for results that are still pending.
+   */
   dispose(): Promise<void>;
 };
 
@@ -118,7 +126,17 @@ export const startTelemetryProbes = (
           telemetryLogger.debug('probe %s failed to stop: %s', name, error);
         }
       }
-      await settled();
+      if (!ctx.signal.aborted) {
+        let timer: NodeJS.Timeout | undefined;
+        const timeout = new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, DISPOSE_SETTLE_TIMEOUT_MS);
+        });
+        try {
+          await Promise.race([settled(), timeout]);
+        } finally {
+          clearTimeout(timer);
+        }
+      }
     })();
     return disposed;
   };

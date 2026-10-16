@@ -24,7 +24,11 @@ export const nodeRuntimeProbe: TelemetryProbe = {
     const histogram = monitorEventLoopDelay({ resolution: RESOLUTION_MS });
     histogram.enable();
 
-    const stopSampling = startSampler(ctx, () => {
+    const stopSampling = startSampler(ctx, (_signal, { afterPause }) => {
+      if (afterPause) {
+        histogram.reset();
+      }
+
       const memory = process.memoryUsage();
       diagnostics.gauge(
         'node.rss_mb',

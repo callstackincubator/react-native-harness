@@ -220,7 +220,12 @@ export const hostResourcesProbe: TelemetryProbe = {
     const { diagnostics } = ctx;
     let previousCpu: CpuTimes | null = null;
 
-    return startSampler(ctx, async (signal) => {
+    return startSampler(ctx, async (signal, { afterPause }) => {
+      if (afterPause) {
+        // The interval since the last sample was idle time; do not blend it in.
+        previousCpu = null;
+      }
+
       diagnostics.gauge('host.load1', os.loadavg()[0] ?? 0, undefined, 'load');
 
       const currentCpu = readCpuTimes();

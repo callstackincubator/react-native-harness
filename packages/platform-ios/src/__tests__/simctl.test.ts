@@ -116,16 +116,18 @@ describe('simctl startup', () => {
     );
   });
 
-  it('counts guest launchd services without the header line', async () => {
+  it('counts only running guest processes, not loaded jobs without a PID', async () => {
+    const signal = new AbortController().signal;
     const spawnSpy = vi.spyOn(tools, 'spawn').mockResolvedValue({
-      stdout: 'PID\tStatus\tLabel\n-\t0\tcom.apple.progressd\n95823\t0\tcom.apple.homed\n',
+      stdout:
+        'PID\tStatus\tLabel\n-\t0\tcom.apple.progressd\n95823\t0\tcom.apple.homed\n-\t78\tcom.apple.cloudphotod\n402\t0\tcom.apple.backboardd\n',
     } as Awaited<ReturnType<typeof tools.spawn>>);
 
-    await expect(getGuestProcessCount('sim-udid')).resolves.toBe(2);
+    await expect(getGuestProcessCount('sim-udid', signal)).resolves.toBe(2);
     expect(spawnSpy).toHaveBeenCalledWith(
       'xcrun',
       ['simctl', 'spawn', 'sim-udid', 'launchctl', 'list'],
-      { timeout: 30_000 },
+      { timeout: 30_000, signal },
     );
   });
 });

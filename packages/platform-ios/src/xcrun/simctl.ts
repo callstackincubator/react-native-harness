@@ -391,17 +391,21 @@ export const waitForBoot = async (
 const GUEST_PROCESS_LIST_TIMEOUT_MS = 30_000;
 
 /**
- * Counts the services the simulator's own `launchd` is managing. A guest that
- * is overloaded or still migrating shows up here long before anything fails.
+ * Counts the processes running inside the simulator. `launchctl list` also
+ * lists loaded jobs that are not running (PID `-`); only rows with a numeric
+ * PID are live processes. A guest that is overloaded or still migrating shows
+ * up here long before anything fails.
  */
-export const getGuestProcessCount = async (udid: string): Promise<number> => {
+export const getGuestProcessCount = async (
+  udid: string,
+  signal?: AbortSignal,
+): Promise<number> => {
   const { stdout } = await spawn(
     'xcrun',
     ['simctl', 'spawn', udid, 'launchctl', 'list'],
-    { timeout: GUEST_PROCESS_LIST_TIMEOUT_MS },
+    { timeout: GUEST_PROCESS_LIST_TIMEOUT_MS, signal },
   );
-  // The first line is the column header (PID Status Label).
-  return Math.max(0, stdout.split('\n').filter((line) => line.trim()).length - 1);
+  return stdout.split('\n').filter((line) => /^\d+\s/.test(line)).length;
 };
 
 export const diagnose = async (

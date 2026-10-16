@@ -8,6 +8,8 @@ import type { EventEmitter } from '../events.js';
  */
 export type LifecyclePhase =
   | 'session.created'
+  | 'run.start'
+  | 'run.end'
   | 'metro.ready'
   | 'platform.ready'
   | 'app.ready'
@@ -47,6 +49,13 @@ export type TelemetryProbe = {
  * become gauges named `platform.<key>`; strings become attrs of a mark.
  */
 export type TelemetryCollector = {
-  collect(phase: LifecyclePhase): Promise<Record<string, number | string>>;
+  /**
+   * `signal` aborts when telemetry stops; collectors must pass it to whatever
+   * they spawn so teardown never waits on a measurement nobody will read.
+   */
+  collect(
+    phase: LifecyclePhase,
+    signal: AbortSignal
+  ): Promise<Record<string, number | string>>;
   dispose?(): void;
 };
