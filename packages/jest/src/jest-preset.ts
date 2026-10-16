@@ -5,4 +5,13 @@ export default {
   // of `availableParallelism() - 1` processes, which roughly doubles Jest's
   // CPU time without making the run faster.
   maxWorkers: 1,
+  // Build and cache output never contains tests, but it can hold tens of
+  // thousands of files. Jest checks these patterns before descending into a
+  // directory, so its crawl skips them entirely. Jest appends a project's own
+  // patterns to the preset's.
+  modulePathIgnorePatterns: [
+    '/\\.harness(/|$)',
+    '/ios/(Pods|build)(/|$)',
+    '/android/(build|\\.gradle|app/build|app/\\.cxx)(/|$)',
+  ],
 };
