@@ -26,7 +26,28 @@ const metroBlockListLogger = logger.child('metro-block-list');
 const INTERNAL_CALLSITES_REGEX =
   /(^|[\\/])(node_modules[/\\]@react-native-harness)([\\/]|$)/;
 
-const getHarnessCacheVersion = (harnessConfig: Config): string => {
+const INITIALIZE_CORE_SUFFIX = /[\\/]react-native[\\/]Libraries[\\/]Core[\\/]InitializeCore\.js$/;
+
+/**
+ * `@react-native/metro-config` resolves InitializeCore from the project root,
+ * but the bundle gets `react-native` through the Harness runtime. When a
+ * monorepo has more than one copy of `react-native`, those paths differ, and
+ * Metro silently drops a run-before-main module that isn't in the graph, so
+ * InitializeCore never runs (`window` is undefined, HMRClient isn't
+ * registered). Point it at the copy the runtime actually imports.
+ */
+const getRuntimeInitializeCore = (): string | null => {
+  try {
+    const runtimeRequire = createRequire(
+      require.resolve('@react-native-harness/runtime/package.json')
+    );
+    return runtimeRequire.resolve('react-native/Libraries/Core/InitializeCore');
+  } catch {
+    return null;
+  }
+};
+
+const getHarnessCacheVersion =(harnessConfig: Config): string => {
   const { version } = require('../package.json') as { version: string };
   const userSalt = harnessConfig.cache?.version;
 
@@ -105,6 +126,21 @@ export const withRnHarness = <T extends MetroConfig>(
       },
       serializer: {
         ...metroConfig.serializer,
+        getModulesRunBeforeMainModule: (entryFilePath) => {
+          const modules =
+            metroConfig.serializer?.getModulesRunBeforeMainModule?.(
+              entryFilePath
+            ) ?? [];
+          const runtimeInitializeCore = getRuntimeInitializeCore();
+
+          return runtimeInitializeCore
+            ? modules.map((modulePath) =>
+                INITIALIZE_CORE_SUFFIX.test(modulePath)
+                  ? runtimeInitializeCore
+                  : modulePath
+              )
+            : modules;
+        },
         getPolyfills: (...args) => [
           ...(metroConfig.serializer?.getPolyfills?.(...args) ?? []),
           harnessManifest,
