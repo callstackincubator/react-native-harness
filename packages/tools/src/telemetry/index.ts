@@ -127,7 +127,7 @@ export const startTelemetryProbes = (
         }
       }
       if (!ctx.signal.aborted) {
-        let timer: NodeJS.Timeout | undefined;
+        let timer: ReturnType<typeof setTimeout> | undefined;
         const timeout = new Promise<void>((resolve) => {
           timer = setTimeout(resolve, DISPOSE_SETTLE_TIMEOUT_MS);
         });

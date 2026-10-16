@@ -2,7 +2,7 @@ import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { DiagnosticEntry, Diagnostics } from '@react-native-harness/tools';
-import { getHarnessRootPath, logger } from '@react-native-harness/tools';
+import { getHarnessRootPath, logger, unrefTimer } from '@react-native-harness/tools';
 
 const reportLogger = logger.child('diagnostics');
 
@@ -185,7 +185,7 @@ export const createDiagnosticsAppender = (
   );
 
   const timer = setInterval(flushAsync, options.flushIntervalMs ?? 2000);
-  timer.unref();
+  unrefTimer(timer);
   process.on('exit', flushSync);
 
   const dispose = async () => {

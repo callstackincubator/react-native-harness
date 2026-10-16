@@ -1,3 +1,4 @@
+import { unrefTimer } from '../unref-timer.js';
 import type { LifecycleEvent, LifecyclePhase, ProbeContext } from './types.js';
 
 export type SampleInfo = {
@@ -71,7 +72,7 @@ export const startSampler = (
   };
 
   const timer = setInterval(tick, ctx.sampleIntervalMs);
-  timer.unref();
+  unrefTimer(timer);
   ctx.signal.addEventListener('abort', stop, { once: true });
   ctx.lifecycle.addListener(onPhase);
   tick();
