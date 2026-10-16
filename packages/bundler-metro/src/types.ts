@@ -63,7 +63,7 @@ export type MetroOptions = {
   /**
    * Whether Jest is running in watch mode (`--watch` / `--watchAll`). Only
    * then does Metro need a file watcher; a one-shot run bundles once and
-   * exits, so watching just costs a file watcher and the file-map
+   * exits, so watching just costs a watchman subscription and the file-map
    * auto-save timer.
    */
   watchMode?: boolean;

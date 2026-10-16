@@ -5,6 +5,4 @@ export default {
   // of `availableParallelism() - 1` processes, which roughly doubles Jest's
   // CPU time without making the run faster.
   maxWorkers: 1,
-  // Harness doesn't depend on watchman; Jest and Metro crawl with Node instead.
-  watchman: false,
 };

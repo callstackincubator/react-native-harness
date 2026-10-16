@@ -127,7 +127,7 @@ export const withRnHarness = <T extends MetroConfig>(
         ...metroConfig.resolver,
         blockList: harnessBlockList,
         resolveRequest: harnessResolver,
-        useWatchman: process.env.RN_HARNESS_DEBUG_USE_WATCHMAN === '1',
+        useWatchman: process.env.RN_HARNESS_DEBUG_USE_WATCHMAN !== '0',
       },
       transformer: {
         ...metroConfig.transformer,
