@@ -1,9 +1,10 @@
 export { getConfig } from './reader.js';
-export type { Config } from './types.js';
+export type { Config, ResolvedDiagnosticsOptions } from './types.js';
 export {
   ConfigSchema,
   DEFAULT_METRO_PORT,
   isDiagnosticsEnabled,
+  resolveDiagnosticsOptions,
   resolveMetroCacheEnabled,
   resolveSkipAlreadyIncludedModules,
 } from './types.js';
