@@ -77,13 +77,11 @@ const getDiagnosticsDir = (projectRoot: string): string =>
 
 export type DiagnosticsAppender = {
   readonly filePath: string;
-  /** Synchronously writes everything buffered so far. */
+  /** Synchronously writes everything not yet on disk. For `exit` handlers. */
   flush(): void;
-  /** Flushes, then stops the timer and removes every process listener. */
-  dispose(): void;
+  /** Waits for in-flight writes, then writes the rest and detaches. */
+  dispose(): Promise<void>;
 };
-
-const APPENDED_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
 
 /**
  * Persists diagnostics entries as they are recorded, one JSON object per line
@@ -91,10 +89,16 @@ const APPENDED_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
  * run finishes, so a job that is cancelled or killed mid-run (the case where
  * the data matters most) would otherwise leave nothing behind.
  *
- * Writes are batched (every `flushIntervalMs` or `maxBufferedEntries`) and
- * synchronous, so they also work from `exit` and signal handlers. A signal is
- * re-raised after flushing when nothing else is listening for it, so
- * persistence never changes how the process terminates.
+ * Entries are batched (every `flushIntervalMs` or `maxBufferedEntries`) and
+ * appended asynchronously, one write at a time, so recording an entry never
+ * blocks on disk, which matters most when the machine is overloaded. Only the
+ * `exit` handler writes synchronously: a process that is going away cannot
+ * wait for the event loop. The session already owns SIGINT/SIGTERM and leaves
+ * through `process.exit`, which emits `exit`; installing signal handlers here
+ * would depend on listener order and fight other handlers about who re-raises.
+ *
+ * Entries recorded before the appender was created are replayed, so the log
+ * starts at the beginning of the session.
  */
 export const createDiagnosticsAppender = (
   diagnostics: Diagnostics,
@@ -111,68 +115,88 @@ export const createDiagnosticsAppender = (
   );
 
   if (!diagnostics.enabled) {
-    return { filePath, flush: () => undefined, dispose: () => undefined };
+    return {
+      filePath,
+      flush: () => undefined,
+      dispose: async () => undefined,
+    };
   }
 
   const maxBufferedEntries = options.maxBufferedEntries ?? 100;
   let buffer: string[] = [];
+  // Chunks handed to the async writer and not yet confirmed on disk, kept so
+  // the `exit` handler can write them if the process leaves first. In the
+  // rare race where one was also completed by the writer, a chunk ends up in
+  // the file twice; losing it would be worse for a log whose purpose is
+  // surviving abrupt termination.
+  let pending: string[][] = [];
+  let writeChain: Promise<void> = Promise.resolve();
   let directoryReady = false;
 
-  const flush = () => {
+  const render = (lines: string[]) => `${lines.join('\n')}\n`;
+
+  const flushAsync = () => {
     if (buffer.length === 0) {
       return;
     }
 
     const lines = buffer;
     buffer = [];
-    try {
-      if (!directoryReady) {
-        fsSync.mkdirSync(path.dirname(filePath), { recursive: true });
-        directoryReady = true;
+    pending.push(lines);
+    writeChain = writeChain.then(async () => {
+      try {
+        if (!directoryReady) {
+          await fs.mkdir(path.dirname(filePath), { recursive: true });
+          directoryReady = true;
+        }
+        await fs.appendFile(filePath, render(lines), 'utf-8');
+      } catch (error) {
+        reportLogger.debug('failed to append diagnostics: %s', error);
+      } finally {
+        pending = pending.filter((chunk) => chunk !== lines);
       }
-      fsSync.appendFileSync(filePath, `${lines.join('\n')}\n`, 'utf-8');
+    });
+  };
+
+  const flushSync = () => {
+    const lines = [...pending.flat(), ...buffer];
+    pending = [];
+    buffer = [];
+    if (lines.length === 0) {
+      return;
+    }
+
+    try {
+      fsSync.mkdirSync(path.dirname(filePath), { recursive: true });
+      fsSync.appendFileSync(filePath, render(lines), 'utf-8');
     } catch (error) {
       reportLogger.debug('failed to append diagnostics: %s', error);
     }
   };
 
-  const unsubscribe = diagnostics.subscribe((entry) => {
-    buffer.push(JSON.stringify(entry));
-    if (buffer.length >= maxBufferedEntries) {
-      flush();
-    }
-  });
-
-  const timer = setInterval(flush, options.flushIntervalMs ?? 2000);
-  timer.unref();
-
-  const signalHandlers = new Map<NodeJS.Signals, () => void>();
-  for (const signal of APPENDED_SIGNALS) {
-    const handler = () => {
-      flush();
-      if (process.listenerCount(signal) === 1) {
-        // Ours is the only handler: restore the default behaviour (terminate).
-        process.off(signal, handler);
-        process.kill(process.pid, signal);
+  const unsubscribe = diagnostics.subscribe(
+    (entry) => {
+      buffer.push(JSON.stringify(entry));
+      if (buffer.length >= maxBufferedEntries) {
+        flushAsync();
       }
-    };
-    signalHandlers.set(signal, handler);
-    process.on(signal, handler);
-  }
-  process.on('exit', flush);
+    },
+    { replay: true }
+  );
 
-  const dispose = () => {
+  const timer = setInterval(flushAsync, options.flushIntervalMs ?? 2000);
+  timer.unref();
+  process.on('exit', flushSync);
+
+  const dispose = async () => {
     unsubscribe();
     clearInterval(timer);
-    flush();
-    process.off('exit', flush);
-    for (const [signal, handler] of signalHandlers) {
-      process.off(signal, handler);
-    }
-    signalHandlers.clear();
+    process.off('exit', flushSync);
+    flushAsync();
+    await writeChain;
   };
 
-  return { filePath, flush, dispose };
+  return { filePath, flush: flushSync, dispose };
 };
 
 export type RunKpis = {
@@ -310,6 +334,39 @@ export const appendStepSummary = async (
   } catch (error) {
     reportLogger.debug('failed to write GitHub step summary: %s', error);
   }
+};
+
+/**
+ * Adds entries recorded after a run's trace was written (session teardown) to
+ * that trace, or writes a new trace if there is none yet.
+ */
+export const appendToTraceFile = async (
+  entries: DiagnosticEntry[],
+  options: { projectRoot: string; runId: string }
+): Promise<string> => {
+  const filePath = path.join(
+    getDiagnosticsDir(options.projectRoot),
+    `${options.runId}.json`
+  );
+
+  let existing: TraceEvent[] = [];
+  try {
+    const parsed = JSON.parse(await fs.readFile(filePath, 'utf-8')) as {
+      traceEvents?: TraceEvent[];
+    };
+    existing = parsed.traceEvents ?? [];
+  } catch {
+    // No trace yet (or an unreadable one): start a fresh file.
+  }
+
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(
+    filePath,
+    JSON.stringify({ traceEvents: [...existing, ...entries.map(toTraceEvent)] }),
+    'utf-8'
+  );
+
+  return filePath;
 };
 
 const formatDuration = (ms: number): string => {

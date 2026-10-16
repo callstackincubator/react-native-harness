@@ -513,6 +513,13 @@ export const createHarnessSession = async (
     projectRoot,
   });
   telemetry.phase('session.created');
+  // Telemetry runs timers and listens on `exit`, so a setup failure before the
+  // main try/catch below must still stop it.
+  const disposeTelemetryOnFailure = <T>(work: Promise<T>): Promise<T> =>
+    work.catch(async (error) => {
+      await telemetry.dispose();
+      throw error;
+    });
 
   sessionLogger.debug(
     'creating session for runner=%s platform=%s',
@@ -535,13 +542,15 @@ export const createHarnessSession = async (
   process.once('SIGTERM', onEarlySignal);
   process.once('SIGINT', onEarlySignal);
 
-  const resourceLockKey = await (platform.getResourceLockKey?.() ?? getDefaultResourceLockKey(platform));
+  const resourceLockKey = await disposeTelemetryOnFailure(
+    Promise.resolve(platform.getResourceLockKey?.() ?? getDefaultResourceLockKey(platform))
+  );
   let didWaitForResourceLock = false;
   let lastStillWaitingLogAt = 0;
 
   logTestRunHeader(platform);
 
-  const resourceLease = await diagnostics.measure(
+  const resourceLease = await disposeTelemetryOnFailure(diagnostics.measure(
     'session.lock.wait',
     () =>
       lockManager.acquire(resourceLockKey, {
@@ -559,10 +568,7 @@ export const createHarnessSession = async (
         },
       }),
     { lockKey: resourceLockKey }
-  ).catch(async (error) => {
-    await telemetry.dispose();
-    throw error;
-  });
+  ));
 
   if (didWaitForResourceLock) logRunnerStarting(platform);
   sessionLogger.debug('resource lock acquired for runner=%s key=%s', platform.name, resourceLockKey);
@@ -1178,6 +1184,9 @@ export const createHarnessSession = async (
       },
       setRunState: (state) => {
         currentRun = state;
+        if (state) {
+          telemetry.trackRun(state.runId);
+        }
       },
       dispose: async (reason = 'normal') => {
         try {

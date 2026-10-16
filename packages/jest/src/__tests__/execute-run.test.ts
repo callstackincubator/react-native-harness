@@ -275,7 +275,7 @@ describe('executeRun', () => {
       });
     });
 
-    it('emits test-file lifecycle phases around every file', async () => {
+    it('emits run and test-file lifecycle phases', async () => {
       const session = makeSession();
       const phases: Array<[string, unknown]> = [];
       session.lifecycle.addListener((event) =>
@@ -286,8 +286,10 @@ describe('executeRun', () => {
 
       const file = path.join('..', 'a.ts');
       expect(phases).toEqual([
+        ['run.start', { runId: expect.any(String) }],
         ['test-file.start', { file }],
         ['test-file.end', { file, status: 'passed' }],
+        ['run.end', { runId: expect.any(String), status: 'passed' }],
       ]);
     });
 

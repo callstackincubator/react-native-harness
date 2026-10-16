@@ -1,6 +1,7 @@
 export { observeMetroEvents, observeBridgeEvents } from './derivers.js';
 export {
   writeTraceFile,
+  appendToTraceFile,
   printSummary,
   createDiagnosticsAppender,
   summarizeRunKpis,

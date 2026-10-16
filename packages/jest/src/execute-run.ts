@@ -183,6 +183,11 @@ export const executeRun = async (
   };
 
   updateRunState();
+  session.lifecycle.emit({
+    type: 'phase',
+    phase: 'run.start',
+    attrs: { runId },
+  });
 
   await session.callHook('run:started', {
     runId,
@@ -374,6 +379,12 @@ export const executeRun = async (
     await caseEventChain;
     unsubscribe();
     runSpan.end({ runId, status: finalStatus });
+    // Idle time between runs (watch mode) is not part of any run's metrics.
+    session.lifecycle.emit({
+      type: 'phase',
+      phase: 'run.end',
+      attrs: { runId, status: finalStatus },
+    });
 
     if (session.diagnostics.enabled) {
       const entries = session.diagnostics.flush();

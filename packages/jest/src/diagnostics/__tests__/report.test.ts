@@ -1,3 +1,4 @@
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -8,6 +9,7 @@ import {
 } from '@react-native-harness/tools';
 import {
   appendStepSummary,
+  appendToTraceFile,
   createDiagnosticsAppender,
   printSummary,
   summarizeRunKpis,
@@ -360,7 +362,7 @@ describe('createDiagnosticsAppender', () => {
   let projectRoot: string;
 
   beforeEach(async () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'harness-appender-test-'));
   });
 
@@ -376,6 +378,12 @@ describe('createDiagnosticsAppender', () => {
       .filter(Boolean)
       .map((line) => JSON.parse(line) as DiagnosticEntry);
 
+  const exists = (filePath: string) =>
+    fs.stat(filePath).then(
+      () => true,
+      () => false,
+    );
+
   it('writes entries as one JSON object per line, flushed on a timer', async () => {
     const diagnostics = createDiagnostics({ enabled: true });
     const appender = createDiagnosticsAppender(diagnostics, {
@@ -388,21 +396,21 @@ describe('createDiagnosticsAppender', () => {
 
     diagnostics.mark('a');
     diagnostics.child('host').gauge('load1', 2.5);
-    await expect(fs.stat(appender.filePath)).rejects.toThrow();
+    expect(await exists(appender.filePath)).toBe(false);
 
     vi.advanceTimersByTime(2000);
+    await appender.dispose();
 
     const entries = await readLines(appender.filePath);
     expect(entries.map((e) => [e.label, e.kind, e.value])).toEqual([
       ['a', 'mark', undefined],
       ['host.load1', 'gauge', 2.5],
     ]);
-
-    appender.dispose();
   });
 
-  it('flushes as soon as enough entries are buffered', async () => {
+  it('does not block the recording call on disk when the buffer fills', async () => {
     const diagnostics = createDiagnostics({ enabled: true });
+    const appendFileSync = vi.spyOn(fsSync, 'appendFileSync');
     const appender = createDiagnosticsAppender(diagnostics, {
       projectRoot,
       id: 'batch',
@@ -411,11 +419,47 @@ describe('createDiagnosticsAppender', () => {
 
     diagnostics.mark('1');
     diagnostics.mark('2');
-    await expect(fs.stat(appender.filePath)).rejects.toThrow();
     diagnostics.mark('3');
 
+    expect(appendFileSync).not.toHaveBeenCalled();
+    await appender.dispose();
     expect(await readLines(appender.filePath)).toHaveLength(3);
-    appender.dispose();
+    expect(appendFileSync).not.toHaveBeenCalled();
+  });
+
+  it('keeps chunks in order across several async writes', async () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    const appender = createDiagnosticsAppender(diagnostics, {
+      projectRoot,
+      id: 'order',
+      maxBufferedEntries: 2,
+    });
+
+    for (let i = 0; i < 7; i += 1) {
+      diagnostics.mark(`m${i}`);
+    }
+    await appender.dispose();
+
+    expect((await readLines(appender.filePath)).map((e) => e.label)).toEqual(
+      Array.from({ length: 7 }, (_, i) => `m${i}`),
+    );
+  });
+
+  it('replays entries recorded before the appender was created', async () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    diagnostics.record({ label: 'session.config.load', duration: 12 });
+
+    const appender = createDiagnosticsAppender(diagnostics, {
+      projectRoot,
+      id: 'replay',
+    });
+    diagnostics.mark('later');
+    await appender.dispose();
+
+    expect((await readLines(appender.filePath)).map((e) => e.label)).toEqual([
+      'session.config.load',
+      'later',
+    ]);
   });
 
   it('keeps entries that the run report flushes out of the diagnostics buffer', async () => {
@@ -427,13 +471,12 @@ describe('createDiagnosticsAppender', () => {
 
     diagnostics.mark('a');
     expect(diagnostics.flush()).toHaveLength(1);
-    appender.flush();
+    await appender.dispose();
 
     expect(await readLines(appender.filePath)).toHaveLength(1);
-    appender.dispose();
   });
 
-  it('flushes on dispose and stops observing afterwards', async () => {
+  it('stops observing after dispose', async () => {
     const diagnostics = createDiagnostics({ enabled: true });
     const appender = createDiagnosticsAppender(diagnostics, {
       projectRoot,
@@ -441,7 +484,7 @@ describe('createDiagnosticsAppender', () => {
     });
 
     diagnostics.mark('before');
-    appender.dispose();
+    await appender.dispose();
     diagnostics.mark('after');
     appender.flush();
 
@@ -450,82 +493,54 @@ describe('createDiagnosticsAppender', () => {
     ]);
   });
 
-  it('flushes on process exit', async () => {
+  it('flushes synchronously on process exit, including writes still pending', async () => {
     const diagnostics = createDiagnostics({ enabled: true });
     const appender = createDiagnosticsAppender(diagnostics, {
       projectRoot,
       id: 'exit',
+      maxBufferedEntries: 2,
     });
 
-    diagnostics.mark('last-words');
+    diagnostics.mark('queued-1');
+    diagnostics.mark('queued-2'); // handed to the async writer, not yet awaited
+    diagnostics.mark('buffered');
     process.emit('exit', 0);
 
-    expect(await readLines(appender.filePath)).toHaveLength(1);
-    appender.dispose();
+    const labels = (await readLines(appender.filePath)).map((e) => e.label);
+    // The async writer may also have completed the first chunk by now, which
+    // is why a chunk can legitimately appear twice; nothing is lost.
+    expect(new Set(labels)).toEqual(new Set(['queued-1', 'queued-2', 'buffered']));
+    await appender.dispose();
   });
 
-  it.each(['SIGTERM', 'SIGINT'] as const)(
-    'flushes on %s and leaves other handlers in charge of termination',
-    async (signal) => {
-      const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-      const otherHandler = vi.fn();
-      process.on(signal, otherHandler);
-      const diagnostics = createDiagnostics({ enabled: true });
-      const appender = createDiagnosticsAppender(diagnostics, {
-        projectRoot,
-        id: `signal-${signal}`,
-      });
-
-      diagnostics.mark('before-kill');
-      process.emit(signal);
-
-      expect(await readLines(appender.filePath)).toHaveLength(1);
-      expect(kill).not.toHaveBeenCalled();
-
-      appender.dispose();
-      process.off(signal, otherHandler);
-    },
-  );
-
-  it('re-raises the signal when it was the only handler', async () => {
-    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-    const baseline = process.listenerCount('SIGTERM');
-    const diagnostics = createDiagnostics({ enabled: true });
-    const appender = createDiagnosticsAppender(diagnostics, {
-      projectRoot,
-      id: 'only-handler',
-    });
-    // Only ours is registered if nothing else was (the common test setup).
-    const others = process.listeners('SIGTERM').slice(0, baseline);
-    others.forEach((listener) => process.off('SIGTERM', listener));
-
-    diagnostics.mark('x');
-    process.emit('SIGTERM');
-
-    expect(kill).toHaveBeenCalledWith(process.pid, 'SIGTERM');
-    expect(process.listenerCount('SIGTERM')).toBe(0);
-
-    others.forEach((listener) => process.on('SIGTERM', listener));
-    appender.dispose();
-  });
-
-  it('removes every process listener on dispose', () => {
+  it('does not install signal handlers', async () => {
     const before = {
-      exit: process.listenerCount('exit'),
       sigterm: process.listenerCount('SIGTERM'),
       sigint: process.listenerCount('SIGINT'),
     };
     const appender = createDiagnosticsAppender(
       createDiagnostics({ enabled: true }),
-      { projectRoot, id: 'listeners' },
+      { projectRoot, id: 'signals' },
     );
-    appender.dispose();
 
     expect({
-      exit: process.listenerCount('exit'),
       sigterm: process.listenerCount('SIGTERM'),
       sigint: process.listenerCount('SIGINT'),
     }).toEqual(before);
+    await appender.dispose();
+  });
+
+  it('removes its exit listener on dispose', async () => {
+    const before = process.listenerCount('exit');
+    const appender = createDiagnosticsAppender(
+      createDiagnostics({ enabled: true }),
+      { projectRoot, id: 'listeners' },
+    );
+    expect(process.listenerCount('exit')).toBe(before + 1);
+
+    await appender.dispose();
+
+    expect(process.listenerCount('exit')).toBe(before);
   });
 
   it('does nothing at all when diagnostics are disabled', async () => {
@@ -539,14 +554,14 @@ describe('createDiagnosticsAppender', () => {
     });
     diagnostics.mark('a');
     appender.flush();
-    appender.dispose();
+    await appender.dispose();
 
     expect(setIntervalSpy).not.toHaveBeenCalled();
     expect(process.listenerCount('exit')).toBe(before);
-    await expect(fs.stat(path.join(projectRoot, '.harness'))).rejects.toThrow();
+    expect(await exists(path.join(projectRoot, '.harness'))).toBe(false);
   });
 
-  it('never throws when the directory cannot be written', () => {
+  it('never throws when the directory cannot be written', async () => {
     const diagnostics = createDiagnostics({ enabled: true });
     const appender = createDiagnosticsAppender(diagnostics, {
       projectRoot: '/dev/null/nope',
@@ -555,6 +570,53 @@ describe('createDiagnosticsAppender', () => {
 
     diagnostics.mark('a');
     expect(() => appender.flush()).not.toThrow();
-    appender.dispose();
+    diagnostics.mark('b');
+    await expect(appender.dispose()).resolves.toBeUndefined();
+  });
+});
+
+describe('appendToTraceFile', () => {
+  let projectRoot: string;
+
+  beforeEach(async () => {
+    projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'harness-append-trace-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(projectRoot, { recursive: true, force: true });
+  });
+
+  it('adds late entries to the run trace that was already written', async () => {
+    await writeTraceFile([makeSpanEntry({ label: 'run.total' })], {
+      projectRoot,
+      runId: 'run-1',
+    });
+
+    const filePath = await appendToTraceFile(
+      [
+        makeSpanEntry({ label: 'dispose.total' }),
+        makeGaugeEntry('host.process_count', 812),
+      ],
+      { projectRoot, runId: 'run-1' },
+    );
+
+    const parsed = JSON.parse(await fs.readFile(filePath, 'utf-8')) as {
+      traceEvents: Array<{ name: string; ph: string }>;
+    };
+    expect(parsed.traceEvents.map((e) => [e.name, e.ph])).toEqual([
+      ['run.total', 'X'],
+      ['dispose.total', 'X'],
+      ['host.process_count', 'C'],
+    ]);
+  });
+
+  it('writes a new trace when none exists', async () => {
+    const filePath = await appendToTraceFile([makeSpanEntry()], {
+      projectRoot,
+      runId: 'fresh',
+    });
+
+    const parsed = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+    expect(parsed.traceEvents).toHaveLength(1);
   });
 });

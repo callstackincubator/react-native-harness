@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  logger,
   createDefaultProbes,
   createLifecycleEmitter,
   DEFAULT_SAMPLE_INTERVAL_MS,
@@ -13,7 +14,9 @@ import {
   type Config as HarnessConfig,
 } from '@react-native-harness/config';
 import type { HarnessPlatformRunner } from '@react-native-harness/platforms';
-import { createDiagnosticsAppender } from './report.js';
+import { appendToTraceFile, createDiagnosticsAppender } from './report.js';
+
+const telemetryLogger = logger.child('diagnostics');
 
 export type SessionTelemetry = {
   /** Identifies the session; names the incremental `.jsonl` log. */
@@ -24,9 +27,15 @@ export type SessionTelemetry = {
   phase(phase: LifecyclePhase, attrs?: DiagnosticAttrs): void;
   /** Makes the platform runner available to the platform collector probe. */
   attachPlatform(platform: HarnessPlatformRunner): void;
+  /** Records the run that is current, so teardown data can join its trace. */
+  trackRun(runId: string): void;
   /** Resolves once lifecycle driven collection started so far has finished. */
   settled(): Promise<void>;
-  /** Stops probes and the incremental log. Safe to call more than once. */
+  /**
+   * Stops probes and the incremental log. Entries recorded since the last
+   * run's report was written (the end-of-run snapshot, teardown spans) are
+   * added to that run's trace. Safe to call more than once.
+   */
   dispose(): Promise<void>;
 };
 
@@ -51,6 +60,7 @@ export const startSessionTelemetry = ({
   const options = resolveDiagnosticsOptions(config);
 
   let platform: HarnessPlatformRunner | undefined;
+  let lastRunId: string | undefined;
 
   const appender = createDiagnosticsAppender(diagnostics, {
     projectRoot,
@@ -90,14 +100,31 @@ export const startSessionTelemetry = ({
     attachPlatform: (runner) => {
       platform = runner;
     },
+    trackRun: (runId) => {
+      lastRunId = runId;
+    },
     settled: run.settled,
     dispose: () => {
       disposed ??= (async () => {
         try {
           abortController.abort();
           await run.dispose();
+          if (diagnostics.enabled && lastRunId) {
+            const leftover = diagnostics.flush();
+            if (leftover.length > 0) {
+              await appendToTraceFile(leftover, {
+                projectRoot,
+                runId: lastRunId,
+              });
+            }
+          }
+        } catch (error) {
+          telemetryLogger.debug(
+            'failed to finalize diagnostics trace: %s',
+            error
+          );
         } finally {
-          appender.dispose();
+          await appender.dispose();
         }
       })();
       return disposed;

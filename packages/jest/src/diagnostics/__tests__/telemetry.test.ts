@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDiagnostics } from '@react-native-harness/tools';
 import type { HarnessPlatformRunner } from '@react-native-harness/platforms';
+import { writeTraceFile } from '../report.js';
 import { startSessionTelemetry } from '../telemetry.js';
 
 const onlyPlatformProbe = {
@@ -162,6 +163,59 @@ describe('startSessionTelemetry', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('adds entries recorded after the run report to that run trace on dispose', async () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    const telemetry = startSessionTelemetry({
+      diagnostics,
+      config: onlyPlatformProbe,
+      projectRoot,
+    });
+    telemetry.attachPlatform(
+      makePlatform() as unknown as HarnessPlatformRunner
+    );
+    telemetry.trackRun('run-1');
+
+    // What executeRun does when the run ends: report, then flush.
+    diagnostics.start('run.total').end();
+    const reported = diagnostics.flush();
+    await writeTraceFile(reported, { projectRoot, runId: 'run-1' });
+
+    // Teardown: an end-of-run collection and the dispose span.
+    telemetry.phase('dispose');
+    await telemetry.settled();
+    diagnostics.start('dispose.total').end();
+    await telemetry.dispose();
+
+    const trace = JSON.parse(
+      await fs.readFile(
+        path.join(projectRoot, '.harness', 'diagnostics', 'run-1.json'),
+        'utf-8'
+      )
+    ) as { traceEvents: Array<{ name: string }> };
+    expect(trace.traceEvents.map((e) => e.name)).toEqual([
+      'telemetry.context',
+      'run.total',
+      'platform.ios.simulator.guest_process_count',
+      'dispose.total',
+    ]);
+  });
+
+  it('writes no trace on dispose when no run ever started', async () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    const telemetry = startSessionTelemetry({
+      diagnostics,
+      config: onlyPlatformProbe,
+      projectRoot,
+    });
+
+    await telemetry.dispose();
+
+    const files = await fs.readdir(
+      path.join(projectRoot, '.harness', 'diagnostics')
+    );
+    expect(files).toEqual([`${telemetry.sessionId}.jsonl`]);
   });
 
   it('dispose is idempotent', async () => {

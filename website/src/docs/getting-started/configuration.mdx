@@ -317,7 +317,7 @@ Besides timings for session setup, Metro bundling, app startup and each test fil
 | `node.rss_mb`, `node.heap_used_mb`                                   | Memory of the Harness process.                                                                                                |
 | `node.event_loop.p50_ms`, `node.event_loop.p99_ms`, `node.event_loop.max_ms` | How late Harness's own timers fire. Large values mean the machine is too busy to schedule work.                       |
 
-On macOS, Harness also records a process listing (`telemetry.process_snapshot`, the 40 largest processes by memory plus the total process count as `host.process_count`) when the platform becomes ready, when the app becomes ready, and at the end of the run. For iOS simulators it records `platform.ios.simulator.guest_process_count`, and the `platform.ios.simctl.waitForBoot` span carries the last boot stage reported by the simulator (`bootLastStatus`), which shows what a slow or timed-out boot was waiting on.
+On macOS, Harness also records a process listing (`telemetry.process_snapshot`, the 40 largest processes by memory plus the total process count as `host.process_count`) when the platform becomes ready, the first time the app becomes ready, and at the end of the run (later app relaunches are not listed again, to keep sampling cheap). For iOS simulators it records `platform.ios.simulator.guest_process_count`, the number of processes running inside the simulator, at platform ready and at the end of the run, and the `platform.ios.simctl.waitForBoot` span carries the last boot stage reported by the simulator (`bootLastStatus`), which shows what a slow or timed-out boot was waiting on.
 
 ### Output
 
@@ -325,9 +325,11 @@ Everything is written to `.harness/diagnostics/` in your project root:
 
 | File                       | Contents                                                                                                                                                    |
 | :------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<sessionId>.jsonl`        | One entry per line, written while the run is in progress (and on `SIGINT`/`SIGTERM`), so a job that is cancelled or times out still leaves its data behind. |
+| `<sessionId>.jsonl`        | One entry per line, written while the run is in progress (and when the process exits), so a job that is cancelled or times out still leaves its data behind. |
 | `<runId>.json`             | A Chrome Trace Event file written when the run finishes. Open it in [Perfetto](https://ui.perfetto.dev) to see the timeline and a graph for each sampled metric. |
 | `<runId>.summary.json`     | The key numbers of the run, for comparing runs: boot wait, time to ready, peak load, peak compressed memory, minimum free memory, memory swapped out, longest event loop lag, number of test files and the result. A value that could not be measured is `null`. |
+
+Sampling is paused between runs in watch mode, so idle time does not show up in a run's metrics. Entries recorded while the session shuts down (the end-of-run process listing, for example) are added to the trace of the last run; the key numbers cover the run itself.
 
 The same key numbers are printed at the end of the run. When running in GitHub Actions, they are also added to the job summary as a table.
 
