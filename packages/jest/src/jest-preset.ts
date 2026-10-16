@@ -14,4 +14,8 @@ export default {
     '/ios/(Pods|build)(/|$)',
     '/android/(build|\\.gradle|app/build|app/\\.cxx)(/|$)',
   ],
+  // With the build output skipped, Jest's own crawl is cheaper than querying
+  // watchman, which costs two CLI process spawns per run and still lists every
+  // file. Metro keeps using watchman.
+  watchman: false,
 };
