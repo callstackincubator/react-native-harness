@@ -3,7 +3,12 @@ import type { Config, Test, TestEvents, TestRunnerOptions, TestWatcher } from 'j
 import type { TestSuiteResult } from '@react-native-harness/bridge';
 import type { HarnessSession } from '../harness-session.js';
 import type { executeRun as ExecuteRun } from '../execute-run.js';
-import { createDiagnostics, HarnessError } from '@react-native-harness/tools';
+import {
+  createDiagnostics,
+  getEmitter,
+  HarnessError,
+  type LifecycleEvent,
+} from '@react-native-harness/tools';
 import JestHarness from '../index.js';
 
 const resolveUndefined = async () => undefined;
@@ -16,6 +21,8 @@ const mockSession: HarnessSession = {
   config: { metroPort: 8081 } as HarnessSession['config'],
   context: {} as HarnessSession['context'],
   diagnostics: createDiagnostics({ enabled: false }),
+  sessionId: 'session-1',
+  lifecycle: getEmitter<LifecycleEvent>(),
   onTestRunnerEvent: vi.fn(() => () => undefined),
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async (): Promise<TestSuiteResult> => ({

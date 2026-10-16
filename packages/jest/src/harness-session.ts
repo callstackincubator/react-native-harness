@@ -75,7 +75,12 @@ import {
   type ResourceLockManager,
   type ResourceLease,
 } from './resource-lock.js';
-import { observeBridgeEvents, observeMetroEvents } from './diagnostics/index.js';
+import {
+  observeBridgeEvents,
+  observeMetroEvents,
+  startSessionTelemetry,
+  type SessionTelemetry,
+} from './diagnostics/index.js';
 import { resolveHarnessMetroPort } from './metro-port.js';
 import { getAdditionalCliArgs } from './cli-args.js';
 import {
@@ -96,6 +101,8 @@ const isBridgeDisconnectError = (error: unknown) =>
   error instanceof Error && error.message === 'App bridge disconnected';
 const TEST_RUN_BRIDGE_STABILITY_WAIT_MS = 500;
 const DISPOSE_HOOK_TIMEOUT_MS = 5_000;
+// Upper bound on waiting for end-of-run telemetry before tearing resources down.
+const DISPOSE_TELEMETRY_TIMEOUT_MS = 10_000;
 
 const waitForBoundedSettlement = async <T>(
   promise: Promise<T>,
@@ -194,6 +201,10 @@ export type HarnessSession = {
   readonly config: HarnessConfig;
   readonly context: HarnessContext;
   readonly diagnostics: Diagnostics;
+  /** Identifies this session; names its incremental diagnostics log. */
+  readonly sessionId: string;
+  /** Run lifecycle phases, for telemetry probes (see `SessionTelemetry`). */
+  readonly lifecycle: SessionTelemetry['lifecycle'];
   onTestRunnerEvent: (listener: (event: TestRunnerEvents) => void) => () => void;
   runTestFile: (path: string, options: HarnessRunTestsOptions) => Promise<TestSuiteResult>;
   ensureAppReady: (testFilePath: string) => Promise<void>;
@@ -494,6 +505,15 @@ export const createHarnessSession = async (
     duration: Date.now() - setupStartedAt,
   });
 
+  // The one composition point for run telemetry. Everything below only emits
+  // lifecycle phases; probes translate them and polled data into diagnostics.
+  const telemetry = startSessionTelemetry({
+    diagnostics,
+    config: harnessConfig,
+    projectRoot,
+  });
+  telemetry.phase('session.created');
+
   sessionLogger.debug(
     'creating session for runner=%s platform=%s',
     platform.name,
@@ -539,7 +559,10 @@ export const createHarnessSession = async (
         },
       }),
     { lockKey: resourceLockKey }
-  );
+  ).catch(async (error) => {
+    await telemetry.dispose();
+    throw error;
+  });
 
   if (didWaitForResourceLock) logRunnerStarting(platform);
   sessionLogger.debug('resource lock acquired for runner=%s key=%s', platform.name, resourceLockKey);
@@ -638,6 +661,7 @@ export const createHarnessSession = async (
             }
             initialized.metro = instance;
             sessionLogger.debug('Metro initialized');
+            telemetry.phase('metro.ready');
             // Attach the Metro diagnostics deriver before the eager prewarm
             // fires so its bundle build/request events land in the trace.
             disposeMetroDiagnostics = observeMetroEvents(instance.events, diagnostics);
@@ -679,6 +703,8 @@ export const createHarnessSession = async (
                   }
                   initialized.platform = instance;
                   sessionLogger.debug('platform runner initialized');
+                  telemetry.attachPlatform(instance);
+                  telemetry.phase('platform.ready');
                   return instance;
                 });
               },
@@ -808,6 +834,7 @@ export const createHarnessSession = async (
       // Abort only cancels finite/in-flight work. Ownership remains explicit
       // below, so this cannot race a platform or app-session disposal path.
       sessionController.abort();
+      telemetry.phase('dispose');
 
       const hookWork = (async () => {
         await hooks.drain();
@@ -839,6 +866,13 @@ export const createHarnessSession = async (
       } else if (hookResult.status === 'rejected') {
         hookError = hookResult.reason;
       }
+
+      // End-of-run telemetry has to observe the platform before it is torn
+      // down, but must never be able to hold teardown up for long.
+      await waitForBoundedSettlement(
+        telemetry.settled(),
+        DISPOSE_TELEMETRY_TIMEOUT_MS
+      );
 
       if (runtimeConfig.forwardClientLogs) {
         metroInstance.events.removeListener(clientLogListener);
@@ -900,7 +934,7 @@ export const createHarnessSession = async (
     };
 
     const dispose = (reason: 'normal' | 'abort' | 'error' = 'normal') => {
-      disposePromise ??= disposeOnce(reason);
+      disposePromise ??= disposeOnce(reason).finally(() => telemetry.dispose());
       return disposePromise;
     };
 
@@ -966,6 +1000,7 @@ export const createHarnessSession = async (
       await hooks.drain();
       sessionLogger.debug('app is ready for %s', testFilePath);
       appReadySpan.end({ file: testFilePath, reused: false });
+      telemetry.phase('app.ready', { file: testFilePath });
     };
 
     // Shared by restartApp (crash/timeout recovery) and the 'process' reset
@@ -1118,6 +1153,8 @@ export const createHarnessSession = async (
       config: runtimeConfig,
       context,
       diagnostics,
+      sessionId: telemetry.sessionId,
+      lifecycle: telemetry.lifecycle,
       onTestRunnerEvent: (listener) => {
         testRunnerEventListeners.add(listener);
         return () => {
@@ -1157,6 +1194,7 @@ export const createHarnessSession = async (
     // Cancels any inflight init work still holding sessionController.signal
     // (e.g. a platform init call abandoned after a readiness timeout race).
     sessionController.abort();
+    await telemetry.dispose();
     await Promise.allSettled([resourceLease.release(), metroPortLease?.release()]);
     if (receivedEarlySignal) {
       process.exit(1);

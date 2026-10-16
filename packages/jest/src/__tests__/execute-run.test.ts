@@ -12,7 +12,11 @@ import {
   AppBridgeDisconnectedError,
   DeviceNotRespondingError,
 } from '@react-native-harness/bridge/server';
-import { createDiagnostics } from '@react-native-harness/tools';
+import {
+  createDiagnostics,
+  getEmitter,
+  type LifecycleEvent,
+} from '@react-native-harness/tools';
 import type { HarnessSession } from '../harness-session.js';
 import { executeRun } from '../execute-run.js';
 
@@ -36,9 +40,15 @@ vi.mock('../run.js', () => ({
 // asserting on them doesn't race with executeRun's own diagnostics.flush().
 const mockPrintSummary = vi.hoisted(() => vi.fn());
 const mockWriteTraceFile = vi.hoisted(() => vi.fn(async () => '/fake/trace.json'));
-vi.mock('../diagnostics/index.js', () => ({
+const mockWriteSummaryFile = vi.hoisted(() => vi.fn(async () => '/fake/summary.json'));
+const mockAppendStepSummary = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('../diagnostics/index.js', async (importOriginal) => ({
+  // summarizeRunKpis stays real: it is a pure reduction over the entries.
+  ...(await importOriginal<typeof import('../diagnostics/index.js')>()),
   printSummary: mockPrintSummary,
   writeTraceFile: mockWriteTraceFile,
+  writeSummaryFile: mockWriteSummaryFile,
+  appendStepSummary: mockAppendStepSummary,
 }));
 
 // ---------------------------------------------------------------------------
@@ -125,6 +135,8 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
     },
   } as HarnessSession['context'],
   diagnostics: createDiagnostics({ enabled: false }),
+  sessionId: 'session-1',
+  lifecycle: getEmitter<LifecycleEvent>(),
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async () => makeHarnessResult()),
   restartApp: vi.fn(resolveUndefined),
@@ -231,6 +243,22 @@ describe('executeRun', () => {
       expect(mockWriteTraceFile).toHaveBeenCalledWith(entries, expect.objectContaining({ runId: expect.any(String) }));
     });
 
+    it('writes the KPI summary and step summary next to the trace', async () => {
+      mockWriteSummaryFile.mockClear();
+      mockAppendStepSummary.mockClear();
+      const diagnostics = createDiagnostics({ enabled: true });
+      const session = makeSession({ diagnostics });
+
+      await executeRun(session, [makeTest('/a.ts')], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      const kpis = { testFileCount: 1, result: 'passed' };
+      expect(mockWriteSummaryFile).toHaveBeenCalledWith(
+        expect.objectContaining(kpis),
+        expect.objectContaining({ runId: expect.any(String), sessionId: 'session-1' }),
+      );
+      expect(mockAppendStepSummary).toHaveBeenCalledWith(expect.objectContaining(kpis));
+    });
+
     it('still records run.total when a test throws', async () => {
       const diagnostics = createDiagnostics({ enabled: true });
       const session = makeSession({
@@ -245,6 +273,22 @@ describe('executeRun', () => {
       expect(entries.find((e) => e.label === 'run.file')).toMatchObject({
         attrs: { status: 'failed' },
       });
+    });
+
+    it('emits test-file lifecycle phases around every file', async () => {
+      const session = makeSession();
+      const phases: Array<[string, unknown]> = [];
+      session.lifecycle.addListener((event) =>
+        phases.push([event.phase, event.attrs]),
+      );
+
+      await executeRun(session, [makeTest('/a.ts')], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      const file = path.join('..', 'a.ts');
+      expect(phases).toEqual([
+        ['test-file.start', { file }],
+        ['test-file.end', { file, status: 'passed' }],
+      ]);
     });
 
     it('is a no-op and does not generate a report when diagnostics is disabled', async () => {
