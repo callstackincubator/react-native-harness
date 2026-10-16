@@ -172,9 +172,6 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
-      - name: Install Watchman
-        run: brew install watchman
-
       - name: Install dependencies
         run: pnpm install
 
