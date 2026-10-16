@@ -9,10 +9,6 @@ import {
   appleSimulator,
 } from '@react-native-harness/platform-apple';
 import {
-  vegaPlatform,
-  vegaEmulator,
-} from '@react-native-harness/platform-vega';
-import {
   webPlatform,
   chromium,
   chrome,
@@ -98,11 +94,6 @@ export default {
           HARNESS_CRASH_MODE: 'delayed_pre_ready',
         },
       },
-    }),
-    vegaPlatform({
-      name: 'vega',
-      device: vegaEmulator('VegaTV_1'),
-      bundleId: 'com.playground',
     }),
     webPlatform({
       name: 'web',

@@ -1,3 +1,13 @@
+## 1.6.0 (2026-10-16)
+
+### 🚀 Features
+
+- The Vega runner now works with current Vega SDKs (0.24 and newer): it drives the `vega` CLI instead of the retired `kepler` binary, starts the Vega Virtual Device when it is not running, supports Fire TV devices in developer mode through `vegaPhysicalDevice(serial)`, installs the app package from `HARNESS_APP_PATH`, forwards Metro's port to the device, captures device logs for failed runs, and configures Metro for React Native for Vega (`kepler` platform, the `@amazon-devices/react-native-kepler` redirect, and Amazon's system bundles so React Native comes from the OS copy). Platforms can also declare a `bundlePlatform` when the app requests Metro bundles under a different platform name than the harness platform id, the runtime no longer depends on a URL polyfill that reads the legacy native module bridge, so it initializes on bridgeless runtimes such as Vega, and test bundles may use string module ids from custom Metro id factories. ([#196](https://github.com/callstackincubator/react-native-harness/pull/196), [#195](https://github.com/callstackincubator/react-native-harness/issues/195))
+
+### ❤️ Thank You
+
+- Hristo Totov @hristototov
+
 ## v1.5.0 (2026-09-14)
 
 ### 🚀 Features

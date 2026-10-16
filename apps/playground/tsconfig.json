@@ -7,9 +7,6 @@
       "path": "../../packages/platform-web"
     },
     {
-      "path": "../../packages/platform-vega"
-    },
-    {
       "path": "../../packages/platform-ios"
     },
     {

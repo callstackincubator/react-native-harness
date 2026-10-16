@@ -1,0 +1,5 @@
+{
+  "//": "The Vega runtime launches the app by its interactive component id, so the registered name must match manifest.toml",
+  "name": "com.harnessplayground.vega.main",
+  "displayName": "HarnessPlaygroundVega"
+}

@@ -246,6 +246,15 @@ export const getHarnessSerializer = (
         // dev-mode serving doesn't tree-shake -- but it is the boundary of
         // what this capture can guarantee.
         const graphKey = getGraphKey(graph);
+        // Assign ids to the whole graph before the first filter call, in the
+        // same order Metro's baseJSBundle does. Config-level filters may
+        // only learn which modules are external once their id factory has
+        // seen them (Vega system bundles do this), and a filter answer
+        // for a pre-module is cached, so asking too early keeps a module in
+        // the bundle that Metro itself would have dropped.
+        for (const mod of graph.dependencies.values()) {
+          bundleOptions.createModuleId(mod.path);
+        }
         const capturedModules = collectIncludedModulePaths(
           preModules,
           graph,

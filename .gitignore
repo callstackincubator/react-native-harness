@@ -128,3 +128,6 @@ npm-debug.*
 *.mobileprovision
 *.orig.*
 web-build/
+
+# Vega build metadata
+apps/playground-vega/buildinfo.json

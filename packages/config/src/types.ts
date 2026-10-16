@@ -22,6 +22,9 @@ const RunnerSchema = z.object({
   // runner. Set by a platform factory (`HarnessPlatform.metroConfigEnhancer`);
   // imported and run by the bundler while it composes the config.
   metroConfigEnhancer: z.string().optional(),
+  // The Metro platform the app requests when it differs from platformId
+  // (e.g. Vega apps request "kepler"). Set by the platform factory.
+  bundlePlatform: z.string().optional(),
   platformId: z.string(),
   // Set by the platform factories (`HarnessPlatform.getResourceLockKey`) to
   // scope the run's resource lock — e.g. per emulator/simulator/device rather

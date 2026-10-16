@@ -1,0 +1,124 @@
+import { PackageManagerTabs } from '@theme';
+
+# Vega (Fire TV)
+
+React Native Harness runs tests on the [Vega Virtual Device](https://developer.amazon.com/docs/vega/0.24/run-apps) and on Fire TV devices running Vega OS, using an app built with [React Native for Vega](https://developer.amazon.com/docs/vega/0.24/vega-rn-overview).
+
+## Overview
+
+The Vega runner drives the `vega` CLI from the Vega SDK. It starts the Vega Virtual Device when it is not running, installs the app package (`.vpkg`) from `HARNESS_APP_PATH`, forwards Metro's port to the device, launches the app by its component id, and follows the app's process and device logs for the duration of the run. Build the app with `react-native build-vega` before invoking Harness.
+
+## Installation
+
+<PackageManagerTabs command="install --save-dev @react-native-harness/platform-vega" />
+
+## Configuration
+
+Import the Vega platform helpers in your `rn-harness.config.mjs`:
+
+```javascript
+import {
+  vegaPlatform,
+  vegaVirtualDevice,
+  vegaPhysicalDevice,
+} from '@react-native-harness/platform-vega';
+
+export default {
+  entryPoint: './index.js',
+  // React Native for Vega runs the component registered under the interactive
+  // component id from manifest.toml, so app.json "name" and this value must
+  // both be "<packageId>.main".
+  appRegistryComponentName: 'com.example.myapp.main',
+  runners: [
+    vegaPlatform({
+      name: 'vega',
+      device: vegaVirtualDevice(),
+      // The [package] id from manifest.toml
+      bundleId: 'com.example.myapp',
+    }),
+    vegaPlatform({
+      name: 'fire-tv',
+      // The serial number printed by `vega device list`
+      device: vegaPhysicalDevice('G0X1AB1234567890'),
+      bundleId: 'com.example.myapp',
+    }),
+  ],
+};
+```
+
+### Options
+
+| Option        | Type     | Default           | Description                                                                                                                 |
+| :------------ | :------- | :---------------- | :-------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | `string` | –                 | Unique name for the runner.                                                                                                 |
+| `device`      | `object` | –                 | `vegaVirtualDevice(deviceId?)` for the Vega Virtual Device or `vegaPhysicalDevice(serial)` for a Fire TV in developer mode. |
+| `bundleId`    | `string` | –                 | The `[package] id` from `manifest.toml`. The component id defaults to `<bundleId>.main`.                                     |
+| `componentId` | `string` | `<bundleId>.main` | The `[[components.interactive]] id` from `manifest.toml`. The Vega CLI identifies the app by it for every install and launch step. |
+| `buildType`   | `string` | `'Debug'`         | Build variant of the package in `HARNESS_APP_PATH`, passed to `vega device install-app --buildType`. Harness needs a Debug package.       |
+
+### Finding device names
+
+`vega device list` prints every device the SDK can reach. The Vega Virtual Device shows up as `VirtualDevice`, which is the default for `vegaVirtualDevice()`. Fire TV devices are listed by serial number:
+
+```
+G0X1AB1234567890 : A1ZZ32RVTQ796E
+VirtualDevice : tv - aarch64 - OS - amazon-ab123456cd789012
+```
+
+## Building and deploying the app
+
+Harness needs a **Debug** package, because debug builds load the JavaScript bundle from Metro:
+
+```bash
+npx react-native build-vega --build-type Debug
+```
+
+The package lands in `build/<arch>-debug/<appName>_<arch>.vpkg`, one per architecture: `aarch64` for the virtual device on Apple Silicon, `x86_64` for the virtual device on Intel, and `armv7` for Fire TV devices.
+
+Point `HARNESS_APP_PATH` at the package that matches the target and run the tests:
+
+```bash
+HARNESS_APP_PATH=build/aarch64-debug/MyApp_aarch64.vpkg npx react-native-harness --harnessRunner vega
+```
+
+Harness installs the package when the app is missing, and reinstalls it whenever `HARNESS_APP_PATH` is set. With `HARNESS_APP_PATH` unset, the app must already be installed on the device.
+
+Install Debug packages with the Debug build type. `vega device install-app` defaults to Release, and a Debug app installed that way never gets the debug sandbox configuration it needs to reach Metro, so Vega OS kills it as unresponsive about fifteen seconds after launch. Harness passes `--buildType Debug` itself; when you install manually, add `-b Debug`.
+
+### Fire TV devices
+
+1. On the Fire TV, open **Settings > My Fire TV > About**, select the device name seven times to unlock developer options, then enable **Developer Mode**. The device shows a six digit code.
+2. On your machine, sign in and enable the device:
+
+   ```bash
+   vega devmode login
+   vega devmode enable-device --code <code>
+   ```
+
+3. After the device reboots, confirm it is listed by `vega device list` and use its serial number in `vegaPhysicalDevice(...)`.
+4. Build the `armv7` package and run the `fire-tv` runner with `HARNESS_APP_PATH` pointing at it.
+
+The device must be on the same network as your machine.
+
+## Metro configuration
+
+Harness applies the same out-of-tree platform wiring that `react-native start` gets from `@amazon-devices/kepler-cli-platform` (the `react-native` → `@amazon-devices/react-native-kepler` resolver redirect and the `kepler` platform), so a plain `metro.config.js` works. Vega system bundles are honoured too: when the app uses them (the default), Harness applies the plugin's split-bundle config so React Native comes from the OS copy and the app bundle stays small; with `kepler.useSystemJsBundles: false` the whole bundle is served by Harness.
+
+Platform-specific test files use the `vega` suffix, for example `settings.vega.harness.ts`, while `Platform.OS` inside tests is `'kepler'`.
+
+Vega apps load the bundle from `http://localhost:8081` on the device. Harness reverse-forwards that port to its Metro server with `vega device start-port-forwarding`. When Harness has to run Metro on a different port, it maps the ports with the SDK's `vda` tool, and fails with a clear error if `vda` is not available. `vda` identifies devices by adb-style serials, so this fallback works with a single attached device, or with a physical device whose serial `vda` reports; with a virtual device and a Fire TV attached at the same time keep Metro on 8081.
+
+## Limitations
+
+- `@react-native-harness/ui` (`screen`, `userEvent`, screenshots) has no Vega native module yet, so test files importing it fail to load on Vega.
+- Crash detection relies on the app process disappearing and on the device log stream (Vega OS reports the kill reason there, for example `AppNotResponding`). Minidumps are not collected.
+
+## Requirements
+
+- Vega SDK 0.24 or newer on macOS or Ubuntu, with the `vega` CLI on `PATH` (`source ~/vega/env`). Harness also looks in `$KEPLER_SDK_PATH/bin` and `~/vega/bin`, or at the binary named by `VEGA_CLI_PATH`.
+- An app built with `@amazon-devices/react-native-kepler` 4.x (React Native 0.83).
+- A Debug `.vpkg` for the target architecture, passed through `HARNESS_APP_PATH`.
+
+## CI
+
+The Vega SDK is not available on GitHub-hosted runners. Run Vega jobs on a self-hosted runner with the SDK installed — see [Running in CI/CD](/docs/guides/ci-cd#vega-in-ci).

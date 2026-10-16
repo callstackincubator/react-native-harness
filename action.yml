@@ -1,5 +1,5 @@
 name: React Native Harness
-description: Run React Native Harness tests on iOS, Android, Web or Windows
+description: Run React Native Harness tests on iOS, Android, Web, Windows or Vega
 inputs:
   runner:
     description: The runner to use (must match a runner name defined in your harness config)
@@ -7,8 +7,8 @@ inputs:
     type: string
   app:
     description: >-
-      The path to the built app (.app for iOS, .apk for Android). Not required
-      for web, or for Windows (deploy the app with `react-native run-windows`
+      The path to the built app (.app for iOS, .apk for Android, .vpkg for
+      Vega). Not required for web, or for Windows (deploy the app with `react-native run-windows`
       before this action runs).
     required: false
     type: string

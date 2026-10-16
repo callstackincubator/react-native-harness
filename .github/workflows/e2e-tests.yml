@@ -13,6 +13,7 @@ on:
           - android
           - ios
           - web
+          - vega
   pull_request:
     types: [ready_for_review]
     branches:
@@ -559,3 +560,51 @@ jobs:
           name: harness-diagnostics-crash-validate-ios
           path: apps/playground/.harness/diagnostics
           if-no-files-found: ignore
+
+  e2e-vega:
+    name: E2E Vega
+    # Needs a self-hosted runner with the Vega SDK installed and the "vega"
+    # label; GitHub-hosted images have no SDK, so this job is dispatch only.
+    runs-on: [self-hosted, vega]
+    timeout-minutes: 45
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'vega' }}
+    env:
+      HARNESS_DEBUG: true
+      RN_HARNESS_DIAGNOSTICS: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.10.0'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: |
+          pnpm install
+
+      - name: Build packages
+        run: |
+          pnpm nx run-many -t build --projects="packages/*"
+
+      - name: Build the Vega app
+        run: |
+          source ~/vega/env
+          pnpm --filter @react-native-harness/playground-vega build:debug
+
+      - name: Run React Native Harness
+        uses: ./
+        with:
+          runner: vega
+          projectRoot: apps/playground-vega
+          app: apps/playground-vega/build/${{ runner.arch == 'ARM64' && 'aarch64' || 'x86_64' }}-debug/playground-vega_${{ runner.arch == 'ARM64' && 'aarch64' || 'x86_64' }}.vpkg

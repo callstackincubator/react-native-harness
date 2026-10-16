@@ -1,7 +1,7 @@
 import { ModuleFactory, ModuleId, Require } from './types.js';
 
-const modulesCache = new Map<number, unknown>();
-const mockRegistry = new Map<number, ModuleFactory>();
+const modulesCache = new Map<ModuleId, unknown>();
+const mockRegistry = new Map<ModuleId, ModuleFactory>();
 
 const originalRequire = global.__r;
 
@@ -10,11 +10,11 @@ export const mock = (moduleId: string, factory: ModuleFactory): void => {
   mockRegistry.set(moduleId as unknown as ModuleId, factory);
 };
 
-const isModuleMocked = (moduleId: number): boolean => {
+const isModuleMocked = (moduleId: ModuleId): boolean => {
   return mockRegistry.has(moduleId);
 };
 
-const getMockImplementation = (moduleId: number): unknown | null => {
+const getMockImplementation = (moduleId: ModuleId): unknown | null => {
   const factory = mockRegistry.get(moduleId);
   
   if (!factory) {

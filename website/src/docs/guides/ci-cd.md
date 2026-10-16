@@ -36,7 +36,7 @@ The action reads your `rn-harness.config.mjs` file to determine the selected run
 
 The action accepts the following inputs:
 
-- `app` (optional): Path to your built app (`.apk` for Android, `.app` for iOS). Not needed for web or Windows runners
+- `app` (optional): Path to your built app (`.apk` for Android, `.app` for iOS, `.vpkg` for Vega). Not needed for web or Windows runners
 - `runner` (required): The runner name from your Harness config (for example `"android"`, `"ios"`, or `"chromium"`)
 - `projectRoot` (optional): The project root directory (defaults to the repository root)
 - `uploadVisualTestArtifacts` (optional): Whether to upload visual test diff and actual images as artifacts
@@ -358,3 +358,32 @@ For Rock projects:
 - Use Rock's integrated build commands
 - Benefit from Rock's advanced caching mechanisms
 - Follow Rock's CI/CD best practices for optimal performance
+
+## Vega in CI
+
+The Vega SDK and the Vega Virtual Device are not available on GitHub-hosted runners, so Vega jobs need a self-hosted macOS or Ubuntu runner with the SDK installed (`source ~/vega/env` in the runner's shell) and either a virtual device or a Fire TV in developer mode on the runner's network. Build the Debug package in an earlier step and pass it through the `app` input (see the [Vega platform guide](/docs/platforms/vega)). The repository's own [`e2e-tests.yml`](https://github.com/callstackincubator/react-native-harness/blob/main/.github/workflows/e2e-tests.yml) has an `e2e-vega` job of this shape, gated on `workflow_dispatch` with `platform: vega` and a runner carrying the `vega` label.
+
+```yaml
+jobs:
+  test-vega:
+    name: Test Vega
+    runs-on: [self-hosted, vega]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build the Vega app
+        run: npx react-native build-vega --build-type Debug
+
+      # Keep @v… in sync with the react-native-harness version in package.json
+      - name: Run React Native Harness
+        uses: callstackincubator/react-native-harness@v1.0.0
+        with:
+          runner: vega
+          app: build/aarch64-debug/MyApp_aarch64.vpkg
+          packageManager: pnpm
+```

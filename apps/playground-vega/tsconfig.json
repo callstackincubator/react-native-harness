@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "../../packages/platform-vega"
+    },
+    {
+      "path": "../../packages/jest"
+    },
+    {
+      "path": "../../packages/runtime"
+    },
+    {
+      "path": "../../packages/react-native-harness"
+    },
+    {
+      "path": "./tsconfig.app.json"
+    }
+  ]
+}
