@@ -71,7 +71,7 @@ npx react-native-harness --harnessRunner ios
 
 React Native Harness supports the most commonly used Jest flags:
 
-- `--watch`: Watch files for changes and rerun tests related to changed files.
+- `--watch`: Watch test files for changes and rerun the ones that changed. Changes to other source files don't trigger a rerun.
 - `--coverage`: Indicates that test coverage information should be collected and reported in the output.
 - `--testNamePattern, -t`: Run only tests with a name that matches the regex.
 - `--testPathPattern`: A regexp string that is matched against all tests paths before executing the test.
