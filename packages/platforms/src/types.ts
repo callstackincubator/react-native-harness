@@ -1,4 +1,6 @@
-import type { Diagnostics } from '@react-native-harness/tools';
+import type { Diagnostics, TelemetryCollector } from '@react-native-harness/tools';
+
+export type { TelemetryCollector };
 
 export type CrashArtifactKind =
   | 'logcat'
@@ -125,6 +127,12 @@ export type HarnessPlatformRunner = {
   collectNativeCoverage?: (
     options: CollectNativeCoverageOptions
   ) => Promise<string | null>;
+  /**
+   * Optional. Supplies platform-specific run telemetry (for example the number
+   * of processes inside a simulator). Harness calls it at run lifecycle phases
+   * when diagnostics are enabled; runners never record diagnostics themselves.
+   */
+  createTelemetryCollector?: () => TelemetryCollector;
 };
 
 export type HarnessPlatformInitOptions = {

@@ -15,6 +15,10 @@ import {
   assertAppleDeviceSimulator,
 } from './config.js';
 import * as simctlModule from './xcrun/simctl.js';
+import {
+  simctlErrorAttrs,
+  simctlResultAttrs,
+} from './xcrun/simctl-diagnostics.js';
 import * as devicectlModule from './xcrun/devicectl.js';
 import { getDeviceName } from './utils.js';
 import { HarnessAppPathError } from './errors.js';
@@ -58,7 +62,8 @@ export const getAppleSimulatorPlatformInstance = async (
   const simctl = instrumented(
     simctlModule,
     'platform.ios.simctl',
-    init.diagnostics ?? noopDiagnostics
+    init.diagnostics ?? noopDiagnostics,
+    { resultAttrs: simctlResultAttrs, errorAttrs: simctlErrorAttrs }
   );
   const permissionsEnabled = harnessConfig.permissions ?? false;
 
@@ -234,6 +239,20 @@ export const getAppleSimulatorPlatformInstance = async (
         outputDir: options.outputDir,
       });
     },
+    createTelemetryCollector: () => ({
+      collect: async (phase): Promise<Record<string, number>> => {
+        // Listing guest services costs a simctl round trip, so only do it at
+        // the boundaries where the guest's state is worth recording.
+        if (phase !== 'platform.ready' && phase !== 'dispose') {
+          return {};
+        }
+
+        return {
+          'ios.simulator.guest_process_count':
+            await simctl.getGuestProcessCount(udid),
+        };
+      },
+    }),
   };
 };
 

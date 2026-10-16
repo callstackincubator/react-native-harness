@@ -21,6 +21,7 @@ export type {
   HarnessPlatformRunnerFactory,
   CollectNativeCoverageOptions,
   HarnessPlatformRunner,
+  TelemetryCollector,
   RunTarget,
   VegaAppLaunchOptions,
   WebAppLaunchOptions,

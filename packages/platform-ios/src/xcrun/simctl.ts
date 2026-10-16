@@ -340,13 +340,68 @@ export const bootSimulator = async (udid: string): Promise<void> => {
   await spawn('xcrun', ['simctl', 'boot', udid]);
 };
 
+export type BootStatusSummary = {
+  /** The stage `simctl bootstatus` last reported, e.g. "Waiting on System App" or "Finished". */
+  lastStatusLine: string | null;
+  /** The elapsed boot time (seconds) `simctl bootstatus` last reported. */
+  elapsedSeconds: number | null;
+};
+
+const BOOT_STATUS_HEADER =
+  /^\[[^\]]*\]\s+Status=\d+,\s+isTerminal=\w+,\s+Elapsed=(\d+):(\d+)\./;
+
+/**
+ * Summarises the progress log printed by `simctl bootstatus`. It prints one
+ * block per update: a `[timestamp] Status=…, Elapsed=mm:ss.` header followed by
+ * indented lines, the first of which names the stage being waited on.
+ */
+export const parseBootStatus = (output: string | undefined): BootStatusSummary => {
+  let lastStatusLine: string | null = null;
+  let elapsedSeconds: number | null = null;
+  let expectStage = false;
+
+  for (const line of (output ?? '').split('\n')) {
+    const header = BOOT_STATUS_HEADER.exec(line);
+    if (header) {
+      elapsedSeconds = Number(header[1]) * 60 + Number(header[2]);
+      expectStage = true;
+      continue;
+    }
+
+    const stage = line.replace(/^[\s├─┤]+/u, '').trim();
+    if (expectStage && stage) {
+      lastStatusLine = stage;
+      expectStage = false;
+    }
+  }
+
+  return { lastStatusLine, elapsedSeconds };
+};
+
 export const waitForBoot = async (
   udid: string,
   signal: AbortSignal,
-): Promise<void> => {
-  await spawn('xcrun', ['simctl', 'bootstatus', udid, '-b'], {
+): Promise<BootStatusSummary> => {
+  const { stdout } = await spawn('xcrun', ['simctl', 'bootstatus', udid, '-b'], {
     signal,
   });
+  return parseBootStatus(stdout);
+};
+
+const GUEST_PROCESS_LIST_TIMEOUT_MS = 30_000;
+
+/**
+ * Counts the services the simulator's own `launchd` is managing. A guest that
+ * is overloaded or still migrating shows up here long before anything fails.
+ */
+export const getGuestProcessCount = async (udid: string): Promise<number> => {
+  const { stdout } = await spawn(
+    'xcrun',
+    ['simctl', 'spawn', udid, 'launchctl', 'list'],
+    { timeout: GUEST_PROCESS_LIST_TIMEOUT_MS },
+  );
+  // The first line is the column header (PID Status Label).
+  return Math.max(0, stdout.split('\n').filter((line) => line.trim()).length - 1);
 };
 
 export const diagnose = async (
