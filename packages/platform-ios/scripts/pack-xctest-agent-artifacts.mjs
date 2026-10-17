@@ -17,7 +17,33 @@ const packageRoot = path.resolve(
   '..'
 );
 const modulePath = path.join(packageRoot, 'dist', 'xctest-agent-prebuilt.js');
-const DEFAULT_DESTINATIONS = ['simulator'];
+
+// Both destinations ship. Simulator artifacts help every iOS run, while device
+// artifacts help only the subset that runs on hardware with a matching Xcode, and
+// cost roughly half again on the tarball (1.0 MB to 1.6 MB compressed). They ship
+// anyway because signing them locally is the only way a device run gets a fast
+// path at all, and an inert implementation would not be worth shipping. Consumers
+// who never touch hardware pay one larger download and nothing at runtime: the
+// provider declines before doing any work. Pack a narrower set with
+// HARNESS_XCTEST_PREBUILD_DESTINATIONS=simulator.
+const DEFAULT_DESTINATIONS = ['simulator', 'device'];
+const DESTINATIONS_ENV = 'HARNESS_XCTEST_PREBUILD_DESTINATIONS';
+
+const getDefaultDestinations = () => {
+  const configured = process.env[DESTINATIONS_ENV]?.trim();
+
+  if (!configured) {
+    return DEFAULT_DESTINATIONS;
+  }
+
+  return configured
+    .split(',')
+    .map((destination) => destination.trim())
+    .filter(Boolean);
+};
+
+const isSupportedDestination = (destination) =>
+  destination === 'simulator' || destination === 'device';
 
 const parseDestinations = (argv) => {
   const destinations = [];
@@ -30,23 +56,21 @@ const parseDestinations = (argv) => {
       continue;
     }
 
-    if (argument === '--all') {
-      destinations.push('simulator', 'device');
-      continue;
-    }
-
     throw new Error(`Unknown argument: ${argument}`);
   }
 
-  for (const destination of destinations) {
-    if (destination !== 'simulator' && destination !== 'device') {
+  const requested =
+    destinations.length > 0 ? destinations : getDefaultDestinations();
+
+  for (const destination of requested) {
+    if (!isSupportedDestination(destination)) {
       throw new Error(
         `Unsupported destination '${destination}'. Expected 'simulator' or 'device'.`
       );
     }
   }
 
-  return destinations.length > 0 ? destinations : DEFAULT_DESTINATIONS;
+  return [...new Set(requested)];
 };
 
 const canBuildForIos = () => {

@@ -684,6 +684,17 @@ export const buildXCTestAgent = async (
 export const createBuildXCTestAgentProvider = (): XCTestAgentProvider => ({
   id: 'build',
   prepare: async (context) => {
+    // The remap escape hatch belongs to the prebuilt path alone. It cannot be
+    // applied to a build: `xcodebuild` takes `PRODUCT_BUNDLE_IDENTIFIER` as a
+    // global override, and the agent project builds two targets whose ids must
+    // stay distinct, so one override would collapse the app and the test bundle
+    // onto the same id and the install would be rejected as a duplicate.
+    if (context.destination === 'device' && context.signing?.bundleIdPrefix) {
+      xctestAgentLogger.warn(
+        'device.codeSign.bundleIdPrefix cannot be applied to a locally built agent (it would give both agent targets the same bundle id), building com.callstackincubator.HarnessXCTestAgent as-is'
+      );
+    }
+
     const result = await buildXCTestAgent({
       destination: context.destination,
       signing: context.signing,

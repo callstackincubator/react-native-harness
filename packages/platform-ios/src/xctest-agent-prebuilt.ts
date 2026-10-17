@@ -1,8 +1,14 @@
-import { logger } from '@react-native-harness/tools';
+import { getHarnessCacheRootPath, logger } from '@react-native-harness/tools';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  buildXCTestAgent,
+  getAgentProjectSourcesHash,
+  getXCTestAgentBuildProductsPath,
+  resolveXCTestAgentToolchain,
+} from './xctest-agent-build.js';
 import type {
   XCTestAgentArtifacts,
   XCTestAgentBuildDestination,
@@ -16,9 +22,8 @@ const PREBUILT_INDEX_NAME = 'index.json';
 const PREBUILT_INDEX_SCHEMA_VERSION = 1;
 const PREBUILT_CACHE_PREFIX = 'xctest-agent-prebuilt';
 const PREBUILT_CACHE_MARKER = 'prebuilt-cache.json';
-const HARNESS_DIRNAME = '.harness';
-const CACHE_DIRNAME = 'cache';
 const XCTEST_PREBUILT_ROOT_ENV = 'HARNESS_IOS_XCTEST_PREBUILT_ROOT';
+const XCTEST_SKIP_PREBUILDS_ENV = 'HARNESS_SKIP_XCTEST_PREBUILDS';
 
 /** Build output that never affects a test run but dominates artifact size. */
 const STRIPPED_ARTIFACT_SUFFIXES = ['.dSYM', '.swiftmodule', '.bcsymbolmap'];
@@ -63,15 +68,6 @@ export type PackXCTestAgentArtifactsResult = {
   indexFilePath: string;
 };
 
-type BuildModule = typeof import('./xctest-agent-build.js');
-
-let buildModulePromise: Promise<BuildModule> | undefined;
-
-// Loaded lazily so consumers that never touch prebuilt artifacts do not pay
-// for the build module's imports.
-const loadBuildModule = async (): Promise<BuildModule> =>
-  (buildModulePromise ??= import('./xctest-agent-build.js'));
-
 /**
  * Root of the installed package, which is the directory holding the agent
  * project. Anchored on the project rather than on `../`, because this module
@@ -80,7 +76,9 @@ const loadBuildModule = async (): Promise<BuildModule> =>
  * the package root.
  */
 export const getPackageRootPath = (): string => {
-  return path.dirname(fileURLToPath(new URL('../xctest-agent', import.meta.url)));
+  return path.dirname(
+    fileURLToPath(new URL('../xctest-agent', import.meta.url))
+  );
 };
 
 export const getPrebuiltRootPath = (
@@ -93,9 +91,9 @@ export const getPrebuiltIndexPath = (
 
 const getPackageVersion = (): string => {
   const packageJsonPath = path.join(getPackageRootPath(), 'package.json');
-  const packageJson = JSON.parse(
-    fs.readFileSync(packageJsonPath, 'utf8')
-  ) as { version?: string };
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as {
+    version?: string;
+  };
 
   if (!packageJson.version) {
     throw new Error(`Missing version in ${packageJsonPath}`);
@@ -175,7 +173,9 @@ const shouldCopyArtifactPath = (sourcePath: string): boolean =>
       STRIPPED_ARTIFACT_SUFFIXES.some((suffix) => segment.endsWith(suffix))
     );
 
-const findXCTestRunRelativePath = (buildProductsPath: string): string | null => {
+const findXCTestRunRelativePath = (
+  buildProductsPath: string
+): string | null => {
   if (!fs.existsSync(buildProductsPath)) {
     return null;
   }
@@ -216,12 +216,22 @@ const getPrebuiltDirectoryName = (key: {
 export const packXCTestAgentArtifacts = async (
   options: PackXCTestAgentArtifactsOptions
 ): Promise<PackXCTestAgentArtifactsResult> => {
-  const build = await loadBuildModule();
-  const toolchain = await build.resolveXCTestAgentToolchain(
+  // The destination becomes part of the artifact's identity, and the build
+  // arguments fall through to device for anything that is not simulator. A typo
+  // would therefore pack a device build under a simulator label and publish it.
+  if (options.destination !== 'simulator' && options.destination !== 'device') {
+    throw new Error(
+      `Unsupported destination '${String(
+        options.destination
+      )}'. Expected 'simulator' or 'device'.`
+    );
+  }
+
+  const toolchain = await resolveXCTestAgentToolchain(
     options.destination,
     options.signal
   );
-  const buildInputsHash = build.getAgentProjectSourcesHash();
+  const buildInputsHash = getAgentProjectSourcesHash();
   const packageRoot = options.packageRoot ?? getPackageRootPath();
   const indexPath = getPrebuiltIndexPath(packageRoot);
   const directoryName = getPrebuiltDirectoryName({
@@ -235,16 +245,17 @@ export const packXCTestAgentArtifacts = async (
     directoryName
   );
 
-  const buildResult = await build.buildXCTestAgent({
+  const buildResult = await buildXCTestAgent({
     destination: options.destination,
     projectRoot: options.projectRoot,
     signal: options.signal,
   });
-  const sourceBuildProductsPath = build.getXCTestAgentBuildProductsPath(
+  const sourceBuildProductsPath = getXCTestAgentBuildProductsPath(
     buildResult.derivedDataPath
   );
-  const xctestrunRelativePath =
-    findXCTestRunRelativePath(sourceBuildProductsPath);
+  const xctestrunRelativePath = findXCTestRunRelativePath(
+    sourceBuildProductsPath
+  );
 
   if (!xctestrunRelativePath) {
     throw new Error(
@@ -303,17 +314,6 @@ type UnpackMarker = {
   xctestrunRelativePath: string;
 };
 
-const getPrebuiltCachePath = (
-  entry: XCTestAgentPrebuiltEntry,
-  projectRoot: string
-): string =>
-  path.join(
-    projectRoot,
-    HARNESS_DIRNAME,
-    CACHE_DIRNAME,
-    `${PREBUILT_CACHE_PREFIX}-${entry.directoryName}`
-  );
-
 const readUnpackMarker = (markerPath: string): UnpackMarker | null => {
   if (!fs.existsSync(markerPath)) {
     return null;
@@ -330,24 +330,39 @@ const readUnpackMarker = (markerPath: string): UnpackMarker | null => {
  * Copies an artifact out of the package into the project's Harness cache.
  *
  * The copy exists because `test-without-building` writes results and logs
- * into its derived data path, while the installed package is a shared store
- * that must stay pristine. Unpacking happens once per project.
+ * into its derived data path, and on a physical device that copy is also
+ * re-signed in place, while the installed package is a shared store that must
+ * stay pristine. Unpacking happens once per project.
  */
 const unpackPrebuiltArtifacts = (
-  build: BuildModule,
   entry: XCTestAgentPrebuiltEntry,
   artifactDirectoryPath: string,
-  projectRoot: string
+  projectRoot: string,
+  /**
+   * Distinguishes caches that must not be shared, such as one re-signed for a
+   * particular identity and profile. The packaged artifact itself is never
+   * mutated, so the unpacked copy has to be keyed by whatever was signed into it.
+   */
+  variant?: string
 ): string => {
-  const derivedDataPath = getPrebuiltCachePath(entry, projectRoot);
+  const directoryName = variant
+    ? `${entry.directoryName}-${createHash('sha256')
+        .update(variant)
+        .digest('hex')
+        .slice(0, 8)}`
+    : entry.directoryName;
+  const derivedDataPath = path.join(
+    getHarnessCacheRootPath(projectRoot),
+    `${PREBUILT_CACHE_PREFIX}-${directoryName}`
+  );
   const markerPath = path.join(derivedDataPath, PREBUILT_CACHE_MARKER);
   const marker = readUnpackMarker(markerPath);
 
   if (
-    marker?.directoryName === entry.directoryName &&
+    marker?.directoryName === directoryName &&
     fs.existsSync(
       path.join(
-        build.getXCTestAgentBuildProductsPath(derivedDataPath),
+        getXCTestAgentBuildProductsPath(derivedDataPath),
         entry.xctestrunRelativePath
       )
     )
@@ -364,7 +379,7 @@ const unpackPrebuiltArtifacts = (
     markerPath,
     JSON.stringify(
       {
-        directoryName: entry.directoryName,
+        directoryName,
         xctestrunRelativePath: entry.xctestrunRelativePath,
       } satisfies UnpackMarker,
       null,
@@ -375,110 +390,193 @@ const unpackPrebuiltArtifacts = (
   return derivedDataPath;
 };
 
+export type PreparedPrebuiltArtifacts = {
+  /** Unpacked, unsigned copy of the artifact; safe to modify or re-sign. */
+  derivedDataPath: string;
+  entry: XCTestAgentPrebuiltEntry;
+};
+
+export const toPrebuiltArtifacts = (
+  prepared: PreparedPrebuiltArtifacts
+): XCTestAgentArtifacts => ({
+  launch: {
+    derivedDataPath: prepared.derivedDataPath,
+    kind: 'xctestrun',
+    xctestrunPath: path.join(
+      getXCTestAgentBuildProductsPath(prepared.derivedDataPath),
+      prepared.entry.xctestrunRelativePath
+    ),
+  },
+  source: 'prebuilt',
+});
+
 /**
- * Primary provider: uses artifacts shipped inside the installed package.
+ * Finds the shipped artifact the local toolchain may use, or returns `null` when
+ * none qualifies.
  *
- * It declines whenever the local toolchain differs from the one that packed
- * the artifact, which leaves `build-for-testing` as the fallback rather than
- * launching a binary the local Xcode may not accept.
+ * Declining rather than failing is deliberate: a toolchain mismatch is the
+ * normal case for anyone whose Xcode differs from the release machine's, and
+ * the caller's fallback — build locally — is always correct.
+ */
+export const resolvePrebuiltEntry = async (options: {
+  destination: XCTestAgentBuildDestination;
+  packageRoot?: string;
+  signal?: AbortSignal;
+}): Promise<XCTestAgentPrebuiltEntry | null> => {
+  if (process.env[XCTEST_SKIP_PREBUILDS_ENV] === '1') {
+    xctestAgentLogger.debug(
+      '%s is set, ignoring prebuilt XCTest agent artifacts',
+      XCTEST_SKIP_PREBUILDS_ENV
+    );
+    return null;
+  }
+
+  const packageRoot = options.packageRoot ?? resolvePrebuiltPackageRoot();
+  const index = readPrebuiltIndex(getPrebuiltIndexPath(packageRoot));
+  const candidates = index?.entries.filter(
+    (candidate) => candidate.destination === options.destination
+  );
+
+  if (!candidates?.length) {
+    xctestAgentLogger.debug(
+      'no prebuilt XCTest agent artifacts shipped for %s',
+      options.destination
+    );
+    return null;
+  }
+
+  let toolchain;
+
+  try {
+    toolchain = await resolveXCTestAgentToolchain(
+      options.destination,
+      options.signal
+    );
+  } catch (error) {
+    xctestAgentLogger.debug(
+      'skipping prebuilt XCTest agent artifacts, the local toolchain version could not be read: %s',
+      error instanceof Error ? error.message : String(error)
+    );
+    return null;
+  }
+
+  const buildInputsHash = getAgentProjectSourcesHash();
+  const agentVersion = getPackageVersion();
+  const entry = candidates.find(
+    (candidate) =>
+      candidate.buildInputsHash === buildInputsHash &&
+      candidate.agentVersion === agentVersion &&
+      candidate.xcodeVersion === toolchain.xcodeVersion &&
+      candidate.sdkVersion === toolchain.sdkVersion
+  );
+
+  if (!entry) {
+    xctestAgentLogger.info(
+      'Shipped XCTest agent artifacts do not match the local %s toolchain (Xcode %s, SDK %s), building instead',
+      options.destination,
+      toolchain.xcodeVersion,
+      toolchain.sdkVersion
+    );
+    return null;
+  }
+
+  const artifactDirectoryPath = path.join(
+    getPrebuiltRootPath(packageRoot),
+    entry.directoryName
+  );
+
+  if (
+    !fs.existsSync(
+      path.join(
+        getXCTestAgentBuildProductsPath(artifactDirectoryPath),
+        entry.xctestrunRelativePath
+      )
+    )
+  ) {
+    xctestAgentLogger.warn(
+      'Prebuilt XCTest agent artifacts are incomplete at %s, building instead',
+      artifactDirectoryPath
+    );
+    return null;
+  }
+
+  return entry;
+};
+
+/**
+ * Copies a resolved artifact into the project's Harness cache.
+ *
+ * `variant` separates caches whose contents differ for reasons the artifact key
+ * cannot see, such as re-signing for a particular identity. The packaged copy is
+ * never modified, so anything written into the unpacked copy has to be part of
+ * its directory name.
+ */
+export const unpackPrebuiltEntry = (
+  entry: XCTestAgentPrebuiltEntry,
+  options: { packageRoot?: string; projectRoot: string; variant?: string }
+): PreparedPrebuiltArtifacts => ({
+  derivedDataPath: unpackPrebuiltArtifacts(
+    entry,
+    path.join(
+      getPrebuiltRootPath(options.packageRoot ?? resolvePrebuiltPackageRoot()),
+      entry.directoryName
+    ),
+    options.projectRoot,
+    options.variant
+  ),
+  entry,
+});
+
+/**
+ * Resolves a usable shipped artifact and copies it into the project cache, or
+ * returns `null` when none qualifies.
+ */
+const preparePrebuiltArtifacts = async (options: {
+  destination: XCTestAgentBuildDestination;
+  packageRoot?: string;
+  projectRoot: string;
+  signal?: AbortSignal;
+  variant?: string;
+}): Promise<PreparedPrebuiltArtifacts | null> => {
+  const entry = await resolvePrebuiltEntry(options);
+
+  if (!entry) {
+    return null;
+  }
+
+  return unpackPrebuiltEntry(entry, options);
+};
+
+/**
+ * Provider for simulator runs: the shipped artifact is directly runnable, since
+ * simulator builds carry no signature.
  */
 export const createPrebuiltXCTestAgentProvider = (options?: {
   packageRoot?: string;
 }): XCTestAgentProvider => ({
   id: 'prebuilt',
   prepare: async (context) => {
-    const packageRoot = options?.packageRoot ?? resolvePrebuiltPackageRoot();
-    const index = readPrebuiltIndex(getPrebuiltIndexPath(packageRoot));
-    const candidates = index?.entries.filter(
-      (candidate) => candidate.destination === context.destination
-    );
-
-    if (!candidates?.length) {
-      xctestAgentLogger.debug(
-        'no prebuilt XCTest agent artifacts shipped for %s',
-        context.destination
-      );
+    if (context.destination !== 'simulator') {
       return null;
     }
 
-    const build = await loadBuildModule();
-    let toolchain;
+    const prepared = await preparePrebuiltArtifacts({
+      ...options,
+      destination: context.destination,
+      projectRoot: context.projectRoot,
+      signal: context.signal,
+    });
 
-    try {
-      toolchain = await build.resolveXCTestAgentToolchain(
-        context.destination,
-        context.signal
-      );
-    } catch (error) {
-      xctestAgentLogger.debug(
-        'skipping prebuilt XCTest agent artifacts, the local toolchain version could not be read: %s',
-        error instanceof Error ? error.message : String(error)
-      );
+    if (!prepared) {
       return null;
     }
-
-    const buildInputsHash = build.getAgentProjectSourcesHash();
-    const agentVersion = getPackageVersion();
-    const entry = candidates.find(
-      (candidate) =>
-        candidate.buildInputsHash === buildInputsHash &&
-        candidate.agentVersion === agentVersion &&
-        candidate.xcodeVersion === toolchain.xcodeVersion &&
-        candidate.sdkVersion === toolchain.sdkVersion
-    );
-
-    if (!entry) {
-      xctestAgentLogger.info(
-        'Shipped XCTest agent artifacts do not match the local %s toolchain (Xcode %s, SDK %s), building instead',
-        context.destination,
-        toolchain.xcodeVersion,
-        toolchain.sdkVersion
-      );
-      return null;
-    }
-
-    const artifactDirectoryPath = path.join(
-      getPrebuiltRootPath(packageRoot),
-      entry.directoryName
-    );
-    const packagedXCTestRunPath = path.join(
-      build.getXCTestAgentBuildProductsPath(artifactDirectoryPath),
-      entry.xctestrunRelativePath
-    );
-
-    if (!fs.existsSync(packagedXCTestRunPath)) {
-      xctestAgentLogger.warn(
-        'Prebuilt XCTest agent artifacts are incomplete at %s, building instead',
-        artifactDirectoryPath
-      );
-      return null;
-    }
-
-    const derivedDataPath = unpackPrebuiltArtifacts(
-      build,
-      entry,
-      artifactDirectoryPath,
-      context.projectRoot
-    );
 
     xctestAgentLogger.info(
       'Using prebuilt XCTest agent artifacts for %s target (Xcode %s)',
       context.destination,
-      entry.xcodeVersion
+      prepared.entry.xcodeVersion
     );
 
-    const artifacts: XCTestAgentArtifacts = {
-      launch: {
-        derivedDataPath,
-        kind: 'xctestrun',
-        xctestrunPath: path.join(
-          build.getXCTestAgentBuildProductsPath(derivedDataPath),
-          entry.xctestrunRelativePath
-        ),
-      },
-      source: 'prebuilt',
-    };
-
-    return artifacts;
+    return toPrebuiltArtifacts(prepared);
   },
 });

@@ -196,6 +196,9 @@ const contextFor = (root = projectRoot) => ({
 describe('prebuilt XCTest agent artifacts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Same as in the resign suite: these tests are about the shipped artifacts,
+    // so an inherited skip flag would disable the thing under test.
+    delete process.env.HARNESS_SKIP_XCTEST_PREBUILDS;
     tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-harness-prebuilt-'));
     packageRoot = path.join(tempRoot, 'package');
     projectRoot = path.join(tempRoot, 'project');

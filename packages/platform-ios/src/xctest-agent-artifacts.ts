@@ -5,6 +5,8 @@ const xctestAgentLogger = logger.child('ios-xctest-agent');
 export type XCTestAgentBuildDestination = 'simulator' | 'device';
 
 export type XCTestAgentBuildSigning = {
+  /** Rewrites the agent's bundle ids; see `ApplePhysicalDeviceCodeSign`. */
+  bundleIdPrefix?: string;
   provisioningProfile?: string;
   signingIdentity?: string;
   teamId?: string;
@@ -44,6 +46,8 @@ export type XCTestAgentArtifacts = {
 };
 
 export type XCTestAgentProviderContext = {
+  /** UDID of the target device. Device providers need it to check a profile covers it. */
+  deviceId?: string;
   destination: XCTestAgentBuildDestination;
   /** Consumer project root, used as the anchor for `.harness` paths. */
   projectRoot: string;

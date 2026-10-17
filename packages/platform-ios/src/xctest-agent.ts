@@ -31,6 +31,7 @@ import {
   getXCTestAgentProjectRoot,
 } from './xctest-agent-build.js';
 import { createPrebuiltXCTestAgentProvider } from './xctest-agent-prebuilt.js';
+import { createResignedDeviceXCTestAgentProvider } from './xctest-agent-resign.js';
 
 const pipelineAsync = promisify(pipeline);
 
@@ -135,10 +136,15 @@ const createExternalXCTestAgentProvider = (): XCTestAgentProvider => ({
 /**
  * Artifact sources in the order they are trusted: an explicitly supplied
  * run file, then artifacts shipped with the package, then a local build.
+ *
+ * Simulator and device artifacts need separate providers. A simulator build is
+ * runnable as shipped; a device build is shipped unsigned and has to acquire
+ * the consumer's signature first.
  */
 export const createDefaultXCTestAgentProviders = (): XCTestAgentProvider[] => [
   createExternalXCTestAgentProvider(),
   createPrebuiltXCTestAgentProvider(),
+  createResignedDeviceXCTestAgentProvider(),
   createBuildXCTestAgentProvider(),
 ];
 
@@ -418,6 +424,7 @@ export const createXCTestAgentController = (options: {
 
     const signing = target.kind === 'device' ? target.codeSign : undefined;
     const artifacts = await resolveXCTestAgentArtifacts(providers, {
+      deviceId: target.kind === 'device' ? target.id : undefined,
       destination: target.kind,
       projectRoot: options.projectRoot ?? process.cwd(),
       signing,

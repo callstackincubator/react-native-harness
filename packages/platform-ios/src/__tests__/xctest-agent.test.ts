@@ -96,6 +96,7 @@ const xcodeVersion = 'Xcode 26.0\nBuild version 17A123';
 const originalExternalXCTestRunFile = process.env.HARNESS_IOS_XCTESTRUN_FILE;
 const originalExternalDerivedDataPath =
   process.env.HARNESS_IOS_XCTEST_DERIVED_DATA_PATH;
+const originalSkipPrebuilts = process.env.HARNESS_SKIP_XCTEST_PREBUILDS;
 
 const createLongRunningSubprocess = (options?: {
   ignoreSignal?: NodeJS.Signals;
@@ -159,6 +160,11 @@ const createLongRunningSubprocess = (options?: {
 describe('xctest-agent orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // These tests cover the controller and the build provider. Shipped artifacts
+    // are exercised by their own suites, and leaving them reachable here would
+    // make the outcome depend on whether this checkout happens to have packed
+    // any — and would decode the developer's real provisioning profiles.
+    process.env.HARNESS_SKIP_XCTEST_PREBUILDS = '1';
     mocks.health.mockResolvedValue({
       permissions: {
         autoAcceptPermissions: false,
@@ -280,6 +286,7 @@ describe('xctest-agent orchestration', () => {
       'HARNESS_IOS_XCTEST_DERIVED_DATA_PATH',
       originalExternalDerivedDataPath
     );
+    restoreEnvVar('HARNESS_SKIP_XCTEST_PREBUILDS', originalSkipPrebuilts);
     rmBuildRoot();
     process.chdir(originalCwd);
     fs.rmSync(tempProjectRoot, { recursive: true, force: true });
