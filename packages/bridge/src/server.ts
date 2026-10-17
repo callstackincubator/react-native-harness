@@ -7,20 +7,22 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { logger } from '@react-native-harness/tools';
-import { BinaryStore, parseBinaryFrame } from './binary-transfer.js';
+import { receiveBinary } from './binary.js';
 import {
   AppBridgeDisconnectedError,
   DeviceNotRespondingError,
 } from './errors.js';
 import { createHeartbeat } from './heartbeat.js';
 import { matchImageSnapshot } from './image-snapshot.js';
+import {
+  createLink,
+  globalClock,
+  StandardWebSocketConnection,
+  type LinkConnection,
+  type StandardWebSocket,
+} from './link/index.js';
 import { serializeBridgeMessage } from './protocol.js';
 import { createRpcPeer } from './rpc-peer.js';
-import {
-  createRpcTransport,
-  type BridgeTransport,
-} from './transport.js';
-import { createNodeWebSocketTransport } from './websocket-server-transport.js';
 import type {
   BridgeServerFunctions,
   BridgeClientFunctions,
@@ -92,17 +94,17 @@ const createWss = (transport: TransportOptions): Promise<WebSocketServer> => {
 };
 
 const receiveScreenshot = async (
-  binaryStore: BinaryStore,
+  link: LinkConnection,
   reference: BinaryDataReference,
 ): Promise<FileReference> => {
-  const data = binaryStore.get(reference.transferId);
-  if (!data) {
+  const data = await receiveBinary(link, reference.channelId);
+
+  if (data.length !== reference.size) {
     throw new Error(
-      `Binary data for transfer ${reference.transferId} not found or expired`,
+      `Screenshot transfer ended after ${data.length} of ${reference.size} bytes`,
     );
   }
 
-  binaryStore.delete(reference.transferId);
   const file = path.join(os.tmpdir(), `harness-screenshot-${randomUUID()}.png`);
   await fs.writeFile(file, data);
   return { path: file };
@@ -117,7 +119,7 @@ export const createHarnessBridge = async (
 
   const emitter = new EventEmitter();
   let currentConnection: AppConnection | null = null;
-  let activeSession: { disconnect: (reason?: Error) => void; transport: BridgeTransport } | null =
+  let activeSession: { disconnect: (reason?: Error) => void; link: LinkConnection } | null =
     null;
   const connectionWaiters: Array<{
     resolve: (c: AppConnection) => void;
@@ -131,21 +133,19 @@ export const createHarnessBridge = async (
     }
 
     bridgeLogger.debug('app connected');
-    const transport = createNodeWebSocketTransport(ws);
-    const binaryStore = new BinaryStore();
+    const link = createLink(
+      new StandardWebSocketConnection(ws as unknown as StandardWebSocket),
+      {
+        end: 'gateway',
+        clock: globalClock,
+        logger: bridgeLogger.child('link'),
+      },
+    );
     let readyConnection: AppConnection | null = null;
     let disconnected = false;
     let offMessage: () => void = noop;
     let offClose: () => void = noop;
     let offError: () => void = noop;
-
-    const closeTransport = () => {
-      if (transport.state === 'closing' || transport.state === 'closed') {
-        return;
-      }
-
-      transport.close(1012);
-    };
 
     const rpc = createRpcPeer<
       BridgeServerFunctions,
@@ -153,11 +153,15 @@ export const createHarnessBridge = async (
       BridgeEvents
     >({
       localMethods: {
-        'device.screenshot.receive': (ref) => receiveScreenshot(binaryStore, ref),
+        'device.screenshot.receive': (ref) => receiveScreenshot(link, ref),
         'test.matchImageSnapshot': (screenshot, testPath, opts) =>
           matchImageSnapshot(screenshot, testPath, opts, context.platform.name),
       },
-      transport: createRpcTransport(transport),
+      transport: {
+        send: (message) => {
+          void link.write(message);
+        },
+      },
       onEvent: (event) => {
         emitter.emit('event', event);
       },
@@ -169,7 +173,7 @@ export const createHarnessBridge = async (
 
     const heartbeat = createHeartbeat({
       sendPing: (id) => {
-        transport.send(serializeBridgeMessage({ type: 'ping', id }));
+        void link.write(serializeBridgeMessage({ type: 'ping', id }));
       },
       onTimeout: () => {
         bridgeLogger.warn('app heartbeat timed out');
@@ -188,9 +192,8 @@ export const createHarnessBridge = async (
       offError();
       bridgeLogger.debug('app disconnected');
       heartbeat.dispose();
-      binaryStore.dispose();
 
-      if (activeSession?.transport === transport) {
+      if (activeSession?.link === link) {
         activeSession = null;
       }
 
@@ -199,14 +202,14 @@ export const createHarnessBridge = async (
       }
 
       rpc.close(reason ?? new AppBridgeDisconnectedError('app-disconnected'));
-      closeTransport();
+      void link.close();
 
       if (readyConnection) {
         emitter.emit('disconnected');
       }
     };
 
-    activeSession = { disconnect, transport };
+    activeSession = { disconnect, link };
 
     const handleControlMessage = async (message: string) => {
       const controlMessage = await rpc.handleMessage(message);
@@ -242,7 +245,7 @@ export const createHarnessBridge = async (
           return;
         }
         case 'ping': {
-          transport.send(
+          void link.write(
             serializeBridgeMessage({ type: 'pong', id: controlMessage.id }),
           );
           return;
@@ -254,21 +257,7 @@ export const createHarnessBridge = async (
       }
     };
 
-    const handleBinaryMessage = (message: Uint8Array) => {
-      try {
-        const { transferId, data } = parseBinaryFrame(message);
-        binaryStore.add(transferId, data);
-      } catch (error) {
-        bridgeLogger.warn('failed to parse binary frame: %s', error);
-      }
-    };
-
-    offMessage = transport.onMessage((message) => {
-      if (typeof message !== 'string') {
-        handleBinaryMessage(message);
-        return;
-      }
-
+    offMessage = link.onData((message) => {
       void handleControlMessage(message).catch((error) => {
         bridgeLogger.warn('failed to handle bridge message: %s', error);
         disconnect(
@@ -279,16 +268,16 @@ export const createHarnessBridge = async (
       });
     });
 
-    offClose = transport.onClose(() => {
-      disconnect();
-    });
-
-    offError = transport.onError((error) => {
+    offError = link.onError((error) => {
       disconnect(
         error instanceof Error
           ? error
           : new AppBridgeDisconnectedError('socket-error'),
       );
+    });
+
+    offClose = link.onClose(() => {
+      disconnect();
     });
   });
 
