@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
@@ -77,6 +76,7 @@ import {
   buildXCTestAgent,
   createXCTestAgentController,
 } from '../xctest-agent.js';
+import { getProjectInputsHash } from '../xctest-agent-build.js';
 import { createDeviceXCTestAgentTransport } from '../xctest-agent-transport-device.js';
 import { createSimulatorXCTestAgentTransport } from '../xctest-agent-transport-simulator.js';
 
@@ -892,28 +892,7 @@ const restoreEnvVar = (name: string, value: string | undefined) => {
   process.env[name] = value;
 };
 
-const getCurrentInputsHash = (): string => {
-  const hash = createHash('sha256');
-
-  for (const filePath of getInputFiles(projectRoot)) {
-    hash.update(path.relative(projectRoot, filePath));
-    hash.update('\0');
-    hash.update(fs.readFileSync(filePath));
-    hash.update('\0');
-  }
-
-  const sourceFilePath = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '..',
-    'xctest-agent.ts'
-  );
-  hash.update(path.basename(sourceFilePath));
-  hash.update('\0');
-  hash.update(fs.readFileSync(sourceFilePath));
-  hash.update('\0');
-
-  return hash.digest('hex');
-};
+const getCurrentInputsHash = (): string => getProjectInputsHash();
 
 const writeSimulatorCacheDirectory = (options: {
   buildInputsHash: string;
@@ -947,26 +926,4 @@ const writeSimulatorCacheDirectory = (options: {
         'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun',
     })
   );
-};
-
-const getInputFiles = (root: string): string[] => {
-  const entries = fs.readdirSync(root, { withFileTypes: true });
-  const files: string[] = [];
-
-  for (const entry of entries) {
-    if (entry.name === 'build' || entry.name === '.gitignore') {
-      continue;
-    }
-
-    const entryPath = path.join(root, entry.name);
-
-    if (entry.isDirectory()) {
-      files.push(...getInputFiles(entryPath));
-      continue;
-    }
-
-    files.push(entryPath);
-  }
-
-  return files.sort();
 };
