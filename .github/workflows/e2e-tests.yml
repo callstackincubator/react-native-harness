@@ -163,6 +163,16 @@ jobs:
         run: |
           pnpm nx run-many -t build --projects="packages/*"
 
+      # Packs prebuilt XCTest agent artifacts into the platform package and
+      # fails if it cannot, so this job exercises the artifact path consumers
+      # get from a published package rather than only the build fallback.
+      - name: Pack XCTest agent artifacts
+        working-directory: packages/platform-ios
+        env:
+          HARNESS_REQUIRE_XCTEST_PREBUILDS: '1'
+        run: |
+          node scripts/pack-xctest-agent-artifacts.mjs
+
       - name: Restore app from cache
         id: cache-app-restore
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -462,6 +472,16 @@ jobs:
       - name: Build packages
         run: |
           pnpm nx run-many -t build --projects="packages/*"
+
+      # Packs prebuilt XCTest agent artifacts into the platform package and
+      # fails if it cannot, so this job exercises the artifact path consumers
+      # get from a published package rather than only the build fallback.
+      - name: Pack XCTest agent artifacts
+        working-directory: packages/platform-ios
+        env:
+          HARNESS_REQUIRE_XCTEST_PREBUILDS: '1'
+        run: |
+          node scripts/pack-xctest-agent-artifacts.mjs
 
       - name: Restore app from cache
         id: cache-app-restore

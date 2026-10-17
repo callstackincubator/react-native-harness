@@ -146,8 +146,9 @@ const getXCTestAgentBuildSigningArgs = (
   return args;
 };
 
-const getXCTestAgentBuildProductsPath = (derivedDataPath: string): string =>
-  path.join(derivedDataPath, 'Build', 'Products');
+export const getXCTestAgentBuildProductsPath = (
+  derivedDataPath: string
+): string => path.join(derivedDataPath, 'Build', 'Products');
 
 const getXCTestAgentBuildManifestPath = (derivedDataPath: string): string =>
   path.join(derivedDataPath, 'build-manifest.json');
@@ -207,11 +208,13 @@ const getBuildInputsSourceFilePath = (): string => {
 };
 
 /**
- * Fingerprint of the checked-in agent project plus the build logic that turns
- * it into artifacts. Written into cache manifests so a stale build is never
- * reused after the agent sources change.
+ * Fingerprint of the checked-in agent project sources.
+ *
+ * These files ship verbatim inside the package, so the digest is the same in
+ * the repository and in an installed package. That is what lets artifacts
+ * packed at release time be recognised by a consumer.
  */
-export const getProjectInputsHash = (): string => {
+export const getAgentProjectSourcesHash = (): string => {
   const projectRoot = getXCTestAgentProjectRoot();
   const hash = createHash('sha256');
 
@@ -221,6 +224,19 @@ export const getProjectInputsHash = (): string => {
     hash.update(fs.readFileSync(filePath));
     hash.update('\0');
   }
+
+  return hash.digest('hex');
+};
+
+/**
+ * Fingerprint used for local build reuse: the agent sources plus the build
+ * logic that turns them into artifacts. Includes this module's own source, so
+ * a change to the build arguments invalidates a previously cached build.
+ */
+export const getProjectInputsHash = (): string => {
+  const hash = createHash('sha256');
+  hash.update(getAgentProjectSourcesHash());
+  hash.update('\0');
 
   const sourceFilePath = getBuildInputsSourceFilePath();
   hash.update(path.basename(sourceFilePath));
@@ -385,6 +401,47 @@ const getCurrentSimulatorSdkVersion = async (
     { signal }
   );
   return stdout.trim();
+};
+
+const getCurrentDeviceSdkVersion = async (
+  signal?: AbortSignal
+): Promise<string> => {
+  const { stdout } = await spawn(
+    'xcodebuild',
+    ['-version', '-sdk', 'iphoneos', 'SDKVersion'],
+    { signal }
+  );
+  return stdout.trim();
+};
+
+export type XCTestAgentToolchain = {
+  sdkVersion: string;
+  xcodeBuild: string;
+  xcodeVersion: string;
+};
+
+/**
+ * Identifies the toolchain that a build product was produced with, so a
+ * prebuilt artifact is only reused by the Xcode it was packed with.
+ */
+export const resolveXCTestAgentToolchain = async (
+  destination: XCTestAgentBuildDestination,
+  signal?: AbortSignal
+): Promise<XCTestAgentToolchain> => {
+  const [versionOutput, sdkVersion] = await Promise.all([
+    spawn('xcodebuild', ['-version'], { signal }).then(({ stdout }) =>
+      stdout.trim()
+    ),
+    destination === 'simulator'
+      ? getCurrentSimulatorSdkVersion(signal)
+      : getCurrentDeviceSdkVersion(signal),
+  ]);
+
+  return {
+    sdkVersion,
+    xcodeBuild: /Build version\s+(\S+)/.exec(versionOutput)?.[1] ?? '',
+    xcodeVersion: /Xcode\s+(\S+)/.exec(versionOutput)?.[1] ?? versionOutput,
+  };
 };
 
 const getSimulatorCacheContext = async (

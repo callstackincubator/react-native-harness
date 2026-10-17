@@ -30,6 +30,7 @@ import {
   getXCTestAgentDerivedDataPath,
   getXCTestAgentProjectRoot,
 } from './xctest-agent-build.js';
+import { createPrebuiltXCTestAgentProvider } from './xctest-agent-prebuilt.js';
 
 const pipelineAsync = promisify(pipeline);
 
@@ -131,8 +132,13 @@ const createExternalXCTestAgentProvider = (): XCTestAgentProvider => ({
   },
 });
 
+/**
+ * Artifact sources in the order they are trusted: an explicitly supplied
+ * run file, then artifacts shipped with the package, then a local build.
+ */
 export const createDefaultXCTestAgentProviders = (): XCTestAgentProvider[] => [
   createExternalXCTestAgentProvider(),
+  createPrebuiltXCTestAgentProvider(),
   createBuildXCTestAgentProvider(),
 ];
 

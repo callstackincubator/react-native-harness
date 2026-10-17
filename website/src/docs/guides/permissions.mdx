@@ -71,6 +71,18 @@ This can have a negative impact on:
 
 The impact is most important to keep in mind for iOS physical devices, where the XCTest agent requires code signing and extra setup, but the same helper is also started on iOS simulators when permissions are enabled.
 
+## Where the XCTest agent comes from
+
+Harness needs a built XCTest agent before it can start one. It obtains one from the first source that applies:
+
+1. **An `.xctestrun` you provide.** Set `HARNESS_IOS_XCTESTRUN_FILE` (optionally with `HARNESS_IOS_XCTEST_DERIVED_DATA_PATH`) to a ready `.xctestrun`, and Harness uses it as-is.
+2. **Artifacts shipped with the platform package.** Releases carry a prebuilt, unsigned simulator agent built with the release machine's Xcode. Harness copies it into `.harness/cache` and runs it, so no compilation happens.
+3. **A local build.** Harness runs `xcodebuild build-for-testing` and caches the result.
+
+The shipped artifacts are keyed to the Xcode and SDK used to build them and to the agent sources in your installed package. If your Xcode differs, Harness says so and builds locally instead, which is why upgrading Xcode costs one rebuild rather than producing a broken agent. Set `HARNESS_IOS_XCTEST_PREBUILT_ROOT` to point Harness at artifacts packed elsewhere, and `HARNESS_SKIP_XCTEST_PREBUILDS=1` to skip them entirely.
+
+Artifacts for physical devices are not shipped, because a runnable device build has to be signed with your own certificate and provisioning profile.
+
 ## Physical iOS Devices
 
 To use permission automation on a physical iOS device, the runner must provide `device.codeSign`.
