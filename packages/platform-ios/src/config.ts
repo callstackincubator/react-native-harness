@@ -15,6 +15,22 @@ export const ApplePhysicalDeviceCodeSignSchema = z.object({
   teamId: z.string().min(1, 'Team ID is required'),
   signingIdentity: z.string().optional(),
   provisioningProfile: z.string().optional(),
+  /**
+   * Reverse-DNS prefix the shipped artifact's bundle ids are rewritten to before
+   * signing. Needed when the account's profile covers only its own identifiers
+   * and cannot cover `com.callstackincubator.*`; the profile must cover the
+   * remapped ids, e.g. `com.example.app.HarnessXCTestAgent`. Applies to the
+   * shipped artifact only: a locally built agent keeps the shipped ids, because
+   * `xcodebuild` cannot override one target's id without changing the other's.
+   */
+  bundleIdPrefix: z
+    .string()
+    .min(1, 'Bundle ID prefix is required')
+    .regex(
+      /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$/,
+      'Bundle ID prefix must be a reverse-DNS prefix such as "com.example.app"'
+    )
+    .optional(),
 });
 
 export const ApplePhysicalDeviceSchema = z.object({

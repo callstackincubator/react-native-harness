@@ -23,6 +23,9 @@
     "zod": "^3.25.67",
     "tslib": "^2.3.0"
   },
+  "scripts": {
+    "prepack": "node scripts/pack-xctest-agent-artifacts.mjs"
+  },
   "devDependencies": {
     "@types/yargs": "^17.0.32"
   },
