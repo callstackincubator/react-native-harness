@@ -1,6 +1,6 @@
 import { logger, spawn } from '@react-native-harness/tools';
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { X509Certificate } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -200,11 +200,18 @@ const readPlistJson = <T>(plistPath: string, keyPath: string): T | null => {
 };
 
 /**
+ * The fingerprint `security find-identity` and `codesign` name a certificate
+ * by: SHA-1 over its DER bytes, uppercase hex without separators. It identifies
+ * the certificate; it does not protect anything.
+ */
+const getCertificateFingerprint = (der: Buffer): string =>
+  new X509Certificate(der).fingerprint.replaceAll(':', '');
+
+/**
  * Certificates a profile may be used with, as codesign SHA-1 fingerprints.
  *
  * Each entry is the DER certificate, which `plutil` prints as base64 when
- * extracted on its own; the fingerprint is simply SHA-1 over those bytes, the
- * same value `security find-identity` reports.
+ * extracted on its own.
  */
 const readDeveloperCertificateHashes = (plistPath: string): string[] => {
   const hashes: string[] = [];
@@ -229,7 +236,11 @@ const readDeveloperCertificateHashes = (plistPath: string): string[] => {
       continue;
     }
 
-    hashes.push(createHash('sha1').update(der).digest('hex').toUpperCase());
+    try {
+      hashes.push(getCertificateFingerprint(der));
+    } catch {
+      // A blob that is not a certificate cannot match a keychain identity.
+    }
   }
 
   return hashes;

@@ -22,13 +22,25 @@ const teamId = 'TESTTEAM01';
 const device = '00008150-0000000000000000';
 
 // The profile's certificate list is matched against the signing identity, so a
-// known blob whose hash the test can compute keeps the keychain out of it.
-const certificate = Buffer.from('pretend-der-certificate');
-const certificateHash = crypto
-  .createHash('sha1')
-  .update(certificate)
-  .digest('hex')
-  .toUpperCase();
+// known certificate whose fingerprint the test can compute keeps the keychain
+// out of it. Self-signed and generated for these tests only.
+const certificate = Buffer.from(
+  [
+    'MIIBfTCCASKgAwIBAgIUTeGS56+1GMVWk0JJ46uFrUcV4YAwCgYIKoZIzj0EAwIw',
+    'IzEhMB8GA1UEAwwYSGFybmVzcyBUZXN0IENlcnRpZmljYXRlMCAXDTI2MTAxODE1',
+    'MTcyOFoYDzIxMjYwOTI0MTUxNzI4WjAjMSEwHwYDVQQDDBhIYXJuZXNzIFRlc3Qg',
+    'Q2VydGlmaWNhdGUwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQldmHMtw5UdQrC',
+    'Mq2sPkH8McXFALDp5XQMN42E9ZGkJP/gMHdAqzkLGuexvtIYry2UtLbaxQIS+5yn',
+    'kLVoNEqYozIwMDAdBgNVHQ4EFgQUWu/u3cfX8U0spNhKZM7JEExO7dkwDwYDVR0T',
+    'AQH/BAUwAwEB/zAKBggqhkjOPQQDAgNJADBGAiEA33wF0yFIBMSSyl5EppAn+AOZ',
+    'DIFLLIQI7dNepX1mrpMCIQDsu1E3rRvTW1NfUGN5WY7AOlwsZEP5Ev0S/qH3K69r',
+    'Fg==',
+  ].join(''),
+  'base64'
+);
+const certificateHash = new crypto.X509Certificate(
+  certificate
+).fingerprint.replaceAll(':', '');
 
 let tempRoot = '';
 
