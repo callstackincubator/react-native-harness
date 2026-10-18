@@ -9,6 +9,7 @@ import {
   getAndroidPhysicalDevicePlatformInstance,
 } from '../instance.js';
 import * as adb from '../adb.js';
+import type { AndroidPlatformConfig } from '../config.js';
 import * as avdConfig from '../avd-config.js';
 import * as sharedPrefs from '../shared-prefs.js';
 import { HarnessAppPathError, HarnessEmulatorConfigError } from '../errors.js';
@@ -56,6 +57,90 @@ describe('Android platform instance', () => {
       emulatorStartup,
       'warnIfEmulatorAccelerationUnavailable'
     ).mockResolvedValue(undefined);
+  });
+
+  describe.each(['emulator', 'physical'] as const)('%s port forwarding', (type) => {
+    const adbId = type === 'emulator' ? 'emulator-5554' : '012345';
+    const metroPort = 9191;
+    const config: AndroidPlatformConfig = {
+      name: 'android',
+      device:
+        type === 'emulator'
+          ? { type: 'emulator', name: 'Pixel_8_API_35' }
+          : { type: 'physical', manufacturer: 'motorola', model: 'moto g72' },
+      bundleId: 'com.harnessplayground',
+      activityName: '.MainActivity',
+    };
+    const createInstance = () =>
+      (type === 'emulator'
+        ? getAndroidEmulatorPlatformInstance
+        : getAndroidPhysicalDevicePlatformInstance)(
+        config,
+        { ...harnessConfig, metroPort },
+        init
+      );
+
+    beforeEach(() => {
+      vi.spyOn(adb, 'getDeviceIds').mockResolvedValue([adbId]);
+      vi.spyOn(adb, 'getEmulatorName').mockResolvedValue('Pixel_8_API_35');
+      vi.spyOn(adb, 'getDeviceInfo').mockResolvedValue({
+        manufacturer: 'motorola',
+        model: 'moto g72',
+      });
+      vi.spyOn(adb, 'isAppInstalled').mockResolvedValue(true);
+      vi.spyOn(adb, 'reversePort').mockResolvedValue(undefined);
+      vi.spyOn(adb, 'setHideErrorDialogs').mockResolvedValue(undefined);
+      vi.spyOn(adb, 'getAppUid').mockResolvedValue(10234);
+      vi.spyOn(sharedPrefs, 'applyHarnessDebugHttpHost').mockResolvedValue(undefined);
+      vi.spyOn(sharedPrefs, 'clearHarnessDebugHttpHost').mockResolvedValue(undefined);
+      vi.spyOn(adb, 'stopApp').mockResolvedValue(undefined);
+      vi.spyOn(adb, 'getAppPid').mockResolvedValue(4321);
+      vi.spyOn(adb, 'getLogcatTimestamp').mockResolvedValue('01-01 00:00:00.000');
+      vi.spyOn(adb, 'startLogcat').mockReturnValue(createLogcatProcess());
+    });
+
+    it('restores lost mappings before launching each app session', async () => {
+      const forwardedPorts = new Set<number>();
+      vi.mocked(adb.reversePort).mockImplementation(async (id, port) => {
+        expect(id).toBe(adbId);
+        forwardedPorts.add(port);
+      });
+      const startApp = vi.spyOn(adb, 'startApp').mockImplementation(async () => {
+        expect(forwardedPorts).toEqual(new Set([metroPort, 8080]));
+      });
+      const instance = await createInstance();
+
+      try {
+        for (let launch = 0; launch < 3; launch++) {
+          // Forwarding can disappear after initialization or between files/retries.
+          forwardedPorts.clear();
+          const session = await instance.createAppSession();
+          await session.dispose();
+        }
+        expect(startApp).toHaveBeenCalledTimes(3);
+      } finally {
+        await instance.dispose();
+      }
+    });
+
+    it('does not launch the app when restoring forwarding fails', async () => {
+      const startApp = vi.spyOn(adb, 'startApp').mockResolvedValue(undefined);
+      const instance = await createInstance();
+      const error = new Error('ADB reverse failed');
+      vi.mocked(adb.reversePort).mockRejectedValue(error);
+
+      try {
+        await expect(
+          instance.createAppSession().then(async (session) => {
+            await session.dispose();
+            return session;
+          })
+        ).rejects.toBe(error);
+        expect(startApp).not.toHaveBeenCalled();
+      } finally {
+        await instance.dispose();
+      }
+    });
   });
 
   it('reuses a running emulator and does not shut it down on dispose', async () => {
