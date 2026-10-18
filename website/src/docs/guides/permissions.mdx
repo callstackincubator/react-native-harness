@@ -76,10 +76,10 @@ The impact is most important to keep in mind for iOS physical devices, where the
 Harness needs a built XCTest agent before it can start one. It obtains one from the first source that applies:
 
 1. **An `.xctestrun` you provide.** Set `HARNESS_IOS_XCTESTRUN_FILE` (optionally with `HARNESS_IOS_XCTEST_DERIVED_DATA_PATH`) to a ready `.xctestrun`, and Harness uses it as-is.
-2. **Artifacts shipped with the platform package.** Releases carry a prebuilt unsigned agent for simulators and one for physical devices, both built with the release machine's Xcode. Harness copies one into `.harness/cache` and runs it, so no compilation happens. A simulator copy runs as copied; a device copy is signed first, as described below.
+2. **Artifacts shipped with the platform package.** Releases carry a prebuilt unsigned agent for simulators and one for physical devices. Harness copies one into `.harness/cache` and runs it, so no compilation happens. A simulator copy runs as copied; a device copy is signed first, as described below.
 3. **A local build.** Harness runs `xcodebuild build-for-testing` and caches the result.
 
-The shipped artifacts are keyed to the Xcode and SDK used to build them and to the agent sources in your installed package. If your Xcode differs, Harness says so and builds locally instead, which is why upgrading Xcode costs one rebuild rather than producing a broken agent. Set `HARNESS_IOS_XCTEST_PREBUILT_ROOT` to point Harness at artifacts packed elsewhere, and `HARNESS_SKIP_XCTEST_PREBUILDS=1` to skip them entirely.
+The shipped artifacts work from Xcode 26 up to the major Xcode version the release was packed with. On any other Xcode, or when the agent sources in your installed package were modified, Harness says so and builds locally instead, so a new Xcode costs one local build until a release ships artifacts packed with it. Set `HARNESS_IOS_XCTEST_PREBUILT_ROOT` to point Harness at artifacts packed elsewhere, and `HARNESS_SKIP_XCTEST_PREBUILDS=1` to skip them entirely.
 
 ### Running on a physical device from shipped artifacts
 

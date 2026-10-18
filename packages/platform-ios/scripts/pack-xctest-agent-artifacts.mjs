@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Packs prebuilt XCTest agent artifacts into this package, so consumers whose
-// Xcode matches the release machine's skip `xcodebuild build-for-testing`.
+// Packs prebuilt XCTest agent artifacts into this package, so consumers on a
+// supported Xcode skip `xcodebuild build-for-testing`. One artifact per
+// destination serves every supported Xcode, so packing uses the selected one.
 //
 // Runs as `prepack`, which npm and pnpm trigger during `nx release publish`.
 // By then `nx release version` has already bumped package.json, so artifacts
@@ -19,7 +20,7 @@ const packageRoot = path.resolve(
 const modulePath = path.join(packageRoot, 'dist', 'xctest-agent-prebuilt.js');
 
 // Both destinations ship. Simulator artifacts help every iOS run, while device
-// artifacts help only the subset that runs on hardware with a matching Xcode, and
+// artifacts help only the subset that runs on hardware, and
 // cost roughly half again on the tarball (1.0 MB to 1.6 MB compressed). They ship
 // anyway because signing them locally is the only way a device run gets a fast
 // path at all, and an inert implementation would not be worth shipping. Consumers
@@ -126,16 +127,26 @@ if (skipReason && isRequired) {
   throw new Error(`Unable to pack XCTest agent artifacts: ${skipReason}`);
 }
 
+const describeFailure = (error) =>
+  error instanceof Error ? error.message : String(error);
+
 if (skipReason) {
   console.warn(`Skipping prebuilt XCTest agent artifacts: ${skipReason}`);
 } else {
-  try {
-    const { packXCTestAgentArtifacts } = await import(
-      pathToFileURL(modulePath).href
-    );
+  const { getPrebuiltRootPath, packXCTestAgentArtifacts } = await import(
+    pathToFileURL(modulePath).href
+  );
 
-    for (const destination of destinations) {
-      const result = await packXCTestAgentArtifacts({ destination, packageRoot });
+  // Start from nothing, so the tarball carries exactly what this run packed
+  // and never an artifact left behind by an earlier pack.
+  fs.rmSync(getPrebuiltRootPath(packageRoot), { recursive: true, force: true });
+
+  for (const destination of destinations) {
+    try {
+      const result = await packXCTestAgentArtifacts({
+        destination,
+        packageRoot,
+      });
 
       console.log(
         `Packed prebuilt XCTest agent artifacts ${[
@@ -147,14 +158,16 @@ if (skipReason) {
           `version=${result.entry.agentVersion}`,
         ].join(' ')}`
       );
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    } catch (error) {
+      // A failed destination costs only its own artifact; the other still
+      // ships.
+      const message = `${destination}: ${describeFailure(error)}`;
 
-    if (isRequired) {
-      throw new Error(`Unable to pack XCTest agent artifacts: ${message}`);
-    }
+      if (isRequired) {
+        throw new Error(`Unable to pack XCTest agent artifacts for ${message}`);
+      }
 
-    console.warn(`Skipping prebuilt XCTest agent artifacts: ${message}`);
+      console.warn(`Skipping prebuilt XCTest agent artifacts for ${message}`);
+    }
   }
 }

@@ -181,12 +181,22 @@ const writeBuildManifest = (
   );
 };
 
+// Local and editor state that never ships in the package. Hashing it would give
+// a checkout that opened the project in Xcode a different digest from the
+// installed package, so packed artifacts would never be recognised.
+const IGNORED_PROJECT_ENTRIES = new Set([
+  '.DS_Store',
+  '.gitignore',
+  'build',
+  'xcuserdata',
+]);
+
 const getProjectInputFilePaths = (root: string): string[] => {
   const entries = fs.readdirSync(root, { withFileTypes: true });
   const files: string[] = [];
 
   for (const entry of entries) {
-    if (entry.name === 'build' || entry.name === '.gitignore') {
+    if (IGNORED_PROJECT_ENTRIES.has(entry.name)) {
       continue;
     }
 
@@ -403,38 +413,110 @@ const getCurrentSimulatorSdkVersion = async (
   return stdout.trim();
 };
 
-const getCurrentDeviceSdkVersion = async (
-  signal?: AbortSignal
-): Promise<string> => {
-  const { stdout } = await spawn(
-    'xcodebuild',
-    ['-version', '-sdk', 'iphoneos', 'SDKVersion'],
-    { signal }
-  );
-  return stdout.trim();
-};
-
 export type XCTestAgentToolchain = {
   sdkVersion: string;
   xcodeBuild: string;
   xcodeVersion: string;
 };
 
+const SDK_PLATFORM_NAMES: Record<XCTestAgentBuildDestination, string> = {
+  device: 'iPhoneOS',
+  simulator: 'iPhoneSimulator',
+};
+
 /**
- * Identifies the toolchain that a build product was produced with, so a
- * prebuilt artifact is only reused by the Xcode it was packed with.
+ * Reads the toolchain from the files `xcodebuild -version` itself reports from:
+ * the selected Xcode's `version.plist` and the SDK's `SDKSettings.json`.
+ *
+ * Every iOS run resolves the toolchain before it can use a shipped artifact,
+ * and the two `xcodebuild` invocations cost about a second together, while
+ * these reads take a few milliseconds. `xcode-select -p` honours
+ * `DEVELOPER_DIR`, so the same Xcode is selected either way.
+ */
+const readXCTestAgentToolchain = async (
+  destination: XCTestAgentBuildDestination,
+  signal?: AbortSignal
+): Promise<XCTestAgentToolchain> => {
+  const { stdout } = await spawn('xcode-select', ['-p'], { signal });
+  const developerDir = stdout.trim();
+  const { stdout: versionJson } = await spawn(
+    'plutil',
+    [
+      '-convert',
+      'json',
+      '-o',
+      '-',
+      path.join(developerDir, '..', 'version.plist'),
+    ],
+    { signal }
+  );
+  const version = JSON.parse(versionJson) as {
+    CFBundleShortVersionString?: string;
+    ProductBuildVersion?: string;
+  };
+  const platform = SDK_PLATFORM_NAMES[destination];
+  const sdkSettings = JSON.parse(
+    fs.readFileSync(
+      path.join(
+        developerDir,
+        'Platforms',
+        `${platform}.platform`,
+        'Developer',
+        'SDKs',
+        `${platform}.sdk`,
+        'SDKSettings.json'
+      ),
+      'utf8'
+    )
+  ) as { Version?: string };
+
+  if (
+    !version.CFBundleShortVersionString ||
+    !version.ProductBuildVersion ||
+    !sdkSettings.Version
+  ) {
+    throw new Error(`Incomplete Xcode version information in ${developerDir}`);
+  }
+
+  return {
+    sdkVersion: sdkSettings.Version,
+    xcodeBuild: version.ProductBuildVersion,
+    xcodeVersion: version.CFBundleShortVersionString,
+  };
+};
+
+/**
+ * Identifies the selected Xcode toolchain: recorded with packed artifacts, and
+ * checked against the minimum a shipped artifact supports before it is used.
  */
 export const resolveXCTestAgentToolchain = async (
   destination: XCTestAgentBuildDestination,
   signal?: AbortSignal
 ): Promise<XCTestAgentToolchain> => {
+  try {
+    return await readXCTestAgentToolchain(destination, signal);
+  } catch (error) {
+    signal?.throwIfAborted();
+    xctestAgentLogger.debug(
+      'reading the Xcode toolchain from disk failed, asking xcodebuild: %s',
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+
   const [versionOutput, sdkVersion] = await Promise.all([
     spawn('xcodebuild', ['-version'], { signal }).then(({ stdout }) =>
       stdout.trim()
     ),
-    destination === 'simulator'
-      ? getCurrentSimulatorSdkVersion(signal)
-      : getCurrentDeviceSdkVersion(signal),
+    spawn(
+      'xcodebuild',
+      [
+        '-version',
+        '-sdk',
+        destination === 'simulator' ? 'iphonesimulator' : 'iphoneos',
+        'SDKVersion',
+      ],
+      { signal }
+    ).then(({ stdout }) => stdout.trim()),
   ]);
 
   return {
@@ -500,6 +582,79 @@ const shouldReuseBuildArtifacts = (options: {
   );
 
   return fs.existsSync(buildProductsPath);
+};
+
+/**
+ * Build settings that only slow the build down or grow its products.
+ *
+ * The agent is never debugged, indexed, previewed, or measured for coverage,
+ * so these cut a clean build by about a third. They also keep the products
+ * free of the build machine's paths: coverage mapping, debug info, and the
+ * `.xctestrun` source map all embed absolute paths, which packed artifacts must
+ * not carry.
+ */
+const XCTEST_AGENT_BUILD_FLAGS = [
+  '-enableCodeCoverage',
+  'NO',
+  'COMPILER_INDEX_STORE_ENABLE=NO',
+  'ENABLE_DEBUG_DYLIB=NO',
+  'ENABLE_PREVIEWS=NO',
+  'GCC_GENERATE_DEBUGGING_SYMBOLS=NO',
+];
+
+/**
+ * Runs `xcodebuild build-for-testing` into `derivedDataPath` and returns the
+ * generated `.xctestrun`, relative to the build products directory.
+ */
+export const runXCTestAgentBuild = async (options: {
+  derivedDataPath: string;
+  destination: XCTestAgentBuildDestination;
+  signal?: AbortSignal;
+  signing?: XCTestAgentBuildSigning;
+}): Promise<string> => {
+  assertXCTestAgentProjectExists();
+  fs.mkdirSync(options.derivedDataPath, { recursive: true });
+
+  const provisioningArgs =
+    options.destination === 'device' && options.signing?.teamId
+      ? ['-allowProvisioningUpdates']
+      : [];
+
+  await spawn(
+    'xcodebuild',
+    [
+      'build-for-testing',
+      '-project',
+      getXCTestAgentProjectFilePath(),
+      '-scheme',
+      XCTEST_AGENT_SCHEME_NAME,
+      '-destination',
+      getXCTestAgentBuildDestination(options.destination),
+      '-derivedDataPath',
+      options.derivedDataPath,
+      ...XCTEST_AGENT_BUILD_FLAGS,
+      ...provisioningArgs,
+      ...getXCTestAgentBuildSigningArgs(options.destination, options.signing),
+    ],
+    {
+      cwd: getXCTestAgentProjectRoot(),
+      signal: options.signal,
+    }
+  );
+
+  const xctestrunRelativePath = getXCTestRunRelativePath(
+    options.derivedDataPath
+  );
+
+  if (!xctestrunRelativePath) {
+    throw new Error(
+      `Missing generated .xctestrun file in ${getXCTestAgentBuildProductsPath(
+        options.derivedDataPath
+      )}`
+    );
+  }
+
+  return xctestrunRelativePath;
 };
 
 const getXCTestRunPath = (derivedDataPath: string): string | undefined => {
@@ -594,52 +749,18 @@ export const buildXCTestAgent = async (
     }
   }
 
-  fs.mkdirSync(derivedDataPath, { recursive: true });
-
   xctestAgentLogger.debug('building XCTest agent for %s', options.destination);
   xctestAgentLogger.info(
     'Building XCTest agent for %s target',
     options.destination
   );
 
-  const signingArgs = getXCTestAgentBuildSigningArgs(
-    options.destination,
-    options.signing
-  );
-  const provisioningArgs: string[] = [];
-
-  if (options.destination === 'device' && options.signing?.teamId) {
-    provisioningArgs.push('-allowProvisioningUpdates');
-  }
-
-  const buildArgs = [
-    'build-for-testing',
-    '-project',
-    getXCTestAgentProjectFilePath(),
-    '-scheme',
-    XCTEST_AGENT_SCHEME_NAME,
-    '-destination',
-    getXCTestAgentBuildDestination(options.destination),
-    '-derivedDataPath',
+  const xctestrunRelativePath = await runXCTestAgentBuild({
     derivedDataPath,
-    ...provisioningArgs,
-    ...signingArgs,
-  ];
-
-  await spawn('xcodebuild', buildArgs, {
-    cwd: getXCTestAgentProjectRoot(),
+    destination: options.destination,
     signal: options.signal,
+    signing: options.signing,
   });
-
-  const xctestrunRelativePath = getXCTestRunRelativePath(derivedDataPath);
-
-  if (!xctestrunRelativePath) {
-    throw new Error(
-      `Missing generated .xctestrun file in ${getXCTestAgentBuildProductsPath(
-        derivedDataPath
-      )}`
-    );
-  }
 
   if (options.destination === 'simulator') {
     if (!simulatorCacheContext) {

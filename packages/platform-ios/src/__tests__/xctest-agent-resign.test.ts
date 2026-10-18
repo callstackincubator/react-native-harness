@@ -238,12 +238,42 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       const signed = mockCodesign();
 
       await resignXCTestAgentArtifacts({
-        derivedDataPath,
         profile,
         xctestrunPath,
       });
 
       expect(signed).toEqual([pluginPath, runnerPath, appPath]);
+    });
+
+    it('signs frameworks embedded by Xcode 26 before the bundles holding them', async () => {
+      const embedded = [
+        path.join(runnerPath, 'Frameworks', 'XCTest.framework'),
+        path.join(runnerPath, 'Frameworks', 'libXCTestSwiftSupport.dylib'),
+      ];
+      for (const embeddedPath of embedded) {
+        fs.mkdirSync(path.dirname(embeddedPath), { recursive: true });
+        fs.writeFileSync(path.join(runnerPath, 'Frameworks', 'Info.plist'), '');
+        if (embeddedPath.endsWith('.framework')) {
+          fs.mkdirSync(embeddedPath, { recursive: true });
+        } else {
+          fs.writeFileSync(embeddedPath, 'dylib');
+        }
+      }
+      mockCodesign();
+
+      await resignXCTestAgentArtifacts({ profile, xctestrunPath });
+
+      const calls = codesignCalls();
+      const embeddedCall = calls[0]?.[1] as string[];
+
+      // Signed in one invocation, without entitlements, ahead of the runner.
+      expect(embeddedCall.slice(-2).sort()).toEqual([...embedded].sort());
+      expect(embeddedCall).not.toContain('--entitlements');
+      expect(calls.slice(1).map(signedTarget)).toEqual([
+        pluginPath,
+        runnerPath,
+        appPath,
+      ]);
     });
 
     it('embeds the profile in the bundles that carry entitlements', async () => {
@@ -252,7 +282,6 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       fs.writeFileSync(profilePath, 'profile bytes');
 
       await resignXCTestAgentArtifacts({
-        derivedDataPath,
         profile: { ...profile, path: profilePath },
         xctestrunPath,
       });
@@ -273,7 +302,6 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       mockCodesign();
 
       await resignXCTestAgentArtifacts({
-        derivedDataPath,
         profile,
         xctestrunPath,
       });
@@ -296,7 +324,6 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       mockCodesign();
 
       await resignXCTestAgentArtifacts({
-        derivedDataPath,
         profile,
         xctestrunPath,
       });
@@ -312,7 +339,6 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       mockCodesign();
 
       await resignXCTestAgentArtifacts({
-        derivedDataPath,
         profile,
         xctestrunPath,
       });
@@ -329,7 +355,7 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       fs.rmSync(runnerPath, { recursive: true });
 
       await expect(
-        resignXCTestAgentArtifacts({ derivedDataPath, profile, xctestrunPath })
+        resignXCTestAgentArtifacts({ profile, xctestrunPath })
       ).rejects.toThrow(/incomplete/);
     });
   });
@@ -340,7 +366,6 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
 
       await resignXCTestAgentArtifacts({
         bundleIdPrefix: 'com.example.consumer',
-        derivedDataPath,
         profile,
         xctestrunPath,
       });
@@ -378,7 +403,6 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
 
       await resignXCTestAgentArtifacts({
         bundleIdPrefix: 'com.example.consumer',
-        derivedDataPath,
         profile,
         xctestrunPath,
       });
@@ -396,7 +420,6 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
 
       await resignXCTestAgentArtifacts({
         bundleIdPrefix: 'com.example.consumer.',
-        derivedDataPath,
         profile,
         xctestrunPath,
       });
@@ -420,7 +443,6 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
 
       await resignXCTestAgentArtifacts({
         bundleIdPrefix: 'com.example.consumer',
-        derivedDataPath,
         profile,
         xctestrunPath,
       });
@@ -619,8 +641,14 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       expect(codesignCalls()).toHaveLength(0);
     });
 
-    it('declines when the artifact belongs to another Xcode', async () => {
-      writeDeviceIndex({ xcodeVersion: '16.4' });
+    it('declines on an Xcode older than the supported minimum', async () => {
+      writeDeviceIndex();
+      const baseImplementation = mocks.spawn.getMockImplementation();
+      mocks.spawn.mockImplementation((file: string, args?: string[]) =>
+        file === 'xcodebuild' && args?.join(' ') === '-version'
+          ? Promise.resolve({ stdout: 'Xcode 16.4\nBuild version 16F6' })
+          : baseImplementation?.(file, args)
+      );
 
       await expect(makeProvider().prepare(deviceContext())).resolves.toBeNull();
       expect(profileLookup).not.toHaveBeenCalled();
@@ -649,31 +677,30 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       const signed = codesignCalls();
 
       expect(signed).toHaveLength(3);
-      expect(signed.map(signedTarget)).toEqual([
+      // Signing runs on a staged copy that is renamed into place afterwards, so
+      // compare paths below each copy's products directory.
+      expect(
+        signed.map(
+          (call) =>
+            signedTarget(call).split(
+              `${path.sep}Build${path.sep}Products${path.sep}`
+            )[1]
+        )
+      ).toEqual([
         path.join(
-          unpackedRoot,
-          'Build',
-          'Products',
           'Debug-iphoneos',
           'HarnessXCTestAgentUITests-Runner.app',
           'PlugIns',
           'HarnessXCTestAgentUITests.xctest'
         ),
-        path.join(
-          unpackedRoot,
-          'Build',
-          'Products',
-          'Debug-iphoneos',
-          'HarnessXCTestAgentUITests-Runner.app'
-        ),
-        path.join(
-          unpackedRoot,
-          'Build',
-          'Products',
-          'Debug-iphoneos',
-          'HarnessXCTestAgent.app'
-        ),
+        path.join('Debug-iphoneos', 'HarnessXCTestAgentUITests-Runner.app'),
+        path.join('Debug-iphoneos', 'HarnessXCTestAgent.app'),
       ]);
+      expect(
+        fs
+          .readdirSync(path.dirname(unpackedRoot))
+          .filter((entry) => entry.includes('.staging-'))
+      ).toEqual([]);
       expect(directoryName).toBe('device-abc123');
 
       // The packaged artifact is shared by every project on the machine, so it

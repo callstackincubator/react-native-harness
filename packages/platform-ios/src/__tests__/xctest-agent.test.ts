@@ -326,6 +326,24 @@ describe('xctest-agent orchestration', () => {
     ).toBe(true);
   });
 
+  it('builds without coverage, indexing, previews, or debug info', async () => {
+    await buildXCTestAgent({ destination: 'simulator' });
+
+    const buildArgs = mocks.spawn.mock.calls.find(
+      ([file, args]) => file === 'xcodebuild' && args?.[0] === 'build-for-testing'
+    )?.[1] as string[];
+
+    expect(buildArgs).toEqual(
+      expect.arrayContaining([
+        'COMPILER_INDEX_STORE_ENABLE=NO',
+        'ENABLE_DEBUG_DYLIB=NO',
+        'ENABLE_PREVIEWS=NO',
+        'GCC_GENERATE_DEBUGGING_SYMBOLS=NO',
+      ])
+    );
+    expect(buildArgs[buildArgs.indexOf('-enableCodeCoverage') + 1]).toBe('NO');
+  });
+
   it('builds standalone simulator agent artifacts with the generic simulator destination', async () => {
     const result = await buildXCTestAgent({
       destination: 'simulator',

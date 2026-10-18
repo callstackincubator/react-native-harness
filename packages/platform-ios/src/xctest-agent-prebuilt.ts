@@ -3,11 +3,13 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 import {
-  buildXCTestAgent,
   getAgentProjectSourcesHash,
   getXCTestAgentBuildProductsPath,
   resolveXCTestAgentToolchain,
+  runXCTestAgentBuild,
 } from './xctest-agent-build.js';
 import type {
   XCTestAgentArtifacts,
@@ -24,6 +26,39 @@ const PREBUILT_CACHE_PREFIX = 'xctest-agent-prebuilt';
 const PREBUILT_CACHE_MARKER = 'prebuilt-cache.json';
 const XCTEST_PREBUILT_ROOT_ENV = 'HARNESS_IOS_XCTEST_PREBUILT_ROOT';
 const XCTEST_SKIP_PREBUILDS_ENV = 'HARNESS_SKIP_XCTEST_PREBUILDS';
+
+/**
+ * Oldest Xcode major version a shipped artifact is used with.
+ *
+ * Artifacts do not need the exact Xcode they were packed with: the agent
+ * targets iOS 15, the runner gets its XCTest frameworks either embedded and
+ * re-signed or from the running Xcode, and artifacts packed with Xcode 26.4.1
+ * and 27.0 were each verified to run under the other on simulators and
+ * devices. Older Xcodes are untested, and so is any major version newer than
+ * the one that packed the artifact; both build locally instead.
+ */
+const MIN_PREBUILT_XCODE_MAJOR_VERSION = 26;
+
+const getXcodeMajorVersion = (xcodeVersion: string): number =>
+  Number.parseInt(xcodeVersion, 10);
+
+/**
+ * Whether an artifact may run under the local Xcode: from the oldest supported
+ * major version up to the major version that packed it. A newer Xcode may change
+ * the `.xctestrun` format or the test runner protocol, so it builds locally
+ * until a release packs an artifact with it.
+ */
+const supportsXcode = (
+  entry: XCTestAgentPrebuiltEntry,
+  xcodeVersion: string
+): boolean => {
+  const localMajorVersion = getXcodeMajorVersion(xcodeVersion);
+
+  return (
+    localMajorVersion >= MIN_PREBUILT_XCODE_MAJOR_VERSION &&
+    localMajorVersion <= getXcodeMajorVersion(entry.xcodeVersion)
+  );
+};
 
 /** Build output that never affects a test run but dominates artifact size. */
 const STRIPPED_ARTIFACT_SUFFIXES = ['.dSYM', '.swiftmodule', '.bcsymbolmap'];
@@ -173,20 +208,6 @@ const shouldCopyArtifactPath = (sourcePath: string): boolean =>
       STRIPPED_ARTIFACT_SUFFIXES.some((suffix) => segment.endsWith(suffix))
     );
 
-const findXCTestRunRelativePath = (
-  buildProductsPath: string
-): string | null => {
-  if (!fs.existsSync(buildProductsPath)) {
-    return null;
-  }
-
-  const entry = fs
-    .readdirSync(buildProductsPath, { recursive: true })
-    .find((value) => typeof value === 'string' && value.endsWith('.xctestrun'));
-
-  return typeof entry === 'string' ? entry : null;
-};
-
 const getPrebuiltDirectoryName = (key: {
   buildInputsHash: string;
   destination: XCTestAgentBuildDestination;
@@ -207,7 +228,7 @@ const getPrebuiltDirectoryName = (key: {
 
 /**
  * Adds prebuilt XCTest agent artifacts to the installed package, so consumers
- * whose toolchain matches never run `xcodebuild build-for-testing`.
+ * on a supported Xcode never run `xcodebuild build-for-testing`.
  *
  * An artifact is an unsigned `build-for-testing` product tree without debug
  * symbol bundles. It embeds no device, bundle-identity, or checkout path,
@@ -245,68 +266,208 @@ export const packXCTestAgentArtifacts = async (
     directoryName
   );
 
-  const buildResult = await buildXCTestAgent({
-    destination: options.destination,
-    projectRoot: options.projectRoot,
-    signal: options.signal,
-  });
-  const sourceBuildProductsPath = getXCTestAgentBuildProductsPath(
-    buildResult.derivedDataPath
-  );
-  const xctestrunRelativePath = findXCTestRunRelativePath(
-    sourceBuildProductsPath
+  // A fresh derived data folder, never a cached local build: a cache in this
+  // checkout may hold products signed with the packer's own identity and
+  // profile, and those must not reach a published package.
+  const derivedDataPath = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'harness-xctest-pack-')
   );
 
-  if (!xctestrunRelativePath) {
-    throw new Error(
-      `Missing generated .xctestrun file in ${sourceBuildProductsPath}`
+  try {
+    const xctestrunRelativePath = await runXCTestAgentBuild({
+      derivedDataPath,
+      destination: options.destination,
+      signal: options.signal,
+    });
+
+    fs.rmSync(artifactDirectoryPath, { recursive: true, force: true });
+    fs.cpSync(
+      getXCTestAgentBuildProductsPath(derivedDataPath),
+      path.join(artifactDirectoryPath, 'Build', 'Products'),
+      { filter: shouldCopyArtifactPath, recursive: true }
     );
+    assertArtifactIsAnonymous(artifactDirectoryPath, [
+      derivedDataPath,
+      getPackageRootPath(),
+      packageRoot,
+      os.homedir(),
+    ]);
+
+    return writePackedEntry({
+      agentVersion: options.agentVersion,
+      artifactDirectoryPath,
+      buildInputsHash,
+      destination: options.destination,
+      directoryName,
+      indexPath,
+      toolchain,
+      xctestrunRelativePath,
+    });
+  } catch (error) {
+    fs.rmSync(artifactDirectoryPath, { recursive: true, force: true });
+    throw error;
+  } finally {
+    fs.rmSync(derivedDataPath, { recursive: true, force: true });
   }
+};
 
-  fs.rmSync(artifactDirectoryPath, { recursive: true, force: true });
-  fs.cpSync(
-    sourceBuildProductsPath,
-    path.join(artifactDirectoryPath, 'Build', 'Products'),
-    { filter: shouldCopyArtifactPath, recursive: true }
-  );
-
+const writePackedEntry = (options: {
+  agentVersion?: string;
+  artifactDirectoryPath: string;
+  buildInputsHash: string;
+  destination: XCTestAgentBuildDestination;
+  directoryName: string;
+  indexPath: string;
+  toolchain: { sdkVersion: string; xcodeBuild: string; xcodeVersion: string };
+  xctestrunRelativePath: string;
+}): PackXCTestAgentArtifactsResult => {
+  const { toolchain } = options;
   const entry: XCTestAgentPrebuiltEntry = {
     agentVersion: options.agentVersion ?? getPackageVersion(),
-    buildInputsHash,
+    buildInputsHash: options.buildInputsHash,
     destination: options.destination,
-    directoryName,
+    directoryName: options.directoryName,
     sdkVersion: toolchain.sdkVersion,
-    xctestrunRelativePath,
+    xctestrunRelativePath: options.xctestrunRelativePath,
     xcodeBuild: toolchain.xcodeBuild,
     xcodeVersion: toolchain.xcodeVersion,
   };
-  const existing = readPrebuiltIndex(indexPath);
-  // One artifact per destination ships with a given package version: it was
-  // packed with one Xcode, and consumers on any other are expected to build.
+  const existing = readPrebuiltIndex(options.indexPath);
+  // One artifact per destination: it serves every supported Xcode, so packing
+  // again replaces it rather than adding a sibling.
   const entries = (existing?.entries ?? []).filter(
     (candidate) => candidate.destination !== entry.destination
   );
 
-  writePrebuiltIndex(indexPath, {
+  const index: XCTestAgentPrebuiltIndex = {
     entries: [...entries, entry].sort((a, b) =>
       a.directoryName.localeCompare(b.directoryName)
     ),
     schemaVersion: PREBUILT_INDEX_SCHEMA_VERSION,
-  });
+  };
+
+  writePrebuiltIndex(options.indexPath, index);
+  removeUnindexedArtifacts(path.dirname(options.indexPath), index);
 
   xctestAgentLogger.info(
     'Packed prebuilt XCTest agent artifacts for %s (Xcode %s, SDK %s) into %s',
     options.destination,
     entry.xcodeVersion,
     entry.sdkVersion,
-    artifactDirectoryPath
+    options.artifactDirectoryPath
   );
 
   return {
-    artifactDirectoryPath,
+    artifactDirectoryPath: options.artifactDirectoryPath,
     entry,
-    indexFilePath: indexPath,
+    indexFilePath: options.indexPath,
   };
+};
+
+/**
+ * Deletes artifact directories the index no longer names. Packing replaces the
+ * entry for a destination, so without this a directory packed by an earlier
+ * Xcode would stay on disk and ship in the tarball as dead weight.
+ */
+const removeUnindexedArtifacts = (
+  prebuiltRootPath: string,
+  index: XCTestAgentPrebuiltIndex
+) => {
+  const indexed = new Set(index.entries.map((entry) => entry.directoryName));
+
+  for (const entry of fs.readdirSync(prebuiltRootPath, {
+    withFileTypes: true,
+  })) {
+    if (entry.isDirectory() && !indexed.has(entry.name)) {
+      fs.rmSync(path.join(prebuiltRootPath, entry.name), {
+        recursive: true,
+        force: true,
+      });
+    }
+  }
+};
+
+const listFiles = (root: string): string[] =>
+  fs
+    .readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(entry.parentPath, entry.name));
+
+// Team that signs the `XCTRunner` host Xcode copies into every test runner.
+const APPLE_TEAM_IDENTIFIER = '59GAB85EFG';
+
+/**
+ * Fails the pack when an artifact carries anything tied to the machine or the
+ * Apple Developer account it was packed on.
+ *
+ * Releases are packed on a maintainer's machine, so a signed product, an
+ * embedded profile, or an absolute path would publish their identity with the
+ * package. The build flags already keep these out; this check is what makes
+ * that a guarantee instead of an assumption about Xcode's defaults.
+ */
+const assertArtifactIsAnonymous = (
+  artifactDirectoryPath: string,
+  hostPaths: string[]
+) => {
+  const needles = [
+    ...new Set(
+      hostPaths.flatMap((hostPath) => [hostPath, fs.realpathSync(hostPath)])
+    ),
+  ].map((needle) => Buffer.from(needle));
+  const problems: string[] = [];
+
+  for (const filePath of listFiles(artifactDirectoryPath)) {
+    const relativePath = path.relative(artifactDirectoryPath, filePath);
+
+    if (filePath.endsWith('.mobileprovision') || filePath.endsWith('.xcent')) {
+      problems.push(`${relativePath} is signing material`);
+      continue;
+    }
+
+    const contents = fs.readFileSync(filePath);
+
+    if (needles.some((needle) => contents.includes(needle))) {
+      problems.push(`${relativePath} embeds a path from this machine`);
+    }
+  }
+
+  for (const bundlePath of fs
+    .readdirSync(artifactDirectoryPath, {
+      recursive: true,
+      withFileTypes: true,
+    })
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        (entry.name.endsWith('.app') || entry.name.endsWith('.xctest'))
+    )
+    .map((entry) => path.join(entry.parentPath, entry.name))) {
+    const signature = spawnSync('codesign', ['-dv', bundlePath], {
+      encoding: 'utf8',
+    });
+    const teamIdentifier = /^TeamIdentifier=(.+)$/m.exec(signature.stderr)?.[1];
+
+    if (
+      teamIdentifier &&
+      teamIdentifier !== 'not set' &&
+      teamIdentifier !== APPLE_TEAM_IDENTIFIER
+    ) {
+      problems.push(
+        `${path.relative(
+          artifactDirectoryPath,
+          bundlePath
+        )} is signed by team ${teamIdentifier}`
+      );
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(
+      `Refusing to pack XCTest agent artifacts that identify this machine or account:\n${problems
+        .map((problem) => `  - ${problem}`)
+        .join('\n')}`
+    );
+  }
 };
 
 type UnpackMarker = {
@@ -326,72 +487,96 @@ const readUnpackMarker = (markerPath: string): UnpackMarker | null => {
   }
 };
 
+const isUnpacked = (
+  derivedDataPath: string,
+  directoryName: string,
+  entry: XCTestAgentPrebuiltEntry
+): boolean =>
+  readUnpackMarker(path.join(derivedDataPath, PREBUILT_CACHE_MARKER))
+    ?.directoryName === directoryName &&
+  fs.existsSync(
+    path.join(
+      getXCTestAgentBuildProductsPath(derivedDataPath),
+      entry.xctestrunRelativePath
+    )
+  );
+
 /**
  * Copies an artifact out of the package into the project's Harness cache.
  *
  * The copy exists because `test-without-building` writes results and logs
  * into its derived data path, and on a physical device that copy is also
- * re-signed in place, while the installed package is a shared store that must
- * stay pristine. Unpacking happens once per project.
+ * re-signed, while the installed package is a shared store that must stay
+ * pristine. Unpacking happens once per project and variant.
+ *
+ * The copy is assembled in a staging directory, finished by `prepare`, marked,
+ * and only then renamed into place. A run that is interrupted mid-signing, or
+ * two runners unpacking the same variant at once, therefore never leave or
+ * observe a half-prepared copy.
  */
-const unpackPrebuiltArtifacts = (
-  entry: XCTestAgentPrebuiltEntry,
-  artifactDirectoryPath: string,
-  projectRoot: string,
+const unpackPrebuiltArtifacts = async (options: {
+  artifactDirectoryPath: string;
+  entry: XCTestAgentPrebuiltEntry;
+  prepare?: (derivedDataPath: string) => Promise<void>;
+  projectRoot: string;
   /**
    * Distinguishes caches that must not be shared, such as one re-signed for a
    * particular identity and profile. The packaged artifact itself is never
    * mutated, so the unpacked copy has to be keyed by whatever was signed into it.
    */
-  variant?: string
-): string => {
-  const directoryName = variant
+  variant?: string;
+}): Promise<string> => {
+  const { entry } = options;
+  const directoryName = options.variant
     ? `${entry.directoryName}-${createHash('sha256')
-        .update(variant)
+        .update(options.variant)
         .digest('hex')
         .slice(0, 8)}`
     : entry.directoryName;
   const derivedDataPath = path.join(
-    getHarnessCacheRootPath(projectRoot),
+    getHarnessCacheRootPath(options.projectRoot),
     `${PREBUILT_CACHE_PREFIX}-${directoryName}`
   );
-  const markerPath = path.join(derivedDataPath, PREBUILT_CACHE_MARKER);
-  const marker = readUnpackMarker(markerPath);
 
-  if (
-    marker?.directoryName === directoryName &&
-    fs.existsSync(
-      path.join(
-        getXCTestAgentBuildProductsPath(derivedDataPath),
-        entry.xctestrunRelativePath
-      )
-    )
-  ) {
+  if (isUnpacked(derivedDataPath, directoryName, entry)) {
     return derivedDataPath;
   }
 
-  fs.mkdirSync(path.dirname(derivedDataPath), { recursive: true });
-  fs.rmSync(derivedDataPath, { recursive: true, force: true });
-  fs.cpSync(artifactDirectoryPath, derivedDataPath, {
-    recursive: true,
-  });
-  fs.writeFileSync(
-    markerPath,
-    JSON.stringify(
-      {
-        directoryName,
-        xctestrunRelativePath: entry.xctestrunRelativePath,
-      } satisfies UnpackMarker,
-      null,
-      2
-    )
-  );
+  const stagingPath = `${derivedDataPath}.staging-${process.pid}-${Date.now()}`;
 
-  return derivedDataPath;
+  try {
+    fs.mkdirSync(path.dirname(derivedDataPath), { recursive: true });
+    fs.cpSync(options.artifactDirectoryPath, stagingPath, { recursive: true });
+    await options.prepare?.(stagingPath);
+    fs.writeFileSync(
+      path.join(stagingPath, PREBUILT_CACHE_MARKER),
+      JSON.stringify(
+        {
+          directoryName,
+          xctestrunRelativePath: entry.xctestrunRelativePath,
+        } satisfies UnpackMarker,
+        null,
+        2
+      )
+    );
+
+    // Another runner may have finished the same variant meanwhile; its copy
+    // is equivalent, so keep it rather than replacing a directory in use.
+    if (isUnpacked(derivedDataPath, directoryName, entry)) {
+      return derivedDataPath;
+    }
+
+    fs.rmSync(derivedDataPath, { recursive: true, force: true });
+    fs.renameSync(stagingPath, derivedDataPath);
+
+    return derivedDataPath;
+  } finally {
+    fs.rmSync(stagingPath, { recursive: true, force: true });
+  }
 };
 
 export type PreparedPrebuiltArtifacts = {
-  /** Unpacked, unsigned copy of the artifact; safe to modify or re-sign. */
+  /** Project-local copy of the artifact, already through `prepare`. */
   derivedDataPath: string;
   entry: XCTestAgentPrebuiltEntry;
 };
@@ -414,9 +599,9 @@ export const toPrebuiltArtifacts = (
  * Finds the shipped artifact the local toolchain may use, or returns `null` when
  * none qualifies.
  *
- * Declining rather than failing is deliberate: a toolchain mismatch is the
- * normal case for anyone whose Xcode differs from the release machine's, and
- * the caller's fallback — build locally — is always correct.
+ * Declining rather than failing is deliberate: an Xcode older than the
+ * supported minimum, or a package whose agent sources were changed locally, is
+ * expected, and the caller's fallback — build locally — is always correct.
  */
 export const resolvePrebuiltEntry = async (options: {
   destination: XCTestAgentBuildDestination;
@@ -462,20 +647,31 @@ export const resolvePrebuiltEntry = async (options: {
 
   const buildInputsHash = getAgentProjectSourcesHash();
   const agentVersion = getPackageVersion();
-  const entry = candidates.find(
+  const current = candidates.filter(
     (candidate) =>
       candidate.buildInputsHash === buildInputsHash &&
-      candidate.agentVersion === agentVersion &&
-      candidate.xcodeVersion === toolchain.xcodeVersion &&
-      candidate.sdkVersion === toolchain.sdkVersion
+      candidate.agentVersion === agentVersion
+  );
+
+  if (current.length === 0) {
+    xctestAgentLogger.info(
+      'Shipped XCTest agent artifacts were packed from different agent sources, building instead'
+    );
+    return null;
+  }
+
+  const entry = current.find((candidate) =>
+    supportsXcode(candidate, toolchain.xcodeVersion)
   );
 
   if (!entry) {
     xctestAgentLogger.info(
-      'Shipped XCTest agent artifacts do not match the local %s toolchain (Xcode %s, SDK %s), building instead',
-      options.destination,
-      toolchain.xcodeVersion,
-      toolchain.sdkVersion
+      'Shipped XCTest agent artifacts support Xcode %d up to Xcode %s, found Xcode %s, building instead',
+      MIN_PREBUILT_XCODE_MAJOR_VERSION,
+      current
+        .map((candidate) => getXcodeMajorVersion(candidate.xcodeVersion))
+        .sort((a, b) => b - a)[0],
+      toolchain.xcodeVersion
     );
     return null;
   }
@@ -504,26 +700,32 @@ export const resolvePrebuiltEntry = async (options: {
 };
 
 /**
- * Copies a resolved artifact into the project's Harness cache.
+ * Copies a resolved artifact into the project's Harness cache, running
+ * `prepare` on the copy before it becomes visible.
  *
  * `variant` separates caches whose contents differ for reasons the artifact key
  * cannot see, such as re-signing for a particular identity. The packaged copy is
- * never modified, so anything written into the unpacked copy has to be part of
- * its directory name.
+ * never modified, so anything `prepare` writes has to be part of the variant.
  */
-export const unpackPrebuiltEntry = (
+export const unpackPrebuiltEntry = async (
   entry: XCTestAgentPrebuiltEntry,
-  options: { packageRoot?: string; projectRoot: string; variant?: string }
-): PreparedPrebuiltArtifacts => ({
-  derivedDataPath: unpackPrebuiltArtifacts(
-    entry,
-    path.join(
+  options: {
+    packageRoot?: string;
+    prepare?: (derivedDataPath: string) => Promise<void>;
+    projectRoot: string;
+    variant?: string;
+  }
+): Promise<PreparedPrebuiltArtifacts> => ({
+  derivedDataPath: await unpackPrebuiltArtifacts({
+    artifactDirectoryPath: path.join(
       getPrebuiltRootPath(options.packageRoot ?? resolvePrebuiltPackageRoot()),
       entry.directoryName
     ),
-    options.projectRoot,
-    options.variant
-  ),
+    entry,
+    prepare: options.prepare,
+    projectRoot: options.projectRoot,
+    variant: options.variant,
+  }),
   entry,
 });
 
@@ -536,7 +738,6 @@ const preparePrebuiltArtifacts = async (options: {
   packageRoot?: string;
   projectRoot: string;
   signal?: AbortSignal;
-  variant?: string;
 }): Promise<PreparedPrebuiltArtifacts | null> => {
   const entry = await resolvePrebuiltEntry(options);
 
@@ -544,7 +745,7 @@ const preparePrebuiltArtifacts = async (options: {
     return null;
   }
 
-  return unpackPrebuiltEntry(entry, options);
+  return await unpackPrebuiltEntry(entry, options);
 };
 
 /**

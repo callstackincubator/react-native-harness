@@ -53,7 +53,9 @@ const mockXcodebuild = (options?: {
   mocks.spawn.mockImplementation((file: string, args?: string[]) => {
     if (file === 'xcodebuild' && args?.join(' ') === '-version') {
       return Promise.resolve({
-        stdout: `Xcode ${options?.xcodeVersion ?? xcodeVersion}\nBuild version ${xcodeBuild}`,
+        stdout: `Xcode ${
+          options?.xcodeVersion ?? xcodeVersion
+        }\nBuild version ${xcodeBuild}`,
       });
     }
 
@@ -125,7 +127,8 @@ const writeFakeArtifact = (options: {
     'Build',
     'Products'
   );
-  const xctestrunName = options.xctestrunName ?? 'agent_iphonesimulator.xctestrun';
+  const xctestrunName =
+    options.xctestrunName ?? 'agent_iphonesimulator.xctestrun';
 
   fs.mkdirSync(path.join(buildProductsPath, 'Debug-iphonesimulator'), {
     recursive: true,
@@ -135,7 +138,11 @@ const writeFakeArtifact = (options: {
     `xctestrun for ${options.directoryName}`
   );
   fs.writeFileSync(
-    path.join(buildProductsPath, 'Debug-iphonesimulator', 'HarnessXCTestAgent.app'),
+    path.join(
+      buildProductsPath,
+      'Debug-iphonesimulator',
+      'HarnessXCTestAgent.app'
+    ),
     'agent binary'
   );
 
@@ -154,7 +161,11 @@ const writeFakeArtifact = (options: {
       'symbols'
     );
     fs.mkdirSync(
-      path.join(buildProductsPath, 'Debug-iphonesimulator', 'agent.swiftmodule'),
+      path.join(
+        buildProductsPath,
+        'Debug-iphonesimulator',
+        'agent.swiftmodule'
+      ),
       { recursive: true }
     );
   }
@@ -220,7 +231,9 @@ describe('prebuilt XCTest agent artifacts', () => {
     });
 
     it('unpacks a matching artifact into the project cache and points at its xctestrun', async () => {
-      const xctestrunName = writeFakeArtifact({ directoryName: 'simulator-abc123' });
+      const xctestrunName = writeFakeArtifact({
+        directoryName: 'simulator-abc123',
+      });
       writeIndex({
         entries: [
           makeEntry({
@@ -257,7 +270,9 @@ describe('prebuilt XCTest agent artifacts', () => {
     });
 
     it('leaves the packaged artifact untouched while running from the copy', async () => {
-      const xctestrunName = writeFakeArtifact({ directoryName: 'simulator-abc123' });
+      const xctestrunName = writeFakeArtifact({
+        directoryName: 'simulator-abc123',
+      });
       writeIndex({
         entries: [
           makeEntry({
@@ -283,7 +298,10 @@ describe('prebuilt XCTest agent artifacts', () => {
         throw new Error('Expected an xctestrun launch input');
       }
 
-      fs.writeFileSync(artifacts.launch.xctestrunPath, 'written by a test session');
+      fs.writeFileSync(
+        artifacts.launch.xctestrunPath,
+        'written by a test session'
+      );
 
       expect(fs.existsSync(packagedXCTestRunPath)).toBe(true);
       expect(fs.readFileSync(packagedXCTestRunPath, 'utf8')).toBe(
@@ -292,7 +310,9 @@ describe('prebuilt XCTest agent artifacts', () => {
     });
 
     it('reuses an artifact it already unpacked', async () => {
-      const xctestrunName = writeFakeArtifact({ directoryName: 'simulator-abc123' });
+      const xctestrunName = writeFakeArtifact({
+        directoryName: 'simulator-abc123',
+      });
       writeIndex({
         entries: [
           makeEntry({
@@ -321,13 +341,39 @@ describe('prebuilt XCTest agent artifacts', () => {
       );
     });
 
-    it('declines when the installed Xcode differs from the packed one', async () => {
-      const xctestrunName = writeFakeArtifact({ directoryName: 'simulator-abc123' });
+    it('uses an artifact packed with a different Xcode and SDK', async () => {
+      const xctestrunName = writeFakeArtifact({
+        directoryName: 'simulator-abc123',
+      });
       writeIndex({
         entries: [
           makeEntry({
             directoryName: 'simulator-abc123',
-            xcodeVersion: '16.4',
+            sdkVersion: '27.0',
+            xcodeVersion: '27.0',
+            xctestrunRelativePath: xctestrunName,
+          }),
+        ],
+        schemaVersion: 1,
+      });
+
+      const artifacts = await createPrebuiltXCTestAgentProvider({
+        packageRoot,
+      }).prepare(contextFor());
+
+      expect(artifacts?.source).toBe('prebuilt');
+    });
+
+    it('declines on an Xcode newer than the one that packed the artifact', async () => {
+      mockXcodebuild({ xcodeVersion: '28.0' });
+      const xctestrunName = writeFakeArtifact({
+        directoryName: 'simulator-abc123',
+      });
+      writeIndex({
+        entries: [
+          makeEntry({
+            directoryName: 'simulator-abc123',
+            xcodeVersion: '27.1',
             xctestrunRelativePath: xctestrunName,
           }),
         ],
@@ -339,13 +385,15 @@ describe('prebuilt XCTest agent artifacts', () => {
       ).resolves.toBeNull();
     });
 
-    it('declines when the installed SDK differs from the packed one', async () => {
-      const xctestrunName = writeFakeArtifact({ directoryName: 'simulator-abc123' });
+    it('declines on an Xcode older than the supported minimum', async () => {
+      mockXcodebuild({ xcodeVersion: '16.4' });
+      const xctestrunName = writeFakeArtifact({
+        directoryName: 'simulator-abc123',
+      });
       writeIndex({
         entries: [
           makeEntry({
             directoryName: 'simulator-abc123',
-            sdkVersion: '18.5',
             xctestrunRelativePath: xctestrunName,
           }),
         ],
@@ -358,7 +406,9 @@ describe('prebuilt XCTest agent artifacts', () => {
     });
 
     it('declines when the agent sources no longer match the packed ones', async () => {
-      const xctestrunName = writeFakeArtifact({ directoryName: 'simulator-abc123' });
+      const xctestrunName = writeFakeArtifact({
+        directoryName: 'simulator-abc123',
+      });
       writeIndex({
         entries: [
           makeEntry({
@@ -376,7 +426,9 @@ describe('prebuilt XCTest agent artifacts', () => {
     });
 
     it('declines when the artifact belongs to another package version', async () => {
-      const xctestrunName = writeFakeArtifact({ directoryName: 'simulator-abc123' });
+      const xctestrunName = writeFakeArtifact({
+        directoryName: 'simulator-abc123',
+      });
       writeIndex({
         entries: [
           makeEntry({
@@ -394,7 +446,9 @@ describe('prebuilt XCTest agent artifacts', () => {
     });
 
     it('declines when another destination owns the only artifact', async () => {
-      const xctestrunName = writeFakeArtifact({ directoryName: 'device-abc123' });
+      const xctestrunName = writeFakeArtifact({
+        directoryName: 'device-abc123',
+      });
       writeIndex({
         entries: [
           {
@@ -491,7 +545,7 @@ describe('prebuilt XCTest agent artifacts', () => {
       ).toBe(false);
     });
 
-    it('replaces the artifact for a destination instead of accumulating them', async () => {
+    it('replaces the artifact for a destination and removes the old directory', async () => {
       await packXCTestAgentArtifacts({
         destination: 'simulator',
         packageRoot,
@@ -506,9 +560,75 @@ describe('prebuilt XCTest agent artifacts', () => {
 
       const index = readPrebuiltIndex(getPrebuiltIndexPath(packageRoot));
       expect(index?.entries).toHaveLength(1);
-      expect(index?.entries[0]?.directoryName).toBe(
-        second.entry.directoryName
-      );
+      expect(index?.entries[0]?.directoryName).toBe(second.entry.directoryName);
+      // The superseded artifact would otherwise ship in the tarball unused.
+      expect(
+        fs.readdirSync(path.join(packageRoot, 'xctest-agent-prebuilds')).sort()
+      ).toEqual([second.entry.directoryName, 'index.json'].sort());
+    });
+
+    it('builds into a fresh folder instead of reusing a local build', async () => {
+      await packXCTestAgentArtifacts({
+        destination: 'simulator',
+        packageRoot,
+        projectRoot,
+      });
+
+      const buildArgs = mocks.spawn.mock.calls.find(
+        (call) => call[1]?.[0] === 'build-for-testing'
+      )?.[1] as string[];
+      const derivedDataPath =
+        buildArgs[buildArgs.indexOf('-derivedDataPath') + 1];
+
+      expect(derivedDataPath.startsWith(projectRoot)).toBe(false);
+      expect(fs.existsSync(derivedDataPath)).toBe(false);
+      expect(fs.existsSync(path.join(projectRoot, '.harness'))).toBe(false);
+    });
+
+    it.each([
+      [
+        'a path from the packing machine',
+        'Debug-iphonesimulator/agent',
+        () => `source at ${os.homedir()}/agent.swift`,
+      ],
+      [
+        'an embedded provisioning profile',
+        'Debug-iphonesimulator/embedded.mobileprovision',
+        () => 'profile',
+      ],
+    ])('refuses artifacts that carry %s', async (_, relativePath, contents) => {
+      const baseImplementation = mocks.spawn.getMockImplementation();
+      mocks.spawn.mockImplementation(async (file: string, args?: string[]) => {
+        const result = await baseImplementation?.(file, args);
+
+        if (args?.[0] === 'build-for-testing') {
+          fs.writeFileSync(
+            path.join(
+              args[args.indexOf('-derivedDataPath') + 1],
+              'Build',
+              'Products',
+              relativePath
+            ),
+            contents()
+          );
+        }
+
+        return result;
+      });
+
+      await expect(
+        packXCTestAgentArtifacts({
+          destination: 'simulator',
+          packageRoot,
+          projectRoot,
+        })
+      ).rejects.toThrow(/Refusing to pack/);
+      expect(readPrebuiltIndex(getPrebuiltIndexPath(packageRoot))).toBeNull();
+      expect(
+        fs.existsSync(path.join(packageRoot, 'xctest-agent-prebuilds')) &&
+          fs.readdirSync(path.join(packageRoot, 'xctest-agent-prebuilds'))
+            .length > 0
+      ).toBe(false);
     });
 
     it('keeps artifacts of different destinations side by side', async () => {
@@ -550,7 +670,11 @@ describe('prebuilt XCTest agent artifacts', () => {
       }).prepare(contextFor(path.join(tempRoot, 'consumer')));
 
       expect(artifacts?.source).toBe('prebuilt');
-      expect(mocks.spawn.mock.calls.filter((call) => call[1]?.[0] === 'build-for-testing')).toHaveLength(0);
+      expect(
+        mocks.spawn.mock.calls.filter(
+          (call) => call[1]?.[0] === 'build-for-testing'
+        )
+      ).toHaveLength(0);
       expect(
         (artifacts?.launch as { xctestrunPath: string }).xctestrunPath
       ).toContain(packed.entry.directoryName);

@@ -105,7 +105,6 @@ export const resolveSigningIdentity = (options: {
   };
 };
 const AGENT_BUNDLE_ID_PREFIX = 'com.callstackincubator.';
-const SIGNED_MARKER = 'resigned-cache.json';
 
 export type ProvisioningProfile = {
   /** `application-identifier` entitlement, e.g. `TEAMID.*`. */
@@ -467,93 +466,53 @@ const replacePlistString = (
   }
 };
 
-/**
- * Keys the remap and bundle-resolution code reads out of a `.xctestrun`.
- *
- * A `.xctestrun` describes its targets under `TestConfigurations` rather than at
- * the top level, so every key has to be looked up per target.
- */
-type XCTestRunTargetKey =
-  | 'TestHostPath'
-  | 'TestBundlePath'
-  | 'UITargetAppPath'
-  | 'TestHostBundleIdentifier';
-
-const MAX_XCTEST_RUN_CONFIGURATIONS = 8;
-const MAX_XCTEST_RUN_TARGETS = 8;
 const MAX_DEVELOPER_CERTIFICATES = 32;
 
-/**
- * Key paths for every test target of every configuration.
- *
- * `plutil` cannot ask a dictionary for its length through a key path, so the
- * shape is probed by looking for a key every target carries. The alternatives
- * were worse: converting the file to JSON and parsing it would put the plist's
- * on-disk representation in the hands of a round-trip, and Xcode writes exactly
- * one configuration and one target for this scheme, so the probes are cheap and
- * the bounds only exist to keep a malformed file from looping.
- */
-const getXCTestRunTargetKeyPaths = (xctestrunPath: string): string[] => {
-  const keyPaths: string[] = [];
-
-  for (
-    let configuration = 0;
-    configuration < MAX_XCTEST_RUN_CONFIGURATIONS;
-    configuration += 1
-  ) {
-    let configurations = 0;
-
-    for (let target = 0; target < MAX_XCTEST_RUN_TARGETS; target += 1) {
-      // Probed as a dictionary because `plutil -extract … raw` only accepts
-      // strings and rejects the booleans every target contains.
-      const keyPath = `TestConfigurations.${configuration}.TestTargets.${target}`;
-
-      if (!plistKeyExists(xctestrunPath, keyPath, 'xml1')) {
-        break;
-      }
-
-      configurations += 1;
-      keyPaths.push(keyPath);
-    }
-
-    if (configurations === 0) {
-      break;
-    }
-  }
-
-  return keyPaths;
+/** The fields of a `.xctestrun` test target that signing and remapping use. */
+type XCTestRunTarget = {
+  TestBundlePath?: string;
+  TestHostBundleIdentifier?: string;
+  TestHostPath?: string;
+  UITargetAppPath?: string;
 };
 
-const plistKeyExists = (
-  plistPath: string,
-  keyPath: string,
-  format: 'raw' | 'xml1' = 'raw'
-): boolean =>
-  spawnSync('plutil', ['-extract', keyPath, format, '-o', '-', plistPath])
-    .status === 0;
-
 /**
- * Values of a target key across the whole file, in file order.
+ * Every test target of every configuration, with the plist key path it lives
+ * at, so a target can be rewritten in place with `plutil -replace`.
  *
- * Xcode emits a single target, but reading every one means a file that ever
- * carried two cannot make this code sign one bundle while the session launches
- * another.
+ * Xcode emits one configuration with one target for this scheme, but reading
+ * all of them means a file that ever carried two cannot make this code sign
+ * one bundle while the session launches another. A `.xctestrun` holds only
+ * strings, numbers, booleans, and collections, so it converts to JSON whole.
  */
-const readXCTestRunTargetValues = (
-  xctestrunPath: string,
-  key: XCTestRunTargetKey
-): string[] => {
-  const values: string[] = [];
+const readXCTestRunTargets = (
+  xctestrunPath: string
+): { keyPath: string; target: XCTestRunTarget }[] => {
+  const result = spawnSync('plutil', [
+    '-convert',
+    'json',
+    '-o',
+    '-',
+    xctestrunPath,
+  ]);
 
-  for (const keyPath of getXCTestRunTargetKeyPaths(xctestrunPath)) {
-    const value = readPlistString(xctestrunPath, `${keyPath}.${key}`);
-
-    if (value && !values.includes(value)) {
-      values.push(value);
-    }
+  if (result.status !== 0) {
+    throw new Error(
+      `Unable to read ${xctestrunPath}: ${result.stderr.toString().trim()}`
+    );
   }
 
-  return values;
+  const xctestrun = JSON.parse(result.stdout.toString()) as {
+    TestConfigurations?: { TestTargets?: XCTestRunTarget[] }[];
+  };
+
+  return (xctestrun.TestConfigurations ?? []).flatMap(
+    (configuration, configurationIndex) =>
+      (configuration.TestTargets ?? []).map((target, targetIndex) => ({
+        keyPath: `TestConfigurations.${configurationIndex}.TestTargets.${targetIndex}`,
+        target,
+      }))
+  );
 };
 
 /**
@@ -571,8 +530,9 @@ const readXCTestRunTargetValues = (
  */
 const getArtifactBundles = (xctestrunPath: string) => {
   const productsPath = path.dirname(xctestrunPath);
+  const targets = readXCTestRunTargets(xctestrunPath);
   const first = (key: 'TestHostPath' | 'TestBundlePath' | 'UITargetAppPath') =>
-    readXCTestRunTargetValues(xctestrunPath, key)[0];
+    targets.find(({ target }) => target[key])?.target[key];
   const rawRunnerPath = first('TestHostPath');
 
   if (!rawRunnerPath) {
@@ -728,11 +688,10 @@ const remapBundleIdentifiers = (options: {
     return;
   }
 
-  for (const keyPath of getXCTestRunTargetKeyPaths(options.xctestrunPath)) {
-    const current = readPlistString(
-      options.xctestrunPath,
-      `${keyPath}.TestHostBundleIdentifier`
-    );
+  for (const { keyPath, target } of readXCTestRunTargets(
+    options.xctestrunPath
+  )) {
+    const current = target.TestHostBundleIdentifier;
     const remapped = current ? rewrites.get(current) : undefined;
 
     if (remapped) {
@@ -786,7 +745,7 @@ const signBundle = async (options: {
   entitlementsPath?: string;
   identity: string;
   signal?: AbortSignal;
-  targetPath: string;
+  targetPath: string | string[];
 }) => {
   const args = ['--force', '--sign', options.identity, '--timestamp=none'];
 
@@ -794,16 +753,37 @@ const signBundle = async (options: {
     args.push('--entitlements', options.entitlementsPath);
   }
 
-  await spawn('codesign', [...args, options.targetPath], {
+  await spawn('codesign', [...args, ...[options.targetPath].flat()], {
     signal: options.signal,
   });
+};
+
+/**
+ * Frameworks and dylibs embedded in a bundle's `Frameworks` directory.
+ *
+ * From Xcode 26 the test runner embeds XCTest, XCUIAutomation, Testing, and
+ * their support libraries, signed by Apple. A device refuses to install an app
+ * whose embedded code is not signed by the same identity as the app itself
+ * ("The identity used to sign the executable is no longer valid"), which is
+ * why `xcodebuild` re-signs them too.
+ */
+const getEmbeddedCodePaths = (bundlePath: string): string[] => {
+  const frameworksPath = path.join(bundlePath, 'Frameworks');
+
+  if (!fs.existsSync(frameworksPath)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(frameworksPath)
+    .filter((entry) => entry.endsWith('.framework') || entry.endsWith('.dylib'))
+    .sort()
+    .map((entry) => path.join(frameworksPath, entry));
 };
 
 export type ResignXCTestAgentArtifactsOptions = {
   /** Rewrites the agent's bundle ids; see `remapBundleIdentifiers`. */
   bundleIdPrefix?: string;
-  /** Artifact copy to sign in place. Never the packaged original. */
-  derivedDataPath: string;
   identity?: string;
   profile: ProvisioningProfile;
   signal?: AbortSignal;
@@ -813,9 +793,9 @@ export type ResignXCTestAgentArtifactsOptions = {
 /**
  * Signs unpacked device artifacts so the configured device can run them.
  *
- * Order matters: the XCTest bundle lives inside the runner, so it is signed
- * first, then the runner that embeds it, then the app under test. Entitlements
- * mirror what `xcodebuild` emits for the same team and bundle id — confirmed by
+ * Order matters: signing goes inside out, so embedded frameworks come first,
+ * then the XCTest bundle that lives inside the runner, then the runner that
+ * embeds it, then the app under test. Entitlements mirror what `xcodebuild` emits for the same team and bundle id — confirmed by
  * diffing against a real signed build — because diverging would change which
  * permission prompts the agent can observe. Signing takes about a second and
  * needs no network, versus a rebuild.
@@ -848,6 +828,22 @@ export const resignXCTestAgentArtifacts = async (
   );
 
   try {
+    const embeddedCode = [
+      bundles.pluginPath,
+      bundles.runnerPath,
+      bundles.appPath,
+    ]
+      .filter((bundle): bundle is string => Boolean(bundle))
+      .flatMap(getEmbeddedCodePaths);
+
+    if (embeddedCode.length > 0) {
+      await signBundle({
+        identity,
+        signal: options.signal,
+        targetPath: embeddedCode,
+      });
+    }
+
     if (bundles.pluginPath) {
       await signBundle({
         identity,
@@ -1026,54 +1022,33 @@ export const createResignedDeviceXCTestAgentProvider = (options?: {
       signing.bundleIdPrefix ?? '',
       identity.identity,
     ].join('\0');
-    const prepared = unpackPrebuiltEntry(entry, {
-      packageRoot: options?.packageRoot,
-      projectRoot: context.projectRoot,
-      variant,
-    });
-
-    // Unpacking replaces the whole copy, so this marker disappears whenever the
-    // artifacts are re-unpacked and re-signing is needed again. Its presence
-    // means a previous run signed this exact copy with this exact profile.
-    const signedMarker = path.join(prepared.derivedDataPath, SIGNED_MARKER);
-
-    if (fs.existsSync(signedMarker)) {
-      xctestAgentLogger.info(
-        'Using prebuilt XCTest agent artifacts for device target, signed with %s',
-        signing.profile.name
-      );
-
-      return toPrebuiltArtifacts(prepared);
-    }
-
-    const xctestrunPath = path.join(
-      getXCTestAgentBuildProductsPath(prepared.derivedDataPath),
-      prepared.entry.xctestrunRelativePath
-    );
+    let prepared;
 
     try {
-      await resignXCTestAgentArtifacts({
-        bundleIdPrefix: signing.bundleIdPrefix,
-        derivedDataPath: prepared.derivedDataPath,
-        identity: identity.identity,
-        profile: signing.profile,
-        signal: context.signal,
-        xctestrunPath,
+      prepared = await unpackPrebuiltEntry(entry, {
+        packageRoot: options?.packageRoot,
+        // Signing runs on the staged copy, so a failure here leaves nothing
+        // half-signed behind and the next run starts from the pristine artifact.
+        prepare: (derivedDataPath) =>
+          resignXCTestAgentArtifacts({
+            bundleIdPrefix: signing.bundleIdPrefix,
+            identity: identity.identity,
+            profile: signing.profile,
+            signal: context.signal,
+            xctestrunPath: path.join(
+              getXCTestAgentBuildProductsPath(derivedDataPath),
+              entry.xctestrunRelativePath
+            ),
+          }),
+        projectRoot: context.projectRoot,
+        variant,
       });
-      fs.writeFileSync(
-        signedMarker,
-        JSON.stringify({
-          profile: signing.profile.uuid || signing.profile.name,
-        })
-      );
     } catch (error) {
+      context.signal?.throwIfAborted();
       xctestAgentLogger.warn(
         'Unable to re-sign prebuilt XCTest agent artifacts for the device (%s), building instead',
         error instanceof Error ? error.message : String(error)
       );
-      // Leave nothing half-signed behind: the next run must start from the
-      // pristine packaged artifacts rather than this copy.
-      fs.rmSync(prepared.derivedDataPath, { recursive: true, force: true });
       return null;
     }
 
