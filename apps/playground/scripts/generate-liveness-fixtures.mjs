@@ -37,9 +37,9 @@ const importsFor = (ids) =>
 const first = names.slice(0, half);
 const second = names.slice(half);
 
-// The assertion helper is imported between the two halves, so Metro gives
-// it a module id in the middle of the graph and the serializer places it in
-// a middle chunk of the test bundle.
+// The assertion helper is imported between the generated modules, so it is
+// not placed in the last chunk of the test bundle, the only one that carries
+// the bundle's own sourceURL.
 fs.writeFileSync(
   path.join(outDir, 'index.ts'),
   `${importsFor(first)}

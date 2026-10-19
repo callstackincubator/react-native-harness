@@ -118,9 +118,10 @@ The word "heartbeat" is no longer used in the bridge.
 - If the budget runs out, the run fails with reason `js-thread-unresponsive`,
   and the error names the label, for example *test "X" (5000ms timeout + 5000ms
   grace)*.
-- To support this, `test-started` gains a `timeout` field. The runner yields
-  one macrotask after sending it, so the event reaches the server before user
-  code can block. If the event arrives late anyway, the default 20s budget
+- To support this, `test-started` gains a `timeout` field, which skipped and
+  todo tests leave out. The runtime yields one macrotask after sending
+  `test-started` and `collection-started`, so each event reaches the server
+  before user code can block. If the event arrives late anyway, the default 20s budget
   stays in effect. The failure mode is a strict check, never a missing one.
 - As a side effect, `testTimeout` is now enforced even when a test blocks the
   thread synchronously, which the in-app timer could not do.
@@ -132,7 +133,9 @@ from user configuration, and nothing has to be turned back on.
 ### 3. Chunked bundle evaluation: harness-owned blocking stays short
 
 - The harness serializer (`bundler-metro/src/getHarnessSerializer.ts`) appends
-  a chunk plan after all code: `//# harnessChunks=[[offset, startLine], …]`.
+  a chunk plan after all code:
+  `//# harnessChunks={"chunks":[[offset, startLine], …],"sourceUrl":"…"}`.
+  Bundles that fit in one chunk get no plan.
   Chunks are about 256 KB and always start at a `__d(...)` module boundary.
 - The runtime evaluates one chunk per macrotask and yields between chunks, so
   `js-probe` messages are answered during the parse. The final chunk contains
