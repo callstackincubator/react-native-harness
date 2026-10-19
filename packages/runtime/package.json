@@ -18,6 +18,12 @@
       "import": "./assets/harness-module-system.js",
       "default": "./assets/harness-module-system.js"
     },
+    "./bundle-format": {
+      "development": "./src/bundle-format/chunk-plan.ts",
+      "types": "./dist/bundle-format/chunk-plan.d.ts",
+      "import": "./dist/bundle-format/chunk-plan.js",
+      "default": "./dist/bundle-format/chunk-plan.js"
+    },
     "./entry-point": {
       "development": "./src/entry-point.ts",
       "types": "./dist/entry-point.d.ts",

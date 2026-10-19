@@ -91,7 +91,7 @@ export const getClient = async (): Promise<HarnessHandle> => {
           });
 
           setup();
-          evaluateModule(moduleJs, path);
+          await evaluateModule(moduleJs, path);
         }, path);
 
         const processedTestSuite = options.testNamePattern
