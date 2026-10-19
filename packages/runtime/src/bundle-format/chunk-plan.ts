@@ -28,8 +28,10 @@ export type BundleChunk = {
 };
 
 export type ChunkPlan = {
-  /** The bundle without the plan comment. */
-  code: string;
+  /** The whole bundle, including the plan comment. */
+  bundle: string;
+  /** Where the code ends and the plan comment starts. */
+  codeLength: number;
   chunks: BundleChunk[];
   sourceUrl?: string;
 };
@@ -114,22 +116,28 @@ const isValidPlan = (value: unknown, codeLength: number): value is SerializedChu
   }
 
   let previousOffset = -1;
+  let previousLine = 0;
 
   for (const chunk of chunks) {
     if (
       !Array.isArray(chunk) ||
-      typeof chunk[0] !== 'number' ||
-      typeof chunk[1] !== 'number' ||
+      !Number.isSafeInteger(chunk[0]) ||
+      !Number.isSafeInteger(chunk[1]) ||
       chunk[0] <= previousOffset ||
-      chunk[0] >= codeLength
+      chunk[0] >= codeLength ||
+      // Each chunk starts on a later line than the one before, at most one
+      // line per character of the chunks before it.
+      chunk[1] < previousLine ||
+      chunk[1] > chunk[0]
     ) {
       return false;
     }
 
     previousOffset = chunk[0];
+    previousLine = chunk[1];
   }
 
-  return chunks[0][0] === 0;
+  return chunks[0][0] === 0 && chunks[0][1] === 0;
 };
 
 /**
@@ -143,7 +151,6 @@ export const readChunkPlan = (bundle: string): ChunkPlan | null => {
     return null;
   }
 
-  const code = bundle.slice(0, markerAt);
   let plan: unknown;
 
   try {
@@ -152,16 +159,17 @@ export const readChunkPlan = (bundle: string): ChunkPlan | null => {
     return null;
   }
 
-  if (!isValidPlan(plan, code.length)) {
+  if (!isValidPlan(plan, markerAt)) {
     return null;
   }
 
   return {
-    code,
+    bundle,
+    codeLength: markerAt,
     sourceUrl: plan.sourceUrl,
     chunks: plan.chunks.map(([start, startLine], index) => ({
       start,
-      end: plan.chunks[index + 1]?.[0] ?? code.length,
+      end: plan.chunks[index + 1]?.[0] ?? markerAt,
       startLine,
     })),
   };
@@ -175,8 +183,8 @@ export const readChunkPlan = (bundle: string): ChunkPlan | null => {
  * the bundle's source map.
  */
 export const getChunkSource = (plan: ChunkPlan, chunk: BundleChunk): string => {
-  const source = plan.code.slice(chunk.start, chunk.end);
-  const isLast = chunk.end === plan.code.length;
+  const source = plan.bundle.slice(chunk.start, chunk.end);
+  const isLast = chunk.end === plan.codeLength;
   // The last chunk carries the bundle's own sourceURL comment.
   const sourceUrlComment =
     !isLast && plan.sourceUrl ? `\n//# sourceURL=${plan.sourceUrl}` : '';

@@ -10,11 +10,8 @@ const SOURCE_URL =
   'http://localhost:8081/example.harness.bundle?modulesOnly=true&platform=ios';
 
 declare global {
-  // eslint-disable-next-line no-var
   var __order: Array<{ module: number; macrotask: number }>;
-  // eslint-disable-next-line no-var
   var __macrotask: number;
-  // eslint-disable-next-line no-var
   var __throwers: Record<number, () => void>;
 }
 
@@ -68,7 +65,7 @@ describe('chunk plan', () => {
     expect(plan).not.toBeNull();
     if (!plan) return;
 
-    expect(plan.code).toBe(code);
+    expect(plan.bundle.slice(0, plan.codeLength)).toBe(code);
     expect(plan.chunks.length).toBeGreaterThan(1);
     expect(plan.chunks.map((chunk) => code.slice(chunk.start, chunk.end)).join('')).toBe(code);
 
@@ -101,6 +98,22 @@ describe('chunk plan', () => {
     expect(readChunkPlan('__r(1);\n//# harnessChunks={"chunks":"nope"}')).toBeNull();
     expect(readChunkPlan('__r(1);\n//# harnessChunks={not json')).toBeNull();
     expect(readChunkPlan('__r(1);\n//# harnessChunks={"chunks":[[3,0]]}')).toBeNull();
+  });
+
+  it.each([
+    ['a negative line', [[0, 0], [5, -1]]],
+    ['a fractional line', [[0, 0], [5, 1.5]]],
+    ['a non-finite line', [[0, 0], [5, Infinity]]],
+    ['lines going backwards', [[0, 0], [5, 3], [8, 2]]],
+    ['more lines than characters', [[0, 0], [5, 6]]],
+    ['a first chunk not on line 0', [[0, 1], [5, 2]]],
+  ])('treats a plan with %s as no plan', (_name, chunks) => {
+    const code = '__d(1);\n__d(2);\n__r(2);\n';
+    // JSON has no Infinity: stringify writes it as null, and the plan
+    // reader would parse 1e400 back as Infinity.
+    const bundle = `${code}\n//# harnessChunks=${JSON.stringify({ chunks }).replace('null', '1e400')}`;
+
+    expect(readChunkPlan(bundle)).toBeNull();
   });
 });
 
@@ -140,7 +153,11 @@ describe('evaluateModule with a chunk plan', () => {
 
     await evaluateModule(bundle, 'example.harness.tsx');
 
-    return { code, plan: plan! };
+    if (!plan) {
+      throw new Error('expected a chunk plan');
+    }
+
+    return { code, plan };
   };
 
   it('evaluates every module once, in order, and resets the entry module', async () => {
@@ -150,6 +167,25 @@ describe('evaluateModule with a chunk plan', () => {
       Array.from({ length: 40 }, (_, i) => i),
     );
     expect(resetModule).toHaveBeenCalledWith(39);
+  });
+
+  it('sends events emitted before it ahead of evaluation', async () => {
+    // Models the bridge sending an event one microtask after it is emitted,
+    // here the setup-file-bundling-finished that precedes evaluation.
+    vi.stubGlobal('__sent', []);
+    vi.stubGlobal('__sentAtEvaluation', null);
+    queueMicrotask(() => {
+      (globalThis as unknown as { __sent: string[] }).__sent.push('setup-file-bundling-finished');
+    });
+
+    await evaluateModule(
+      'globalThis.__sentAtEvaluation = globalThis.__sent.slice();\n__r(1);',
+      'setup.ts',
+    );
+
+    expect(
+      (globalThis as unknown as { __sentAtEvaluation: string[] }).__sentAtEvaluation,
+    ).toEqual(['setup-file-bundling-finished']);
   });
 
   it('gives up the JS thread between chunks', async () => {

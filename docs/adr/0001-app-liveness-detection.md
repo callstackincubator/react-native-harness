@@ -112,17 +112,28 @@ The word "heartbeat" is no longer used in the bridge.
   | Phase (from existing runner events) | Block budget |
   | --- | --- |
   | Between phases (default) | 20s |
+  | `setup-file-bundling-finished` (evaluating a setup file) | `bundleStartTimeout` (60s default) |
   | `collection-started` → `collection-finished` (loading a test file) | `bundleStartTimeout` (60s default) |
-  | `test-started` → `test-finished` | that test's `timeout` + 5s grace |
+  | `suite-started` → `suite-finished`, outside its tests (`beforeAll`/`afterAll`) | the hook `timeout` + 5s grace |
+  | `test-started` → `test-finished` (the test and its `beforeEach`/`afterEach`) | that test's `timeout` + 5s grace |
+
+- A new budget covers silence from the later of the last acknowledged probe
+  and the moment it was set, so a long block that fitted one budget is never
+  judged against a smaller one that follows, such as the idle budget after a
+  long test.
 
 - If the budget runs out, the run fails with reason `js-thread-unresponsive`,
   and the error names the label, for example *test "X" (5000ms timeout + 5000ms
   grace)*.
-- To support this, `test-started` gains a `timeout` field, which skipped and
-  todo tests leave out. The runtime yields one macrotask after sending
-  `test-started` and `collection-started`, so each event reaches the server
-  before user code can block. If the event arrives late anyway, the default 20s budget
-  stays in effect. The failure mode is a strict check, never a missing one.
+- To support this, `test-started` and `suite-started` gain a `timeout` field,
+  which skipped and todo tests and suites leave out. Before user code that
+  may block (a test, `beforeAll`, `afterAll`, a setup file or test file), the
+  runtime waits a microtask hop so the event announcing it is handed to
+  `WebSocket.send`; the native WebSocket sends it even while JS then blocks.
+  A microtask hop costs nothing measurable, unlike a timer, which can wait for
+  the next frame before every test. If the event arrives late anyway, the
+  previous budget stays in effect. The failure mode is a strict check, never a
+  missing one.
 - As a side effect, `testTimeout` is now enforced even when a test blocks the
   thread synchronously, which the in-app timer could not do.
 
@@ -222,8 +233,8 @@ confusion with `bridgeTimeout`.
 - **Debugger.** With chunked evaluation, DevTools sees several scripts with
   the same URL. Breakpoints set by URL are expected to work, but this must be
   checked by hand.
-- **Code that loads with a test file** has no user-configured timeout. It gets
-  the fixed `bundleStartTimeout` budget, which is a policy choice.
+- **Code that loads with a setup file or test file** has no user-configured
+  timeout. It gets the `bundleStartTimeout` budget, which is a policy choice.
 - **A frozen native main thread**, with the process alive, is not detected by
   the connection check. This is left to the crash monitor and the JS watchdog.
 

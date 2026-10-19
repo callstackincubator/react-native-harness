@@ -87,15 +87,19 @@ describe('JS watchdog', () => {
     watchdog.dispose();
   });
 
-  it('does not reset the clock when the budget changes', () => {
+  it('does not judge a block that fitted the previous budget against a smaller one', () => {
     const { onUnresponsive, watchdog } = setup(1_000);
 
-    // Silent for 500ms under a generous budget...
+    // Silent for 500ms under a generous budget (a long test)...
     vi.advanceTimersByTime(500);
-    // ...then a smaller budget applies to the time already spent.
+    // ...then the test finishes and the smaller idle budget applies, before
+    // the delayed probe ack has arrived.
     watchdog.setBlockBudget({ ms: 100, label: 'idle' });
-    vi.advanceTimersByTime(10);
+    vi.advanceTimersByTime(100);
+    expect(onUnresponsive).not.toHaveBeenCalled();
 
+    // A thread that stays silent still fails within the new budget.
+    vi.advanceTimersByTime(10);
     expect(onUnresponsive).toHaveBeenCalledWith({ ms: 100, label: 'idle' });
   });
 

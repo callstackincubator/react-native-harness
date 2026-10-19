@@ -196,6 +196,86 @@ describe('app liveness', () => {
     }
   });
 
+  it("lets a suite's beforeAll/afterAll hooks block for as long as their timeout allows", async () => {
+    const { js, handle, failedWithin } = await setup();
+
+    handle.emitEvent({
+      type: 'suite-started',
+      name: 'Button',
+      file: 'button.harness.tsx',
+      timeout: 400,
+    });
+    await sleep(20);
+
+    // A beforeAll blocking for twice the idle budget.
+    js.block();
+    expect((await failedWithin(300)).failed).toBe(false);
+    js.unblock();
+
+    // A test, then an afterAll blocking just as long.
+    handle.emitEvent({ type: 'test-started', ...testEvent, timeout: 400 });
+    handle.emitEvent({
+      type: 'test-finished',
+      ...testEvent,
+      duration: 1,
+      status: 'passed',
+    });
+    await sleep(20);
+    js.block();
+    expect((await failedWithin(300)).failed).toBe(false);
+
+    const outcome = await failedWithin(1_000);
+    expect(outcome.failed).toBe(true);
+    if (outcome.failed) {
+      expect(outcome.error.message).toContain(
+        'beforeAll/afterAll hooks of suite "Button"',
+      );
+    }
+  });
+
+  it('gives loading a setup file the file-load budget', async () => {
+    const { js, handle, failedWithin } = await setup();
+
+    handle.emitEvent({
+      type: 'setup-file-bundling-finished',
+      file: 'setup.ts',
+      setupType: 'setupFiles',
+      duration: 1,
+    });
+    await sleep(20);
+
+    js.block();
+    expect((await failedWithin(220)).failed).toBe(false);
+
+    const outcome = await failedWithin(1_000);
+    expect(outcome.failed).toBe(true);
+    if (outcome.failed) {
+      expect(outcome.error.message).toContain('loading setup file setup.ts');
+    }
+  });
+
+  it('does not fail right after a long test when the smaller idle budget applies', async () => {
+    const { js, handle, failedWithin } = await setup();
+
+    handle.emitEvent({ type: 'test-started', ...testEvent, timeout: 400 });
+    await sleep(20);
+
+    // Blocked for longer than the idle budget, within the test's budget...
+    js.block();
+    expect((await failedWithin(300)).failed).toBe(false);
+    // ...then the test finishes before the held-back probe acks are sent.
+    handle.emitEvent({
+      type: 'test-finished',
+      ...testEvent,
+      duration: 300,
+      status: 'passed',
+    });
+    await sleep(50);
+    js.unblock();
+
+    expect((await failedWithin(200)).failed).toBe(false);
+  });
+
   it('reports a lost connection when the socket stops answering pings', async () => {
     const { failedWithin } = await setup({ autoPong: false });
 

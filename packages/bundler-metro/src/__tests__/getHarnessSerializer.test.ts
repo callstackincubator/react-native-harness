@@ -580,22 +580,23 @@ describe('getHarnessSerializer chunk plan', () => {
       const plan = readChunkPlan(bundle);
       expect(plan).not.toBeNull();
       if (!plan) return;
+      const code = plan.bundle.slice(0, plan.codeLength);
 
       // ~1.2 MB in ~256 KB chunks.
       expect(plan.chunks.length).toBeGreaterThanOrEqual(4);
       expect(plan.sourceUrl).toBe(SOURCE_URL);
       // The chunks cover the bundle exactly, in order.
       expect(
-        plan.chunks.map((chunk) => plan.code.slice(chunk.start, chunk.end)).join('')
-      ).toBe(plan.code);
+        plan.chunks.map((chunk) => code.slice(chunk.start, chunk.end)).join('')
+      ).toBe(code);
 
       for (const chunk of plan.chunks) {
-        const before = plan.code.slice(0, chunk.start);
+        const before = code.slice(0, chunk.start);
         // Every chunk starts a line, on the line it has in the whole bundle.
         expect(chunk.start === 0 || before.endsWith('\n')).toBe(true);
         expect(chunk.startLine).toBe(before.split('\n').length - 1);
         // ...and on a module boundary.
-        expect(plan.code.slice(chunk.start)).toMatch(/^__d\(function \(\) \{ globalThis\.loaded\d+/);
+        expect(code.slice(chunk.start)).toMatch(/^__d\(function \(\) \{ globalThis\.loaded\d+/);
       }
     }
   );
@@ -614,7 +615,7 @@ describe('getHarnessSerializer chunk plan', () => {
       )
     ).code;
 
-    expect(plan?.code).toBe(unplanned);
+    expect(plan?.bundle.slice(0, plan.codeLength)).toBe(unplanned);
   });
 
   it('does not add a plan to a test bundle that fits in one chunk', async () => {

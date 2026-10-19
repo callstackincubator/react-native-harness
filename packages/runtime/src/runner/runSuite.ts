@@ -10,7 +10,7 @@ import {
   type HarnessExpectTestState,
 } from '../expect/context.js';
 import { flushExpectTestState } from '../expect/errors.js';
-import { yieldToEventLoop } from '../utils/yield.js';
+import { flushOutgoingMessages } from '../utils/yield.js';
 import { runHooks, type HookType } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
 import { ActiveTestContext, TestRunnerContext } from './types.js';
@@ -403,7 +403,7 @@ const runTest = async (
   if (runsTest) {
     // Let test-started reach the harness before the test can block the
     // thread, so the test's own timeout applies to it.
-    await yieldToEventLoop();
+    await flushOutgoingMessages();
   }
 
   try {
@@ -632,10 +632,14 @@ export const runSuite = async (
   const startTime = Date.now();
 
   // Emit suite-started event
+  const runsSuite = suite.status !== 'skipped' && suite.status !== 'todo';
   context.events.emit({
     type: 'suite-started',
     name: suite.name,
     file: context.testFilePath,
+    // The harness applies the hook timeout to beforeAll/afterAll from the
+    // CLI side too, because the timer cannot fire while a hook blocks.
+    timeout: runsSuite ? getTestTimeout(context) : undefined,
   });
 
   // Check if suite should be skipped or is todo
@@ -694,6 +698,9 @@ export const runSuite = async (
 
   const testResults: TestResult[] = [];
   const suiteResults: TestSuiteResult[] = [];
+
+  // Let suite-started reach the harness before a beforeAll can block.
+  await flushOutgoingMessages();
 
   // Run beforeAll hooks
   try {
@@ -780,6 +787,10 @@ export const runSuite = async (
   // Run afterAll hooks
   let suiteError: TestSuiteResult['error'];
   if (!state.interruptedByTimeout) {
+    // Let the last test-finished or suite-finished, which restores this
+    // suite's hook budget, reach the harness before an afterAll can block.
+    await flushOutgoingMessages();
+
     try {
       await withSuiteHookTimeout(
         () =>

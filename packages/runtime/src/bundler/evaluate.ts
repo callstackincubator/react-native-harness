@@ -1,7 +1,7 @@
 import { MalformedModuleError } from './errors.js';
 import type { ModuleId } from '../mocker/types.js';
 import { getChunkSource, readChunkPlan } from '../bundle-format/chunk-plan.js';
-import { yieldToEventLoop } from '../utils/yield.js';
+import { flushOutgoingMessages, yieldToEventLoop } from '../utils/yield.js';
 
 // Metro emits `__r(123)` by default; custom module id factories (Vega
 // system bundles, for example) emit quoted string ids such as `__r("1a27")`.
@@ -33,15 +33,24 @@ export const evaluateModule = async (
   modulePath: string,
 ): Promise<void> => {
   const plan = readChunkPlan(moduleJs);
-  const code = plan?.code ?? moduleJs;
-  const moduleId = findEntryModuleId(code, modulePath);
+  const lastChunk = plan?.chunks[plan.chunks.length - 1];
+  // The entry module is required at the end of the bundle, in the last chunk.
+  const moduleId = findEntryModuleId(
+    plan && lastChunk
+      ? moduleJs.slice(lastChunk.start, plan.codeLength)
+      : moduleJs,
+    modulePath,
+  );
 
   // This is important as if module was already initialized, it would not be re-initialized
   global.__resetModule(moduleId);
 
+  // Let events emitted so far reach the harness before evaluation can block.
+  await flushOutgoingMessages();
+
   if (!plan) {
     // eslint-disable-next-line no-eval
-    eval(code);
+    eval(moduleJs);
     return;
   }
 

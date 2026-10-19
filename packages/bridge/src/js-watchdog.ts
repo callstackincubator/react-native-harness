@@ -10,8 +10,9 @@ export type JsBlockBudget = {
 export type JsWatchdog = {
   notifyProbeAck: (id: number) => void;
   /**
-   * Replaces the current budget. The clock is not reset: it keeps measuring
-   * from the last acknowledged probe.
+   * Replaces the current budget. The new budget covers silence from the
+   * later of the last acknowledged probe and the change itself: a block that
+   * fitted the previous budget is never judged against a smaller one.
    */
   setBlockBudget: (budget: JsBlockBudget) => void;
   dispose: () => void;
@@ -32,6 +33,7 @@ export const createJsWatchdog = (options: {
 }): JsWatchdog => {
   let budget = options.initialBudget;
   let lastAckAt = Date.now();
+  let budgetSetAt = lastAckAt;
   let nextProbeId = 1;
   let pendingProbeId: number | null = null;
   let disposed = false;
@@ -46,7 +48,7 @@ export const createJsWatchdog = (options: {
   };
 
   const interval = setInterval(() => {
-    if (Date.now() - lastAckAt > budget.ms) {
+    if (Date.now() - Math.max(lastAckAt, budgetSetAt) > budget.ms) {
       dispose();
       options.onUnresponsive(budget);
       return;
@@ -69,6 +71,7 @@ export const createJsWatchdog = (options: {
     },
     setBlockBudget: (next) => {
       budget = next;
+      budgetSetAt = Date.now();
     },
     dispose,
   };

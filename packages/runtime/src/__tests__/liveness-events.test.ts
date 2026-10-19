@@ -1,4 +1,6 @@
 import {
+  afterAll as harnessAfterAll,
+  beforeAll as harnessBeforeAll,
   describe as harnessDescribe,
   getTestCollector,
   it as harnessIt,
@@ -17,48 +19,45 @@ vi.mock('../symbolicate.js', async () => {
 });
 
 /**
- * Records, for each event, whether a macrotask has run since it was emitted
- * by the time user code starts. The harness's JS watchdog only sees an event
- * once the JS thread gives up the current task, so user code that blocks
- * must not start in the same task as the event announcing it.
+ * Models the bridge, which hands an event to `WebSocket.send` one microtask
+ * after it is emitted. The harness's JS watchdog only learns about a phase
+ * from that message, so it must be sent before user code that may block the
+ * thread starts.
  */
-const trackMacrotasksAfter = <E extends { type: string }>(
-  events: { addListener: (listener: (event: E) => void) => void },
-  type: E['type'],
-) => {
-  const state = { emitted: [] as E[], macrotaskRan: false };
+const trackSentEvents = <E extends { type: string }>(events: {
+  addListener: (listener: (event: E) => void) => void;
+}) => {
+  const sent: E[] = [];
 
   events.addListener((event) => {
-    if (event.type !== type) {
-      return;
-    }
-
-    state.emitted.push(event);
-    state.macrotaskRan = false;
-    setTimeout(() => {
-      state.macrotaskRan = true;
-    }, 0);
+    queueMicrotask(() => sent.push(event));
   });
 
-  return state;
+  return {
+    sent,
+    lastSent: () => sent[sent.length - 1],
+  };
 };
 
 describe('liveness events', () => {
-  it('reports each running test with its timeout before running it', async () => {
+  it('sends each phase with its timeout before user code runs in it', async () => {
     const collector = getTestCollector();
     const runner = getTestRunner();
-    const started = trackMacrotasksAfter<TestRunnerEvents>(
-      runner.events,
-      'test-started',
-    );
-    const ranAfterMacrotask: boolean[] = [];
+    const tracker = trackSentEvents<TestRunnerEvents>(runner.events);
+    const seen: Record<string, TestRunnerEvents | undefined> = {};
 
     const collection = await collector.collect(() => {
       harnessDescribe('Suite', () => {
+        harnessBeforeAll(() => {
+          seen.beforeAll = tracker.lastSent();
+        });
         harnessIt('runs', () => {
-          ranAfterMacrotask.push(started.macrotaskRan);
+          seen.test = tracker.lastSent();
         });
         harnessIt.skip('is skipped', () => undefined);
+        harnessAfterAll(() => {
+          seen.afterAll = tracker.lastSent();
+        });
       });
     }, 'runtime/liveness.test.ts');
 
@@ -70,30 +69,40 @@ describe('liveness events', () => {
     });
 
     expect(result.status).toBe('passed');
-    expect(started.emitted).toEqual([
-      expect.objectContaining({ name: 'runs', timeout: 12_345 }),
-      expect.objectContaining({ name: 'is skipped', timeout: undefined }),
-    ]);
-    expect(ranAfterMacrotask).toEqual([true]);
+    expect(seen.beforeAll).toMatchObject({
+      type: 'suite-started',
+      name: 'Suite',
+      timeout: 12_345,
+    });
+    expect(seen.test).toMatchObject({
+      type: 'test-started',
+      name: 'runs',
+      timeout: 12_345,
+    });
+    expect(seen.afterAll).toMatchObject({
+      type: 'test-finished',
+      name: 'is skipped',
+    });
+    expect(
+      tracker.sent.find(
+        (event) => event.type === 'test-started' && event.name === 'is skipped',
+      ),
+    ).toMatchObject({ timeout: undefined });
 
     collector.dispose();
     runner.dispose();
   });
 
-  it('reports a test file load before evaluating the file', async () => {
+  it('sends a test file load before evaluating the file', async () => {
     const collector = getTestCollector();
-    const started = trackMacrotasksAfter<TestCollectorEvents>(
-      collector.events,
-      'collection-started',
-    );
-    let ranAfterMacrotask: boolean | null = null;
+    const tracker = trackSentEvents<TestCollectorEvents>(collector.events);
+    let sentBeforeEvaluation: TestCollectorEvents | undefined;
 
     await collector.collect(() => {
-      ranAfterMacrotask = started.macrotaskRan;
+      sentBeforeEvaluation = tracker.lastSent();
     }, 'runtime/liveness.test.ts');
 
-    expect(started.emitted).toHaveLength(1);
-    expect(ranAfterMacrotask).toBe(true);
+    expect(sentBeforeEvaluation).toMatchObject({ type: 'collection-started' });
 
     collector.dispose();
   });

@@ -191,13 +191,14 @@ export const createHarnessBridge = async (
       onLost: (error) => {
         if (error.reason === 'connection-lost') {
           bridgeLogger.warn('app connection lost (no response to WebSocket ping)');
-          // A half-open socket never completes a close handshake.
-          ws.terminate();
         } else {
           bridgeLogger.warn('app JS thread unresponsive: %s', error.detail);
         }
 
         disconnect(error);
+        // Neither a half-open socket nor a blocked JS thread completes a
+        // close handshake, so drop the socket instead of waiting for one.
+        ws.terminate();
       },
       config: livenessOptions,
     });

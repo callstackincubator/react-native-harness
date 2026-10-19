@@ -5,8 +5,8 @@ import {
 } from './connection-check.js';
 import { AppBridgeDisconnectedError } from './errors.js';
 import {
+  createJsBlockBudgetPolicy,
   getIdleBudget,
-  getJsBlockBudgetForEvent,
   type JsBlockBudgetPolicyOptions,
 } from './js-block-budget-policy.js';
 import { createJsWatchdog } from './js-watchdog.js';
@@ -29,16 +29,23 @@ export const DEFAULT_APP_LIVENESS_OPTIONS: AppLivenessOptions = {
   jsBlockBudget: { idleMs: 20_000, fileLoadMs: 60_000, graceMs: 5_000 },
 };
 
+// An override left `undefined` keeps the default instead of replacing it,
+// which would turn a budget into `undefined` and disable it.
+const definedOnly = <T extends object>(values: Partial<T> = {}): Partial<T> =>
+  Object.fromEntries(
+    Object.entries(values).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
+
 export const resolveAppLivenessOptions = (
   overrides: AppLivenessOverrides = {},
 ): AppLivenessOptions => ({
   connectionCheck: {
     ...DEFAULT_APP_LIVENESS_OPTIONS.connectionCheck,
-    ...overrides.connectionCheck,
+    ...definedOnly(overrides.connectionCheck),
   },
   jsBlockBudget: {
     ...DEFAULT_APP_LIVENESS_OPTIONS.jsBlockBudget,
-    ...overrides.jsBlockBudget,
+    ...definedOnly(overrides.jsBlockBudget),
   },
   jsProbeIntervalMs: overrides.jsProbeIntervalMs,
 });
@@ -67,6 +74,7 @@ export const createAppLiveness = (options: {
     },
   });
 
+  const policy = createJsBlockBudgetPolicy(options.config.jsBlockBudget);
   const watchdog = createJsWatchdog({
     sendProbe: options.sendProbe,
     initialBudget: getIdleBudget(options.config.jsBlockBudget),
@@ -80,10 +88,7 @@ export const createAppLiveness = (options: {
 
   return {
     handleEvent: (event) => {
-      const budget = getJsBlockBudgetForEvent(
-        event,
-        options.config.jsBlockBudget,
-      );
+      const budget = policy.getBudgetForEvent(event);
 
       if (budget) {
         watchdog.setBlockBudget(budget);
