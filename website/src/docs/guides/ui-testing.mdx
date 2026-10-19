@@ -18,6 +18,8 @@ To enable UI testing in your project, install the UI testing package:
 
 <PackageManagerTabs command="install --save-dev @react-native-harness/ui" />
 
+On iOS, resolve native dependencies before rebuilding. For apps using React Native's SwiftPM integration, run `npx react-native spm` from the app directory. `@react-native-harness/ui` ships its own `HarnessUI` package manifest and autolinking metadata. For CocoaPods apps, run `pod install` in the iOS directory.
+
 After installation, **rebuild your app** since this package contains native code that needs to be compiled and linked.
 
 ## Screen API

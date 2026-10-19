@@ -11,6 +11,7 @@
     "dist",
     "android",
     "ios",
+    "Package.swift",
     "*.podspec",
     "react-native.config.js",
     "!ios/build",
@@ -51,6 +52,9 @@
     "android": {
       "javaPackageName": "com.harnessui"
     }
+  },
+  "swiftpmConfig": {
+    "name": "HarnessUI"
   },
   "author": {
     "name": "Szymon Chmal",
