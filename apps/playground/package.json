@@ -21,7 +21,7 @@
   "dependencies": {
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-native": "0.82.1",
+    "react-native": "0.83.0",
     "react-native-nitro-image": "^0.13.1",
     "react-native-nitro-modules": "^0.35.4",
     "react-native-vision-camera": "^5.0.4",
@@ -37,10 +37,10 @@
     "@react-native-harness/platform-web": "workspace:*",
     "@react-native-harness/runtime": "workspace:*",
     "@react-native-harness/ui": "workspace:*",
-    "@react-native/babel-preset": "0.82.1",
-    "@react-native/eslint-config": "0.82.1",
-    "@react-native/metro-config": "0.82.1",
-    "@react-native/typescript-config": "0.82.1",
+    "@react-native/babel-preset": "0.83.0",
+    "@react-native/eslint-config": "0.83.0",
+    "@react-native/metro-config": "0.83.0",
+    "@react-native/typescript-config": "0.83.0",
     "jest": "^30.2.0",
     "react-native-harness": "workspace:*"
   }
