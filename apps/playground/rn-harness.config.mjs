@@ -107,7 +107,9 @@ export default {
   defaultRunner: 'android',
   platformReadyTimeout: 600000,
   bridgeTimeout: 120000,
-  testTimeout: 10000,
+  // The liveness e2e suite raises this to run a test that blocks the JS
+  // thread for longer than the default allows.
+  testTimeout: Number(process.env.HARNESS_TEST_TIMEOUT ?? 10000),
 
   permissions: true,
   detectNativeCrashes: true,
