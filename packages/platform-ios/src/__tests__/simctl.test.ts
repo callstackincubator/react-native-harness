@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import * as tools from '@react-native-harness/tools';
 import {
   diagnose,
+  getAppInfo,
   getGuestProcessCount,
   parseBootStatus,
   streamLogs,
@@ -129,6 +130,21 @@ describe('simctl startup', () => {
       ['simctl', 'spawn', 'sim-udid', 'launchctl', 'list'],
       { timeout: 30_000, signal },
     );
+  });
+});
+
+describe('getAppInfo', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns null when simctl appinfo exits with code 3 for a missing app', async () => {
+    const error = Object.assign(Object.create(tools.SubprocessError.prototype), {
+      exitCode: 3,
+    });
+    vi.spyOn(tools, 'spawn').mockRejectedValue(error);
+
+    await expect(getAppInfo('sim-udid', 'com.example.app')).resolves.toBeNull();
   });
 });
 
