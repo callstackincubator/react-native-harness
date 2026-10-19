@@ -634,6 +634,11 @@ export const createHarnessSession = async (
         noServer: true,
         timeout: runtimeConfig.bridgeTimeout,
         context,
+        liveness: {
+          // Loading a test file runs user code that has no timeout of its
+          // own, so it gets the same allowance as starting the bundle.
+          jsBlockBudget: { fileLoadMs: runtimeConfig.bundleStartTimeout },
+        },
       })
     );
     sessionLogger.debug('bridge initialized on Metro websocket path %s', HARNESS_BRIDGE_PATH);

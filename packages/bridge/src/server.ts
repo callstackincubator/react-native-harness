@@ -12,7 +12,11 @@ import {
   AppBridgeDisconnectedError,
   DeviceNotRespondingError,
 } from './errors.js';
-import { createHeartbeat } from './heartbeat.js';
+import {
+  createAppLiveness,
+  resolveAppLivenessOptions,
+  type AppLivenessOverrides,
+} from './app-liveness.js';
 import { matchImageSnapshot } from './image-snapshot.js';
 import {
   createLink,
@@ -39,6 +43,10 @@ export {
   AppBridgeDisconnectedError,
   DeviceNotRespondingError,
 } from './errors.js';
+export {
+  DEFAULT_APP_LIVENESS_OPTIONS,
+  type AppLivenessOverrides,
+} from './app-liveness.js';
 
 const bridgeLogger = logger.child('bridge');
 const noop = (): void => undefined;
@@ -63,6 +71,8 @@ type TransportOptions =
 export type HarnessBridgeOptions = TransportOptions & {
   timeout?: number;
   context: HarnessContext;
+  /** Overrides for the connection check and JS watchdog limits. */
+  liveness?: AppLivenessOverrides;
 };
 
 export type HarnessBridge = {
@@ -113,7 +123,8 @@ const receiveScreenshot = async (
 export const createHarnessBridge = async (
   options: HarnessBridgeOptions,
 ): Promise<HarnessBridge> => {
-  const { timeout, context, ...transportOptions } = options;
+  const { timeout, context, liveness, ...transportOptions } = options;
+  const livenessOptions = resolveAppLivenessOptions(liveness);
   const wss = await createWss(transportOptions);
   bridgeLogger.debug('bridge server ready');
 
@@ -163,6 +174,7 @@ export const createHarnessBridge = async (
         },
       },
       onEvent: (event) => {
+        appLiveness.handleEvent(event);
         emitter.emit('event', event);
       },
       callTimeoutMs: (method) => method === 'runTests' ? undefined : timeout,
@@ -171,14 +183,23 @@ export const createHarnessBridge = async (
       },
     });
 
-    const heartbeat = createHeartbeat({
-      sendPing: (id) => {
-        void link.write(serializeBridgeMessage({ type: 'ping', id }));
+    const appLiveness = createAppLiveness({
+      socket: ws,
+      sendProbe: (id) => {
+        void link.write(serializeBridgeMessage({ type: 'js-probe', id }));
       },
-      onTimeout: () => {
-        bridgeLogger.warn('app heartbeat timed out');
-        disconnect(new AppBridgeDisconnectedError('heartbeat-timeout'));
+      onLost: (error) => {
+        if (error.reason === 'connection-lost') {
+          bridgeLogger.warn('app connection lost (no response to WebSocket ping)');
+          // A half-open socket never completes a close handshake.
+          ws.terminate();
+        } else {
+          bridgeLogger.warn('app JS thread unresponsive: %s', error.detail);
+        }
+
+        disconnect(error);
       },
+      config: livenessOptions,
     });
 
     const disconnect = (reason?: Error) => {
@@ -191,7 +212,7 @@ export const createHarnessBridge = async (
       offClose();
       offError();
       bridgeLogger.debug('app disconnected');
-      heartbeat.dispose();
+      appLiveness.dispose();
 
       if (activeSession?.link === link) {
         activeSession = null;
@@ -244,14 +265,8 @@ export const createHarnessBridge = async (
           }
           return;
         }
-        case 'ping': {
-          void link.write(
-            serializeBridgeMessage({ type: 'pong', id: controlMessage.id }),
-          );
-          return;
-        }
-        case 'pong': {
-          heartbeat.notifyPong(controlMessage.id);
+        case 'js-probe-ack': {
+          appLiveness.handleProbeAck(controlMessage.id);
           return;
         }
       }

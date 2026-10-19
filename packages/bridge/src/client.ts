@@ -146,9 +146,9 @@ export const connectToHarness = async (
       return;
     }
 
-    if (controlMessage.type === 'ping') {
+    if (controlMessage.type === 'js-probe') {
       void link.write(
-        serializeBridgeMessage({ type: 'pong', id: controlMessage.id }),
+        serializeBridgeMessage({ type: 'js-probe-ack', id: controlMessage.id }),
       );
     }
   };

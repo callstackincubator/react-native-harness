@@ -10,6 +10,7 @@ import {
   type HarnessExpectTestState,
 } from '../expect/context.js';
 import { flushExpectTestState } from '../expect/errors.js';
+import { yieldToEventLoop } from '../utils/yield.js';
 import { runHooks, type HookType } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
 import { ActiveTestContext, TestRunnerContext } from './types.js';
@@ -384,6 +385,7 @@ const runTest = async (
 
   // Emit test-started event
   const ancestorTitles = getAncestorTitles(suite);
+  const runsTest = test.status !== 'skipped' && test.status !== 'todo';
   context.events.emit({
     type: 'test-started',
     name: test.name,
@@ -393,7 +395,16 @@ const runTest = async (
     fullName: getFullName(ancestorTitles, test.name),
     startedAt,
     declarationMode: test.declarationMode,
+    // The harness enforces this from the CLI side too, because the timer
+    // below cannot fire while the test blocks the JS thread.
+    timeout: runsTest ? getTestTimeout(context) : undefined,
   });
+
+  if (runsTest) {
+    // Let test-started reach the harness before the test can block the
+    // thread, so the test's own timeout applies to it.
+    await yieldToEventLoop();
+  }
 
   try {
     if (test.status === 'skipped') {

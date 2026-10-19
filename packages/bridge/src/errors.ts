@@ -13,7 +13,8 @@ export class DeviceNotRespondingError extends HarnessError {
 export type AppBridgeDisconnectedReason =
   | 'app-disconnected'
   | 'app-replaced'
-  | 'heartbeat-timeout'
+  | 'connection-lost'
+  | 'js-thread-unresponsive'
   | 'socket-error'
   | 'bridge-disposed';
 
@@ -23,8 +24,10 @@ const appBridgeDisconnectedMessage = (
   switch (reason) {
     case 'app-replaced':
       return 'The app bridge was replaced by a newer app connection. This can happen when the app reloads, restarts, or reconnects while a test file is still running.';
-    case 'heartbeat-timeout':
-      return 'The app bridge stopped responding during test execution. This can happen if the app was killed, crashed, became unresponsive, or lost its WebSocket connection.';
+    case 'connection-lost':
+      return 'The app stopped answering WebSocket pings during test execution. The app process was likely killed, frozen, or lost its network connection. Check .harness/crash-reports for a crash report.';
+    case 'js-thread-unresponsive':
+      return "The app's JS thread was blocked for longer than allowed during test execution.";
     case 'socket-error':
       return 'The app bridge connection failed during test execution. This can happen if the app was killed, crashed, or the underlying WebSocket connection closed unexpectedly.';
     case 'bridge-disposed':
@@ -35,8 +38,16 @@ const appBridgeDisconnectedMessage = (
 };
 
 export class AppBridgeDisconnectedError extends HarnessError {
-  constructor(public readonly reason: AppBridgeDisconnectedReason) {
-    super(appBridgeDisconnectedMessage(reason));
+  constructor(
+    public readonly reason: AppBridgeDisconnectedReason,
+    /** What the app was busy with, when known. Appended to the message. */
+    public readonly detail?: string
+  ) {
+    super(
+      detail
+        ? `${appBridgeDisconnectedMessage(reason)} It was busy with: ${detail}.`
+        : appBridgeDisconnectedMessage(reason)
+    );
     this.name = 'AppBridgeDisconnectedError';
     this.stack = `${this.name}: ${this.message}`;
   }

@@ -220,8 +220,8 @@ export const createRpcPeer = <
           return null;
         }
         case 'ready':
-        case 'ping':
-        case 'pong':
+        case 'js-probe':
+        case 'js-probe-ack':
           return message;
       }
     },

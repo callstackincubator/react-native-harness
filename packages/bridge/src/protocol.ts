@@ -38,20 +38,25 @@ export type BridgeReadyMessage = {
   device: DeviceDescriptor;
 };
 
-export type BridgePingMessage = {
-  type: 'ping';
+/**
+ * Sent by the server to check that the app's JS thread is getting a turn to
+ * run. Only JS answers it, unlike WebSocket protocol pings, which the native
+ * WebSocket answers.
+ */
+export type BridgeJsProbeMessage = {
+  type: 'js-probe';
   id: number;
 };
 
-export type BridgePongMessage = {
-  type: 'pong';
+export type BridgeJsProbeAckMessage = {
+  type: 'js-probe-ack';
   id: number;
 };
 
 export type BridgeControlMessage =
   | BridgeReadyMessage
-  | BridgePingMessage
-  | BridgePongMessage;
+  | BridgeJsProbeMessage
+  | BridgeJsProbeAckMessage;
 
 export type BridgeMessage<Event extends { type: string } = BridgeEvents> =
   | BridgeInvokeMessage
@@ -171,10 +176,10 @@ export const parseBridgeMessage = (raw: string): BridgeMessage => {
       readDeviceDescriptor(parsed.device);
       return parsed as BridgeReadyMessage;
     }
-    case 'ping':
-    case 'pong': {
+    case 'js-probe':
+    case 'js-probe-ack': {
       readNumber(parsed.id, 'id');
-      return parsed as BridgePingMessage | BridgePongMessage;
+      return parsed as BridgeJsProbeMessage | BridgeJsProbeAckMessage;
     }
     default:
       throw new Error(`Invalid bridge message: unknown type ${messageType}`);

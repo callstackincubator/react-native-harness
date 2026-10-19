@@ -67,12 +67,15 @@ describe('connectToHarness', () => {
     handle.disconnect();
   });
 
-  it('answers pings with pongs', async () => {
+  it('answers JS probes with acks', async () => {
     const { cli, handle, nextMessage } = await setup();
 
-    await cli.write(JSON.stringify({ type: 'ping', id: 7 }));
+    await cli.write(JSON.stringify({ type: 'js-probe', id: 7 }));
 
-    expect(await nextMessage('pong')).toEqual({ type: 'pong', id: 7 });
+    expect(await nextMessage('js-probe-ack')).toEqual({
+      type: 'js-probe-ack',
+      id: 7,
+    });
 
     handle.disconnect();
   });

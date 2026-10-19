@@ -220,7 +220,12 @@ Increase this value if you experience startup failures while:
 
 ## Bridge Timeout
 
-The bridge timeout controls the app-side bridge readiness window after Harness launches the app. It does not include simulator or emulator boot time. Once the runtime is connected, Harness keeps test execution alive through heartbeat traffic and applies the configured test timeout to each individual test case.
+The bridge timeout controls the app-side bridge readiness window after Harness launches the app. It does not include simulator or emulator boot time.
+
+Once the app is connected, Harness checks two things while tests run:
+
+- **The connection.** The app's WebSocket must keep answering pings. It answers them natively, even while JavaScript is busy, so a failure here means the app was killed, froze, or lost its network connection.
+- **The JS thread.** The app's JS thread may be blocked, for example by synchronous work in a test, for as long as the current step allows: the test's [`testTimeout`](#test-timeout) plus 5 seconds while a test runs, [`bundleStartTimeout`](#bundle-start-timeout) while a test file loads, and 20 seconds otherwise. If it stays blocked longer, the run fails with an error naming the test or file. Harness enforces this from the CLI, so `testTimeout` also applies to tests that block the JS thread, which a timer inside the app cannot do.
 
 Harness uses `bridgeTimeout` while waiting for the app runtime to connect, and as the timeout for shorter bridge RPCs such as screenshots or image snapshot matching.
 
