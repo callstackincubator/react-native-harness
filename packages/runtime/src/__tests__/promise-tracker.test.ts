@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   clearTrackedPromises,
   getPendingPromises,
@@ -294,5 +294,112 @@ describe('promise tracker', () => {
 
     uninstallPromiseTracker();
     expect(globalThis.Promise).toBe(originalPromise);
+  });
+});
+
+describe('promise tracker finalization', () => {
+  type TrackerModule = typeof import('../promise-tracker.js');
+
+  // Collection is simulated by invoking the registry callback directly, so the
+  // tests do not depend on GC timing.
+  const loadWithFakeRegistry = async () => {
+    const callbacks: Array<(id: number) => void> = [];
+
+    class FakeFinalizationRegistry {
+      constructor(callback: (id: number) => void) {
+        callbacks.push(callback);
+      }
+      register() {
+        // no-op
+      }
+    }
+
+    vi.resetModules();
+    vi.stubGlobal('FinalizationRegistry', FakeFinalizationRegistry);
+    const tracker: TrackerModule = await import('../promise-tracker.js');
+    const finalize = (id: number) => callbacks.forEach((cb) => cb(id));
+    return { tracker, finalize };
+  };
+
+  const createHungPromise = async (tracker: TrackerModule) => {
+    tracker.installPromiseTracker();
+    await tracker.withPromiseTrackerTestContext(testContext, async () => {
+      void new Promise(() => undefined);
+    });
+    return tracker.getPendingPromises()[0].id;
+  };
+
+  const matchesTest = (test: PromiseTrackerTestContext) =>
+    test.fullName === testContext.fullName;
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it('drops a collected record when no retention window is active', async () => {
+    const { tracker, finalize } = await loadWithFakeRegistry();
+    const id = await createHungPromise(tracker);
+
+    finalize(id);
+
+    expect(tracker.getPendingPromises()).toHaveLength(0);
+    tracker.uninstallPromiseTracker();
+  });
+
+  it('keeps a collected record during a retention window and drops it on release', async () => {
+    const { tracker, finalize } = await loadWithFakeRegistry();
+    const id = await createHungPromise(tracker);
+    const release = tracker.retainPendingPromises(matchesTest);
+
+    finalize(id);
+    expect(tracker.getPendingPromises().map((p) => p.id)).toEqual([id]);
+
+    release();
+    expect(tracker.getPendingPromises()).toHaveLength(0);
+    tracker.uninstallPromiseTracker();
+  });
+
+  it('does not retain records outside the window scope', async () => {
+    const { tracker, finalize } = await loadWithFakeRegistry();
+    const id = await createHungPromise(tracker);
+    const release = tracker.retainPendingPromises(
+      (test) => test.fullName === 'something else',
+    );
+
+    finalize(id);
+    expect(tracker.getPendingPromises()).toHaveLength(0);
+
+    release();
+    tracker.uninstallPromiseTracker();
+  });
+
+  it('keeps a record until the last overlapping window is released', async () => {
+    const { tracker, finalize } = await loadWithFakeRegistry();
+    const id = await createHungPromise(tracker);
+    const releaseA = tracker.retainPendingPromises(matchesTest);
+    const releaseB = tracker.retainPendingPromises(matchesTest);
+
+    finalize(id);
+    releaseA();
+    expect(tracker.getPendingPromises()).toHaveLength(1);
+
+    releaseB();
+    expect(tracker.getPendingPromises()).toHaveLength(0);
+    tracker.uninstallPromiseTracker();
+  });
+
+  it('drops settled records regardless of retention windows', async () => {
+    const { tracker } = await loadWithFakeRegistry();
+    tracker.installPromiseTracker();
+    const release = tracker.retainPendingPromises(matchesTest);
+
+    await tracker.withPromiseTrackerTestContext(testContext, async () => {
+      await new Promise<void>((resolve) => resolve());
+    });
+
+    expect(tracker.getPendingPromises()).toHaveLength(0);
+    release();
+    tracker.uninstallPromiseTracker();
   });
 });

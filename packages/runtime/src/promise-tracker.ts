@@ -25,13 +25,43 @@ const pendingPromises = new Map<number, TrackedPromiseRecord>();
 const promiseIds = new WeakMap<object, number>();
 const promiseContexts = new WeakMap<object, PromiseTrackerTestContext>();
 
-// A garbage-collected promise can never settle or hold anything pending, so drop
-// its record (and captured stack) instead of leaking it. Primary defense; the
-// size cap above covers the window before GC runs.
+// Windows during which collected-but-unsettled records are kept, because a
+// timeout may still need to report them (a hung test can await a promise that
+// nothing references anymore).
+const retentionWindows = new Set<
+  (test: PromiseTrackerTestContext) => boolean
+>();
+const finalizedIds = new Set<number>();
+
+const isRetained = (record: TrackedPromiseRecord): boolean => {
+  if (!record.test) {
+    return false;
+  }
+
+  for (const matches of retentionWindows) {
+    if (matches(record.test)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+// A garbage-collected promise can never settle, so drop its record (and
+// captured stack) instead of leaking it, unless an active retention window
+// still needs it for diagnostics. Primary defense; the size cap above covers
+// the window before GC runs.
 const promiseFinalization =
   typeof FinalizationRegistry === 'undefined'
     ? null
     : new FinalizationRegistry<number>((id) => {
+        const record = pendingPromises.get(id);
+
+        if (record && isRetained(record)) {
+          finalizedIds.add(id);
+          return;
+        }
+
         pendingPromises.delete(id);
       });
 
@@ -82,6 +112,7 @@ const registerPromise = ():
     }
 
     pendingPromises.delete(oldest);
+    finalizedIds.delete(oldest);
   }
 
   return { id, test };
@@ -93,6 +124,7 @@ const markPromiseSettled = (id: number | null) => {
   }
 
   pendingPromises.delete(id);
+  finalizedIds.delete(id);
 };
 
 export const omitPromiseFromTracking = (promise: unknown): void => {
@@ -107,6 +139,7 @@ export const omitPromiseFromTracking = (promise: unknown): void => {
   }
 
   pendingPromises.delete(id);
+  finalizedIds.delete(id);
 };
 
 const isThenable = <T>(value: T | PromiseLike<T>): value is PromiseLike<T> =>
@@ -389,12 +422,43 @@ export const uninstallPromiseTracker = (): void => {
   globalThis.Promise = originalPromise;
   originalPromise = null;
   pendingPromises.clear();
+  finalizedIds.clear();
+  retentionWindows.clear();
   // WeakMap entries are released with their promises.
   currentTestContext = undefined;
 };
 
 export const clearTrackedPromises = (): void => {
   pendingPromises.clear();
+  finalizedIds.clear();
+};
+
+/**
+ * Keeps records matching `matches` even if their promise is garbage-collected,
+ * until the returned release function is called. Release drops the retained
+ * records that were collected in the meantime.
+ */
+export const retainPendingPromises = (
+  matches: (test: PromiseTrackerTestContext) => boolean,
+): (() => void) => {
+  // Wrap so identical matchers in nested windows stay distinct entries.
+  const window = (test: PromiseTrackerTestContext) => matches(test);
+  retentionWindows.add(window);
+
+  return () => {
+    if (!retentionWindows.delete(window)) {
+      return;
+    }
+
+    for (const id of finalizedIds) {
+      const record = pendingPromises.get(id);
+
+      if (!record || !isRetained(record)) {
+        pendingPromises.delete(id);
+        finalizedIds.delete(id);
+      }
+    }
+  };
 };
 
 export const getPendingPromises = (): TrackedPromiseRecord[] => {

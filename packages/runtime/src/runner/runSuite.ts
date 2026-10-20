@@ -15,6 +15,7 @@ import { getTestExecutionError } from './errors.js';
 import { ActiveTestContext, TestRunnerContext } from './types.js';
 import {
   getPendingPromises,
+  retainPendingPromises,
   omitPromiseFromTracking,
   runWithoutPromiseTracking,
   type TrackedPromiseRecord,
@@ -162,15 +163,28 @@ const withTestTimeout = async <T>(
           promise.test.phase === 'afterEach'),
     );
 
-  return await withRuntimeTimeout(work, {
-    timeout: options.timeout,
-    createTimeoutError: () =>
-      new TestCaseTimeoutError(options.fullName, options.timeout, {
-        pendingPromises: getPendingPromiseDiagnostics(
-          getMatchingPendingPromises(),
-        ),
-      }),
-  });
+  const release = retainPendingPromises(
+    (test) =>
+      test.file === options.file &&
+      test.fullName === options.fullName &&
+      (test.phase === 'beforeEach' ||
+        test.phase === 'test' ||
+        test.phase === 'afterEach'),
+  );
+
+  try {
+    return await withRuntimeTimeout(work, {
+      timeout: options.timeout,
+      createTimeoutError: () =>
+        new TestCaseTimeoutError(options.fullName, options.timeout, {
+          pendingPromises: getPendingPromiseDiagnostics(
+            getMatchingPendingPromises(),
+          ),
+        }),
+    });
+  } finally {
+    release();
+  }
 };
 
 const withSuiteHookTimeout = async (
@@ -190,9 +204,15 @@ const withSuiteHookTimeout = async (
         promise.test.phase === options.hookType,
     );
 
-  return await withRuntimeTimeout(
-    work,
-    {
+  const release = retainPendingPromises(
+    (test) =>
+      test.file === options.file &&
+      test.suite === options.suiteName &&
+      test.phase === options.hookType,
+  );
+
+  try {
+    return await withRuntimeTimeout(work, {
       timeout: options.timeout,
       createTimeoutError: () =>
         new SuiteHookTimeoutError(
@@ -205,8 +225,10 @@ const withSuiteHookTimeout = async (
             ),
           },
         ),
-    },
-  );
+    });
+  } finally {
+    release();
+  }
 };
 
 const emitTestFinished = (
