@@ -172,6 +172,128 @@ describe('resource lock manager', () => {
       writeFileSpy.mockRestore();
     }
   });
+
+  const createEperm = () =>
+    Object.assign(new Error('EPERM: operation not permitted'), {
+      code: 'EPERM',
+    });
+
+  it('does not leak an unhandled rejection when a heartbeat read fails', async () => {
+    const manager = createResourceLockManager({
+      rootDir,
+      pollIntervalMs: 5,
+      heartbeatIntervalMs: 10,
+      staleLockTimeoutMs: 500,
+    });
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+
+    const lease = await manager.acquire('ios:simulator:iPhone 17 Pro:26.2');
+    const actualReadFile = fs.readFile.bind(fs);
+    const readFileSpy = vi
+      .spyOn(fs, 'readFile')
+      .mockImplementation(async (file, options) => {
+        if (typeof file === 'string' && file.endsWith('owner.json')) {
+          throw createEperm();
+        }
+
+        return await actualReadFile(file, options as never);
+      });
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    } finally {
+      readFileSpy.mockRestore();
+    }
+
+    await lease.release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    process.off('unhandledRejection', onUnhandled);
+    expect(unhandled).toEqual([]);
+  });
+
+  it('keeps waiting when reading the owner file hits a transient EPERM', async () => {
+    const manager = createResourceLockManager({
+      rootDir,
+      pollIntervalMs: 5,
+      heartbeatIntervalMs: 20,
+      staleLockTimeoutMs: 500,
+    });
+    const key = 'ios:simulator:iPhone 17 Pro:26.2';
+    const firstLease = await manager.acquire(key);
+    const actualReadFile = fs.readFile.bind(fs);
+    let failuresLeft = 2;
+    const readFileSpy = vi
+      .spyOn(fs, 'readFile')
+      .mockImplementation(async (file, options) => {
+        if (
+          typeof file === 'string' &&
+          file.endsWith('owner.json') &&
+          failuresLeft > 0
+        ) {
+          failuresLeft -= 1;
+          throw createEperm();
+        }
+
+        return await actualReadFile(file, options as never);
+      });
+
+    try {
+      const secondAcquire = manager.acquire(key);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(failuresLeft).toBe(0);
+      await firstLease.release();
+      const secondLease = await secondAcquire;
+      await secondLease.release();
+    } finally {
+      readFileSpy.mockRestore();
+    }
+  });
+
+  it('waits for an in-flight heartbeat before releasing the owner file', async () => {
+    const manager = createResourceLockManager({
+      rootDir,
+      pollIntervalMs: 5,
+      heartbeatIntervalMs: 10,
+      staleLockTimeoutMs: 500,
+    });
+    const actualWriteFile = fs.writeFile.bind(fs);
+    let tempWriteStarted = false;
+    const writeFileSpy = vi
+      .spyOn(fs, 'writeFile')
+      .mockImplementation(async (file, data, options) => {
+        if (
+          typeof file === 'string' &&
+          file.startsWith(rootDir) &&
+          file.endsWith('.tmp')
+        ) {
+          tempWriteStarted = true;
+          await new Promise((resolve) => setTimeout(resolve, 60));
+        }
+
+        return await actualWriteFile(file, data, options);
+      });
+
+    try {
+      const lease = await manager.acquire('ios:simulator:iPhone 17 Pro:26.2');
+      const [keyDirName] = await fs.readdir(rootDir);
+      const ownerFilePath = path.join(rootDir, keyDirName, 'owner.json');
+
+      while (!tempWriteStarted) {
+        await new Promise((resolve) => setTimeout(resolve, 2));
+      }
+
+      await lease.release();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      await expect(fs.access(ownerFilePath)).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    } finally {
+      writeFileSpy.mockRestore();
+    }
+  });
 });
 
 type ResourceLockOwner = {

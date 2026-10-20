@@ -89,6 +89,37 @@ const isMissingFileError = (error: unknown): boolean => {
   );
 };
 
+// On Windows, a file being deleted by another process can briefly fail
+// reads and deletes with EPERM/EBUSY instead of ENOENT.
+const isTransientFsError = (error: unknown): boolean => {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    (error.code === 'EPERM' || error.code === 'EBUSY')
+  );
+};
+
+const TRANSIENT_FS_RETRIES = 5;
+const TRANSIENT_FS_RETRY_DELAY_MS = 20;
+
+const retryTransientFsError = async <T>(
+  operation: () => Promise<T>,
+): Promise<T> => {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isTransientFsError(error) || attempt >= TRANSIENT_FS_RETRIES) {
+        throw error;
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, TRANSIENT_FS_RETRY_DELAY_MS),
+      );
+    }
+  }
+};
+
 const isExclusiveCreateError = (error: unknown): boolean => {
   return (
     error instanceof Error &&
@@ -104,7 +135,9 @@ const ensureLockDirectories = async (paths: LockPaths): Promise<void> => {
 
 const readJsonFile = async <T>(filePath: string): Promise<T | null> => {
   try {
-    const content = await fs.readFile(filePath, 'utf8');
+    const content = await retryTransientFsError(() =>
+      fs.readFile(filePath, 'utf8'),
+    );
     return JSON.parse(content) as T;
   } catch (error) {
     if (isMissingFileError(error)) {
@@ -132,7 +165,7 @@ const writeJsonFileAtomic = async <T>(
 
 const removeFileIfPresent = async (filePath: string): Promise<void> => {
   try {
-    await fs.rm(filePath, { force: true });
+    await retryTransientFsError(() => fs.rm(filePath, { force: true }));
   } catch (error) {
     if (!isMissingFileError(error)) {
       throw error;
@@ -338,7 +371,7 @@ export const createResourceLockManager = (
       scopedLogger.debug('queued ticket %s for key %s', ticketId, key);
 
       let heartbeatTimer: NodeJS.Timeout | null = null;
-      let heartbeatInFlight = false;
+      let heartbeatInFlight: Promise<void> | null = null;
       let released = false;
       let didNotifyWait = false;
       const waitStartedAt = Date.now();
@@ -354,6 +387,10 @@ export const createResourceLockManager = (
           heartbeatTimer = null;
         }
 
+        // Let an in-flight refresh finish so it cannot recreate owner.json
+        // after we remove it.
+        await heartbeatInFlight;
+
         const owner = await readJsonFile<ResourceLockMetadata>(
           paths.ownerFilePath,
         );
@@ -366,13 +403,7 @@ export const createResourceLockManager = (
       };
 
       const startHeartbeat = () => {
-        heartbeatTimer = setInterval(async () => {
-          if (heartbeatInFlight) {
-            return;
-          }
-
-          heartbeatInFlight = true;
-
+        const refreshHeartbeat = async () => {
           try {
             const nextHeartbeatAt = Date.now();
             const owner = await readJsonFile<ResourceLockMetadata>(
@@ -383,33 +414,33 @@ export const createResourceLockManager = (
               return;
             }
 
-            const nextMetadata: ResourceLockMetadata = {
+            await writeJsonFileAtomic(paths.ownerFilePath, {
               ...owner,
               heartbeatAt: nextHeartbeatAt,
-            };
-
-            if (released) {
-              return;
-            }
-
-            try {
-              await writeJsonFileAtomic(paths.ownerFilePath, nextMetadata);
-              scopedLogger.debug('refreshed heartbeat for ticket %s', ticketId);
-            } catch (error) {
-              // A failed refresh is not fatal by design: the lock goes stale
-              // and another holder reclaims it. Swallow it so a transient
-              // write error (e.g. the owner file racing a concurrent release,
-              // or an EPERM on Windows when the directory is being torn down)
-              // never surfaces as an unhandled rejection from this interval.
-              scopedLogger.debug(
-                'heartbeat refresh for ticket %s failed: %s',
-                ticketId,
-                error instanceof Error ? error.message : String(error),
-              );
-            }
-          } finally {
-            heartbeatInFlight = false;
+            });
+            scopedLogger.debug('refreshed heartbeat for ticket %s', ticketId);
+          } catch (error) {
+            // A failed refresh is not fatal by design: the lock goes stale
+            // and another holder reclaims it. Swallow it so a transient
+            // error (e.g. the owner file racing a concurrent release, or an
+            // EPERM on Windows while a file is being deleted) never surfaces
+            // as an unhandled rejection from this interval.
+            scopedLogger.debug(
+              'heartbeat refresh for ticket %s failed: %s',
+              ticketId,
+              error instanceof Error ? error.message : String(error),
+            );
           }
+        };
+
+        heartbeatTimer = setInterval(() => {
+          if (heartbeatInFlight) {
+            return;
+          }
+
+          heartbeatInFlight = refreshHeartbeat().finally(() => {
+            heartbeatInFlight = null;
+          });
         }, heartbeatIntervalMs);
         heartbeatTimer.unref?.();
       };
