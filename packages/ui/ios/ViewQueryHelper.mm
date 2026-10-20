@@ -29,23 +29,19 @@
 
 + (nullable UIWindow *)getActiveWindow {
     UIWindow *window = nil;
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                for (UIWindow *w in scene.windows) {
-                    if (w.isKeyWindow) {
-                        window = w;
-                        break;
-                    }
+    for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+        if (scene.activationState == UISceneActivationStateForegroundActive) {
+            for (UIWindow *w in scene.windows) {
+                if (w.isKeyWindow) {
+                    window = w;
+                    break;
                 }
-                if (!window) {
-                    window = scene.windows.firstObject;
-                }
-                break;
             }
+            if (!window) {
+                window = scene.windows.firstObject;
+            }
+            break;
         }
-    } else {
-        window = [UIApplication sharedApplication].keyWindow;
     }
     return window;
 }

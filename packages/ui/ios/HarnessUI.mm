@@ -414,11 +414,12 @@ static NSTimeInterval _lastTapTime = 0;
 
 #pragma mark - Screenshot API
 
-- (void)captureScreenshot:(JS::NativeHarnessUI::ViewInfo *)bounds
+- (void)captureScreenshot:(JS::NativeHarnessUI::SpecCaptureScreenshotOptions &)options
                   resolve:(RCTPromiseResolveBlock)resolve
                    reject:(RCTPromiseRejectBlock)reject {
   RCTLogInfo(@"[HarnessUI] captureScreenshot called");
 
+  auto bounds = options.bounds();
   CGRect captureRect = CGRectNull;
   NSString *nativeId = nil;
 

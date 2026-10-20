@@ -81,8 +81,8 @@ const WebHarnessUI: HarnessUIModule = {
     return Array.from(elements).map(getElementViewInfo);
   },
 
-  captureScreenshot: async (bounds) => {
-    let captureBounds = bounds;
+  captureScreenshot: async ({ bounds }) => {
+    let captureBounds = bounds ?? null;
     if (bounds?.nativeId && bounds.width === 0 && bounds.height === 0) {
       const element = window.__RN_HARNESS_VIEW_REGISTRY__.get(bounds.nativeId);
       if (element) {
