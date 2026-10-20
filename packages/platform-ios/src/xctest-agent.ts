@@ -8,6 +8,7 @@ import {
   type OwnedProcess,
   type Subprocess,
 } from '@react-native-harness/tools';
+import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import { PassThrough, pipeline } from 'node:stream';
 import { promisify } from 'node:util';
@@ -198,23 +199,133 @@ const waitForAbortable = async <T>(
   }
 };
 
+class XCTestAgentStartupExitError extends Error {}
+
+type XCTestAgentStartupExitWatch = {
+  exited: Promise<string>;
+  getExitDescription: () => string | null;
+  cancel: () => void;
+};
+
+const describeChildProcessExit = (
+  code: number | null,
+  signal: NodeJS.Signals | null
+): string =>
+  signal
+    ? `xcodebuild was terminated by signal ${signal}`
+    : `xcodebuild exited with code ${code}`;
+
+// Watches the xcodebuild child for the duration of the startup wait. Unlike
+// waitForChildProcessExit, it also records an exit that happened before the
+// listeners were attached, so startup can fail fast instead of polling a port
+// that will never open.
+const watchChildProcessStartupExit = (
+  subprocess: Subprocess
+): XCTestAgentStartupExitWatch => {
+  let exitDescription: string | null = null;
+  let cancelled = false;
+  let detach = () => undefined;
+
+  const exited = new Promise<string>((resolve) => {
+    const finish = (description: string) => {
+      exitDescription = description;
+      detach();
+      resolve(description);
+    };
+
+    const attach = (childProcess: ChildProcess) => {
+      if (cancelled) {
+        return;
+      }
+
+      const { exitCode, signalCode } = childProcess;
+      if (exitCode !== null || signalCode !== null) {
+        finish(describeChildProcessExit(exitCode, signalCode));
+        return;
+      }
+
+      const handleClose = (
+        code: number | null,
+        signal: NodeJS.Signals | null
+      ) => finish(describeChildProcessExit(code, signal));
+      const handleError = (error: Error) =>
+        finish(`xcodebuild failed to start: ${error.message}`);
+
+      detach = () => {
+        childProcess.off('close', handleClose);
+        childProcess.off('error', handleError);
+      };
+      childProcess.once('close', handleClose);
+      childProcess.once('error', handleError);
+    };
+
+    void subprocess.nodeChildProcess.then(attach, () => undefined);
+  });
+
+  return {
+    exited,
+    getExitDescription: () => exitDescription,
+    cancel: () => {
+      cancelled = true;
+      detach();
+    },
+  };
+};
+
+const createStartupExitError = (exitDescription: string) =>
+  new XCTestAgentStartupExitError(
+    `XCTest agent exited before becoming ready: ${exitDescription}`
+  );
+
 const waitForAgentReady = async (options: {
   client: ReturnType<typeof createXCTestAgentClient>;
   startupTimeoutMs: number;
   signal?: AbortSignal;
+  processExit?: XCTestAgentStartupExitWatch;
 }) => {
   const deadline = Date.now() + options.startupTimeoutMs;
+  const processExit = options.processExit;
   let lastError: unknown = null;
+
+  const throwIfProcessExited = () => {
+    const exitDescription = processExit?.getExitDescription();
+    if (exitDescription) {
+      throw createStartupExitError(exitDescription);
+    }
+  };
+
+  // Lets a pending health check or poll delay end as soon as xcodebuild exits.
+  const raceWithProcessExit = <T>(promise: Promise<T>): Promise<T> => {
+    if (!processExit) {
+      return promise;
+    }
+
+    return Promise.race([
+      promise,
+      processExit.exited.then((exitDescription) => {
+        throw createStartupExitError(exitDescription);
+      }),
+    ]);
+  };
 
   while (Date.now() < deadline) {
     options.signal?.throwIfAborted();
+    throwIfProcessExited();
     try {
-      await waitForAbortable(options.client.health(), options.signal);
+      await raceWithProcessExit(
+        waitForAbortable(options.client.health(), options.signal)
+      );
       options.signal?.throwIfAborted();
       return;
     } catch (error) {
+      if (error instanceof XCTestAgentStartupExitError) {
+        throw error;
+      }
+
       lastError = error;
-      await delay(XCTEST_AGENT_STARTUP_POLL_INTERVAL_MS, options.signal);
+      await raceWithProcessExit(
+        delay(XCTEST_AGENT_STARTUP_POLL_INTERVAL_MS, options.signal)
+      );
     }
   }
 
@@ -504,11 +615,14 @@ export const createXCTestAgentController = (options: {
       }
     });
 
+    const processExit = watchChildProcessStartupExit(currentProcess.subprocess);
+
     try {
       await waitForAgentReady({
         client,
         startupTimeoutMs,
         signal,
+        processExit,
       });
       await client.configurePermissions(runtimeConfiguration.permissions);
     } catch (error) {
@@ -522,6 +636,8 @@ export const createXCTestAgentController = (options: {
       agentClient = null;
       await stopProcess({ process: currentProcess });
       throw error;
+    } finally {
+      processExit.cancel();
     }
   };
 

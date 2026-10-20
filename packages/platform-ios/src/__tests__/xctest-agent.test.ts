@@ -157,6 +157,61 @@ const createLongRunningSubprocess = (options?: {
   };
 };
 
+const createControlledSubprocess = () => {
+  const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+
+  const childProcess = {
+    exitCode: null as number | null,
+    kill: vi.fn(),
+    off: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      listeners.get(event)?.delete(listener);
+      return childProcess;
+    }),
+    once: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      const eventListeners = listeners.get(event) ?? new Set();
+      eventListeners.add(listener);
+      listeners.set(event, eventListeners);
+      return childProcess;
+    }),
+    signalCode: null as NodeJS.Signals | null,
+    stderr: new PassThrough(),
+    stdout: new PassThrough(),
+  };
+
+  const exit = (code: number) => {
+    childProcess.exitCode = code;
+    for (const listener of [...(listeners.get('close') ?? [])]) {
+      listener(code, null);
+    }
+  };
+
+  return {
+    exit,
+    subprocess: {
+      nodeChildProcess: Promise.resolve(childProcess),
+      [Symbol.asyncIterator]() {
+        return {
+          next: async () => ({ done: true, value: undefined }),
+        };
+      },
+    },
+  };
+};
+
+const useXcodebuildTestProcess = (subprocess: unknown) => {
+  const previousImplementation = mocks.spawn.getMockImplementation();
+
+  mocks.spawn.mockImplementation(
+    (file: string, args?: string[], options?: unknown) => {
+      if (file === 'xcodebuild' && args?.[0] === 'test-without-building') {
+        return subprocess;
+      }
+
+      return previousImplementation?.(file, args, options);
+    }
+  );
+};
+
 describe('xctest-agent orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -554,6 +609,54 @@ describe('xctest-agent orchestration', () => {
 
     await expect(starting).rejects.toMatchObject({ name: 'AbortError' });
     expect(mocks.disposeClient).toHaveBeenCalledOnce();
+  });
+
+  it('fails startup with the exit status when xcodebuild exited before the agent became ready', async () => {
+    const xcodebuild = createControlledSubprocess();
+    xcodebuild.exit(65);
+    useXcodebuildTestProcess(xcodebuild.subprocess);
+    mocks.health.mockRejectedValue(
+      new Error('connect ECONNREFUSED 127.0.0.1:49152')
+    );
+    const controller = createXCTestAgentController({
+      port: 49152,
+      startupTimeoutMs: 1_000,
+      target: {
+        kind: 'simulator',
+        id: 'sim-999',
+      },
+    });
+
+    const startedAt = Date.now();
+
+    await expect(controller.ensureStarted()).rejects.toThrow(
+      'XCTest agent exited before becoming ready: xcodebuild exited with code 65'
+    );
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+  });
+
+  it('fails startup when xcodebuild exits while the agent is still being polled', async () => {
+    const xcodebuild = createControlledSubprocess();
+    useXcodebuildTestProcess(xcodebuild.subprocess);
+    mocks.health.mockRejectedValue(
+      new Error('connect ECONNREFUSED 127.0.0.1:49152')
+    );
+    const controller = createXCTestAgentController({
+      port: 49152,
+      startupTimeoutMs: 10_000,
+      target: {
+        kind: 'simulator',
+        id: 'sim-999',
+      },
+    });
+
+    const starting = controller.ensureStarted();
+    await vi.waitFor(() => expect(mocks.health).toHaveBeenCalledTimes(2));
+    xcodebuild.exit(65);
+
+    await expect(starting).rejects.toThrow(
+      'XCTest agent exited before becoming ready: xcodebuild exited with code 65'
+    );
   });
 
   it('aborts the finite XCTest build when preparation is cancelled', async () => {
