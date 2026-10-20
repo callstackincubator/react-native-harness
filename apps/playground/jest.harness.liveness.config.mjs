@@ -1,6 +1,7 @@
 // Liveness e2e suite (docs/adr/0001-app-liveness-detection.md). Run
-// `node scripts/generate-liveness-fixtures.mjs` first to create the large
-// generated module graph, then select `liveness/pass` or a single
+// `pnpm nx run @react-native-harness/playground:generate-liveness-fixtures`
+// first to create the large generated module graph (typecheck also runs it),
+// then select `liveness/pass` or a single
 // `liveness/fail` file with --testPathPatterns. Files under `fail/` are
 // expected to fail, with the error each one documents.
 export default {

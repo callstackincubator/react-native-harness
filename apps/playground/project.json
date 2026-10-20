@@ -8,6 +8,19 @@
         "command": "node ../../packages/react-native-harness/bin.js",
         "cwd": "apps/playground"
       }
+    },
+    "generate-liveness-fixtures": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["{projectRoot}/scripts/generate-liveness-fixtures.mjs"],
+      "outputs": ["{projectRoot}/src/__tests__/liveness/generated"],
+      "options": {
+        "command": "node scripts/generate-liveness-fixtures.mjs",
+        "cwd": "apps/playground"
+      }
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck", "generate-liveness-fixtures"]
     }
   }
 }
