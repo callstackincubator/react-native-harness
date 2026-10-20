@@ -166,7 +166,7 @@ const prepareCachedAvd = async ({
     });
 
     logger.info('Saving Android emulator snapshot for %s...', emulatorName);
-    await adbModule.stopEmulator(generationAdbId);
+    await adbModule.stopEmulator(generationAdbId, emulatorName);
     await adbModule.waitForEmulatorDisconnect(generationAdbId, signal);
   } else {
     logger.info('Using cached Android emulator %s...', emulatorName);
@@ -310,7 +310,7 @@ export const getAndroidEmulatorPlatformInstance = async (
 
       if (startedByHarness) {
         logger.info('Shutting down Android emulator %s...', emulatorName);
-        await adb.stopEmulator(adbId);
+        await adb.stopEmulator(adbId, emulatorName);
       }
     },
   };

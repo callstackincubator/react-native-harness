@@ -165,7 +165,7 @@ describe('Android platform instance', () => {
 
     await instance.dispose();
 
-    expect(stopEmulator).toHaveBeenCalledWith('emulator-5554');
+    expect(stopEmulator).toHaveBeenCalledWith('emulator-5554', 'Pixel_8_API_35');
   });
 
   it('verifies SDK assets before booting an existing AVD', async () => {
@@ -336,7 +336,7 @@ describe('Android platform instance', () => {
 
     expect(deleteAvd).toHaveBeenCalledWith('Pixel_8_API_35');
     expect(createAvd).toHaveBeenCalled();
-    expect(stopEmulator).toHaveBeenCalledWith('emulator-5554');
+    expect(stopEmulator).toHaveBeenCalledWith('emulator-5554', 'Pixel_8_API_35');
     expect(waitForEmulatorDisconnect).toHaveBeenCalledWith(
       'emulator-5554',
       init.signal
@@ -407,7 +407,7 @@ describe('Android platform instance', () => {
       'Pixel_8_API_35',
       'clean-snapshot-generation'
     );
-    expect(stopEmulator).toHaveBeenCalledWith('emulator-5554');
+    expect(stopEmulator).toHaveBeenCalledWith('emulator-5554', 'Pixel_8_API_35');
     expect(waitForEmulatorDisconnect).toHaveBeenCalledWith(
       'emulator-5554',
       init.signal

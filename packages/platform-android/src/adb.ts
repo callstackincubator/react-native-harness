@@ -62,6 +62,11 @@ const waitWithSignal = async (
 
 const EMULATOR_STARTUP_OBSERVATION_TIMEOUT_MS = 5000;
 const EMULATOR_OUTPUT_BUFFER_LIMIT = 16 * 1024;
+const EMULATOR_SHUTDOWN_TIMEOUT_MS = 60_000;
+const startedEmulators = new Map<
+  string,
+  ChildProcessByStdio<null, Readable, Readable>
+>();
 const androidAdbLogger = logger.child('android-adb');
 
 export const emulatorProcess = {
@@ -464,8 +469,37 @@ export const isBootCompleted = async (adbId: string): Promise<boolean> => {
   }
 };
 
-export const stopEmulator = async (adbId: string): Promise<void> => {
+export const stopEmulator = async (
+  adbId: string,
+  name: string
+): Promise<void> => {
+  const childProcess = startedEmulators.get(name);
   await spawn(getAdbBinaryPath(), ['-s', adbId, 'emu', 'kill']);
+
+  if (
+    !childProcess ||
+    childProcess.exitCode !== null ||
+    childProcess.signalCode !== null
+  ) {
+    return;
+  }
+
+  // `adb emu kill` acknowledges the shutdown request before the emulator
+  // finishes writing snapshots and removing AVD locks. Wait for the process
+  // we started to exit before another boot or a CI cache archive can begin.
+  await new Promise<void>((resolve, reject) => {
+    const onExit = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(() => {
+      childProcess.off('exit', onExit);
+      reject(
+        new Error(`Android emulator @${name} did not exit after shutdown.`)
+      );
+    }, EMULATOR_SHUTDOWN_TIMEOUT_MS);
+    childProcess.once('exit', onExit);
+  });
 };
 
 export const installApp = async (
@@ -633,6 +667,12 @@ export const startEmulator = async (
     cleanup();
   }
 
+  startedEmulators.set(name, childProcess);
+  childProcess.once('exit', () => {
+    if (startedEmulators.get(name) === childProcess) {
+      startedEmulators.delete(name);
+    }
+  });
   childProcess.stdout?.destroy();
   childProcess.stderr?.destroy();
   childProcess.unref();
