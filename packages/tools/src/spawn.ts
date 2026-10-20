@@ -45,7 +45,55 @@ export const spawn = (
   };
   const command = [file, ...(args ?? [])].join(' ');
   spawnLogger.debug('running command: %s', command);
-  return nanoSpawn(file, args, { ...defaultOptions, ...options });
+  const subprocess = nanoSpawn(file, args, { ...defaultOptions, ...options });
+  // Registered before any caller can observe the subprocess, so the error is
+  // enriched in place before `await`, `.catch` or iteration see it.
+  subprocess.then(undefined, appendOutputToErrorMessage);
+  return subprocess;
+};
+
+const OUTPUT_TAIL_MAX_LINES = 20;
+const OUTPUT_TAIL_MAX_CHARS = 2000;
+const enrichedErrors = new WeakSet<SubprocessError>();
+
+const getOutputTail = (output: string | undefined): string => {
+  const lines = (output ?? '')
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '');
+  const tail = lines.slice(-OUTPUT_TAIL_MAX_LINES).join('\n');
+  return tail.length > OUTPUT_TAIL_MAX_CHARS
+    ? tail.slice(-OUTPUT_TAIL_MAX_CHARS)
+    : tail;
+};
+
+/**
+ * nano-spawn's error message only names the command; the reason it failed is
+ * usually in what the command printed. Append the tail of the captured output
+ * so the message is useful wherever it ends up being reported.
+ */
+const appendOutputToErrorMessage = (error: unknown): void => {
+  if (!(error instanceof SubprocessError) || enrichedErrors.has(error)) {
+    return;
+  }
+  enrichedErrors.add(error);
+
+  const sections = [
+    ['stderr', getOutputTail(error.stderr)],
+    ['stdout', getOutputTail(error.stdout)],
+  ]
+    .filter(([, tail]) => tail !== '')
+    .map(([name, tail]) => `${name}:\n${tail}`);
+
+  if (sections.length === 0) {
+    return;
+  }
+
+  const originalMessage = error.message;
+  error.message = `${originalMessage}\n${sections.join('\n')}`;
+  // `stack` repeats the message captured at construction; printed errors use it.
+  if (error.stack?.includes(originalMessage)) {
+    error.stack = error.stack.replace(originalMessage, () => error.message);
+  }
 };
 
 /**
