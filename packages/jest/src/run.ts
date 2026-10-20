@@ -1,4 +1,3 @@
-import path from 'node:path';
 import type { Config as JestConfig } from 'jest-runner';
 import { TestResult as JestTestResult } from '@jest/test-result';
 import type {
@@ -9,6 +8,7 @@ import type { HarnessSession } from './harness-session.js';
 import { formatResultsErrors } from 'jest-message-util';
 import { toTestResult } from './toTestResult.js';
 import { formatHarnessErrorMessage } from './format-harness-error.js';
+import { toRelativePosixPath } from './relative-path.js';
 
 // Helper function to flatten nested test suites into a flat array of tests with hierarchy
 const flattenTests = (
@@ -91,14 +91,14 @@ export const runHarnessTestFile: RunHarnessTestFile = async ({
   session,
 }) => {
   const start = Date.now();
-  const relativeTestPath = path.relative(globalConfig.rootDir, testPath);
+  const relativeTestPath = toRelativePosixPath(globalConfig.rootDir, testPath);
 
   // Extract setup files from Jest config and convert to relative paths
   const setupFiles = projectConfig.setupFiles?.map((setupFile) =>
-    path.relative(globalConfig.rootDir, setupFile)
+    toRelativePosixPath(globalConfig.rootDir, setupFile)
   );
   const setupFilesAfterEnv = projectConfig.setupFilesAfterEnv?.map(
-    (setupFile) => path.relative(globalConfig.rootDir, setupFile)
+    (setupFile) => toRelativePosixPath(globalConfig.rootDir, setupFile)
   );
   const testTimeout =
     session.config.testTimeout ??

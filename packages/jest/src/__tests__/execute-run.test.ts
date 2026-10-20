@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Config, Test, TestWatcher } from 'jest-runner';
 import type { TestResult as JestTestResult } from '@jest/test-result';
@@ -236,8 +235,7 @@ describe('executeRun', () => {
       expect(runEntry?.attrs?.runId).toBeTypeOf('string');
       expect(fileEntry).toMatchObject({
         status: 'ok',
-        // path.relative('/project', '/a.ts') -- OS-separated, so `..\a.ts` on Windows.
-        attrs: { file: path.join('..', 'a.ts'), status: 'passed' },
+        attrs: { file: '../a.ts', status: 'passed' },
       });
       expect(fileEntry?.attrs?.runId).toBeTypeOf('string');
       expect(mockWriteTraceFile).toHaveBeenCalledWith(entries, expect.objectContaining({ runId: expect.any(String) }));
@@ -284,7 +282,7 @@ describe('executeRun', () => {
 
       await executeRun(session, [makeTest('/a.ts')], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
 
-      const file = path.join('..', 'a.ts');
+      const file = '../a.ts';
       expect(phases).toEqual([
         ['run.start', { runId: expect.any(String) }],
         ['test-file.start', { file }],

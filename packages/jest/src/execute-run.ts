@@ -5,9 +5,9 @@ import type {
   TestEvents,
 } from 'jest-runner';
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
 import { type HarnessSession, type HarnessRunState } from './harness-session.js';
 import { runHarnessTestFile } from './run.js';
+import { toRelativePosixPath } from './relative-path.js';
 import { resolveResetStrategyKind } from './environment-reset.js';
 import {
   NativeCrashError,
@@ -153,7 +153,7 @@ export const executeRun = async (
   const startTime = Date.now();
   const watchMode = globalConfig.watch || globalConfig.watchAll;
   const rootDir = globalConfig.rootDir ?? process.cwd();
-  const testFiles = tests.map((t) => path.relative(rootDir, t.path));
+  const testFiles = tests.map((t) => toRelativePosixPath(rootDir, t.path));
   const summary = createRunSummary();
   let caseEventChain = Promise.resolve();
   const unsubscribe = session.onTestRunnerEvent((event) => {
@@ -217,7 +217,7 @@ export const executeRun = async (
     for (const test of tests) {
       if (watcher.isInterrupted()) throw new CancelRun();
 
-      const relativeTestPath = path.relative(rootDir, test.path);
+      const relativeTestPath = toRelativePosixPath(rootDir, test.path);
       const fileStartedAt = Date.now();
       let emittedTestFileFinished = false;
 
