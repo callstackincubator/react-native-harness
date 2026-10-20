@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+
+// Re-signing reads and writes plists through macOS-only `plutil`.
+const canRunPlutilTests = process.platform === 'darwin';
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
@@ -233,7 +237,7 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
     fs.rmSync(tempRoot, { force: true, recursive: true });
   });
 
-  describe('bundle resolution', () => {
+  describe.skipIf(!canRunPlutilTests)('bundle resolution', () => {
     it('signs the bundles the xctestrun points at, innermost first', async () => {
       const signed = mockCodesign();
 
@@ -360,7 +364,7 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
     });
   });
 
-  describe('bundle id remapping', () => {
+  describe.skipIf(!canRunPlutilTests)('bundle id remapping', () => {
     it('rewrites the Info.plists and every bundle id the xctestrun names', async () => {
       mockCodesign();
 
@@ -485,7 +489,7 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
     const packageJson = JSON.parse(
       fs.readFileSync(
         path.resolve(
-          path.dirname(new URL(import.meta.url).pathname),
+          path.dirname(fileURLToPath(import.meta.url)),
           '..',
           '..',
           'package.json'
@@ -655,7 +659,7 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       expect(codesignCalls()).toHaveLength(0);
     });
 
-    it('signs a copy in the project cache and leaves the packaged artifact unsigned', async () => {
+    it.skipIf(!canRunPlutilTests)('signs a copy in the project cache and leaves the packaged artifact unsigned', async () => {
       const { directoryName, xctestrunName } = writeDeviceIndex();
 
       const artifacts = await makeProvider().prepare(deviceContext());
@@ -740,7 +744,7 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       );
     });
 
-    it('signs under the configured bundle id prefix', async () => {
+    it.skipIf(!canRunPlutilTests)('signs under the configured bundle id prefix', async () => {
       writeDeviceIndex();
 
       const artifacts = await makeProvider().prepare({
@@ -794,7 +798,7 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       expect(codesignCalls()).toHaveLength(0);
     });
 
-    it('signs once and reuses the signed copy', async () => {
+    it.skipIf(!canRunPlutilTests)('signs once and reuses the signed copy', async () => {
       writeDeviceIndex();
       const provider = makeProvider();
 
@@ -843,7 +847,7 @@ describe('re-signing prebuilt XCTest agent artifacts for a device', () => {
       expect(leftovers).toEqual([]);
     });
 
-    it('keys the cache by profile so switching identities re-signs', async () => {
+    it.skipIf(!canRunPlutilTests)('keys the cache by profile so switching identities re-signs', async () => {
       writeDeviceIndex();
       const otherProfile = { ...profile, uuid: 'profile-uuid-2' };
       profileLookup = vi.fn(async () => profile);

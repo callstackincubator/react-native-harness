@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+// Profiles are decoded through macOS-only `plutil`.
+const canRunPlutilTests = process.platform === 'darwin';
+
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
 }));
@@ -96,7 +99,7 @@ beforeEach(() => {
 });
 
 describe('a profile named by path', () => {
-  it('is accepted when it lists the target device', async () => {
+  it.skipIf(!canRunPlutilTests)('is accepted when it lists the target device', async () => {
     const profile = writeProfile({ devices: [device] });
 
     await expect(search(profile)).resolves.toMatchObject({

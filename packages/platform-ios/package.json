@@ -27,7 +27,8 @@
     "prepack": "node scripts/pack-xctest-agent-artifacts.mjs"
   },
   "devDependencies": {
-    "@types/yargs": "^17.0.32"
+    "@types/yargs": "^17.0.32",
+    "vite": "^7.2.2"
   },
   "license": "MIT"
 }

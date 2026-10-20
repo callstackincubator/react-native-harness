@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
@@ -33,7 +34,7 @@ const simulatorSdkVersion = '26.4';
 const packageVersion = JSON.parse(
   fs.readFileSync(
     path.resolve(
-      path.dirname(new URL(import.meta.url).pathname),
+      path.dirname(fileURLToPath(import.meta.url)),
       '..',
       '..',
       'package.json'

@@ -84,8 +84,10 @@ describe('simctl startup', () => {
   });
 
   it('starts simulator log streaming with the provided predicate', () => {
-    const subprocess = {} as ReturnType<typeof tools.spawn>;
-    const spawnSpy = vi.spyOn(tools, 'spawn').mockReturnValue(subprocess);
+    const subprocess = {} as ReturnType<typeof tools.spawnOwnedProcess>;
+    const spawnSpy = vi
+      .spyOn(tools, 'spawnOwnedProcess')
+      .mockReturnValue(subprocess);
 
     expect(
       streamLogs(
