@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   kill: vi.fn(),
   shutdown: vi.fn(async () => undefined),
   spawn: vi.fn(),
+  defaultTickIntervalMs: vi.fn((): number | undefined => undefined),
 }));
 
 vi.mock('@react-native-harness/tools', async () => {
@@ -47,6 +48,10 @@ vi.mock('@react-native-harness/tools', async () => {
     },
   };
 });
+
+vi.mock('../startup-strategy.js', () => ({
+  getDefaultXCTestAgentTickIntervalMs: mocks.defaultTickIntervalMs,
+}));
 
 vi.mock('../xctest-agent-client.js', () => ({
   createXCTestAgentClient: vi.fn(() => ({
@@ -215,6 +220,8 @@ const useXcodebuildTestProcess = (subprocess: unknown) => {
 describe('xctest-agent orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.defaultTickIntervalMs.mockReturnValue(undefined);
+    delete process.env.HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS;
     // These tests cover the controller and the build provider. Shipped artifacts
     // are exercised by their own suites, and leaving them reachable here would
     // make the outcome depend on whether this checkout happens to have packed
@@ -983,6 +990,45 @@ describe('xctest-agent orchestration', () => {
     } finally {
       fs.renameSync(hiddenProjectPath, projectPath);
     }
+  });
+
+  describe('tick interval', () => {
+    const startAndGetEnv = async () => {
+      const controller = createXCTestAgentController({
+        port: 49152,
+        target: { kind: 'simulator', id: 'sim-999' },
+      });
+      await controller.ensureStarted();
+      const call = mocks.spawn.mock.calls.at(-1);
+      return (call?.[2] as { env: Record<string, string> }).env;
+    };
+
+    afterEach(() => {
+      delete process.env.HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS;
+    });
+
+    it('forwards the user-set interval unchanged over the host default', async () => {
+      process.env.HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS = '500';
+      mocks.defaultTickIntervalMs.mockReturnValue(2000);
+
+      expect(
+        (await startAndGetEnv()).TEST_RUNNER_HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS
+      ).toBe('500');
+    });
+
+    it('forwards the constrained-host default when unset', async () => {
+      mocks.defaultTickIntervalMs.mockReturnValue(2000);
+
+      expect(
+        (await startAndGetEnv()).TEST_RUNNER_HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS
+      ).toBe('2000');
+    });
+
+    it('forwards nothing on unconstrained hosts when unset', async () => {
+      expect(
+        (await startAndGetEnv()).TEST_RUNNER_HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS
+      ).toBeUndefined();
+    });
   });
 
   it('skips killing the agent process when dispose is called before startup', async () => {

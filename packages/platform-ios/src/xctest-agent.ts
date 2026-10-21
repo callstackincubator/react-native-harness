@@ -33,6 +33,7 @@ import {
 } from './xctest-agent-build.js';
 import { createPrebuiltXCTestAgentProvider } from './xctest-agent-prebuilt.js';
 import { createResignedDeviceXCTestAgentProvider } from './xctest-agent-resign.js';
+import { getDefaultXCTestAgentTickIntervalMs } from './startup-strategy.js';
 
 const pipelineAsync = promisify(pipeline);
 
@@ -497,7 +498,12 @@ export const createXCTestAgentController = (options: {
   let agentClient: ReturnType<typeof createXCTestAgentClient> | null = null;
 
   const getLaunchEnvironment = (): Record<string, string> => {
-    const tickIntervalMs = getEnvironmentPath(XCTEST_AGENT_TICK_INTERVAL_MS_ENV);
+    const defaultTickIntervalMs = getDefaultXCTestAgentTickIntervalMs();
+    const tickIntervalMs =
+      getEnvironmentPath(XCTEST_AGENT_TICK_INTERVAL_MS_ENV) ??
+      (defaultTickIntervalMs === undefined
+        ? null
+        : String(defaultTickIntervalMs));
 
     return Object.assign(
       {},
