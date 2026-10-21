@@ -35,8 +35,13 @@ import {
   createIosCrashReporter,
   getIosProcessNames,
 } from './crash-reporter.js';
-import { shouldOverlapXCTestBuildAndSimulatorBoot } from './startup-strategy.js';
+import {
+  shouldOverlapXCTestBuildAndSimulatorBoot,
+  shouldWaitForSimulatorToSettle,
+} from './startup-strategy.js';
+import { waitForSimulatorToSettle } from './simulator-settle.js';
 
+const SIMULATOR_SETTLE_PROBE_TIMEOUT_MS = 5_000;
 const iosInstanceLogger = logger.child('ios-instance');
 
 const getHarnessAppPath = (): string => {
@@ -132,6 +137,26 @@ export const getAppleSimulatorPlatformInstance = async (
         udid
       );
       await simctl.waitForBoot(udid, init.signal);
+
+      if (shouldWaitForSimulatorToSettle()) {
+        const result = await waitForSimulatorToSettle({
+          probe: (signal) =>
+            simctl.getGuestProcessCount(
+              udid,
+              signal,
+              SIMULATOR_SETTLE_PROBE_TIMEOUT_MS
+            ),
+          signal: init.signal,
+        });
+        iosInstanceLogger.debug(
+          'iOS simulator %s %s after %dms (%d probes)',
+          udid,
+          result.settled ? 'settled' : 'did not settle in time',
+          result.durationMs,
+          result.probes
+        );
+        init.signal.throwIfAborted();
+      }
     }
 
     const isInstalled = await simctl.isAppInstalled(udid, config.bundleId);

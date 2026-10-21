@@ -399,11 +399,12 @@ const GUEST_PROCESS_LIST_TIMEOUT_MS = 30_000;
 export const getGuestProcessCount = async (
   udid: string,
   signal?: AbortSignal,
+  timeoutMs: number = GUEST_PROCESS_LIST_TIMEOUT_MS,
 ): Promise<number> => {
   const { stdout } = await spawn(
     'xcrun',
     ['simctl', 'spawn', udid, 'launchctl', 'list'],
-    { timeout: GUEST_PROCESS_LIST_TIMEOUT_MS, signal },
+    { timeout: timeoutMs, signal },
   );
   return stdout.split('\n').filter((line) => /^\d+\s/.test(line)).length;
 };

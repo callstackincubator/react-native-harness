@@ -11,3 +11,10 @@ export const shouldOverlapXCTestBuildAndSimulatorBoot = (): boolean => {
     availableCpuCount > MINIMUM_CPU_COUNT_FOR_PARALLEL_STARTUP
   );
 };
+
+/**
+ * Small hosts keep running first-boot work (SpringBoard, daemons) after
+ * `bootstatus` returns, so they benefit from an extra settle step.
+ */
+export const shouldWaitForSimulatorToSettle = (): boolean =>
+  !shouldOverlapXCTestBuildAndSimulatorBoot();

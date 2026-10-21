@@ -9,7 +9,10 @@ vi.mock('@react-native-harness/tools', async (importOriginal) => ({
   getHostCapabilities: mocks.getHostCapabilities,
 }));
 
-import { shouldOverlapXCTestBuildAndSimulatorBoot } from '../startup-strategy.js';
+import {
+  shouldOverlapXCTestBuildAndSimulatorBoot,
+  shouldWaitForSimulatorToSettle,
+} from '../startup-strategy.js';
 
 describe('shouldOverlapXCTestBuildAndSimulatorBoot', () => {
   it.each([
@@ -27,4 +30,18 @@ describe('shouldOverlapXCTestBuildAndSimulatorBoot', () => {
       expect(shouldOverlapXCTestBuildAndSimulatorBoot()).toBe(expected);
     },
   );
+});
+
+describe('shouldWaitForSimulatorToSettle', () => {
+  it.each([
+    [true, 7 * 1024 ** 3, 3],
+    [true, 16 * 1024 ** 3, 6],
+    [false, 16 * 1024 ** 3, 8],
+  ])('returns %s for %i bytes and %i CPUs', (expected, mem, cpus) => {
+    mocks.getHostCapabilities.mockReturnValue({
+      totalMemoryBytes: mem,
+      availableCpuCount: cpus,
+    });
+    expect(shouldWaitForSimulatorToSettle()).toBe(expected);
+  });
 });

@@ -26,6 +26,20 @@ vi.mock('../xctest-agent.js', () => ({
   createXCTestAgentController: xctestAgentMocks.createXCTestAgentController,
 }));
 
+const settleMocks = vi.hoisted(() => ({
+  waitForSimulatorToSettle: vi.fn(),
+  shouldWaitForSimulatorToSettle: vi.fn(),
+}));
+
+vi.mock('../simulator-settle.js', () => ({
+  waitForSimulatorToSettle: settleMocks.waitForSimulatorToSettle,
+}));
+
+vi.mock('../startup-strategy.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../startup-strategy.js')>()),
+  shouldWaitForSimulatorToSettle: settleMocks.shouldWaitForSimulatorToSettle,
+}));
+
 const harnessConfig = {
   metroPort: DEFAULT_METRO_PORT,
 } as HarnessConfig;
@@ -46,6 +60,13 @@ describe('iOS platform instance dependency validation', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    settleMocks.waitForSimulatorToSettle.mockReset();
+    settleMocks.waitForSimulatorToSettle.mockResolvedValue({
+      settled: true,
+      durationMs: 1,
+      probes: 2,
+    });
+    settleMocks.shouldWaitForSimulatorToSettle.mockReturnValue(true);
     xctestAgentMocks.createXCTestAgentController.mockReturnValue({
       prepare: xctestAgentMocks.prepare,
       ensureStarted: xctestAgentMocks.ensureStarted,
@@ -75,6 +96,43 @@ describe('iOS platform instance dependency validation', () => {
     await expect(
       getAppleSimulatorPlatformInstance(config, harnessConfig, init),
     ).resolves.toBeDefined();
+  });
+
+  describe.each([
+    ['Shutdown', true, true],
+    ['Booting', true, true],
+    ['Booted', true, false],
+    ['Shutdown', false, false],
+  ])('simulator settle (status %s, constrained %s)', (status, constrained, expectSettle) => {
+    it(`settle called: ${expectSettle}`, async () => {
+      settleMocks.shouldWaitForSimulatorToSettle.mockReturnValue(constrained);
+      vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+      vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+      vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue(status as never);
+      vi.spyOn(simctl, 'bootSimulator').mockResolvedValue(undefined);
+      vi.spyOn(simctl, 'waitForBoot').mockResolvedValue({} as never);
+      vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+        undefined,
+      );
+
+      await getAppleSimulatorPlatformInstance(
+        {
+          name: 'ios',
+          device: {
+            type: 'simulator' as const,
+            name: 'iPhone 16 Pro',
+            systemVersion: '18.0',
+          },
+          bundleId: 'com.harnessplayground',
+        },
+        harnessConfig,
+        init,
+      );
+
+      expect(settleMocks.waitForSimulatorToSettle).toHaveBeenCalledTimes(
+        expectSettle ? 1 : 0,
+      );
+    });
   });
 
   it('does not start the simulator XCTest agent when permissions are disabled', async () => {
