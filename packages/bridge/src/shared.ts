@@ -169,6 +169,10 @@ export type BridgeServerFunctions = {
   ) => Promise<{ pass: boolean; message: string }>;
 };
 
+export type SnapshotUpdateState = 'all' | 'new' | 'none';
+
 export type HarnessContext = {
   platform: HarnessPlatform;
+  /** Jest's snapshot update state; when absent, a missing image snapshot is written. */
+  updateSnapshot?: SnapshotUpdateState;
 };

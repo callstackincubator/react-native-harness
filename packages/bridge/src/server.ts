@@ -166,7 +166,13 @@ export const createHarnessBridge = async (
       localMethods: {
         'device.screenshot.receive': (ref) => receiveScreenshot(link, ref),
         'test.matchImageSnapshot': (screenshot, testPath, opts) =>
-          matchImageSnapshot(screenshot, testPath, opts, context.platform.name),
+          matchImageSnapshot(
+            screenshot,
+            testPath,
+            opts,
+            context.platform.name,
+            context.updateSnapshot ?? 'new'
+          ),
       },
       transport: {
         send: (message) => {

@@ -14,6 +14,10 @@ export async function toMatchImageSnapshot(
   received: ScreenshotResult,
   options: ImageSnapshotOptions
 ): Promise<{ pass: boolean; message: () => string }> {
+  if (this.isNot) {
+    throw new Error('`.not` cannot be used with `.toMatchImageSnapshot()`.');
+  }
+
   const handle = getHandle();
   const context = getHarnessContext();
 

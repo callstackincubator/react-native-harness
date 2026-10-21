@@ -3,7 +3,11 @@ import { ssim } from 'ssim.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PNG } from 'pngjs';
-import type { FileReference, ImageSnapshotOptions } from './shared.js';
+import type {
+  FileReference,
+  ImageSnapshotOptions,
+  SnapshotUpdateState,
+} from './shared.js';
 
 type PixelmatchOptions = Parameters<typeof pixelmatch>[5];
 
@@ -49,7 +53,8 @@ export const matchImageSnapshot = async (
   screenshot: FileReference,
   testFilePath: string,
   options: ImageSnapshotOptions,
-  platformName: string
+  platformName: string,
+  updateSnapshot: SnapshotUpdateState
 ) => {
   const pixelmatchOptions = {
     ...DEFAULT_OPTIONS_FOR_PIXELMATCH,
@@ -69,14 +74,24 @@ export const matchImageSnapshot = async (
   const testDir = path.dirname(testFilePath);
   const snapshotsDir = path.join(testDir, SNAPSHOT_DIR_NAME, platformName);
 
-  const snapshotName = `${options.name}.png`;
-  const snapshotPath = path.join(snapshotsDir, snapshotName);
+  const snapshotPath = path.join(snapshotsDir, `${options.name}.png`);
+  const failureImagePath = (image: 'actual' | 'diff'): string =>
+    path.join(snapshotsDir, `${options.name}-${image}.png`);
+  const actualPath = failureImagePath('actual');
 
   await fs.mkdir(snapshotsDir, { recursive: true });
 
   try {
     await fs.access(snapshotPath);
   } catch {
+    if (updateSnapshot === 'none') {
+      await fs.writeFile(actualPath, receivedBuffer);
+      return {
+        pass: false,
+        message: `New snapshot was not written: ${snapshotPath} does not exist, and missing snapshots are not written in CI mode. Received image saved at ${actualPath}; commit it as ${snapshotPath}, or run without CI mode (--ci=false) on a machine with this device and commit the snapshot it writes.`,
+      };
+    }
+
     // First time - create snapshot
     await fs.writeFile(snapshotPath, receivedBuffer);
     return {
@@ -152,12 +167,9 @@ export const matchImageSnapshot = async (
 
   // Save diff and actual images when test fails
   if (!pass) {
-    const diffFileName = `${snapshotName.replace('.png', '')}-diff.png`;
-    const diffPath = path.join(snapshotsDir, diffFileName);
+    const diffPath = failureImagePath('diff');
     await fs.writeFile(diffPath, PNG.sync.write(diff));
 
-    const actualFileName = `${snapshotName.replace('.png', '')}-actual.png`;
-    const actualPath = path.join(snapshotsDir, actualFileName);
     await fs.writeFile(actualPath, receivedBuffer);
 
     message += ` Diff saved at ${diffPath}. Actual image saved at ${actualPath}.`;
