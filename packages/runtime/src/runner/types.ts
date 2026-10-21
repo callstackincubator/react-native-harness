@@ -1,4 +1,5 @@
 import { EventEmitter } from '../utils/emitter.js';
+import type { TestHostSession } from '../host-surface.js';
 import type {
   HarnessTestContext,
   TestRunnerEvents,
@@ -12,6 +13,7 @@ export type TestRunnerContext = {
   events: TestRunnerEventsEmitter;
   testFilePath: string;
   testTimeout?: number;
+  hostSession?: TestHostSession;
 };
 
 export type ActiveTestContext = HarnessTestContext;

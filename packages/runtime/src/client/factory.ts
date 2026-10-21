@@ -20,6 +20,7 @@ import { setup } from '../render/setup.js';
 import { runSetupFiles } from './setup-files.js';
 import { setHandle } from './store.js';
 import { installPromiseTracker } from '../promise-tracker.js';
+import { beginTestHostSession } from '../host-surface.js';
 
 // Reloading tears down the JS runtime, so the RPC caller would never see a
 // response if we reloaded synchronously. Acknowledge first, then reload on
@@ -49,6 +50,7 @@ export const getClient = async (): Promise<HarnessHandle> => {
         throw new Error('Already running tests');
       }
 
+      const hostSession = beginTestHostSession(path);
       store.getState().setStatus('running');
 
       let collector: TestCollector | null = null;
@@ -57,63 +59,84 @@ export const getClient = async (): Promise<HarnessHandle> => {
         TestRunnerEvents | TestCollectorEvents | BundlerEvents
       > | null = null;
       let bundler: Bundler | null = null;
+      const evaluateForHost = async (moduleJs: string, file: string): Promise<void> => {
+        hostSession.throwIfInterrupted();
+        await hostSession.run(() => evaluateModule(moduleJs, file));
+        hostSession.throwIfInterrupted();
+      };
 
       try {
-        collector = getTestCollector();
-        runner = getTestRunner();
-        bundler = getBundler();
+        const fileCollector = collector = getTestCollector();
+        const fileRunner = runner = getTestRunner();
+        const fileBundler = bundler = getBundler();
         events = combineEventEmitters(
-          collector.events,
-          runner.events,
-          bundler.events
+          fileCollector.events,
+          fileRunner.events,
+          fileBundler.events
         );
-
         events.addListener((event) => {
           handle.emitEvent(event);
         });
 
-        await runSetupFiles({
-          setupFiles: options.setupFiles ?? [],
-          setupFilesAfterEnv: [],
-          events: events as EventEmitter<BundlerEvents>,
-          bundler: bundler as Bundler,
-          evaluateModule,
-        });
-
-        const moduleJs = await bundler.getModule(path);
-        const collectionResult = await collector.collect(async () => {
+        return await hostSession.run(async () => {
           await runSetupFiles({
-            setupFiles: [],
-            setupFilesAfterEnv: options.setupFilesAfterEnv ?? [],
-            events: events as EventEmitter<BundlerEvents>,
-            bundler: bundler as Bundler,
-            evaluateModule,
+            setupFiles: options.setupFiles ?? [],
+            setupFilesAfterEnv: [],
+            events: fileBundler.events,
+            bundler: fileBundler,
+            evaluateModule: evaluateForHost,
           });
+          hostSession.throwIfInterrupted();
 
-          setup();
-          await evaluateModule(moduleJs, path);
-        }, path);
+          const moduleJs = await fileBundler.getModule(path);
+          hostSession.throwIfInterrupted();
+          const collectionResult = await fileCollector.collect(async () => {
+            hostSession.throwIfInterrupted();
+            await runSetupFiles({
+              setupFiles: [],
+              setupFilesAfterEnv: options.setupFilesAfterEnv ?? [],
+              events: fileBundler.events,
+              bundler: fileBundler,
+              evaluateModule: evaluateForHost,
+            });
+            hostSession.throwIfInterrupted();
 
-        const processedTestSuite = options.testNamePattern
-          ? markTestsAsSkippedByName(
-              collectionResult.testSuite,
-              options.testNamePattern
-            )
-          : collectionResult.testSuite;
+            setup();
+            await evaluateForHost(moduleJs, path);
+            hostSession.throwIfInterrupted();
+          }, path);
+          hostSession.throwIfInterrupted();
 
-        return await runner.run({
-          testSuite: processedTestSuite,
-          testFilePath: path,
-          runner: options.runner,
-          testTimeout: options.testTimeout,
+          const processedTestSuite = options.testNamePattern
+            ? markTestsAsSkippedByName(
+                collectionResult.testSuite,
+                options.testNamePattern
+              )
+            : collectionResult.testSuite;
+
+          return await fileRunner.run({
+            testSuite: processedTestSuite,
+            testFilePath: path,
+            runner: options.runner,
+            testTimeout: options.testTimeout,
+          });
         });
       } finally {
-        // Free this file's Metro graph so graphs don't accumulate per file (OOM).
-        await bundler?.releaseModule(path);
-        collector?.dispose();
-        runner?.dispose();
-        events?.clearAllListeners();
-        store.getState().setStatus('idle');
+        hostSession.dispose();
+        try {
+          // Free this file's Metro graph so graphs don't accumulate per file (OOM).
+          const release = bundler?.releaseModule(path);
+          if (hostSession.interrupted) {
+            void release?.catch(() => undefined);
+          } else {
+            await release;
+          }
+        } finally {
+          collector?.dispose();
+          runner?.dispose();
+          events?.clearAllListeners();
+          store.getState().setStatus('idle');
+        }
       }
     },
   });
