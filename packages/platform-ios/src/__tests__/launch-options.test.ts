@@ -1,4 +1,6 @@
 import * as tools from '@react-native-harness/tools';
+import { runWithHarnessContext } from '@react-native-harness/tools/harness-context';
+import { createFakeProcessManager } from '@react-native-harness/tools/testing';
 import { describe, expect, it, vi } from 'vitest';
 import {
   getDeviceConnectionHost,
@@ -82,43 +84,44 @@ describe('Apple app launch options', () => {
       {
         stdout: 'pipe',
         stderr: 'pipe',
-      },
+      }
     );
   });
 
   it('passes terminate-running-process to simctl launch commands', async () => {
-    const spawnSpy = vi
-      .spyOn(tools, 'spawn')
-      .mockResolvedValue({} as Awaited<ReturnType<typeof tools.spawn>>);
+    const fake = createFakeProcessManager().on(
+      'xcrun',
+      (args) => args[1] === 'launch',
+      {}
+    );
     const spawnOwnedProcessSpy = vi
       .spyOn(tools, 'spawnOwnedProcess')
-      .mockReturnValue(
-        {} as ReturnType<typeof tools.spawnOwnedProcess>
-      );
+      .mockReturnValue({} as ReturnType<typeof tools.spawnOwnedProcess>);
 
-    await startApp('sim-udid', 'com.example.app', {
-      arguments: ['--mode=test'],
-    });
+    await runWithHarnessContext({ process: fake }, () =>
+      startApp('sim-udid', 'com.example.app', {
+        arguments: ['--mode=test'],
+      })
+    );
 
     launchAppProcess('sim-udid', 'com.example.app', {
       arguments: ['--mode=test'],
     });
 
-    expect(spawnSpy).toHaveBeenNthCalledWith(
-      1,
-      'xcrun',
-      [
-        'simctl',
-        'launch',
-        '--terminate-running-process',
-        'sim-udid',
-        'com.example.app',
-        '--mode=test',
-      ],
+    expect(fake.calls).toEqual([
       {
-        env: {},
+        file: 'xcrun',
+        args: [
+          'simctl',
+          'launch',
+          '--terminate-running-process',
+          'sim-udid',
+          'com.example.app',
+          '--mode=test',
+        ],
+        options: { env: {} },
       },
-    );
+    ]);
 
     expect(spawnOwnedProcessSpy).toHaveBeenNthCalledWith(
       1,
@@ -136,7 +139,7 @@ describe('Apple app launch options', () => {
         env: {},
         stdout: 'pipe',
         stderr: 'pipe',
-      },
+      }
     );
   });
 
