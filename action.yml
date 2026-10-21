@@ -310,6 +310,20 @@ runs:
           ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
           ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
         if-no-files-found: ignore
+    # `adb emu kill` returns before the emulator finishes writing its snapshot
+    # and removing AVD lock files, so wait for the process to exit before
+    # archiving ~/.android/avd.
+    - name: Wait for Android emulator to exit
+      if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled && steps.avd-cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        for _ in $(seq 1 120); do
+          if ! pgrep -f 'qemu-system|emulator.*-avd' > /dev/null; then
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "::warning::Android emulator is still running after 120s; the AVD cache may be incomplete."
     - name: Save AVD cache
       if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled && steps.avd-cache.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
@@ -318,8 +332,19 @@ runs:
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
-    - name: Save Harness cache
+    - name: Check Harness cache
+      id: check-harness-cache
       if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'ios' && steps.cache-harness-restore.outputs.cache-hit != 'true' }}
+      shell: bash
+      working-directory: ${{ steps.load-config.outputs.projectRoot }}
+      run: |
+        if compgen -G '.harness/cache/xctest-agent-simulator-*' > /dev/null; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Save Harness cache
+      if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'ios' && steps.cache-harness-restore.outputs.cache-hit != 'true' && steps.check-harness-cache.outputs.exists == 'true' }}
       uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/xctest-agent-simulator-*
