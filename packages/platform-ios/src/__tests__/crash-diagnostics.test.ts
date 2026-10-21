@@ -161,7 +161,9 @@ describe('collectCrashArtifacts', () => {
       }
     );
 
-    expect(artifacts[0]?.artifactPath).toContain('/.harness/crash-reports/');
+    expect(artifacts[0]?.artifactPath).toContain(
+      join('.harness', 'crash-reports')
+    );
     expect(artifacts[0]?.artifactPath).toContain('test-native-crash.test.ts');
     expect(fs.existsSync(artifacts[0]?.artifactPath ?? '')).toBe(true);
   });
