@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { runCommand, spawn, SubprocessError } from '../spawn.js';
+import {
+  getWindowsBatchInvocation,
+  runCommand,
+  spawn,
+  SubprocessError,
+} from '../spawn.js';
 
 describe('runCommand', () => {
   it('uses SIGKILL when a deadline expires', async () => {
@@ -80,5 +85,31 @@ describe('spawn', () => {
 
     expect(result.stdout).toBe('hello');
     expect(result.stderr).toBe('');
+  });
+});
+
+describe('getWindowsBatchInvocation', () => {
+  it('leaves non-batch files and non-Windows hosts alone', () => {
+    expect(getWindowsBatchInvocation('adb.exe', ['devices'], 'win32')).toBeNull();
+    expect(getWindowsBatchInvocation('sdkmanager.bat', ['--list'], 'darwin')).toBeNull();
+  });
+
+  it('runs batch files through cmd.exe with single-level quoting', () => {
+    expect(
+      getWindowsBatchInvocation(
+        'C:\\Program Files\\Sdk\\sdkmanager.bat',
+        ['--sdk_root=C:\\Sdk', '--licenses', 'system-images;android-35;google_apis;x86_64', 'a b', ''],
+        'win32'
+      )
+    ).toEqual({
+      file: 'cmd.exe',
+      args: [
+        '/d',
+        '/s',
+        '/c',
+        '""C:\\Program Files\\Sdk\\sdkmanager.bat" --sdk_root=C:\\Sdk --licenses system-images;android-35;google_apis;x86_64 "a b" """',
+      ],
+      windowsVerbatimArguments: true,
+    });
   });
 });
