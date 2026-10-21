@@ -515,7 +515,8 @@ export const getAndroidProcessEnv = (
     ...env,
     ANDROID_HOME: sdkRoot,
     ANDROID_SDK_ROOT: sdkRoot,
-    ANDROID_AVD_HOME: path.join(os.homedir(), '.android', 'avd'),
+    ANDROID_AVD_HOME:
+      env.ANDROID_AVD_HOME || path.join(os.homedir(), '.android', 'avd'),
     PATH: pathEntries.join(path.delimiter),
   };
 };
