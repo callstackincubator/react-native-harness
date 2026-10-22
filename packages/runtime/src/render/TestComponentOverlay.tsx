@@ -23,6 +23,7 @@ export const TestComponentOverlay = (): React.ReactElement | null => {
   const { element, key } = useRenderedElement();
 
   useEffect(() => {
+    let cancelled = false;
     // Call onRenderCallback when element changes
     const callback = store.getState().onRenderCallback;
 
@@ -31,10 +32,15 @@ export const TestComponentOverlay = (): React.ReactElement | null => {
       // useEffect fires after React commits, but native processes commands async.
       // Double rAF ensures native has finished processing all view creation.
       waitForNativeViewHierarchy().then(() => {
-        callback();
-        store.getState().setOnRenderCallback(null);
+        if (!cancelled && store.getState().onRenderCallback === callback) {
+          callback();
+          store.getState().setOnRenderCallback(null);
+        }
       });
     }
+    return () => {
+      cancelled = true;
+    };
   }, [element]);
 
   if (!element) {

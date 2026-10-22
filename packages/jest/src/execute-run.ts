@@ -10,6 +10,7 @@ import { runHarnessTestFile } from './run.js';
 import { toRelativePosixPath } from './relative-path.js';
 import { resolveResetStrategyKind } from './environment-reset.js';
 import {
+  HostSurfaceReplacedError,
   NativeCrashError,
   RuntimeDisconnectError,
   StartupStallError,
@@ -320,7 +321,11 @@ export const executeRun = async (
             await session.restartApp(test.path);
             shouldRestartAfterTimeout = false;
           }
-        } catch (err) {
+        } catch (error) {
+          const err =
+            error instanceof Error && error.name === 'HostSurfaceReplacedError'
+              ? new HostSurfaceReplacedError(test.path, error)
+              : error;
           fileStatus = 'failed';
           if (!emittedTestFileFinished) {
             await emitTestFileFinished({
@@ -331,6 +336,7 @@ export const executeRun = async (
           }
 
           const isRuntimeFailure =
+            err instanceof HostSurfaceReplacedError ||
             err instanceof NativeCrashError ||
             err instanceof RuntimeDisconnectError ||
             err instanceof StartupStallError ||
@@ -349,6 +355,11 @@ export const executeRun = async (
           updateRunState({ error: isRuntimeFailure ? undefined : err });
           await caseEventChain;
           await emitEvent('test-file-failure', test, buildTestFailure(err));
+          if (err instanceof HostSurfaceReplacedError) {
+            // Abandoned async test work may still be running in this process.
+            await session.restartApp(test.path);
+            isFirstTest = true;
+          }
         }
       } finally {
         fileSpan.end({ status: fileStatus });

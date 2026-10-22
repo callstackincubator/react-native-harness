@@ -3,6 +3,7 @@ import { getEmitter } from '../utils/emitter.js';
 import { runSuite } from './runSuite.js';
 import { TestRunner } from './types.js';
 import { setHarnessContext } from './context.js';
+import { getCurrentTestHostSession } from '../host-surface.js';
 
 export const getTestRunner = (): TestRunner => {
   const events = getEmitter<TestRunnerEvents>();
@@ -19,6 +20,7 @@ export const getTestRunner = (): TestRunner => {
         events,
         testFilePath,
         testTimeout,
+        hostSession: getCurrentTestHostSession(),
       });
 
       // If coverage is enabled, there will be a global variable called __coverage__

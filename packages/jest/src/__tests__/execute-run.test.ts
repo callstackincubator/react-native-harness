@@ -6,7 +6,11 @@ import type {
   TestRunnerTestStartedEvent,
   TestSuiteResult,
 } from '@react-native-harness/bridge';
-import { NativeCrashError, StartupStallError } from '../errors.js';
+import {
+  HostSurfaceReplacedError,
+  NativeCrashError,
+  StartupStallError,
+} from '../errors.js';
 import {
   AppBridgeDisconnectedError,
   DeviceNotRespondingError,
@@ -583,6 +587,141 @@ describe('executeRun', () => {
   });
 
   describe('runtime failures', () => {
+    it('attributes a host replacement RPC rejection to the interrupted file', async () => {
+      const cause = new Error(
+        'The native host surface was replaced during test execution.'
+      );
+      cause.name = 'HostSurfaceReplacedError';
+      cause.stack = 'HostSurfaceReplacedError: runtime stack';
+      mockRunHarnessTestFile.mockRejectedValueOnce(cause);
+      const session = makeSession();
+      const { emitEvent, calls } = makeEmitEvent();
+
+      await executeRun(
+        session,
+        [makeTest()],
+        makeWatcher(),
+        emitEvent,
+        makeGlobalConfig({ watch: true })
+      );
+
+      const failure = calls.find(([name]) => name === 'test-file-failure');
+      expect(failure).toEqual([
+        'test-file-failure',
+        expect.objectContaining({ path: '/test/example.ts' }),
+        expect.objectContaining({
+          testFilePath: '/test/example.ts',
+          message: cause.message,
+          stack: cause.stack,
+          cause,
+        }),
+      ]);
+      expect(failure?.[2]).toBeInstanceOf(HostSurfaceReplacedError);
+      expect(
+        calls.filter(([name]) => name === 'test-file-failure')
+      ).toHaveLength(1);
+      expect(calls.some(([name]) => name === 'test-file-success')).toBe(false);
+      expect(session.callHook).toHaveBeenCalledWith(
+        'test-file:finished',
+        expect.objectContaining({ status: 'failed', result: null })
+      );
+      expect(session.callHook).toHaveBeenCalledWith(
+        'run:finished',
+        expect.objectContaining({
+          summary: { passed: 0, failed: 1, skipped: 0, todo: 0 },
+          status: 'failed',
+        })
+      );
+      expect(mockRunHarnessTestFile).toHaveBeenCalledTimes(1);
+      expect(session.restartApp).toHaveBeenCalledExactlyOnceWith(
+        '/test/example.ts'
+      );
+    });
+
+    it.each([false, 'runtime', true] as const)(
+      'restarts before the next runnable file after host replacement with reset=%s',
+      async (resetEnvironmentBetweenTestFiles) => {
+        const order: string[] = [];
+        const cause = new Error('The native host surface was replaced.');
+        cause.name = 'HostSurfaceReplacedError';
+        mockRunHarnessTestFile
+          .mockImplementationOnce(async ({ testPath }) => {
+            order.push(`run:${testPath}`);
+            throw cause;
+          })
+          .mockImplementationOnce(async ({ testPath }) => {
+            order.push(`run:${testPath}`);
+            return makeFileRunResult();
+          });
+        const session = makeSession({
+          restartApp: vi.fn(async (testPath) => {
+            order.push(`restart:${testPath}`);
+          }),
+        });
+        session.config.resetEnvironmentBetweenTestFiles =
+          resetEnvironmentBetweenTestFiles;
+        const { emitEvent, calls } = makeEmitEvent();
+
+        await executeRun(
+          session,
+          [
+            makeTest('/a.ts'),
+            makeTest('/skip.ios.harness.ts'),
+            makeTest('/b.ts'),
+          ],
+          makeWatcher(),
+          emitEvent,
+          makeGlobalConfig()
+        );
+
+        expect(order).toEqual(['run:/a.ts', 'restart:/a.ts', 'run:/b.ts']);
+        expect(mockRunHarnessTestFile).toHaveBeenCalledTimes(2);
+        expect(session.restartApp).toHaveBeenCalledTimes(1);
+        expect(session.resetEnvironment).not.toHaveBeenCalled();
+        expect(calls.filter(([name]) => name === 'test-file-failure')).toEqual([
+          [
+            'test-file-failure',
+            expect.objectContaining({ path: '/a.ts' }),
+            expect.any(HostSurfaceReplacedError),
+          ],
+        ]);
+        expect(calls).toContainEqual([
+          'test-file-success',
+          expect.objectContaining({ path: '/b.ts' }),
+          expect.anything(),
+        ]);
+        expect(session.callHook).toHaveBeenCalledWith(
+          'run:finished',
+          expect.objectContaining({
+            summary: { passed: 1, failed: 1, skipped: 1, todo: 0 },
+            status: 'failed',
+          })
+        );
+      }
+    );
+
+    it('does not continue to the next file if host replacement recovery fails', async () => {
+      const cause = new Error('The native host surface was replaced.');
+      cause.name = 'HostSurfaceReplacedError';
+      mockRunHarnessTestFile.mockRejectedValueOnce(cause);
+      const recoveryError = new Error('Unable to restart the app');
+      const session = makeSession({
+        restartApp: vi.fn().mockRejectedValue(recoveryError),
+      });
+
+      await expect(
+        executeRun(
+          session,
+          [makeTest('/a.ts'), makeTest('/b.ts')],
+          makeWatcher(),
+          makeEmitEvent().emitEvent,
+          makeGlobalConfig()
+        )
+      ).rejects.toBe(recoveryError);
+
+      expect(mockRunHarnessTestFile).toHaveBeenCalledTimes(1);
+    });
+
     it('passes StartupStallError to onFailure with an empty stack', async () => {
       const { emitEvent, calls } = makeEmitEvent();
       const session = makeSession({

@@ -179,4 +179,14 @@ export class RuntimeDisconnectError extends HarnessError {
   }
 }
 
+// The runtime sends this name through the runTests RPC when its native host
+// surface is replaced while a test file is still running.
+export class HostSurfaceReplacedError extends HarnessError {
+  constructor(public readonly testFilePath: string, cause: Error) {
+    super(cause.message, { cause });
+    this.name = 'HostSurfaceReplacedError';
+    this.stack = cause.stack;
+  }
+}
+
 export type HarnessRuntimeFailure = NativeCrashError | RuntimeDisconnectError;
