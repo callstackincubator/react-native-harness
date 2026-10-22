@@ -25,19 +25,26 @@ const createOptions = () => ({
 
 describe('createVegaAppSession', () => {
   it('emits app_exited and reports the exited state once the app is gone', async () => {
-    const options = createOptions();
-    options.getAppRunState.mockResolvedValue('stopped');
-    const listener = vi.fn();
+    vi.useFakeTimers();
+    try {
+      const options = createOptions();
+      options.getAppRunState.mockResolvedValue('stopped');
+      const listener = vi.fn();
 
-    const session = await createVegaAppSession({ ...options, startGraceMs: 0 });
-    session.addListener(listener);
+      const session = await createVegaAppSession({ ...options, startGraceMs: 0 });
+      session.addListener(listener);
 
-    // Two confirming polls are needed, one poll interval apart.
-    await vi.waitFor(
-      () => expect(listener).toHaveBeenCalledWith({ type: 'app_exited' }),
-      { timeout: 3000 }
-    );
-    expect((await session.getState()).status).toBe('exited');
+      // Two confirming polls are needed, one poll interval apart: the first
+      // runs immediately, the second one interval later.
+      await vi.advanceTimersByTimeAsync(500);
+      expect(listener).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(500 + 10);
+      expect(listener).toHaveBeenCalledWith({ type: 'app_exited' });
+      expect((await session.getState()).status).toBe('exited');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('ignores failed probes and needs consecutive stopped answers before declaring an exit', async () => {
