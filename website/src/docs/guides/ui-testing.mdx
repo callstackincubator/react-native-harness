@@ -42,9 +42,9 @@ describe('Element Queries', () => {
       </View>
     );
 
-    // These methods throw if no element is found
-    const welcomeText = screen.findByTestId('welcome-text');
-    const subtitle = screen.findByTestId('subtitle');
+    // These methods wait for the element and reject if it does not appear
+    const welcomeText = await screen.findByTestId('welcome-text');
+    const subtitle = await screen.findByTestId('subtitle');
 
     // These methods return null if no element is found
     const welcomeTextSafe = screen.queryByTestId('welcome-text');
@@ -58,21 +58,23 @@ describe('Element Queries', () => {
       </View>
     );
 
-    const heading = screen.findByAccessibilityLabel('Main heading');
+    const heading = await screen.findByAccessibilityLabel('Main heading');
   });
 });
 ```
 
 ### Available query methods
 
+The `find*` methods are asynchronous: `await` them. They poll until the element appears (up to one second) and reject if it does not. The `query*` methods are synchronous and check once.
+
 | Method                                | Description                                                                  |
 | ------------------------------------- | ---------------------------------------------------------------------------- |
-| `findByTestId(testId)`                | Find single element by testID (throws if not found)                          |
-| `findAllByTestId(testId)`             | Find all elements by testID (throws if none found)                           |
+| `findByTestId(testId)`                | Find single element by testID (waits, rejects if not found)                  |
+| `findAllByTestId(testId)`             | Find all elements by testID (waits, rejects if none found)                   |
 | `queryByTestId(testId)`               | Find single element by testID (returns null if not found)                    |
 | `queryAllByTestId(testId)`            | Find all elements by testID (returns empty array if none found)              |
-| `findByAccessibilityLabel(label)`     | Find single element by accessibility label (throws if not found)             |
-| `findAllByAccessibilityLabel(label)`  | Find all elements by accessibility label (throws if none found)              |
+| `findByAccessibilityLabel(label)`     | Find single element by accessibility label (waits, rejects if not found)     |
+| `findAllByAccessibilityLabel(label)`  | Find all elements by accessibility label (waits, rejects if none found)      |
 | `queryByAccessibilityLabel(label)`    | Find single element by accessibility label (returns null if not found)       |
 | `queryAllByAccessibilityLabel(label)` | Find all elements by accessibility label (returns empty array if none found) |
 
@@ -171,7 +173,7 @@ test('capture specific element', async () => {
     </View>
   );
 
-  const headerElement = screen.findByTestId('header');
+  const headerElement = await screen.findByTestId('header');
   const headerScreenshot = await screen.screenshot(headerElement);
 
   await expect(headerScreenshot).toMatchImageSnapshot({
@@ -214,20 +216,24 @@ describe('User Interactions', () => {
       </TouchableOpacity>
     );
 
-    const button = screen.findByTestId('my-button');
+    const button = await screen.findByTestId('my-button');
     await userEvent.press(button);
 
     expect(onPress).toHaveBeenCalled();
   });
 
   test('text input', async () => {
-    await render(<TextInput testID="username-input" />);
+    const onChangeText = fn();
 
-    const input = screen.findByTestId('username-input');
+    await render(
+      <TextInput testID="username-input" onChangeText={onChangeText} />
+    );
+
+    const input = await screen.findByTestId('username-input');
     await userEvent.type(input, 'testuser');
 
-    // Verify the input value
-    expect(input.props.value).toBe('testuser');
+    // onChangeText fires for each character, so the last call has the full text
+    expect(onChangeText).toHaveBeenLastCalledWith('testuser');
   });
 });
 
