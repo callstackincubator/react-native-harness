@@ -32,8 +32,10 @@ export type MetroConfigEnhancerContext<TPlatformConfig = unknown> = {
  * needs — module resolution redirects, additional `resolver.platforms`
  * entries, its own core initialization — so that wiring lives in the platform
  * package instead of in the bundler, which stays unaware of which platforms
- * exist. It runs last, on the fully composed config; whatever it returns is
- * what Metro is started with.
+ * exist. It runs last, on the fully composed config, and Metro starts with
+ * what it returns, its resolver wrapped once more so that the `react` and
+ * `react-native` imports of Harness's own packages, and of the packages its
+ * runtime depends on, resolve from the project.
  */
 export type MetroConfigEnhancer<TPlatformConfig = unknown> = (
   metroConfig: MetroConfig,

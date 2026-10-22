@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import os from 'node:os';
+import path from 'node:path';
 import type { MetroConfig } from 'metro-config';
 import { createHarnessCache } from '@react-native-harness/cache';
 import {
@@ -15,6 +16,7 @@ import { getHarnessManifest } from './manifest.js';
 import { getHarnessBlockList } from './metro-block-list.js';
 import { getHarnessCacheStores } from './metro-cache.js';
 import { getCappedMaxWorkers } from './metro-workers.js';
+import { resolvePeerDependenciesFromProject } from './resolvers/peer-dependencies.js';
 import { getHarnessResolver } from './resolvers/resolver.js';
 import type { MetroConfigEnhancer } from './types.js';
 import type { NotReadOnly } from './utils.js';
@@ -29,19 +31,19 @@ const INTERNAL_CALLSITES_REGEX =
 const INITIALIZE_CORE_SUFFIX = /[\\/]react-native[\\/]Libraries[\\/]Core[\\/]InitializeCore\.js$/;
 
 /**
- * `@react-native/metro-config` resolves InitializeCore from the project root,
- * but the bundle gets `react-native` through the Harness runtime. When a
- * monorepo has more than one copy of `react-native`, those paths differ, and
- * Metro silently drops a run-before-main module that isn't in the graph, so
+ * `@react-native/metro-config` resolves InitializeCore from its own location,
+ * while the bundle gets `react-native` from the project. When a monorepo has
+ * more than one copy of `react-native`, those paths can differ, and Metro
+ * silently drops a run-before-main module that isn't in the graph, so
  * InitializeCore never runs (`window` is undefined, HMRClient isn't
- * registered). Point it at the copy the runtime actually imports.
+ * registered). Point it at the project's copy.
  */
-const getRuntimeInitializeCore = (): string | null => {
+const getProjectInitializeCore = (projectRoot: string): string | null => {
   try {
-    const runtimeRequire = createRequire(
-      require.resolve('@react-native-harness/runtime/package.json')
+    const projectRequire = createRequire(
+      path.join(projectRoot, 'package.json')
     );
-    return runtimeRequire.resolve('react-native/Libraries/Core/InitializeCore');
+    return projectRequire.resolve('react-native/Libraries/Core/InitializeCore');
   } catch {
     return null;
   }
@@ -131,12 +133,12 @@ export const withRnHarness = <T extends MetroConfig>(
             metroConfig.serializer?.getModulesRunBeforeMainModule?.(
               entryFilePath
             ) ?? [];
-          const runtimeInitializeCore = getRuntimeInitializeCore();
+          const projectInitializeCore = getProjectInitializeCore(projectRoot);
 
-          return runtimeInitializeCore
+          return projectInitializeCore
             ? modules.map((modulePath) =>
                 INITIALIZE_CORE_SUFFIX.test(modulePath)
-                  ? runtimeInitializeCore
+                  ? projectInitializeCore
                   : modulePath
               )
             : modules;
@@ -231,15 +233,20 @@ export const withRnHarness = <T extends MetroConfig>(
       });
     }
 
-    if (enhancer) {
-      return (await runMetroConfigEnhancer(
-        enhancer,
-        patchedConfig,
-        projectRoot
-      )) as T;
-    }
+    const composedConfig = enhancer
+      ? await runMetroConfigEnhancer(enhancer, patchedConfig, projectRoot)
+      : patchedConfig;
+    const resolveRequest = composedConfig.resolver?.resolveRequest;
 
-    return patchedConfig as T;
+    return {
+      ...composedConfig,
+      resolver: {
+        ...composedConfig.resolver,
+        resolveRequest:
+          resolveRequest &&
+          resolvePeerDependenciesFromProject(resolveRequest, projectRoot),
+      },
+    } as T;
   };
 };
 
@@ -251,7 +258,10 @@ export const withRnHarness = <T extends MetroConfig>(
  * redirects, additional `resolver.platforms` entries, its own core
  * initialization — declares it here rather than in this package, so nothing in
  * the bundler has to know which platforms exist. It runs last, on the fully
- * composed config, and whatever it returns is what Metro is started with.
+ * composed config, and Metro starts with what it returns, its resolver wrapped
+ * once more so that the `react` and `react-native` imports of Harness's own
+ * packages, and of the packages its runtime depends on, resolve from the
+ * project.
  */
 const runMetroConfigEnhancer = async <T extends MetroConfig>(
   enhancer: MetroConfigEnhancerRef,
