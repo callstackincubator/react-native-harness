@@ -45,6 +45,27 @@ Currently, releases are published by maintainers when they determine it's time t
 
 Version bumps use [Nx release](https://nx.dev/docs/features/manage-releases) with files under `.nx/version-plans/`. The top-level `nx release` command expects `release.git` in `nx.json`; this repo uses **`nx release version`** and **`nx release changelog`** instead, with git settings under `release.version.git` and `release.changelog.git` (Nx 22).
 
+### Releasing with GitHub Actions
+
+Maintainers release by running the [Release workflow](.github/workflows/release.yml) from the Actions tab on `main`. It:
+
+1. Applies the pending version plans and writes the changelog with the commands described below, then packs every package on macOS so `@react-native-harness/platform-apple` ships its prebuilt XCTest agent artifacts. In parallel, it typechecks, lints, and tests every package.
+2. Waits for approval through the `npm` environment, then pushes the `chore: release vX.Y.Z` commit and the `vX.Y.Z` tag to `main`.
+3. Publishes the packed tarballs to npm through [trusted publishing](https://docs.npmjs.com/trusted-publishers), with provenance, to the `latest` dist-tag, or to the prerelease identifier's dist-tag, such as `rc`.
+4. Creates the GitHub release from the new changelog section.
+
+Check **Dry run** to see the version, publish order, and release notes in the run summary without pushing or publishing. If a run fails after pushing the tag, re-run it: it skips steps already done, including packages already on npm. If `main` moves while a release runs, the push fails before anything is published; start a new run.
+
+The workflow restores no caches and the job that pushes and publishes installs no dependencies, so cache poisoning and dependency scripts cannot reach the published packages.
+
+One-time setup:
+
+- Create a GitHub environment named `npm` that requires a reviewer and allows deployments from `main` only.
+- On npmjs.com, add a trusted publisher to each package with organization `callstackincubator`, repository `react-native-harness`, workflow `release.yml`, and environment `npm`, and allow it to publish with `npm publish`. Once publishing works, set each package to require two-factor authentication and disallow tokens.
+- The workflow pushes to `main` with its `GITHUB_TOKEN`. If `main` gets branch protection or a ruleset, give the workflow a way through, such as a bypass or a GitHub App token.
+
+### Releasing locally
+
 Typical flow **without publishing to npm**:
 
 1. `pnpm exec nx release version` — runs the configured `preVersionCommand` (full package build), applies version plans, bumps `packages/*/package.json`, updates the lockfile if needed, and stages changes.
