@@ -129,6 +129,10 @@ export const createHarnessBridge = async (
   bridgeLogger.debug('bridge server ready');
 
   const emitter = new EventEmitter();
+  // Screenshot files written by this bridge that have not been compared yet.
+  const receivedScreenshots = new Set<string>();
+  const removeScreenshot = (file: string) =>
+    fs.rm(file, { force: true }).catch(() => undefined);
   let currentConnection: AppConnection | null = null;
   let activeSession: { disconnect: (reason?: Error) => void; link: LinkConnection } | null =
     null;
@@ -164,9 +168,26 @@ export const createHarnessBridge = async (
       BridgeEvents
     >({
       localMethods: {
-        'device.screenshot.receive': (ref) => receiveScreenshot(link, ref),
-        'test.matchImageSnapshot': (screenshot, testPath, opts) =>
-          matchImageSnapshot(screenshot, testPath, opts, context.platform.name),
+        'device.screenshot.receive': async (ref) => {
+          const file = await receiveScreenshot(link, ref);
+          receivedScreenshots.add(file.path);
+          return file;
+        },
+        'test.matchImageSnapshot': async (screenshot, testPath, opts) => {
+          try {
+            return await matchImageSnapshot(
+              screenshot,
+              testPath,
+              opts,
+              context.platform.name,
+            );
+          } finally {
+            // Only delete files this bridge created, never a client-supplied path.
+            if (receivedScreenshots.delete(screenshot.path)) {
+              await removeScreenshot(screenshot.path);
+            }
+          }
+        },
       },
       transport: {
         send: (message) => {
@@ -349,6 +370,11 @@ export const createHarnessBridge = async (
 
       wss.close();
       emitter.removeAllListeners();
+
+      for (const file of receivedScreenshots) {
+        void removeScreenshot(file);
+      }
+      receivedScreenshots.clear();
     },
   };
 };
