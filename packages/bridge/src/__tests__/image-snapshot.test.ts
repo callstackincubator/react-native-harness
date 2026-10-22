@@ -70,4 +70,37 @@ describe('matchImageSnapshot failure output', () => {
       await fs.readFile(path.join(snapshotsDir, 'code-actual.png'))
     ).toEqual(siblingBaseline);
   });
+
+  it('saves the received image to __diff_output__ when dimensions differ', async () => {
+    const testFile = path.join(dir, 'a.harness.ts');
+    const snapshotsDir = path.join(dir, '__image_snapshots__', 'ios');
+    await fs.mkdir(snapshotsDir, { recursive: true });
+
+    const baseline = new PNG({ width: 4, height: 4 });
+    await fs.writeFile(
+      path.join(snapshotsDir, 'box.png'),
+      PNG.sync.write(baseline)
+    );
+
+    const received = path.join(dir, 'received.png');
+    const receivedBuffer = PNG.sync.write(new PNG({ width: 4, height: 6 }));
+    await fs.writeFile(received, receivedBuffer);
+
+    const result = await matchImageSnapshot(
+      { path: received },
+      testFile,
+      { name: 'box' },
+      'ios'
+    );
+
+    const actualPath = path.join(
+      snapshotsDir,
+      '__diff_output__',
+      'box-actual.png'
+    );
+    expect(result.pass).toBe(false);
+    expect(result.message).toContain('Images have different dimensions');
+    expect(result.message).toContain(`Actual image saved at ${actualPath}.`);
+    expect(await fs.readFile(actualPath)).toEqual(receivedBuffer);
+  });
 });
