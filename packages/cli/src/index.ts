@@ -1,8 +1,9 @@
-import { run, yargsOptions } from 'jest-cli';
+import { run } from 'jest-cli';
 import { getConfig } from '@react-native-harness/config';
 import { runInitWizard } from './wizard/index.js';
 import { runPlatformCommand } from './platform-commands.js';
 import { addJestPlatformIgnorePatternArg } from './jest-platform-ignore-pattern.js';
+import { patchYargsOptions } from './jest-cli-options.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -210,49 +211,6 @@ const checkForOldConfig = async () => {
   } catch {
     // Swallow the error - if we can't load the config, let Jest CLI handle it
   }
-};
-
-const patchYargsOptions = () => {
-  yargsOptions.harnessRunner = {
-    type: 'string',
-    description: 'Specify which harness runner to use',
-    requiresArg: true,
-  };
-
-  // Remove all options that are not supported by Harness
-  delete yargsOptions.runner;
-  delete yargsOptions.testRunner;
-  delete yargsOptions.testEnvironment;
-  delete yargsOptions.testEnvironmentOptions;
-  delete yargsOptions.transform;
-  delete yargsOptions.transformIgnorePatterns;
-  delete yargsOptions.updateSnapshot;
-  delete yargsOptions.workerThreads;
-  delete yargsOptions.snapshotSerializers;
-  delete yargsOptions.shard;
-  delete yargsOptions.runInBand;
-  delete yargsOptions.resolver;
-  delete yargsOptions.resetMocks;
-  delete yargsOptions.resetModules;
-  delete yargsOptions.restoreMocks;
-  delete yargsOptions.preset;
-  delete yargsOptions.prettierPath;
-  delete yargsOptions.maxWorkers;
-  delete yargsOptions.moduleDirectories;
-  delete yargsOptions.moduleFileExtensions;
-  delete yargsOptions.moduleNameMapper;
-  delete yargsOptions.modulePathIgnorePatterns;
-  delete yargsOptions.modulePaths;
-  delete yargsOptions.maxConcurrency;
-  delete yargsOptions.injectGlobals;
-  delete yargsOptions.globalSetup;
-  delete yargsOptions.globalTeardown;
-  delete yargsOptions.clearMocks;
-  delete yargsOptions.globals;
-  delete yargsOptions.haste;
-  delete yargsOptions.automock;
-  delete yargsOptions.coverageProvider;
-  delete yargsOptions.logHeapUsage;
 };
 
 const main = async () => {

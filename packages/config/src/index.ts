@@ -1,4 +1,5 @@
 export { getConfig } from './reader.js';
+export { harnessCliOptions } from './cli-options.js';
 export type { Config, ResolvedDiagnosticsOptions } from './types.js';
 export {
   ConfigSchema,

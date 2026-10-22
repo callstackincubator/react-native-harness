@@ -44,6 +44,12 @@ const PluginSchema = z.custom<AnyHarnessPlugin>(
   'Invalid Harness plugin'
 );
 
+export const MetroPortSchema = z
+  .number()
+  .int('Metro port must be an integer')
+  .min(1, 'Metro port must be at least 1')
+  .max(65535, 'Metro port must be at most 65535');
+
 export const ConfigSchema = z
   .object({
     entryPoint: z.string().min(1, 'Entry point is required'),
@@ -54,13 +60,7 @@ export const ConfigSchema = z
     plugins: z.array(PluginSchema).optional().default([]),
     defaultRunner: z.string().optional(),
     host: z.string().min(1, 'Host is required').optional(),
-    metroPort: z
-      .number()
-      .int('Metro port must be an integer')
-      .min(1, 'Metro port must be at least 1')
-      .max(65535, 'Metro port must be at most 65535')
-      .optional()
-      .default(DEFAULT_METRO_PORT),
+    metroPort: MetroPortSchema.optional().default(DEFAULT_METRO_PORT),
     webSocketPort: z
       .number()
       .optional()
