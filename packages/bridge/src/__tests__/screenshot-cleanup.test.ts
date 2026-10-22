@@ -15,7 +15,7 @@ const png = (color: number) => {
 const exists = (p: string) =>
   fs.access(p).then(
     () => true,
-    () => false,
+    () => false
   );
 
 describe('received screenshot cleanup', () => {
@@ -36,7 +36,12 @@ describe('received screenshot cleanup', () => {
     bridge = await createHarnessBridge({
       port: 0,
       context: {
-        platform: { name: 'ios', platformId: 'ios', runner: '/dev/null', config: {} },
+        platform: {
+          name: 'ios',
+          platformId: 'ios',
+          runner: '/dev/null',
+          config: {},
+        },
       },
     } as Parameters<typeof createHarnessBridge>[0]);
     const port = (bridge.ws.address() as { port: number }).port;
@@ -72,7 +77,9 @@ describe('received screenshot cleanup', () => {
     const file = await transfer(0);
     expect((await match(file)).pass).toBe(false);
     expect(await exists(file.path)).toBe(false);
-    const actual = await fs.stat(path.join(snapshotDir(), 'shot-actual.png'));
+    const actual = await fs.stat(
+      path.join(snapshotDir(), '__diff_output__', 'shot-actual.png')
+    );
     expect(actual.size).toBeGreaterThan(0);
   });
 
