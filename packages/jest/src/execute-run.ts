@@ -66,15 +66,30 @@ class CancelRun extends Error {
   }
 }
 
-const buildTestFailure = (err: unknown): { message: string; stack: string } => {
-  if (
-    err instanceof NativeCrashError ||
-    err instanceof RuntimeDisconnectError ||
-    err instanceof StartupStallError ||
-    err instanceof AppBridgeDisconnectedError ||
-    err instanceof DeviceNotRespondingError
-  ) {
-    return { message: (err as Error).message, stack: '' };
+const isRuntimeFailure = (err: unknown): err is Error =>
+  err instanceof NativeCrashError ||
+  err instanceof RuntimeDisconnectError ||
+  err instanceof StartupStallError ||
+  err instanceof AppBridgeDisconnectedError ||
+  err instanceof DeviceNotRespondingError;
+
+const formatRunningTest = (test: TestRunnerTestStartedEvent): string =>
+  `Running test: "${[...test.ancestorTitles, test.name].join(' › ')}"`;
+
+const buildTestFailure = (
+  err: unknown,
+  runningTest: TestRunnerTestStartedEvent | null = null,
+): { message: string; stack: string } => {
+  if (isRuntimeFailure(err)) {
+    if (!runningTest) {
+      return { message: err.message, stack: '' };
+    }
+
+    const [headline, ...details] = err.message.split('\n');
+    return {
+      message: [headline, formatRunningTest(runningTest), ...details].join('\n'),
+      stack: '',
+    };
   }
   return err as { message: string; stack: string };
 };
@@ -156,7 +171,16 @@ export const executeRun = async (
   const testFiles = tests.map((t) => toRelativePosixPath(rootDir, t.path));
   const summary = createRunSummary();
   let caseEventChain = Promise.resolve();
+  // The device runs one test at a time, so a test that started and has not
+  // finished is the one the app was running if it crashes or disconnects.
+  let runningTest: TestRunnerTestStartedEvent | null = null;
   const unsubscribe = session.onTestRunnerEvent((event) => {
+    if (event.type === 'test-started') {
+      runningTest = event;
+    } else if (event.type === 'test-finished') {
+      runningTest = null;
+    }
+
     if (isHarnessCaseEvent(event)) {
       caseEventChain = caseEventChain.then(() =>
         event.type === 'test-started'
@@ -219,6 +243,7 @@ export const executeRun = async (
 
       const relativeTestPath = toRelativePosixPath(rootDir, test.path);
       const fileStartedAt = Date.now();
+      runningTest = null;
       let emittedTestFileFinished = false;
 
       const emitTestFileFinished = async (options: {
@@ -330,14 +355,7 @@ export const executeRun = async (
             });
           }
 
-          const isRuntimeFailure =
-            err instanceof NativeCrashError ||
-            err instanceof RuntimeDisconnectError ||
-            err instanceof StartupStallError ||
-            err instanceof AppBridgeDisconnectedError ||
-            err instanceof DeviceNotRespondingError;
-
-          if (isRuntimeFailure) {
+          if (isRuntimeFailure(err)) {
             summary.failed += 1;
             updateRunState();
           }
@@ -346,9 +364,13 @@ export const executeRun = async (
             session.resetCrashState();
           }
 
-          updateRunState({ error: isRuntimeFailure ? undefined : err });
+          updateRunState({ error: isRuntimeFailure(err) ? undefined : err });
           await caseEventChain;
-          await emitEvent('test-file-failure', test, buildTestFailure(err));
+          await emitEvent(
+            'test-file-failure',
+            test,
+            buildTestFailure(err, runningTest),
+          );
         }
       } finally {
         fileSpan.end({ status: fileStatus });

@@ -635,6 +635,133 @@ describe('executeRun', () => {
       ]);
     });
 
+    describe('running test', () => {
+      const startedEvent = (
+        name: string,
+        ancestorTitles: string[],
+      ): TestRunnerTestStartedEvent => ({
+        type: 'test-started',
+        file: 'example.ts',
+        suite: ancestorTitles[ancestorTitles.length - 1] ?? 'root',
+        name,
+        ancestorTitles,
+        fullName: [...ancestorTitles, name].join(' '),
+        startedAt: 10,
+      });
+
+      const finishedEvent = (
+        started: TestRunnerTestStartedEvent,
+      ): TestRunnerTestFinishedEvent => ({
+        ...started,
+        type: 'test-finished',
+        duration: 5,
+        status: 'passed',
+      });
+
+      const makeListeningSession = (overrides: Partial<HarnessSession> = {}) => {
+        let listener:
+          | ((event: TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent) => void)
+          | undefined;
+        const session = makeSession({
+          onTestRunnerEvent: vi.fn((nextListener) => {
+            listener = nextListener as typeof listener;
+            return () => undefined;
+          }),
+          ...overrides,
+        });
+
+        return {
+          session,
+          emit: (event: TestRunnerTestStartedEvent | TestRunnerTestFinishedEvent) =>
+            listener?.(event),
+        };
+      };
+
+      const getFailureMessages = (calls: Array<unknown[]>) =>
+        calls
+          .filter(([eventName]) => eventName === 'test-file-failure')
+          .map(([, , failure]) => (failure as { message: string }).message);
+
+      it('names the test that was running when the app crashed', async () => {
+        const { emitEvent, calls } = makeEmitEvent();
+        const { session, emit } = makeListeningSession();
+        const passed = startedEvent('creates an object', ['TestObjectCpp']);
+
+        mockRunHarnessTestFile.mockImplementation(async () => {
+          emit(passed);
+          emit(finishedEvent(passed));
+          emit(
+            startedEvent('thisObject returns a HybridObject of the same type', [
+              'TestObjectCpp',
+            ]),
+          );
+          throw new NativeCrashError('example.ts', {
+            phase: 'execution',
+            source: 'polling',
+          });
+        });
+
+        await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
+
+        expect(getFailureMessages(calls)).toEqual([
+          [
+            'The native app crashed during test execution.',
+            'Running test: "TestObjectCpp › thisObject returns a HybridObject of the same type"',
+            "Harness couldn't extract the crash log.",
+          ].join('\n'),
+        ]);
+      });
+
+      it('keeps the original message when no test was running', async () => {
+        const { emitEvent, calls } = makeEmitEvent();
+        const { session, emit } = makeListeningSession();
+        const error = new AppBridgeDisconnectedError('app-disconnected');
+        const completed = startedEvent('works', ['suite']);
+
+        mockRunHarnessTestFile.mockImplementation(async () => {
+          emit(completed);
+          emit(finishedEvent(completed));
+          throw error;
+        });
+
+        await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
+
+        expect(getFailureMessages(calls)).toEqual([error.message]);
+      });
+
+      it('does not carry the running test over to the next file', async () => {
+        const { emitEvent, calls } = makeEmitEvent();
+        const startupError = new StartupStallError(1500, 3);
+        const { session, emit } = makeListeningSession({
+          ensureAppReady: vi
+            .fn()
+            .mockResolvedValueOnce(undefined)
+            .mockRejectedValueOnce(startupError),
+        });
+
+        mockRunHarnessTestFile.mockImplementationOnce(async () => {
+          emit(startedEvent('crashes', ['first file']));
+          throw new NativeCrashError('a.ts', {
+            phase: 'execution',
+            source: 'polling',
+          });
+        });
+
+        await executeRun(
+          session,
+          [makeTest('/project/a.ts'), makeTest('/project/b.ts')],
+          makeWatcher(),
+          emitEvent,
+          makeGlobalConfig(),
+        );
+
+        const messages = getFailureMessages(calls);
+        expect(messages).toHaveLength(2);
+        expect(messages[0]).toContain('Running test: "first file › crashes"');
+        expect(messages[1]).toBe(startupError.message);
+      });
+    });
+
     it('calls resetCrashState after a NativeCrashError', async () => {
       const session = makeSession({
         ensureAppReady: vi.fn().mockRejectedValue(
