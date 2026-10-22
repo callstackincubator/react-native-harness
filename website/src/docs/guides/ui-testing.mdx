@@ -111,6 +111,8 @@ describe('Screenshot Testing', () => {
 });
 ```
 
+Baselines are stored in `__image_snapshots__/<runner>/` next to the test file. When a comparison fails, Harness saves `<name>-diff.png` and `<name>-actual.png` into `__image_snapshots__/<runner>/__diff_output__/`. You can add `__diff_output__/` to your `.gitignore` to keep these files out of version control.
+
 ### Screenshot options
 
 The `toMatchImageSnapshot` matcher accepts various options to customize the comparison:

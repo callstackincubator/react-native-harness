@@ -307,8 +307,8 @@ runs:
       with:
         name: visual-test-diffs-${{ fromJson(steps.load-config.outputs.config).platformId }}
         path: |
-          ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
-          ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
+          ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/__diff_output__/*-diff.png
+          ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/__diff_output__/*-actual.png
         if-no-files-found: ignore
     # `adb emu kill` returns before the emulator finishes writing its snapshot
     # and removing AVD lock files, so wait for the process to exit before

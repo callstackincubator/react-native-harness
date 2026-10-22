@@ -8,6 +8,7 @@ import type { FileReference, ImageSnapshotOptions } from './shared.js';
 type PixelmatchOptions = Parameters<typeof pixelmatch>[5];
 
 const SNAPSHOT_DIR_NAME = '__image_snapshots__';
+const DIFF_OUTPUT_DIR_NAME = '__diff_output__';
 const DEFAULT_OPTIONS_FOR_PIXELMATCH: PixelmatchOptions = {
   threshold: 0.1,
   includeAA: false,
@@ -152,12 +153,17 @@ export const matchImageSnapshot = async (
 
   // Save diff and actual images when test fails
   if (!pass) {
+    // Failure artifacts live in their own folder so they can never overwrite
+    // a baseline of another snapshot (e.g. one named `<name>-diff`).
+    const diffOutputDir = path.join(snapshotsDir, DIFF_OUTPUT_DIR_NAME);
+    await fs.mkdir(diffOutputDir, { recursive: true });
+
     const diffFileName = `${snapshotName.replace('.png', '')}-diff.png`;
-    const diffPath = path.join(snapshotsDir, diffFileName);
+    const diffPath = path.join(diffOutputDir, diffFileName);
     await fs.writeFile(diffPath, PNG.sync.write(diff));
 
     const actualFileName = `${snapshotName.replace('.png', '')}-actual.png`;
-    const actualPath = path.join(snapshotsDir, actualFileName);
+    const actualPath = path.join(diffOutputDir, actualFileName);
     await fs.writeFile(actualPath, receivedBuffer);
 
     message += ` Diff saved at ${diffPath}. Actual image saved at ${actualPath}.`;
