@@ -29,4 +29,24 @@ describe('formatHarnessErrorMessage', () => {
     expect(message).toContain('Promise #7, created 10ms after test start:');
     expect(message).toContain('  Error: Promise created');
   });
+
+  it('prints the assertion diff between the message and the code frame', () => {
+    const message = formatHarnessErrorMessage({
+      name: 'AssertionError',
+      message: 'expected 1 to be 2 // Object.is equality',
+      diff: '- Expected\n+ Received\n\n- 2\n+ 1',
+      codeFrame: {
+        content: '> 3 |   expect(1).toBe(2);',
+        fileName: 'example.harness.ts',
+      },
+    });
+
+    expect(message).toBe(
+      [
+        'expected 1 to be 2 // Object.is equality',
+        '- Expected\n+ Received\n\n- 2\n+ 1',
+        '> 3 |   expect(1).toBe(2);',
+      ].join('\n\n'),
+    );
+  });
 });

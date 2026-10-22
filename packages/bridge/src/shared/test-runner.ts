@@ -14,6 +14,8 @@ export type TestResultStatus = 'passed' | 'failed' | 'skipped' | 'todo';
 export type SerializedError = {
   name: string;
   message: string;
+  // Expected/received diff of a failed assertion, formatted like Vitest's.
+  diff?: string;
   codeFrame?: CodeFrame;
   diagnostics?: {
     pendingPromises?: {

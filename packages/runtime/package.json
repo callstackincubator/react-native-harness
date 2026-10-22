@@ -49,6 +49,7 @@
     "@react-native-harness/bridge": "workspace:*",
     "@vitest/expect": "4.0.16",
     "@vitest/spy": "4.0.16",
+    "@vitest/utils": "4.0.16",
     "chai": "^6.2.2",
     "event-target-shim": "^6.0.2",
     "use-sync-external-store": "^1.6.0",
