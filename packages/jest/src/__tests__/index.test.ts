@@ -10,6 +10,7 @@ import {
   type LifecycleEvent,
 } from '@react-native-harness/tools';
 import JestHarness from '../index.js';
+import { resetWatchSessionForTests } from '../watch-session.js';
 
 const resolveUndefined = async () => undefined;
 
@@ -66,6 +67,9 @@ const makeTest = (): Test => ({
 const makeGlobalConfig = (overrides: Partial<Config.GlobalConfig> = {}): Config.GlobalConfig =>
   ({ rootDir: '/project', watch: false, watchAll: false, collectCoverage: false, ...overrides } as Config.GlobalConfig);
 
+const watchConfig = (overrides: Partial<Config.GlobalConfig> = {}) =>
+  makeGlobalConfig({ watch: true, ...overrides });
+
 type ExecuteRunMock = typeof ExecuteRun;
 type TypedExecuteRunMock = typeof mockExecuteRun & {
   mockImplementationOnce: (implementation: ExecuteRunMock) => typeof mockExecuteRun;
@@ -106,6 +110,7 @@ const makeTestCaseResultPayload = (): TestEvents['test-case-result'] => [
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
+  resetWatchSessionForTests();
   vi.clearAllMocks();
   (mockSession.dispose as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
   typedMockExecuteRun.mockResolvedValue(undefined);
@@ -130,6 +135,79 @@ describe('JestHarness', () => {
 
       expect(mockCreateHarnessSession).toHaveBeenCalledOnce();
       expect(mockSession.dispose).not.toHaveBeenCalled();
+    });
+
+    it('reuses the session across runner instances in watch mode', async () => {
+      const first = new JestHarness(watchConfig());
+      const second = new JestHarness(watchConfig());
+
+      await first.runTests([makeTest()], makeWatcher(), makeOptions());
+      await second.runTests([makeTest()], makeWatcher(), makeOptions());
+
+      expect(mockCreateHarnessSession).toHaveBeenCalledOnce();
+      expect(mockSession.dispose).not.toHaveBeenCalled();
+      expect(mockExecuteRun).toHaveBeenCalledTimes(2);
+    });
+
+    it('creates one session for overlapping watch runs', async () => {
+      await Promise.all([
+        new JestHarness(watchConfig()).runTests([makeTest()], makeWatcher(), makeOptions()),
+        new JestHarness(watchConfig()).runTests([makeTest()], makeWatcher(), makeOptions()),
+      ]);
+
+      expect(mockCreateHarnessSession).toHaveBeenCalledOnce();
+    });
+
+    it('does not cache a failed watch session creation', async () => {
+      mockCreateHarnessSession.mockRejectedValueOnce(new Error('boom'));
+
+      await expect(
+        new JestHarness(watchConfig()).runTests([makeTest()], makeWatcher(), makeOptions()),
+      ).rejects.toThrow('boom');
+      await new JestHarness(watchConfig()).runTests([makeTest()], makeWatcher(), makeOptions());
+
+      expect(mockCreateHarnessSession).toHaveBeenCalledTimes(2);
+    });
+
+    it('replaces the watch session when the config changes', async () => {
+      await new JestHarness(watchConfig({ rootDir: '/a' })).runTests(
+        [makeTest()], makeWatcher(), makeOptions(),
+      );
+      await new JestHarness(watchConfig({ rootDir: '/b' })).runTests(
+        [makeTest()], makeWatcher(), makeOptions(),
+      );
+
+      expect(mockSession.dispose).toHaveBeenCalledOnce();
+      expect(mockCreateHarnessSession).toHaveBeenCalledTimes(2);
+    });
+
+    it('creates one new session for overlapping runs after a config change', async () => {
+      await new JestHarness(watchConfig({ rootDir: '/a' })).runTests(
+        [makeTest()], makeWatcher(), makeOptions(),
+      );
+
+      await Promise.all([
+        new JestHarness(watchConfig({ rootDir: '/b' })).runTests([makeTest()], makeWatcher(), makeOptions()),
+        new JestHarness(watchConfig({ rootDir: '/b' })).runTests([makeTest()], makeWatcher(), makeOptions()),
+      ]);
+
+      expect(mockSession.dispose).toHaveBeenCalledOnce();
+      expect(mockCreateHarnessSession).toHaveBeenCalledTimes(2);
+    });
+
+    it('continues when disposing the stale watch session fails', async () => {
+      await new JestHarness(watchConfig({ rootDir: '/a' })).runTests(
+        [makeTest()], makeWatcher(), makeOptions(),
+      );
+      vi.mocked(mockSession.dispose).mockRejectedValueOnce(new Error('dispose failed'));
+
+      await expect(
+        new JestHarness(watchConfig({ rootDir: '/b' })).runTests(
+          [makeTest()], makeWatcher(), makeOptions(),
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mockCreateHarnessSession).toHaveBeenCalledTimes(2);
     });
 
     it('disposes the session after each run in normal mode', async () => {

@@ -67,3 +67,13 @@ Object.defineProperties(
   Object.getOwnPropertyDescriptors(originalRequire)
 );
 global.__r = mockRequire as unknown as Require;
+
+// `__resetModule` forces Metro to re-run a module's factory on the next
+// `__r(id)`. `mockRequire` would still answer from `modulesCache` without ever
+// reaching Metro, so a re-evaluated module (e.g. the same test file on a later
+// run in watch mode) would silently not execute. Drop the cached entry too.
+const originalResetModule = global.__resetModule;
+global.__resetModule = (moduleId) => {
+  modulesCache.delete(moduleId);
+  originalResetModule?.(moduleId);
+};
