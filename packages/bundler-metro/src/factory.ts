@@ -1,4 +1,8 @@
-import { logger, withAbortTimeout } from '@react-native-harness/tools';
+import {
+  logger,
+  waitForAbort,
+  withAbortTimeout,
+} from '@react-native-harness/tools';
 import type { Server as HttpServer } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
 import type { Socket } from 'node:net';
@@ -7,11 +11,7 @@ import nocache from 'nocache';
 import { isPortAvailable, getMetroPackage } from './utils.js';
 import { MetroPortUnavailableError } from './errors.js';
 import type { MetroInstance, MetroOptions, PrewarmState } from './types.js';
-import {
-  type Reporter,
-  withReporter,
-  type ReportableEvent,
-} from './reporter.js';
+import { withReporter, type ReportableEvent } from './reporter.js';
 import { getExpoMiddleware } from './middlewares/expo-middleware.js';
 import { getBundleRequestObserverMiddleware } from './middlewares/bundle-request-middleware.js';
 import { getStatusMiddleware } from './middlewares/status-middleware.js';
@@ -69,24 +69,40 @@ const waitForMetroStatus = async (options: {
   return lastStatus;
 };
 
-const waitForBundler = async (
-  reporter: Reporter,
-  abortSignal: AbortSignal
-): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    const onEvent = (event: ReportableEvent) => {
-      if (event.type === 'initialize_done') {
-        reporter.removeListener(onEvent);
-        resolve();
-      }
-    };
-    reporter.addListener(onEvent);
+type MetroServer = Awaited<
+  ReturnType<ReturnType<typeof getMetroPackage>['runServer']>
+>;
 
-    abortSignal.addEventListener('abort', () => {
-      reporter.removeListener(onEvent);
-      reject(new DOMException('The operation was aborted', 'AbortError'));
-    });
+type TrackedMetroServer = {
+  server: HttpServer | HttpsServer;
+  close: () => Promise<void>;
+};
+
+const trackMetroServer = (maybeServer: MetroServer): TrackedMetroServer => {
+  // Metro <0.83 returns the server directly, while 0.83+ returns an object with the server as a property.
+  const server: HttpServer | HttpsServer =
+    'httpServer' in maybeServer ? maybeServer.httpServer : maybeServer;
+
+  // closeAllConnections() does not close sockets upgraded to WebSockets (e.g. Metro's /hot
+  // endpoint), but those sockets block server.close() from ever firing its callback; track them
+  // so close() can force-destroy whatever remains.
+  const sockets = new Set<Socket>();
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
   });
+
+  return {
+    server,
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+        for (const socket of sockets) {
+          socket.destroy();
+        }
+      }),
+  };
 };
 
 export const getMetroInstance = async (
@@ -153,12 +169,12 @@ export const getMetroInstance = async (
     .use('/', getExpoMiddleware(projectRoot, harnessConfig))
     .use('/status', getStatusMiddleware(projectRoot));
 
-  const ready = waitForBundler(reporter, abortSignal);
+  const abortWait = waitForAbort(abortSignal);
   if (metroBindHost) {
     metroLogger.debug('binding Metro server to host %s', metroBindHost);
   }
 
-  const maybeServer = await Metro.runServer(config, {
+  const serverStart = Metro.runServer(config, {
     waitForBundler: true,
     unstable_extraMiddleware: [middleware],
     websocketEndpoints,
@@ -166,35 +182,35 @@ export const getMetroInstance = async (
     watch: watchMode && !process.env.CI,
   });
 
-  // Metro <0.83 returns the server directly, while 0.83+ returns an object with the server as a property.
-  const server: HttpServer | HttpsServer =
-    'httpServer' in maybeServer ? maybeServer.httpServer : maybeServer;
+  let trackedServer: TrackedMetroServer;
+  try {
+    trackedServer = trackMetroServer(
+      await Promise.race([serverStart, abortWait.promise])
+    );
+  } catch (error) {
+    // A server that finishes starting after the session gave up on it would hold the port.
+    void serverStart
+      .then(
+        (lateServer) => trackMetroServer(lateServer).close(),
+        () => undefined
+      )
+      .catch((closeError: unknown) => {
+        metroLogger.debug(
+          'could not close a Metro server that started after the abort: %s',
+          closeError
+        );
+      });
+    throw error;
+  } finally {
+    abortWait.cancel();
+  }
+
+  const { server, close: closeServer } = trackedServer;
   server.keepAliveTimeout = 30000;
 
-  // closeAllConnections() does not close sockets upgraded to WebSockets (e.g. Metro's /hot
-  // endpoint), but those sockets block server.close() from ever firing its callback; track them
-  // so dispose() can force-destroy whatever remains.
-  const sockets = new Set<Socket>();
-  server.on('connection', (socket) => {
-    sockets.add(socket);
-    socket.on('close', () => sockets.delete(socket));
-  });
-
-  const closeServer = () =>
-    new Promise<void>((resolve) => {
-      server.close(() => resolve());
-      server.closeAllConnections();
-      for (const socket of sockets) {
-        socket.destroy();
-      }
-    });
-
-  try {
-    abortSignal.throwIfAborted();
-    await ready;
-  } catch (error) {
+  if (abortSignal.aborted) {
     await closeServer();
-    throw error;
+    abortSignal.throwIfAborted();
   }
 
   metroLogger.debug('Metro server is running');
