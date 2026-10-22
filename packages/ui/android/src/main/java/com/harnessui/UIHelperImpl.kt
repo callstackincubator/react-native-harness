@@ -24,6 +24,7 @@ import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 /**
  * UI helper implementation for HarnessUI.
@@ -308,11 +309,18 @@ class UIHelperImpl(
                 val hasBounds = bounds != null && bounds.getDouble("width") > 0 && bounds.getDouble("height") > 0
 
                 if (hasBounds) {
-                    // Convert dp to px for bounds
-                    captureX = (bounds!!.getDouble("x") * density).toInt()
-                    captureY = (bounds.getDouble("y") * density).toInt()
-                    captureWidth = (bounds.getDouble("width") * density).toInt()
-                    captureHeight = (bounds.getDouble("height") * density).toInt()
+                    // Convert dp to px, rounding each edge (not the size) so the region covers the same
+                    // pixels React Native lays out for a view with these bounds.
+                    val boundsX = bounds!!.getDouble("x")
+                    val boundsY = bounds.getDouble("y")
+                    val left = (boundsX * density).roundToInt()
+                    val top = (boundsY * density).roundToInt()
+                    val right = ((boundsX + bounds.getDouble("width")) * density).roundToInt()
+                    val bottom = ((boundsY + bounds.getDouble("height")) * density).roundToInt()
+                    captureX = left
+                    captureY = top
+                    captureWidth = right - left
+                    captureHeight = bottom - top
                     Log.i(TAG, "Capturing region: x=$captureX y=$captureY w=$captureWidth h=$captureHeight")
                 } else {
                     captureX = 0
