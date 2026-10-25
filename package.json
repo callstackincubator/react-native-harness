@@ -15,6 +15,7 @@
     "@babel/preset-env": "^7.25.3",
     "@babel/runtime": "7.27.6",
     "@eslint/js": "^9.8.0",
+    "@expo/fingerprint": "0.21.6",
     "@nx/eslint": "22.0.4",
     "@nx/eslint-plugin": "22.0.4",
     "@nx/js": "22.0.4",
