@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import * as tools from '@react-native-harness/tools';
+import { runWithHarnessContext } from '@react-native-harness/tools/harness-context';
+import {
+  createFakeProcessManager,
+  type FakeProcessCall,
+  type FakeProcessResponse,
+} from '@react-native-harness/tools/testing';
 import {
   applyHarnessDebugHttpHost,
   clearHarnessDebugHttpHost,
@@ -7,6 +12,19 @@ import {
 
 const bundleId = 'com.example.app';
 const adbId = 'emulator-5554';
+
+// Answers every adb call with the next queued response, in order.
+const createQueuedFake = (responses: FakeProcessResponse[]) => {
+  const queue = [...responses];
+  return createFakeProcessManager().on(
+    'adb',
+    () => true,
+    () => queue.shift() ?? {}
+  );
+};
+
+const toCalls = (calls: FakeProcessCall[]) =>
+  calls.map(({ file, args, options }) => [file, args, options] as const);
 
 const getWrittenContent = (
   calls: ReadonlyArray<readonly unknown[]>
@@ -57,35 +75,33 @@ describe('Android shared preferences Metro host override', () => {
   });
 
   it('handles empty self-closing map files', async () => {
-    const spawnSpy = vi
-      .spyOn(tools, 'spawn')
-      .mockResolvedValueOnce({
-        stdout: '<?xml version="1.0" encoding="utf-8"?>\n<map />\n',
-      } as Awaited<ReturnType<typeof tools.spawn>>)
-      .mockResolvedValueOnce({} as Awaited<ReturnType<typeof tools.spawn>>);
-
-    await applyHarnessDebugHttpHost(adbId, bundleId, 'localhost:9090');
-
-    expect(getWrittenContent(spawnSpy.mock.calls)).toContain('<map>');
-    expect(getWrittenContent(spawnSpy.mock.calls)).toContain('</map>');
-    expect(getWrittenContent(spawnSpy.mock.calls)).toContain(
+    const fake = createQueuedFake([
+      { stdout: '<?xml version="1.0" encoding="utf-8"?>\n<map />\n' },
+      {},
+    ]);
+    await runWithHarnessContext({ process: fake }, () =>
+      applyHarnessDebugHttpHost(adbId, bundleId, 'localhost:9090')
+    );
+    const written = getWrittenContent(toCalls(fake.calls));
+    expect(written).toContain('<map>');
+    expect(written).toContain('</map>');
+    expect(written).toContain(
       '<string name="debug_http_host">localhost:9090</string>'
     );
   });
 
   it('restores the previous debug host on cleanup', async () => {
-    const spawnSpy = vi
-      .spyOn(tools, 'spawn')
-      .mockResolvedValueOnce({
+    const fake = createQueuedFake([
+      {
         stdout: [
           '<?xml version="1.0" encoding="utf-8"?>',
           '<map>',
           '  <string name="debug_http_host">10.0.2.2:8081</string>',
           '</map>',
         ].join('\n'),
-      } as Awaited<ReturnType<typeof tools.spawn>>)
-      .mockResolvedValueOnce({} as Awaited<ReturnType<typeof tools.spawn>>)
-      .mockResolvedValueOnce({
+      },
+      {},
+      {
         stdout: [
           '<?xml version="1.0" encoding="utf-8"?>',
           '<map>',
@@ -95,13 +111,16 @@ describe('Android shared preferences Metro host override', () => {
           '  <!-- react-native-harness:debug_http_host:end -->',
           '</map>',
         ].join('\n'),
-      } as Awaited<ReturnType<typeof tools.spawn>>)
-      .mockResolvedValueOnce({} as Awaited<ReturnType<typeof tools.spawn>>);
+      },
+      {},
+    ]);
 
-    await applyHarnessDebugHttpHost(adbId, bundleId, 'localhost:9090');
-    await clearHarnessDebugHttpHost(adbId, bundleId);
+    await runWithHarnessContext({ process: fake }, async () => {
+      await applyHarnessDebugHttpHost(adbId, bundleId, 'localhost:9090');
+      await clearHarnessDebugHttpHost(adbId, bundleId);
+    });
 
-    const writes = getWrittenContents(spawnSpy.mock.calls);
+    const writes = getWrittenContents(toCalls(fake.calls));
     const firstWrite = writes[0];
     const secondWrite = writes[1];
 

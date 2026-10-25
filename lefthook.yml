@@ -8,10 +8,6 @@ pre-commit:
       run: pnpm nx affected -t typecheck --uncommitted
 
 pre-push:
-  parallel: true
   commands:
-    test:
-      run: pnpm nx affected -t test --base=origin/main --head=HEAD --outputStyle=static
-
-    build:
-      run: pnpm nx affected -t build --base=origin/main --head=HEAD --outputStyle=static
+    build-and-test:
+      run: pnpm nx affected -t build test --base=origin/main --head=HEAD --outputStyle=static

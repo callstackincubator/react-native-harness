@@ -1,13 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import path from 'node:path';
 import { AppBridgeDisconnectedError } from '@react-native-harness/bridge/server';
-import { NativeCrashError, PlatformReadyTimeoutError } from '../errors.js';
+import {
+  HostSurfaceReplacedError,
+  NativeCrashError,
+  PlatformReadyTimeoutError,
+} from '../errors.js';
 
 describe('PlatformReadyTimeoutError', () => {
   it('includes the configured timeout and config hint', () => {
     expect(new PlatformReadyTimeoutError(300000).message).toBe(
       'The platform did not become ready within 300000ms. Increase "platformReadyTimeout" if your device, simulator, or emulator needs more time to start.'
     );
+  });
+});
+
+describe('HostSurfaceReplacedError', () => {
+  it('preserves the runtime error and identifies the interrupted file', () => {
+    const cause = new Error('The native host surface was replaced.');
+    cause.name = 'HostSurfaceReplacedError';
+    cause.stack = 'HostSurfaceReplacedError: runtime stack';
+
+    const error = new HostSurfaceReplacedError('/test/interrupted.ts', cause);
+
+    expect(error.name).toBe('HostSurfaceReplacedError');
+    expect(error.testFilePath).toBe('/test/interrupted.ts');
+    expect(error.message).toBe(cause.message);
+    expect(error.stack).toBe(cause.stack);
+    expect(error.cause).toBe(cause);
   });
 });
 

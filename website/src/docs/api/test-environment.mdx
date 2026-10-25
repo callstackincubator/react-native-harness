@@ -94,6 +94,14 @@ Mocks created via `mock()` are tied to the module cache. Use `resetModules()` in
 
 ---
 
+## Native test host replacement
+
+On Android and iOS, Harness detects when the test host's root surface is replaced within the same JavaScript runtime. For example, Android can recreate an Activity after a resource-overlay update without exiting the process or disconnecting the bridge.
+
+Harness fails the active file with `HostSurfaceReplacedError`, including the old and new surface tags. It stops scheduling that file's remaining hooks and tests, then restarts the app before continuing with the next file. The interrupted file is not retried. Ordinary `render()`, `rerender()` and `unmount()` calls keep the same host surface and remain supported, as do configured resets between files.
+
+This detects an interruption; it does not prevent Android from recreating an Activity or preserve references to destroyed native views. Tests that assert native view identity need a stable host. Activity recreation and resource-refresh behavior require separate lifecycle coverage.
+
 ## Native Crash Detection
 
 Testing native modules often involves calling code that might cause the host application to crash. Standard test runners often hang or report a generic "Device disconnected" error in these cases.

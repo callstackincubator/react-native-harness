@@ -24,6 +24,7 @@ import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 /**
  * UI helper implementation for HarnessUI.
@@ -258,44 +259,51 @@ class UIHelperImpl(
                 val nativeId = if (bounds != null && bounds.hasKey("nativeId")) bounds.getString("nativeId") else null
 
                 if (!nativeId.isNullOrEmpty()) {
+                    // Element screenshots never fall back to a window/region capture.
                     val targetView = ViewRegistry.get(nativeId)
-                    if (targetView != null) {
-                        val width = targetView.width
-                        val height = targetView.height
-
-                        if (width > 0 && height > 0) {
-                            val location = IntArray(2)
-                            targetView.getLocationOnScreen(location)
-                            val viewRect = Rect(location[0], location[1], location[0] + width, location[1] + height)
-                            val rootRect = Rect(0, 0, root.width, root.height)
-
-                            val isFullyOnScreen = rootRect.contains(viewRect)
-                            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                            val canvas = Canvas(bitmap)
-
-                            if (isFullyOnScreen) {
-                                Log.i(TAG, "View $nativeId is fully on screen. Using screen-based screenshotting.")
-                                // Translate canvas to capture the view from the root view hierarchy
-                                canvas.translate(-location[0].toFloat(), -location[1].toFloat())
-                                root.draw(canvas)
-                            } else {
-                                Log.i(TAG, "View $nativeId is partially/fully off screen. Using direct view render.")
-                                // Draw the specific view directly
-                                targetView.draw(canvas)
-                            }
-
-                            val outputStream = ByteArrayOutputStream()
-                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
-                            val pngBytes = outputStream.toByteArray()
-                            bitmap.recycle()
-
-                            val base64String = android.util.Base64.encodeToString(pngBytes, android.util.Base64.NO_WRAP)
-                            promise.resolve(base64String)
-                            return@runOnUiThread
-                        }
-                    } else {
-                        Log.w(TAG, "View with nativeId $nativeId not found for screenshot, falling back to window screenshot")
+                    if (targetView == null) {
+                        Log.w(TAG, "View with nativeId $nativeId not found for screenshot")
+                        promise.resolve(null)
+                        return@runOnUiThread
                     }
+
+                    val width = targetView.width
+                    val height = targetView.height
+
+                    if (width <= 0 || height <= 0) {
+                        Log.w(TAG, "View $nativeId has zero size ($width x $height), nothing to capture")
+                        promise.resolve(null)
+                        return@runOnUiThread
+                    }
+
+                    val location = IntArray(2)
+                    targetView.getLocationOnScreen(location)
+                    val viewRect = Rect(location[0], location[1], location[0] + width, location[1] + height)
+                    val rootRect = Rect(0, 0, root.width, root.height)
+
+                    val isFullyOnScreen = rootRect.contains(viewRect)
+                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(bitmap)
+
+                    if (isFullyOnScreen) {
+                        Log.i(TAG, "View $nativeId is fully on screen. Using screen-based screenshotting.")
+                        // Translate canvas to capture the view from the root view hierarchy
+                        canvas.translate(-location[0].toFloat(), -location[1].toFloat())
+                        root.draw(canvas)
+                    } else {
+                        Log.i(TAG, "View $nativeId is partially/fully off screen. Using direct view render.")
+                        // Draw the specific view directly
+                        targetView.draw(canvas)
+                    }
+
+                    val outputStream = ByteArrayOutputStream()
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                    val pngBytes = outputStream.toByteArray()
+                    bitmap.recycle()
+
+                    val base64String = android.util.Base64.encodeToString(pngBytes, android.util.Base64.NO_WRAP)
+                    promise.resolve(base64String)
+                    return@runOnUiThread
                 }
 
                 // Determine capture dimensions
@@ -308,11 +316,18 @@ class UIHelperImpl(
                 val hasBounds = bounds != null && bounds.getDouble("width") > 0 && bounds.getDouble("height") > 0
 
                 if (hasBounds) {
-                    // Convert dp to px for bounds
-                    captureX = (bounds!!.getDouble("x") * density).toInt()
-                    captureY = (bounds.getDouble("y") * density).toInt()
-                    captureWidth = (bounds.getDouble("width") * density).toInt()
-                    captureHeight = (bounds.getDouble("height") * density).toInt()
+                    // Convert dp to px, rounding each edge (not the size) so the region covers the same
+                    // pixels React Native lays out for a view with these bounds.
+                    val boundsX = bounds!!.getDouble("x")
+                    val boundsY = bounds.getDouble("y")
+                    val left = (boundsX * density).roundToInt()
+                    val top = (boundsY * density).roundToInt()
+                    val right = ((boundsX + bounds.getDouble("width")) * density).roundToInt()
+                    val bottom = ((boundsY + bounds.getDouble("height")) * density).roundToInt()
+                    captureX = left
+                    captureY = top
+                    captureWidth = right - left
+                    captureHeight = bottom - top
                     Log.i(TAG, "Capturing region: x=$captureX y=$captureY w=$captureWidth h=$captureHeight")
                 } else {
                     captureX = 0

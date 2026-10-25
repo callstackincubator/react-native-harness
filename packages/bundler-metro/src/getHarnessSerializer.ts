@@ -5,6 +5,10 @@ import type {
   Module,
 } from 'metro/private/DeltaBundler/types';
 import { logger } from '@react-native-harness/tools';
+// The runtime is resolved lazily elsewhere because it is app code; this
+// subpath is the RN-free bundle format shared with the serializer.
+// eslint-disable-next-line @nx/enforce-module-boundaries
+import { appendChunkPlan } from '@react-native-harness/runtime/bundle-format';
 
 const require = createRequire(import.meta.url);
 const serializerLogger = logger.child('metro-serializer');
@@ -226,6 +230,23 @@ export const getHarnessSerializer = (
       bundleToString(baseJSBundle(entryPoint, preModules, graph, bundleOptions))
     );
 
+  // Test bundles are evaluated by the harness runtime with `eval`, which
+  // can split them along the appended chunk plan so that parsing a large
+  // bundle does not block the JS thread in one go.
+  const serializeTestBundle = (
+    bundle: ReturnType<typeof baseJSBundle>,
+    bundleOptions: BundleOptions
+  ) => {
+    const { code, metadata } = bundleToString(bundle);
+
+    return asSerializerResult({
+      code: appendChunkPlan(code, bundle, {
+        sourceUrl: bundleOptions.sourceUrl ?? undefined,
+      }),
+      metadata,
+    });
+  };
+
   // One set of "already included" module paths per graph identity (see
   // `getGraphKey`). Only ever written from a positively-identified main
   // bundle serialization (see below), so a debugger or browser hitting an
@@ -246,6 +267,15 @@ export const getHarnessSerializer = (
         // dev-mode serving doesn't tree-shake -- but it is the boundary of
         // what this capture can guarantee.
         const graphKey = getGraphKey(graph);
+        // Assign ids to the whole graph before the first filter call, in the
+        // same order Metro's baseJSBundle does. Config-level filters may
+        // only learn which modules are external once their id factory has
+        // seen them (Vega system bundles do this), and a filter answer
+        // for a pre-module is cached, so asking too early keeps a module in
+        // the bundle that Metro itself would have dropped.
+        for (const mod of graph.dependencies.values()) {
+          bundleOptions.createModuleId(mod.path);
+        }
         const capturedModules = collectIncludedModulePaths(
           preModules,
           graph,
@@ -277,7 +307,10 @@ export const getHarnessSerializer = (
         graphKey,
         [...includedModulesByGraphKey.keys()].join(', ') || '<none>'
       );
-      return defaultSerializer(entryPoint, preModules, graph, bundleOptions);
+      return serializeTestBundle(
+        baseJSBundle(entryPoint, preModules, graph, bundleOptions),
+        bundleOptions
+      );
     }
 
     // Serialize the FULL graph -- options.processModuleFilter is passed
@@ -298,8 +331,6 @@ export const getHarnessSerializer = (
         excludedModuleIds.has(id) ? [id, blankModuleCode(code)] : [id, code]
     );
 
-    return asSerializerResult(
-      bundleToString({ ...bundle, modules: blankedModules })
-    );
+    return serializeTestBundle({ ...bundle, modules: blankedModules }, bundleOptions);
   };
 };

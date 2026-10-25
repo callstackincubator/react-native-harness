@@ -1,6 +1,62 @@
+import fs from 'node:fs';
 import os from 'node:os';
-import { describe, expect, it, vi } from 'vitest';
+import path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { CustomResolutionContext } from 'metro-resolver';
 import { getConfig } from '@react-native-harness/config';
+import type { MetroResolver } from '../resolvers/types.js';
+
+const tempDirs: string[] = [];
+
+afterEach(() => {
+  for (const tempDir of tempDirs.splice(0)) {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+const createTempProject = (): string => {
+  const projectRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'rn-harness-with-rn-harness-'),
+  );
+  tempDirs.push(projectRoot);
+  return projectRoot;
+};
+
+const writeProjectFile = (
+  projectRoot: string,
+  relativePath: string,
+  content: string,
+): string => {
+  const filePath = path.join(projectRoot, ...relativePath.split('/'));
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content);
+  return filePath;
+};
+
+// A project holding a Harness runtime module, with Harness's config and resolver
+// mocked for the next withRnHarness call.
+const createHarnessProject = async () => {
+  const { getHarnessResolver } = await import('../resolvers/resolver.js');
+  const harnessResolver = vi.fn<MetroResolver>(() => ({ type: 'empty' }));
+  vi.mocked(getHarnessResolver).mockReturnValueOnce(harnessResolver);
+  const projectRoot = createTempProject();
+  writeProjectFile(
+    projectRoot,
+    'node_modules/@react-native-harness/runtime/package.json',
+    JSON.stringify({ name: '@react-native-harness/runtime' }),
+  );
+  const harnessModule = writeProjectFile(
+    projectRoot,
+    'node_modules/@react-native-harness/runtime/dist/index.js',
+    'export {};',
+  );
+  vi.mocked(getConfig).mockResolvedValueOnce({
+    config: {},
+    projectRoot,
+  } as never);
+
+  return { projectRoot, harnessModule, harnessResolver };
+};
 
 type MinimalMetroConfig = {
   projectRoot: string;
@@ -151,6 +207,82 @@ describe('withRnHarness', () => {
 
     expect(config.server?.useGlobalHotkey).toBe(false);
     expect(config.transformer?.unstable_workerThreads).toBe(true);
+  });
+
+  it("resolves react-native from the project for Harness's modules", async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+    const { projectRoot, harnessModule, harnessResolver } =
+      await createHarnessProject();
+
+    const config = (await withRnHarness(
+      { projectRoot, serializer: {} },
+      true,
+    )()) as unknown as { resolver: { resolveRequest: MetroResolver } };
+
+    config.resolver.resolveRequest(
+      { originModulePath: harnessModule } as CustomResolutionContext,
+      'react-native',
+      'android',
+    );
+
+    expect(harnessResolver).toHaveBeenCalledWith(
+      expect.objectContaining({
+        originModulePath: path.join(projectRoot, 'package.json'),
+      }),
+      'react-native',
+      'android',
+    );
+  });
+
+  it("runs the project's InitializeCore before the main module when Metro's config lists another copy", async () => {
+    const { withRnHarness } = await import('../withRnHarness.js');
+    const projectRoot = createTempProject();
+    const projectInitializeCore = writeProjectFile(
+      projectRoot,
+      'node_modules/react-native/Libraries/Core/InitializeCore.js',
+      '',
+    );
+    writeProjectFile(
+      projectRoot,
+      'node_modules/react-native/package.json',
+      JSON.stringify({ name: 'react-native' }),
+    );
+    const workspaceInitializeCore = path.join(
+      os.tmpdir(),
+      'workspace',
+      'node_modules',
+      'react-native',
+      'Libraries',
+      'Core',
+      'InitializeCore.js',
+    );
+    vi.mocked(getConfig).mockResolvedValueOnce({
+      config: {},
+      projectRoot,
+    } as never);
+
+    const config = (await withRnHarness(
+      {
+        projectRoot,
+        serializer: {
+          getModulesRunBeforeMainModule: () => [
+            workspaceInitializeCore,
+            '/tmp/other-module.js',
+          ],
+        },
+      },
+      true,
+    )()) as unknown as {
+      serializer: {
+        getModulesRunBeforeMainModule: (entryFilePath: string) => string[];
+      };
+    };
+
+    expect(
+      config.serializer.getModulesRunBeforeMainModule(
+        path.join(projectRoot, 'index.js'),
+      ),
+    ).toEqual([fs.realpathSync(projectInitializeCore), '/tmp/other-module.js']);
   });
 
   it('inherits the project blockList while keeping test files crawlable', async () => {
@@ -320,7 +452,7 @@ describe('withRnHarness', () => {
       platformConfig: { appName: 'Demo' },
     });
 
-    it('returns the composed config untouched when no enhancer is set', async () => {
+    it('runs no enhancer when none is set', async () => {
       const { withRnHarness } = await import('../withRnHarness.js');
 
       const config = (await withRnHarness(
@@ -373,6 +505,34 @@ describe('withRnHarness', () => {
       )()) as unknown as MinimalMetroConfig & { enhanced?: boolean };
 
       expect(config.enhanced).toBe(true);
+    });
+
+    it("resolves react-native from the project for Harness's modules after the enhancer renames it", async () => {
+      const { withRnHarness } = await import('../withRnHarness.js');
+      const { projectRoot, harnessModule, harnessResolver } =
+        await createHarnessProject();
+
+      const config = (await withRnHarness(
+        { projectRoot, serializer: {} },
+        true,
+        enhancerRef(
+          "export default (config) => ({ ...config, resolver: { ...config.resolver, resolveRequest: (context, moduleName, platform) => config.resolver.resolveRequest(context, moduleName === 'react-native' ? 'react-native-windows' : moduleName, platform) } });",
+        ),
+      )()) as unknown as { resolver: { resolveRequest: MetroResolver } };
+
+      config.resolver.resolveRequest(
+        { originModulePath: harnessModule } as CustomResolutionContext,
+        'react-native',
+        'windows',
+      );
+
+      expect(harnessResolver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          originModulePath: path.join(projectRoot, 'package.json'),
+        }),
+        'react-native-windows',
+        'windows',
+      );
     });
 
     it('throws when the enhancer module has no default export function', async () => {

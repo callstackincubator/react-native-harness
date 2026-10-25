@@ -22,6 +22,9 @@ const RunnerSchema = z.object({
   // runner. Set by a platform factory (`HarnessPlatform.metroConfigEnhancer`);
   // imported and run by the bundler while it composes the config.
   metroConfigEnhancer: z.string().optional(),
+  // The Metro platform the app requests when it differs from platformId
+  // (e.g. Vega apps request "kepler"). Set by the platform factory.
+  bundlePlatform: z.string().optional(),
   platformId: z.string(),
   // Set by the platform factories (`HarnessPlatform.getResourceLockKey`) to
   // scope the run's resource lock — e.g. per emulator/simulator/device rather
@@ -41,6 +44,12 @@ const PluginSchema = z.custom<AnyHarnessPlugin>(
   'Invalid Harness plugin'
 );
 
+export const MetroPortSchema = z
+  .number()
+  .int('Metro port must be an integer')
+  .min(1, 'Metro port must be at least 1')
+  .max(65535, 'Metro port must be at most 65535');
+
 export const ConfigSchema = z
   .object({
     entryPoint: z.string().min(1, 'Entry point is required'),
@@ -51,13 +60,7 @@ export const ConfigSchema = z
     plugins: z.array(PluginSchema).optional().default([]),
     defaultRunner: z.string().optional(),
     host: z.string().min(1, 'Host is required').optional(),
-    metroPort: z
-      .number()
-      .int('Metro port must be an integer')
-      .min(1, 'Metro port must be at least 1')
-      .max(65535, 'Metro port must be at most 65535')
-      .optional()
-      .default(DEFAULT_METRO_PORT),
+    metroPort: MetroPortSchema.optional().default(DEFAULT_METRO_PORT),
     webSocketPort: z
       .number()
       .optional()
@@ -221,14 +224,66 @@ export const ConfigSchema = z
       ),
 
     diagnostics: z
-      .boolean()
+      .union([
+        z.boolean(),
+        z
+          .object({
+            enabled: z
+              .boolean()
+              .optional()
+              .describe(
+                'Turns diagnostics on or off. Defaults to true when the object form is used.'
+              ),
+            probes: z
+              .object({
+                host: z
+                  .boolean()
+                  .optional()
+                  .describe(
+                    'Sample host load, CPU split and memory pressure. Defaults to true.'
+                  ),
+                node: z
+                  .boolean()
+                  .optional()
+                  .describe(
+                    'Sample Harness process memory and event loop lag. Defaults to true.'
+                  ),
+                snapshots: z
+                  .boolean()
+                  .optional()
+                  .describe(
+                    'Record a process listing at run milestones (macOS). Defaults to true.'
+                  ),
+                platform: z
+                  .boolean()
+                  .optional()
+                  .describe(
+                    'Record platform specific measurements, such as the process count inside an iOS simulator. Defaults to true.'
+                  ),
+              })
+              .strict()
+              .optional(),
+            sampleIntervalMs: z
+              .number()
+              .int()
+              .min(250, 'sampleIntervalMs must be at least 250')
+              .optional()
+              .describe(
+                'How often host and process metrics are sampled, in milliseconds. Defaults to 5000.'
+              ),
+          })
+          .strict(),
+      ])
       .optional()
       .default(false)
       .describe(
-        'Enable diagnostics tracing for the harness session. Records spans for ' +
-          'session setup, Metro bundling, bridge/client events, and per-file test runs, ' +
-          'then writes a Chrome Trace Event JSON file and prints a summary after each run. ' +
-          'Can also be enabled via the RN_HARNESS_DIAGNOSTICS environment variable.'
+        'Enable diagnostics for the harness session. Records spans for session ' +
+          'setup, Metro bundling, bridge/client events, and per-file test runs, ' +
+          'samples host and process resource metrics, then writes a Chrome Trace ' +
+          'Event JSON file, an incremental JSONL log and a KPI summary, and prints ' +
+          'a summary after each run. Pass an object to tune the probes and the ' +
+          'sampling interval. Can also be enabled via the RN_HARNESS_DIAGNOSTICS ' +
+          'environment variable.'
       ),
 
     // Deprecated property - used for migration detection
@@ -253,19 +308,57 @@ export type Config = z.infer<typeof ConfigSchema>;
 
 /**
  * Resolves whether diagnostics tracing is enabled: either explicitly via the
- * `diagnostics` config option, or via the `RN_HARNESS_DIAGNOSTICS` environment
- * variable (any value other than unset, `''`, `'0'`, or `'false'`).
+ * `diagnostics` config option (`true`, or an object that does not set
+ * `enabled: false`), or via the `RN_HARNESS_DIAGNOSTICS` environment variable
+ * (any value other than unset, `''`, `'0'`, or `'false'`).
  */
 export const isDiagnosticsEnabled = (
   config: Pick<Config, 'diagnostics'> | undefined,
   env: NodeJS.ProcessEnv = process.env
 ): boolean => {
-  if (config?.diagnostics === true) {
+  const diagnostics = config?.diagnostics;
+  if (diagnostics === true) {
+    return true;
+  }
+  if (typeof diagnostics === 'object' && diagnostics.enabled !== false) {
     return true;
   }
 
   const envValue = env.RN_HARNESS_DIAGNOSTICS;
   return !!envValue && envValue !== '0' && envValue !== 'false';
+};
+
+export type ResolvedDiagnosticsOptions = {
+  probes: {
+    host: boolean;
+    node: boolean;
+    snapshots: boolean;
+    platform: boolean;
+  };
+  /** Undefined means "use the default sampling interval". */
+  sampleIntervalMs: number | undefined;
+};
+
+/**
+ * Resolves the diagnostics tuning options. Every probe is on unless the object
+ * form of `diagnostics` switches it off, which is also what the boolean form
+ * and the `RN_HARNESS_DIAGNOSTICS` environment variable mean.
+ */
+export const resolveDiagnosticsOptions = (
+  config: Pick<Config, 'diagnostics'> | undefined
+): ResolvedDiagnosticsOptions => {
+  const diagnostics = config?.diagnostics;
+  const options = typeof diagnostics === 'object' ? diagnostics : undefined;
+
+  return {
+    probes: {
+      host: options?.probes?.host ?? true,
+      node: options?.probes?.node ?? true,
+      snapshots: options?.probes?.snapshots ?? true,
+      platform: options?.probes?.platform ?? true,
+    },
+    sampleIntervalMs: options?.sampleIntervalMs,
+  };
 };
 
 /**

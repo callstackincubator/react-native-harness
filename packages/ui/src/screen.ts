@@ -181,7 +181,9 @@ const createScreen = (): Screen => {
         }
       }
 
-      const base64String = await HarnessUI.captureScreenshot(captureBounds);
+      const base64String = await HarnessUI.captureScreenshot(
+        captureBounds ? { bounds: captureBounds } : {}
+      );
 
       if (!base64String) {
         return null;

@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
@@ -20,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   kill: vi.fn(),
   shutdown: vi.fn(async () => undefined),
   spawn: vi.fn(),
+  defaultTickIntervalMs: vi.fn((): number | undefined => undefined),
 }));
 
 vi.mock('@react-native-harness/tools', async () => {
@@ -49,6 +49,10 @@ vi.mock('@react-native-harness/tools', async () => {
   };
 });
 
+vi.mock('../startup-strategy.js', () => ({
+  getDefaultXCTestAgentTickIntervalMs: mocks.defaultTickIntervalMs,
+}));
+
 vi.mock('../xctest-agent-client.js', () => ({
   createXCTestAgentClient: vi.fn(() => ({
     configurePermissions: mocks.configurePermissions,
@@ -77,6 +81,7 @@ import {
   buildXCTestAgent,
   createXCTestAgentController,
 } from '../xctest-agent.js';
+import { getProjectInputsHash } from '../xctest-agent-build.js';
 import { createDeviceXCTestAgentTransport } from '../xctest-agent-transport-device.js';
 import { createSimulatorXCTestAgentTransport } from '../xctest-agent-transport-simulator.js';
 
@@ -96,6 +101,7 @@ const xcodeVersion = 'Xcode 26.0\nBuild version 17A123';
 const originalExternalXCTestRunFile = process.env.HARNESS_IOS_XCTESTRUN_FILE;
 const originalExternalDerivedDataPath =
   process.env.HARNESS_IOS_XCTEST_DERIVED_DATA_PATH;
+const originalSkipPrebuilts = process.env.HARNESS_SKIP_XCTEST_PREBUILDS;
 
 const createLongRunningSubprocess = (options?: {
   ignoreSignal?: NodeJS.Signals;
@@ -156,9 +162,71 @@ const createLongRunningSubprocess = (options?: {
   };
 };
 
+const createControlledSubprocess = () => {
+  const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+
+  const childProcess = {
+    exitCode: null as number | null,
+    kill: vi.fn(),
+    off: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      listeners.get(event)?.delete(listener);
+      return childProcess;
+    }),
+    once: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      const eventListeners = listeners.get(event) ?? new Set();
+      eventListeners.add(listener);
+      listeners.set(event, eventListeners);
+      return childProcess;
+    }),
+    signalCode: null as NodeJS.Signals | null,
+    stderr: new PassThrough(),
+    stdout: new PassThrough(),
+  };
+
+  const exit = (code: number) => {
+    childProcess.exitCode = code;
+    for (const listener of [...(listeners.get('close') ?? [])]) {
+      listener(code, null);
+    }
+  };
+
+  return {
+    exit,
+    subprocess: {
+      nodeChildProcess: Promise.resolve(childProcess),
+      [Symbol.asyncIterator]() {
+        return {
+          next: async () => ({ done: true, value: undefined }),
+        };
+      },
+    },
+  };
+};
+
+const useXcodebuildTestProcess = (subprocess: unknown) => {
+  const previousImplementation = mocks.spawn.getMockImplementation();
+
+  mocks.spawn.mockImplementation(
+    (file: string, args?: string[], options?: unknown) => {
+      if (file === 'xcodebuild' && args?.[0] === 'test-without-building') {
+        return subprocess;
+      }
+
+      return previousImplementation?.(file, args, options);
+    }
+  );
+};
+
 describe('xctest-agent orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.defaultTickIntervalMs.mockReturnValue(undefined);
+    delete process.env.HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS;
+    // These tests cover the controller and the build provider. Shipped artifacts
+    // are exercised by their own suites, and leaving them reachable here would
+    // make the outcome depend on whether this checkout happens to have packed
+    // any — and would decode the developer's real provisioning profiles.
+    process.env.HARNESS_SKIP_XCTEST_PREBUILDS = '1';
     mocks.health.mockResolvedValue({
       permissions: {
         autoAcceptPermissions: false,
@@ -280,6 +348,7 @@ describe('xctest-agent orchestration', () => {
       'HARNESS_IOS_XCTEST_DERIVED_DATA_PATH',
       originalExternalDerivedDataPath
     );
+    restoreEnvVar('HARNESS_SKIP_XCTEST_PREBUILDS', originalSkipPrebuilts);
     rmBuildRoot();
     process.chdir(originalCwd);
     fs.rmSync(tempProjectRoot, { recursive: true, force: true });
@@ -317,6 +386,24 @@ describe('xctest-agent orchestration', () => {
         path.join(simulatorCacheRoot, cacheDirectory, 'cache.json')
       )
     ).toBe(true);
+  });
+
+  it('builds without coverage, indexing, previews, or debug info', async () => {
+    await buildXCTestAgent({ destination: 'simulator' });
+
+    const buildArgs = mocks.spawn.mock.calls.find(
+      ([file, args]) => file === 'xcodebuild' && args?.[0] === 'build-for-testing'
+    )?.[1] as string[];
+
+    expect(buildArgs).toEqual(
+      expect.arrayContaining([
+        'COMPILER_INDEX_STORE_ENABLE=NO',
+        'ENABLE_DEBUG_DYLIB=NO',
+        'ENABLE_PREVIEWS=NO',
+        'GCC_GENERATE_DEBUGGING_SYMBOLS=NO',
+      ])
+    );
+    expect(buildArgs[buildArgs.indexOf('-enableCodeCoverage') + 1]).toBe('NO');
   });
 
   it('builds standalone simulator agent artifacts with the generic simulator destination', async () => {
@@ -529,6 +616,54 @@ describe('xctest-agent orchestration', () => {
 
     await expect(starting).rejects.toMatchObject({ name: 'AbortError' });
     expect(mocks.disposeClient).toHaveBeenCalledOnce();
+  });
+
+  it('fails startup with the exit status when xcodebuild exited before the agent became ready', async () => {
+    const xcodebuild = createControlledSubprocess();
+    xcodebuild.exit(65);
+    useXcodebuildTestProcess(xcodebuild.subprocess);
+    mocks.health.mockRejectedValue(
+      new Error('connect ECONNREFUSED 127.0.0.1:49152')
+    );
+    const controller = createXCTestAgentController({
+      port: 49152,
+      startupTimeoutMs: 1_000,
+      target: {
+        kind: 'simulator',
+        id: 'sim-999',
+      },
+    });
+
+    const startedAt = Date.now();
+
+    await expect(controller.ensureStarted()).rejects.toThrow(
+      'XCTest agent exited before becoming ready: xcodebuild exited with code 65'
+    );
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+  });
+
+  it('fails startup when xcodebuild exits while the agent is still being polled', async () => {
+    const xcodebuild = createControlledSubprocess();
+    useXcodebuildTestProcess(xcodebuild.subprocess);
+    mocks.health.mockRejectedValue(
+      new Error('connect ECONNREFUSED 127.0.0.1:49152')
+    );
+    const controller = createXCTestAgentController({
+      port: 49152,
+      startupTimeoutMs: 10_000,
+      target: {
+        kind: 'simulator',
+        id: 'sim-999',
+      },
+    });
+
+    const starting = controller.ensureStarted();
+    await vi.waitFor(() => expect(mocks.health).toHaveBeenCalledTimes(2));
+    xcodebuild.exit(65);
+
+    await expect(starting).rejects.toThrow(
+      'XCTest agent exited before becoming ready: xcodebuild exited with code 65'
+    );
   });
 
   it('aborts the finite XCTest build when preparation is cancelled', async () => {
@@ -857,6 +992,45 @@ describe('xctest-agent orchestration', () => {
     }
   });
 
+  describe('tick interval', () => {
+    const startAndGetEnv = async () => {
+      const controller = createXCTestAgentController({
+        port: 49152,
+        target: { kind: 'simulator', id: 'sim-999' },
+      });
+      await controller.ensureStarted();
+      const call = mocks.spawn.mock.calls.at(-1);
+      return (call?.[2] as { env: Record<string, string> }).env;
+    };
+
+    afterEach(() => {
+      delete process.env.HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS;
+    });
+
+    it('forwards the user-set interval unchanged over the host default', async () => {
+      process.env.HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS = '500';
+      mocks.defaultTickIntervalMs.mockReturnValue(2000);
+
+      expect(
+        (await startAndGetEnv()).TEST_RUNNER_HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS
+      ).toBe('500');
+    });
+
+    it('forwards the constrained-host default when unset', async () => {
+      mocks.defaultTickIntervalMs.mockReturnValue(2000);
+
+      expect(
+        (await startAndGetEnv()).TEST_RUNNER_HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS
+      ).toBe('2000');
+    });
+
+    it('forwards nothing on unconstrained hosts when unset', async () => {
+      expect(
+        (await startAndGetEnv()).TEST_RUNNER_HARNESS_XCTEST_AGENT_TICK_INTERVAL_MS
+      ).toBeUndefined();
+    });
+  });
+
   it('skips killing the agent process when dispose is called before startup', async () => {
     const controller = createXCTestAgentController({
       target: {
@@ -892,28 +1066,7 @@ const restoreEnvVar = (name: string, value: string | undefined) => {
   process.env[name] = value;
 };
 
-const getCurrentInputsHash = (): string => {
-  const hash = createHash('sha256');
-
-  for (const filePath of getInputFiles(projectRoot)) {
-    hash.update(path.relative(projectRoot, filePath));
-    hash.update('\0');
-    hash.update(fs.readFileSync(filePath));
-    hash.update('\0');
-  }
-
-  const sourceFilePath = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '..',
-    'xctest-agent.ts'
-  );
-  hash.update(path.basename(sourceFilePath));
-  hash.update('\0');
-  hash.update(fs.readFileSync(sourceFilePath));
-  hash.update('\0');
-
-  return hash.digest('hex');
-};
+const getCurrentInputsHash = (): string => getProjectInputsHash();
 
 const writeSimulatorCacheDirectory = (options: {
   buildInputsHash: string;
@@ -947,26 +1100,4 @@ const writeSimulatorCacheDirectory = (options: {
         'HarnessXCTestAgent_HarnessXCTestAgent_iphonesimulator26.0-arm64.xctestrun',
     })
   );
-};
-
-const getInputFiles = (root: string): string[] => {
-  const entries = fs.readdirSync(root, { withFileTypes: true });
-  const files: string[] = [];
-
-  for (const entry of entries) {
-    if (entry.name === 'build' || entry.name === '.gitignore') {
-      continue;
-    }
-
-    const entryPath = path.join(root, entry.name);
-
-    if (entry.isDirectory()) {
-      files.push(...getInputFiles(entryPath));
-      continue;
-    }
-
-    files.push(entryPath);
-  }
-
-  return files.sort();
 };

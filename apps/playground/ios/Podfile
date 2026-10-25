@@ -5,6 +5,11 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
+# Use the precompiled React Native core and third-party dependencies
+# (Folly, glog, fmt, ...) instead of compiling them from source.
+ENV['RCT_USE_RN_DEP'] ||= '1'
+ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1'
+
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 

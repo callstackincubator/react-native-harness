@@ -1,5 +1,5 @@
 name: React Native Harness
-description: Run React Native Harness tests on iOS, Android, Web or Windows
+description: Run React Native Harness tests on iOS, Android, Web, Windows or Vega
 inputs:
   runner:
     description: The runner to use (must match a runner name defined in your harness config)
@@ -7,8 +7,8 @@ inputs:
     type: string
   app:
     description: >-
-      The path to the built app (.app for iOS, .apk for Android). Not required
-      for web, or for Windows (deploy the app with `react-native run-windows`
+      The path to the built app (.app for iOS, .apk for Android, .vpkg for
+      Vega). Not required for web, or for Windows (deploy the app with `react-native run-windows`
       before this action runs).
     required: false
     type: string
@@ -170,7 +170,7 @@ runs:
         ${{ steps.detect-pm.outputs.runner }}react-native-harness ci plan-metro-restore
     - name: Restore Metro cache (.harness/cache/metro)
       id: restore-metro
-      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: |
           ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/metro
@@ -198,7 +198,7 @@ runs:
     - name: Restore Harness cache
       id: cache-harness-restore
       if: fromJson(steps.load-config.outputs.config).platformId == 'ios'
-      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/xctest-agent-simulator-*
         key: harness-ios-${{ runner.os }}-${{ hashFiles(format('{0}/.harness/cache/**/cache.json', steps.load-config.outputs.projectRoot)) }}
@@ -256,7 +256,7 @@ runs:
         CACHE_KEY="avd-$AVD_NAME-$ARCH-$AVD_CONFIG_HASH"
         echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
     - name: Restore AVD cache
-      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       id: avd-cache
       if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled }}
       with:
@@ -303,24 +303,49 @@ runs:
         fi
     - name: Upload visual test artifacts
       if: always() && inputs.uploadVisualTestArtifacts == 'true'
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       with:
         name: visual-test-diffs-${{ fromJson(steps.load-config.outputs.config).platformId }}
         path: |
-          ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-diff.png
-          ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/*-actual.png
+          ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/__diff_output__/*-diff.png
+          ${{ steps.load-config.outputs.projectRoot }}/**/__image_snapshots__/**/__diff_output__/*-actual.png
         if-no-files-found: ignore
+    # `adb emu kill` returns before the emulator finishes writing its snapshot
+    # and removing AVD lock files, so wait for the process to exit before
+    # archiving ~/.android/avd.
+    - name: Wait for Android emulator to exit
+      if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled && steps.avd-cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        for _ in $(seq 1 120); do
+          if ! pgrep -f 'qemu-system|emulator.*-avd' > /dev/null; then
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "::warning::Android emulator is still running after 120s; the AVD cache may be incomplete."
     - name: Save AVD cache
       if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' && fromJson(steps.load-config.outputs.config).action.avdCachingEnabled && steps.avd-cache.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: |
           ~/.android/avd
           ~/.android/adb*
         key: ${{ steps.avd-key.outputs.key }}
-    - name: Save Harness cache
+    - name: Check Harness cache
+      id: check-harness-cache
       if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'ios' && steps.cache-harness-restore.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      shell: bash
+      working-directory: ${{ steps.load-config.outputs.projectRoot }}
+      run: |
+        if compgen -G '.harness/cache/xctest-agent-simulator-*' > /dev/null; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Save Harness cache
+      if: ${{ always() && fromJson(steps.load-config.outputs.config).platformId == 'ios' && steps.cache-harness-restore.outputs.cache-hit != 'true' && steps.check-harness-cache.outputs.exists == 'true' }}
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/xctest-agent-simulator-*
         key: ${{ steps.cache-harness-restore.outputs.cache-primary-key }}
@@ -338,7 +363,7 @@ runs:
         ${{ steps.detect-pm.outputs.runner }}react-native-harness ci plan-metro-save
     - name: Save Metro cache
       if: always() && steps.plan-metro-save.outputs.metroShouldSave == 'true'
-      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:
         path: |
           ${{ steps.load-config.outputs.projectRoot }}/.harness/cache/metro
@@ -346,7 +371,7 @@ runs:
         key: ${{ steps.plan-metro-save.outputs.metroSaveKey }}
     - name: Upload crash report artifacts
       if: always()
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       with:
         name: harness-crash-reports-${{ fromJson(steps.load-config.outputs.config).platformId }}
         path: ${{ steps.load-config.outputs.projectRoot }}/.harness/crash-reports/**/*

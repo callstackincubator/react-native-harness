@@ -110,6 +110,85 @@ describe('createDiagnostics (enabled)', () => {
     expect(diagnostics.flush()).toHaveLength(1);
     expect(diagnostics.flush()).toHaveLength(0);
   });
+
+  it('gauge() records a numeric sample with namespace, attrs and unit', () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    diagnostics
+      .child('host')
+      .child({ runId: 'run-1' })
+      .gauge('load1', 4.5, { source: 'os' }, 'load');
+
+    const entries = diagnostics.flush();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      label: 'host.load1',
+      kind: 'gauge',
+      value: 4.5,
+      unit: 'load',
+      duration: 0,
+      status: 'ok',
+      attrs: { runId: 'run-1', source: 'os' },
+    });
+  });
+
+  it('gauge() omits unit when none is given', () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    diagnostics.gauge('x', 1);
+
+    expect(diagnostics.flush()[0]).not.toHaveProperty('unit');
+  });
+
+  it('subscribe() observes entries from children without consuming them', () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    const seen: string[] = [];
+    const unsubscribe = diagnostics.subscribe((entry) => seen.push(entry.label));
+
+    diagnostics.mark('a');
+    diagnostics.child('ns').gauge('b', 2);
+    diagnostics.start('c').end();
+    unsubscribe();
+    diagnostics.mark('after-unsubscribe');
+
+    expect(seen).toEqual(['a', 'ns.b', 'c']);
+    expect(diagnostics.flush()).toHaveLength(4);
+  });
+
+  it('subscribe({ replay }) delivers already recorded, unflushed entries first', () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    diagnostics.mark('flushed');
+    diagnostics.flush();
+    diagnostics.mark('early-1');
+    diagnostics.child('ns').gauge('early-2', 1);
+    const seen: string[] = [];
+
+    diagnostics.subscribe((entry) => seen.push(entry.label), { replay: true });
+    diagnostics.mark('late');
+
+    expect(seen).toEqual(['early-1', 'ns.early-2', 'late']);
+  });
+
+  it('subscribe() without replay only sees later entries', () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    diagnostics.mark('early');
+    const seen: string[] = [];
+
+    diagnostics.subscribe((entry) => seen.push(entry.label));
+
+    expect(seen).toEqual([]);
+  });
+
+  it('subscribe() isolates listener failures from the observed code', () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    const seen: string[] = [];
+    diagnostics.subscribe(() => {
+      throw new Error('sink down');
+    });
+    diagnostics.subscribe((entry) => seen.push(entry.label));
+
+    expect(() => diagnostics.mark('a')).not.toThrow();
+    expect(seen).toEqual(['a']);
+    expect(diagnostics.flush()).toHaveLength(1);
+  });
 });
 
 describe('createDiagnostics (disabled)', () => {
@@ -125,8 +204,19 @@ describe('createDiagnostics (disabled)', () => {
     span.end();
     span.fail(new Error('x'));
     diagnostics.mark('foo');
+    diagnostics.gauge('foo', 1);
     diagnostics.record({ label: 'foo', duration: 10 });
     expect(diagnostics.flush()).toEqual([]);
+  });
+
+  it('subscribe() never calls the listener and returns a callable disposer', () => {
+    const diagnostics = createDiagnostics({ enabled: false });
+    const listener = vi.fn();
+    const dispose = diagnostics.subscribe(listener);
+
+    diagnostics.mark('foo');
+    expect(listener).not.toHaveBeenCalled();
+    expect(() => dispose()).not.toThrow();
   });
 
   it('defaults to disabled when no options are passed', () => {
@@ -270,5 +360,62 @@ describe('instrumented()', () => {
     wrapped.doThing();
 
     expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('adds attrs derived from the resolved value of an async method', async () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    const target = { wait: async () => ({ lastStatusLine: 'Finished' }) };
+    const wrapped = instrumented(target, 'ns', diagnostics, {
+      resultAttrs: (method, result) =>
+        method === 'wait'
+          ? { last: (result as { lastStatusLine: string }).lastStatusLine }
+          : undefined,
+    });
+
+    await wrapped.wait();
+    await wait(1);
+
+    expect(diagnostics.flush()[0]?.attrs).toEqual({ last: 'Finished' });
+  });
+
+  it('adds attrs derived from the result of a sync method', () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    const wrapped = instrumented({ count: () => 3 }, 'ns', diagnostics, {
+      resultAttrs: (_method, result) => ({ count: result as number }),
+    });
+
+    wrapped.count();
+
+    expect(diagnostics.flush()[0]?.attrs).toEqual({ count: 3 });
+  });
+
+  it('adds attrs derived from a rejection and tolerates a throwing deriver', async () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    const target = {
+      failing: async () => {
+        throw new Error('timed out');
+      },
+      other: async () => 'x',
+    };
+    const wrapped = instrumented(target, 'ns', diagnostics, {
+      errorAttrs: (method) => {
+        if (method === 'other') {
+          throw new Error('deriver bug');
+        }
+        return { stage: 'Waiting on Data Migration' };
+      },
+      resultAttrs: () => {
+        throw new Error('deriver bug');
+      },
+    });
+
+    await expect(wrapped.failing()).rejects.toThrow('timed out');
+    await expect(wrapped.other()).resolves.toBe('x');
+    await wait(1);
+
+    const [failed, ok] = diagnostics.flush();
+    expect(failed?.status).toBe('error');
+    expect(failed?.attrs).toMatchObject({ stage: 'Waiting on Data Migration' });
+    expect(ok?.status).toBe('ok');
   });
 });

@@ -71,6 +71,44 @@ This can have a negative impact on:
 
 The impact is most important to keep in mind for iOS physical devices, where the XCTest agent requires code signing and extra setup, but the same helper is also started on iOS simulators when permissions are enabled.
 
+## Where the XCTest agent comes from
+
+Harness needs a built XCTest agent before it can start one. It obtains one from the first source that applies:
+
+1. **An `.xctestrun` you provide.** Set `HARNESS_IOS_XCTESTRUN_FILE` (optionally with `HARNESS_IOS_XCTEST_DERIVED_DATA_PATH`) to a ready `.xctestrun`, and Harness uses it as-is.
+2. **Artifacts shipped with the platform package.** Releases carry a prebuilt unsigned agent for simulators and one for physical devices. Harness copies one into `.harness/cache` and runs it, so no compilation happens. A simulator copy runs as copied; a device copy is signed first, as described below.
+3. **A local build.** Harness runs `xcodebuild build-for-testing` and caches the result.
+
+The shipped artifacts work from Xcode 26 up to the major Xcode version the release was packed with. On any other Xcode, or when the agent sources in your installed package were modified, Harness says so and builds locally instead, so a new Xcode costs one local build until a release ships artifacts packed with it. Set `HARNESS_IOS_XCTEST_PREBUILT_ROOT` to point Harness at artifacts packed elsewhere, and `HARNESS_SKIP_XCTEST_PREBUILDS=1` to skip them entirely.
+
+### Running on a physical device from shipped artifacts
+
+A device build cannot ship ready to run, because a runnable bundle carries your certificate and a profile that lists your device. So Harness ships device artifacts unsigned and signs a private copy on your machine, in the same `.harness/cache` location, using the certificate and profile you configure. This needs no network access and takes about a second.
+
+Harness picks the certificate by matching the certificates embedded in your provisioning profile against the usable identities in your keychain. It picks the profile by requiring that it covers the agent's bundle ids, lists your device, and has not expired. When no installed profile qualifies, Harness builds locally instead, which is the path that can reach the Developer Portal to obtain one.
+
+Two settings matter when signing is not automatic:
+
+- `signingIdentity` narrows the choice to one certificate. `codesign` refuses the name `Apple Development` outright once your keychain holds two development certificates, so name the certificate by its SHA-1 if you have several accounts.
+- `bundleIdPrefix` rewrites the agent's own bundle ids. Individual developer accounts and many corporate ones cannot mint a profile covering `com.callstackincubator.*`, and a prefix that your wildcard profile does cover is the way around that. It must be a reverse-DNS prefix such as `com.example.myapp`. It rewrites the three bundle Info.plists along with the bundle ids the `.xctestrun` names, so the test session launches what was installed. It applies to the artifact that ships with the package: a locally built agent keeps the shipped ids, because `xcodebuild` cannot override one target's bundle id without giving both agent targets the same one.
+
+```javascript
+applePlatform({
+  name: 'iphone',
+  device: applePhysicalDevice('My iPhone', {
+    codeSign: {
+      teamId: 'TEAMID1234',
+      bundleIdPrefix: 'com.example.myapp',
+      signingIdentity: 'A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2',
+      provisioningProfile: 'My Wildcard Profile',
+    },
+  }),
+  bundleId: 'com.example.myapp',
+})
+```
+
+Device artifacts ship unsigned and generic, so they carry nothing specific to your account. They add roughly half again to the package download. Pack a narrower set with `HARNESS_XCTEST_PREBUILD_DESTINATIONS=simulator`, or point Harness at artifacts packed elsewhere with `HARNESS_IOS_XCTEST_PREBUILT_ROOT`.
+
 ## Physical iOS Devices
 
 To use permission automation on a physical iOS device, the runner must provide `device.codeSign`.

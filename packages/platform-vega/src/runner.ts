@@ -1,119 +1,134 @@
 import {
-  createAppSessionEmitter,
-  type AppSession,
-  type AppSessionState,
   DeviceNotFoundError,
-  AppNotInstalledError,
   type HarnessPlatformRunnerFactory,
 } from '@react-native-harness/platforms';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
-import { VegaPlatformConfigSchema, type VegaPlatformConfig } from './config.js';
-import * as kepler from './kepler.js';
+import {
+  instrumented,
+  isInteractive,
+  logger,
+  noopDiagnostics,
+} from '@react-native-harness/tools';
+import {
+  getVegaComponentId,
+  VegaPlatformConfigSchema,
+  type VegaPlatformConfigInput,
+} from './config.js';
+import * as vegaModule from './vega.js';
+import { getOptionalHarnessAppPath } from './app-path.js';
+import { VegaAppPathError } from './errors.js';
+import { configureVegaMetroAccess } from './port-forwarding.js';
+import { createVegaAppSession } from './app-session.js';
 
-const APP_EXIT_POLL_INTERVAL_MS = 1000;
+const log = logger.child('platform-vega');
 
 const getVegaRunner: HarnessPlatformRunnerFactory<
-  VegaPlatformConfig,
+  VegaPlatformConfigInput,
   HarnessConfig
-> = async (config, _harnessConfig, _init) => {
-  void _harnessConfig;
-  void _init;
+> = async (config, harnessConfig, init) => {
   const parsedConfig = VegaPlatformConfigSchema.parse(config);
-  const deviceId = parsedConfig.device.deviceId;
-  const bundleId = parsedConfig.bundleId;
-  const deviceStatus = await kepler.getVegaDeviceStatus(deviceId);
+  const vega = instrumented(
+    vegaModule,
+    'platform.vega.cli',
+    init.diagnostics ?? noopDiagnostics
+  );
+  const { bundleId } = parsedConfig;
+  const componentId = getVegaComponentId(parsedConfig);
 
-  if (deviceStatus === 'stopped') {
-    throw new DeviceNotFoundError(deviceId);
+  await vega.ensureVegaCliAvailable();
+
+  let deviceId: string;
+  let startedByHarness = false;
+
+  const stopVirtualDeviceIfStarted = async () => {
+    if (startedByHarness) {
+      logger.info('Shutting down Vega virtual device...');
+      await vega.stopVirtualDevice();
+    }
+  };
+
+  // Nothing owns the device until the runner is returned, so a failure after
+  // starting the virtual device must shut it down again.
+  const cleanUpOnFailure = async <T>(work: () => Promise<T>): Promise<T> => {
+    try {
+      return await work();
+    } catch (error) {
+      await stopVirtualDeviceIfStarted();
+      throw error;
+    }
+  };
+
+  const isVirtual = parsedConfig.device.type === 'emulator';
+
+  if (parsedConfig.device.type === 'emulator') {
+    const preferredId = parsedConfig.device.deviceId;
+    let resolvedId = await vega.findConnectedVirtualDevice(preferredId);
+
+    if (!resolvedId) {
+      logger.info('Starting Vega virtual device...');
+      await vega.startVirtualDevice({
+        signal: init.signal,
+        gui: isInteractive(),
+      });
+      startedByHarness = true;
+      resolvedId = await cleanUpOnFailure(() =>
+        vega.waitForVirtualDevice(preferredId, init.signal)
+      );
+    }
+
+    deviceId = resolvedId;
+  } else {
+    deviceId = parsedConfig.device.serial;
+
+    if (!(await vega.isDeviceConnected(deviceId))) {
+      log.error(
+        'Fire TV %s is not connected. Enable developer mode on the device ("vega devmode login", then "vega devmode enable-device --code <code>") and check "vega device list".',
+        deviceId
+      );
+      throw new DeviceNotFoundError(deviceId);
+    }
   }
 
-  const isInstalled = await kepler.isAppInstalled(deviceId, bundleId);
+  log.debug('using Vega device %s', deviceId);
 
-  if (!isInstalled) {
-    throw new AppNotInstalledError(bundleId, deviceId);
-  }
+  const prepareApp = async () => {
+    const appPath = getOptionalHarnessAppPath();
+
+    if (appPath) {
+      logger.info('Installing %s on %s...', bundleId, deviceId);
+      await vega.installApp(deviceId, appPath, {
+        signal: init.signal,
+        buildType: parsedConfig.buildType,
+      });
+    } else if (!(await vega.isAppInstalled(deviceId, componentId))) {
+      throw new VegaAppPathError('missing');
+    }
+
+    return await configureVegaMetroAccess(
+      vega,
+      { deviceId, isVirtual },
+      harnessConfig.metroPort
+    );
+  };
+
+  const metroAccess = await cleanUpOnFailure(prepareApp);
 
   return {
-    createAppSession: async (): Promise<AppSession> => {
-      await kepler.stopApp(deviceId, bundleId);
-      await kepler.startApp(deviceId, bundleId);
+    createAppSession: async () => {
+      await vega.terminateApp(deviceId, componentId);
 
-      const emitter = createAppSessionEmitter();
-      let state: AppSessionState = { status: 'running' };
-      let disposed = false;
-      let stopPolling = false;
-      let pollDelayTimeout: ReturnType<typeof setTimeout> | null = null;
-      let resolvePollDelay: (() => void) | null = null;
-
-      // Unlike a raced delay() loser (which is fine to just discard), this
-      // wait is directly `await`ed by pollTask with nothing else racing it,
-      // so cancelling it must also resolve the promise immediately —
-      // otherwise dispose() blocks on `await pollTask` for up to
-      // APP_EXIT_POLL_INTERVAL_MS instead of returning right away.
-      const waitForNextPoll = () =>
-        new Promise<void>((resolve) => {
-          resolvePollDelay = () => {
-            resolvePollDelay = null;
-            pollDelayTimeout = null;
-            resolve();
-          };
-
-          pollDelayTimeout = setTimeout(() => {
-            resolvePollDelay?.();
-          }, APP_EXIT_POLL_INTERVAL_MS);
-        });
-
-      const cancelPendingPollDelay = () => {
-        if (pollDelayTimeout) {
-          clearTimeout(pollDelayTimeout);
-          pollDelayTimeout = null;
-        }
-
-        resolvePollDelay?.();
-      };
-
-      const pollTask = (async () => {
-        while (!stopPolling) {
-          if (!(await kepler.isAppRunning(deviceId, bundleId))) {
-            if (!disposed && state.status === 'running') {
-              state = { status: 'exited', occurredAt: Date.now(), reason: 'process-gone' };
-              emitter.emit({ type: 'app_exited' });
-            }
-            return;
-          }
-
-          if (stopPolling) {
-            return;
-          }
-
-          await waitForNextPoll();
-        }
-      })();
-
-      const session: AppSession = {
-        dispose: async () => {
-          if (disposed) {
-            return;
-          }
-
-          disposed = true;
-          stopPolling = true;
-          cancelPendingPollDelay();
-          state = { status: 'disposed', occurredAt: Date.now() };
-          emitter.clear();
-          await kepler.stopApp(deviceId, bundleId);
-          await pollTask;
-        },
-        getState: async () => state,
-        getLogs: () => [],
-        addListener: emitter.addListener,
-        removeListener: emitter.removeListener,
-      };
-
-      return session;
+      return await createVegaAppSession({
+        launchApp: () => vega.launchApp(deviceId, componentId),
+        terminateApp: () => vega.terminateApp(deviceId, componentId),
+        getAppRunState: () => vega.getAppRunState(deviceId, componentId),
+        startLogStream: () => vega.startLogStream(deviceId),
+        stopLogStream: () => vega.stopLogStream(deviceId),
+      });
     },
     dispose: async () => {
-      await kepler.stopApp(deviceId, bundleId);
+      await vega.terminateApp(deviceId, componentId);
+      await metroAccess.dispose();
+      await stopVirtualDeviceIfStarted();
     },
   };
 };

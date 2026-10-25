@@ -7,6 +7,7 @@ import type {
   TestWatcher,
 } from 'jest-runner';
 import { createHarnessSession, type HarnessSession } from './harness-session.js';
+import { getWatchSession } from './watch-session.js';
 import { executeRun } from './execute-run.js';
 import { HarnessError } from '@react-native-harness/tools';
 import { getErrorMessage } from './logs.js';
@@ -20,7 +21,6 @@ export default class JestHarness implements EmittingTestRunnerInterface {
   readonly supportsEventEmitters = true as const;
 
   #globalConfig: Config.GlobalConfig;
-  #session: HarnessSession | null = null;
   #listeners = new Map<keyof TestEvents, Set<TestEventListener<keyof TestEvents>>>();
 
   constructor(globalConfig: Config.GlobalConfig) {
@@ -54,13 +54,15 @@ export default class JestHarness implements EmittingTestRunnerInterface {
 
     const isWatchMode = this.#globalConfig.watch || this.#globalConfig.watchAll;
 
+    let session: HarnessSession | null = null;
+
     try {
-      if (!this.#session) {
-        this.#session = await createHarnessSession(this.#globalConfig);
-      }
+      session = isWatchMode
+        ? await getWatchSession(this.#globalConfig)
+        : await createHarnessSession(this.#globalConfig);
 
       await executeRun(
-        this.#session,
+        session,
         tests,
         watcher,
         this.#emit,
@@ -73,8 +75,7 @@ export default class JestHarness implements EmittingTestRunnerInterface {
       throw error;
     } finally {
       if (!isWatchMode) {
-        await this.#session?.dispose();
-        this.#session = null;
+        await session?.dispose();
       }
     }
   }

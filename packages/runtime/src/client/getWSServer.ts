@@ -1,16 +1,21 @@
 import { HARNESS_BRIDGE_PATH } from '@react-native-harness/bridge';
-import { URL } from 'react-native-url-polyfill';
 import { getDevServerUrl } from '../utils/dev-server.js';
 
-export const getWSServer = (): string => {
-  const devServerUrlString = getDevServerUrl();
-  const devServerUrl = new URL(devServerUrlString);
+// Scheme, optional user info, and host (with port) of an absolute URL. Parsed
+// by hand because URL polyfills for React Native read the legacy
+// NativeModules bridge, which bridgeless runtimes such as Vega do not have.
+const ABSOLUTE_URL_PATTERN = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/?#]*@)?([^/?#]+)/i;
 
-  if (!devServerUrl.host) {
-    throw new TypeError(`Invalid URL: ${devServerUrlString}`);
+export const getWSServer = (): string => {
+  const devServerUrl = getDevServerUrl();
+  const match = devServerUrl.match(ABSOLUTE_URL_PATTERN);
+
+  if (!match) {
+    throw new TypeError(`Invalid URL: ${devServerUrl}`);
   }
 
-  const protocol = devServerUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+  const [, scheme, host] = match;
+  const protocol = scheme.toLowerCase() === 'https' ? 'wss:' : 'ws:';
 
-  return `${protocol}//${devServerUrl.host}${HARNESS_BRIDGE_PATH}`;
+  return `${protocol}//${host.toLowerCase()}${HARNESS_BRIDGE_PATH}`;
 };

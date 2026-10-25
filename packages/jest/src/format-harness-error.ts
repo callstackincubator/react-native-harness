@@ -54,6 +54,11 @@ export const formatHarnessErrorMessage = (
   }
 
   const parts = [error.message];
+
+  if (error.diff) {
+    parts.push(error.diff);
+  }
+
   const pendingPromiseDetails = error.diagnostics?.pendingPromises
     ? formatPendingPromises(
         error.diagnostics.pendingPromises,

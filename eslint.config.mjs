@@ -16,6 +16,7 @@ export default [
       'actions/**/*.cjs',
       'packages/runtime/assets/**/*.js',
       '**/*.tsbuildinfo',
+      'apps/playground/src/__tests__/liveness/generated/**',
     ],
   },
   {

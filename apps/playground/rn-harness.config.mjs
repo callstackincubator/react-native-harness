@@ -9,10 +9,6 @@ import {
   appleSimulator,
 } from '@react-native-harness/platform-apple';
 import {
-  vegaPlatform,
-  vegaEmulator,
-} from '@react-native-harness/platform-vega';
-import {
   webPlatform,
   chromium,
   chrome,
@@ -99,11 +95,6 @@ export default {
         },
       },
     }),
-    vegaPlatform({
-      name: 'vega',
-      device: vegaEmulator('VegaTV_1'),
-      bundleId: 'com.playground',
-    }),
     webPlatform({
       name: 'web',
       browser: chrome('http://localhost:8081/index.html', { headless: false }),
@@ -116,7 +107,9 @@ export default {
   defaultRunner: 'android',
   platformReadyTimeout: 600000,
   bridgeTimeout: 120000,
-  testTimeout: 10000,
+  // The liveness e2e suite raises this to run a test that blocks the JS
+  // thread for longer than the default allows.
+  testTimeout: Number(process.env.HARNESS_TEST_TIMEOUT ?? 10000),
 
   permissions: true,
   detectNativeCrashes: true,

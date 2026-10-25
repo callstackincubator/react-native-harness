@@ -10,10 +10,6 @@ vi.mock('../utils/dev-server.js', () => ({
   getDevServerUrl: mocks.getDevServerUrl,
 }));
 
-vi.mock('react-native-url-polyfill', () => ({
-  URL,
-}));
-
 describe('getWSServer', () => {
   beforeEach(() => {
     mocks.getDevServerUrl.mockReset();

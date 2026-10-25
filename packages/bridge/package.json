@@ -1,6 +1,6 @@
 {
   "name": "@react-native-harness/bridge",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -33,6 +33,7 @@
     "pngjs": "^7.0.0",
     "ssim.js": "^3.5.0",
     "tslib": "^2.3.0",
+    "web-streams-polyfill": "^4.3.0",
     "ws": "^8.18.2"
   },
   "devDependencies": {

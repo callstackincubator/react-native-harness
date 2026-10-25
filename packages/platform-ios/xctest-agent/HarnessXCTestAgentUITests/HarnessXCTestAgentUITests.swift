@@ -5,6 +5,7 @@ final class HarnessXCTestAgentState {
   private let lock = NSLock()
   private var _permissions: PermissionPromptConfiguration
   private var _shouldShutdown = false
+  private var _targetApplicationState: XCUIApplication.State?
 
   init(permissions: PermissionPromptConfiguration) {
     _permissions = permissions
@@ -19,6 +20,26 @@ final class HarnessXCTestAgentState {
   func updatePermissions(_ permissions: PermissionPromptConfiguration) {
     lock.lock()
     _permissions = permissions
+    lock.unlock()
+  }
+
+  /// Whether a target app bundle id was configured for this session.
+  let hasTargetApplication: Bool = {
+    let bundleIdentifier = ProcessInfo.processInfo.environment["HARNESS_XCTEST_AGENT_TARGET_BUNDLE_ID"]
+    return !(bundleIdentifier ?? "").isEmpty
+  }()
+
+  /// Last observed state of the target app, or nil when no target app is
+  /// configured or it has not been observed yet.
+  var targetApplicationState: XCUIApplication.State? {
+    lock.lock()
+    defer { lock.unlock() }
+    return _targetApplicationState
+  }
+
+  func updateTargetApplicationState(_ state: XCUIApplication.State?) {
+    lock.lock()
+    _targetApplicationState = state
     lock.unlock()
   }
 
@@ -240,6 +261,7 @@ final class HarnessXCTestAgentUITests: XCTestCase {
     }
 
     let currentState = targetApplication.state
+    state.updateTargetApplicationState(currentState)
     if currentState == lastTargetApplicationState {
       return
     }

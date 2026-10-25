@@ -10,6 +10,7 @@ import {
 import * as simctl from '../xcrun/simctl.js';
 import * as devicectl from '../xcrun/devicectl.js';
 import { HarnessAppPathError } from '../errors.js';
+import { createDiagnostics } from '@react-native-harness/tools';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,6 +24,20 @@ const xctestAgentMocks = vi.hoisted(() => ({
 
 vi.mock('../xctest-agent.js', () => ({
   createXCTestAgentController: xctestAgentMocks.createXCTestAgentController,
+}));
+
+const settleMocks = vi.hoisted(() => ({
+  waitForSimulatorToSettle: vi.fn(),
+  shouldWaitForSimulatorToSettle: vi.fn(),
+}));
+
+vi.mock('../simulator-settle.js', () => ({
+  waitForSimulatorToSettle: settleMocks.waitForSimulatorToSettle,
+}));
+
+vi.mock('../startup-strategy.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../startup-strategy.js')>()),
+  shouldWaitForSimulatorToSettle: settleMocks.shouldWaitForSimulatorToSettle,
 }));
 
 const harnessConfig = {
@@ -45,6 +60,13 @@ describe('iOS platform instance dependency validation', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    settleMocks.waitForSimulatorToSettle.mockReset();
+    settleMocks.waitForSimulatorToSettle.mockResolvedValue({
+      settled: true,
+      durationMs: 1,
+      probes: 2,
+    });
+    settleMocks.shouldWaitForSimulatorToSettle.mockReturnValue(true);
     xctestAgentMocks.createXCTestAgentController.mockReturnValue({
       prepare: xctestAgentMocks.prepare,
       ensureStarted: xctestAgentMocks.ensureStarted,
@@ -74,6 +96,43 @@ describe('iOS platform instance dependency validation', () => {
     await expect(
       getAppleSimulatorPlatformInstance(config, harnessConfig, init),
     ).resolves.toBeDefined();
+  });
+
+  describe.each([
+    ['Shutdown', true, true],
+    ['Booting', true, true],
+    ['Booted', true, false],
+    ['Shutdown', false, false],
+  ])('simulator settle (status %s, constrained %s)', (status, constrained, expectSettle) => {
+    it(`settle called: ${expectSettle}`, async () => {
+      settleMocks.shouldWaitForSimulatorToSettle.mockReturnValue(constrained);
+      vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+      vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+      vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue(status as never);
+      vi.spyOn(simctl, 'bootSimulator').mockResolvedValue(undefined);
+      vi.spyOn(simctl, 'waitForBoot').mockResolvedValue({} as never);
+      vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+        undefined,
+      );
+
+      await getAppleSimulatorPlatformInstance(
+        {
+          name: 'ios',
+          device: {
+            type: 'simulator' as const,
+            name: 'iPhone 16 Pro',
+            systemVersion: '18.0',
+          },
+          bundleId: 'com.harnessplayground',
+        },
+        harnessConfig,
+        init,
+      );
+
+      expect(settleMocks.waitForSimulatorToSettle).toHaveBeenCalledTimes(
+        expectSettle ? 1 : 0,
+      );
+    });
   });
 
   it('does not start the simulator XCTest agent when permissions are disabled', async () => {
@@ -125,7 +184,7 @@ describe('iOS platform instance dependency validation', () => {
     await expect(
       getApplePhysicalDevicePlatformInstance(config, harnessConfig),
     ).resolves.toBeDefined();
-    expect(getDevice).toHaveBeenCalledWith('My iPhone');
+    expect(getDevice).toHaveBeenCalledWith('My iPhone', undefined);
   });
 
   it('does not start the physical-device XCTest agent when permissions are disabled', async () => {
@@ -258,6 +317,82 @@ describe('iOS platform instance dependency validation', () => {
     expect(shutdownSimulator).not.toHaveBeenCalled();
   });
 
+  it('reports the guest process count through the telemetry collector', async () => {
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+    const getGuestProcessCount = vi
+      .spyOn(simctl, 'getGuestProcessCount')
+      .mockResolvedValue(312);
+
+    const instance = await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfig,
+      init,
+    );
+    const collector = instance.createTelemetryCollector?.();
+
+    const signal = new AbortController().signal;
+    await expect(collector?.collect('platform.ready', signal)).resolves.toEqual({
+      'ios.simulator.guest_process_count': 312,
+    });
+    await expect(collector?.collect('dispose', signal)).resolves.toEqual({
+      'ios.simulator.guest_process_count': 312,
+    });
+    await expect(collector?.collect('app.ready', signal)).resolves.toEqual({});
+    await expect(collector?.collect('test-file.start', signal)).resolves.toEqual({});
+    expect(getGuestProcessCount).toHaveBeenCalledTimes(2);
+    expect(getGuestProcessCount).toHaveBeenCalledWith('sim-udid', signal);
+  });
+
+  it('records the last bootstatus stage on the waitForBoot span', async () => {
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booting');
+    vi.spyOn(simctl, 'waitForBoot').mockResolvedValue({
+      lastStatusLine: 'Waiting on System App',
+      elapsedSeconds: 143,
+    });
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+    const diagnostics = createDiagnostics({ enabled: true });
+
+    await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfig,
+      { ...init, diagnostics },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const span = diagnostics
+      .flush()
+      .find((entry) => entry.label === 'platform.ios.simctl.waitForBoot');
+    expect(span?.attrs).toEqual({
+      bootLastStatus: 'Waiting on System App',
+      bootElapsedSeconds: 143,
+    });
+  });
+
   it('boots a shutdown simulator and shuts it down on dispose', async () => {
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Shutdown');
@@ -266,7 +401,7 @@ describe('iOS platform instance dependency validation', () => {
       .mockResolvedValue(undefined);
     const waitForBoot = vi
       .spyOn(simctl, 'waitForBoot')
-      .mockResolvedValue(undefined);
+      .mockResolvedValue({ lastStatusLine: 'Finished', elapsedSeconds: 6 });
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
       undefined,
@@ -309,7 +444,7 @@ describe('iOS platform instance dependency validation', () => {
       .mockResolvedValue(undefined);
     const waitForBoot = vi
       .spyOn(simctl, 'waitForBoot')
-      .mockResolvedValue(undefined);
+      .mockResolvedValue({ lastStatusLine: 'Finished', elapsedSeconds: 6 });
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
       undefined,
@@ -352,7 +487,7 @@ describe('iOS platform instance dependency validation', () => {
       .mockResolvedValue(undefined);
     const waitForBoot = vi
       .spyOn(simctl, 'waitForBoot')
-      .mockResolvedValue(undefined);
+      .mockResolvedValue({ lastStatusLine: 'Finished', elapsedSeconds: 6 });
     vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
     vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
       undefined,

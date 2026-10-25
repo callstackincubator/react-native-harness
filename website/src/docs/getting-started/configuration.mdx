@@ -111,6 +111,7 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `coverage.root`                    | Root directory for coverage instrumentation (default: `process.cwd()`).                                                                                   |
 | `coverage.native.ios.pods`         | Experimental list of CocoaPods target names to instrument for iOS native coverage.                                                                       |
 | `forwardClientLogs`                | Forward console logs from the app to the terminal (default: `false`).                                                                                     |
+| `diagnostics`                      | Record a timing trace and resource metrics for the run: `true`, or an object with `enabled`, `probes` and `sampleIntervalMs` (default: `false`). See [Diagnostics](#diagnostics). |
 | `cache`                            | Cache configuration object.                                                                                                                                |
 | `cache.metro`                      | Enable persistent Metro transform and file-map caching under `.harness/cache` (default: `true`).                                                          |
 | `cache.version`                    | User-controlled salt folded into the Metro cache version. Bump it to force-invalidate previously cached transforms.                                       |
@@ -141,6 +142,7 @@ For detailed installation and configuration instructions, please refer to the pl
 - [**iOS**](/docs/platforms/ios)
 - [**Web**](/docs/platforms/web)
 - [**Windows**](/docs/platforms/windows)
+- [**Vega (Fire TV)**](/docs/platforms/vega)
 
 ## Default Runner
 
@@ -218,7 +220,12 @@ Increase this value if you experience startup failures while:
 
 ## Bridge Timeout
 
-The bridge timeout controls the app-side bridge readiness window after Harness launches the app. It does not include simulator or emulator boot time. Once the runtime is connected, Harness keeps test execution alive through heartbeat traffic and applies the configured test timeout to each individual test case.
+The bridge timeout controls the app-side bridge readiness window after Harness launches the app. It does not include simulator or emulator boot time.
+
+Once the app is connected, Harness checks two things while tests run:
+
+- **The connection.** The app's WebSocket must keep answering pings. It answers them natively, even while JavaScript is busy, so a failure here means the app was killed, froze, or lost its network connection.
+- **The JS thread.** The app's JS thread may be blocked, for example by synchronous work in a test, for as long as the current step allows: [`testTimeout`](#test-timeout) plus 5 seconds while a test or a `beforeAll`/`afterAll` hook runs, [`bundleStartTimeout`](#bundle-start-timeout) while a setup file or test file loads, and 20 seconds otherwise. If it stays blocked longer, the run fails with an error naming the test, hook, or file. Harness enforces this from the CLI, so `testTimeout` also applies to tests that block the JS thread, which a timer inside the app cannot do.
 
 Harness uses `bridgeTimeout` while waiting for the app runtime to connect, and as the timeout for shorter bridge RPCs such as screenshots or image snapshot matching.
 
@@ -280,6 +287,57 @@ Harness can retry app startup automatically when the app fails to come up cleanl
 Increase this value if your app occasionally needs another launch attempt before it reaches a ready state, especially in slower CI environments.
 
 Set it to `0` if you want startup failures to fail immediately without any automatic retry.
+
+## Diagnostics
+
+Diagnostics record where a run spends its time and how loaded the machine is while it does. They are most useful on slow or flaky CI runners, where you need data to tell a slow simulator boot from a slow bundle or an overloaded host.
+
+Turn them on with `diagnostics: true`, or set `RN_HARNESS_DIAGNOSTICS=1` for a single run without touching your config. Pass an object to tune what is collected:
+
+```javascript
+{
+  diagnostics: {
+    probes: {
+      host: true, // load, CPU split and memory pressure of the machine
+      node: true, // memory and event loop lag of the Harness process
+      snapshots: true, // process listing at run milestones (macOS only)
+      platform: true, // platform-specific data, such as the process count inside an iOS simulator
+    },
+    sampleIntervalMs: 5000,
+  },
+}
+```
+
+With the object form, diagnostics are on unless you set `enabled: false`. Every probe is on by default, and `sampleIntervalMs` defaults to `5000` (minimum `250`). Nothing is started, sampled or written when diagnostics are off.
+
+### What is recorded
+
+Besides timings for session setup, Metro bundling, app startup and each test file, Harness samples these metrics every `sampleIntervalMs`:
+
+| Metric                                                               | Meaning                                                                                                                       |
+| :------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------- |
+| `host.load1`                                                         | One-minute load average.                                                                                                      |
+| `host.cpu.user_pct`, `host.cpu.sys_pct`, `host.cpu.idle_pct`         | How the machine's CPU time was split since the previous sample.                                                               |
+| `host.mem.free`, `host.mem.compressed`, `host.mem.demand` (MB)       | macOS memory pressure. `demand` is anonymous + wired + compressed memory, the part the OS cannot simply reclaim.              |
+| `host.mem.swapouts`, `host.mem.compressions` (MB)                    | Cumulative memory swapped out or compressed since boot. A rising `swapouts` during a run means the machine is out of memory.  |
+| `node.rss_mb`, `node.heap_used_mb`                                   | Memory of the Harness process.                                                                                                |
+| `node.event_loop.p50_ms`, `node.event_loop.p99_ms`, `node.event_loop.max_ms` | How late Harness's own timers fire. Large values mean the machine is too busy to schedule work.                       |
+
+On macOS, Harness also records a process listing (`telemetry.process_snapshot`, the 40 largest processes by memory plus the total process count as `host.process_count`) when the platform becomes ready, the first time the app becomes ready, and at the end of the run (later app relaunches are not listed again, to keep sampling cheap). For iOS simulators it records `platform.ios.simulator.guest_process_count`, the number of processes running inside the simulator, at platform ready and at the end of the run, and the `platform.ios.simctl.waitForBoot` span carries the last boot stage reported by the simulator (`bootLastStatus`), which shows what a slow or timed-out boot was waiting on.
+
+### Output
+
+Everything is written to `.harness/diagnostics/` in your project root:
+
+| File                       | Contents                                                                                                                                                    |
+| :------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<sessionId>.jsonl`        | One entry per line, written while the run is in progress (and when the process exits), so a job that is cancelled or times out still leaves its data behind. |
+| `<runId>.json`             | A Chrome Trace Event file written when the run finishes. Open it in [Perfetto](https://ui.perfetto.dev) to see the timeline and a graph for each sampled metric. |
+| `<runId>.summary.json`     | The key numbers of the run, for comparing runs: boot wait, time to ready, peak load, peak compressed memory, minimum free memory, memory swapped out, longest event loop lag, number of test files and the result. A value that could not be measured is `null`. |
+
+Sampling is paused between runs in watch mode, so idle time does not show up in a run's metrics. Entries recorded while the session shuts down (the end-of-run process listing, for example) are added to the trace of the last run; the key numbers cover the run itself.
+
+The same key numbers are printed at the end of the run. When running in GitHub Actions, they are also added to the job summary as a table.
 
 ## Plugins
 

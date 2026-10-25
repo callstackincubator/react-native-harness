@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Config, Test, TestWatcher } from 'jest-runner';
 import type { TestResult as JestTestResult } from '@jest/test-result';
@@ -7,12 +6,20 @@ import type {
   TestRunnerTestStartedEvent,
   TestSuiteResult,
 } from '@react-native-harness/bridge';
-import { NativeCrashError, StartupStallError } from '../errors.js';
+import {
+  HostSurfaceReplacedError,
+  NativeCrashError,
+  StartupStallError,
+} from '../errors.js';
 import {
   AppBridgeDisconnectedError,
   DeviceNotRespondingError,
 } from '@react-native-harness/bridge/server';
-import { createDiagnostics } from '@react-native-harness/tools';
+import {
+  createDiagnostics,
+  getEmitter,
+  type LifecycleEvent,
+} from '@react-native-harness/tools';
 import type { HarnessSession } from '../harness-session.js';
 import { executeRun } from '../execute-run.js';
 
@@ -36,9 +43,15 @@ vi.mock('../run.js', () => ({
 // asserting on them doesn't race with executeRun's own diagnostics.flush().
 const mockPrintSummary = vi.hoisted(() => vi.fn());
 const mockWriteTraceFile = vi.hoisted(() => vi.fn(async () => '/fake/trace.json'));
-vi.mock('../diagnostics/index.js', () => ({
+const mockWriteSummaryFile = vi.hoisted(() => vi.fn(async () => '/fake/summary.json'));
+const mockAppendStepSummary = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('../diagnostics/index.js', async (importOriginal) => ({
+  // summarizeRunKpis stays real: it is a pure reduction over the entries.
+  ...(await importOriginal<typeof import('../diagnostics/index.js')>()),
   printSummary: mockPrintSummary,
   writeTraceFile: mockWriteTraceFile,
+  writeSummaryFile: mockWriteSummaryFile,
+  appendStepSummary: mockAppendStepSummary,
 }));
 
 // ---------------------------------------------------------------------------
@@ -125,6 +138,8 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
     },
   } as HarnessSession['context'],
   diagnostics: createDiagnostics({ enabled: false }),
+  sessionId: 'session-1',
+  lifecycle: getEmitter<LifecycleEvent>(),
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async () => makeHarnessResult()),
   restartApp: vi.fn(resolveUndefined),
@@ -224,11 +239,26 @@ describe('executeRun', () => {
       expect(runEntry?.attrs?.runId).toBeTypeOf('string');
       expect(fileEntry).toMatchObject({
         status: 'ok',
-        // path.relative('/project', '/a.ts') -- OS-separated, so `..\a.ts` on Windows.
-        attrs: { file: path.join('..', 'a.ts'), status: 'passed' },
+        attrs: { file: '../a.ts', status: 'passed' },
       });
       expect(fileEntry?.attrs?.runId).toBeTypeOf('string');
       expect(mockWriteTraceFile).toHaveBeenCalledWith(entries, expect.objectContaining({ runId: expect.any(String) }));
+    });
+
+    it('writes the KPI summary and step summary next to the trace', async () => {
+      mockWriteSummaryFile.mockClear();
+      mockAppendStepSummary.mockClear();
+      const diagnostics = createDiagnostics({ enabled: true });
+      const session = makeSession({ diagnostics });
+
+      await executeRun(session, [makeTest('/a.ts')], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      const kpis = { testFileCount: 1, result: 'passed' };
+      expect(mockWriteSummaryFile).toHaveBeenCalledWith(
+        expect.objectContaining(kpis),
+        expect.objectContaining({ runId: expect.any(String), sessionId: 'session-1' }),
+      );
+      expect(mockAppendStepSummary).toHaveBeenCalledWith(expect.objectContaining(kpis));
     });
 
     it('still records run.total when a test throws', async () => {
@@ -245,6 +275,24 @@ describe('executeRun', () => {
       expect(entries.find((e) => e.label === 'run.file')).toMatchObject({
         attrs: { status: 'failed' },
       });
+    });
+
+    it('emits run and test-file lifecycle phases', async () => {
+      const session = makeSession();
+      const phases: Array<[string, unknown]> = [];
+      session.lifecycle.addListener((event) =>
+        phases.push([event.phase, event.attrs]),
+      );
+
+      await executeRun(session, [makeTest('/a.ts')], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      const file = '../a.ts';
+      expect(phases).toEqual([
+        ['run.start', { runId: expect.any(String) }],
+        ['test-file.start', { file }],
+        ['test-file.end', { file, status: 'passed' }],
+        ['run.end', { runId: expect.any(String), status: 'passed' }],
+      ]);
     });
 
     it('is a no-op and does not generate a report when diagnostics is disabled', async () => {
@@ -539,6 +587,141 @@ describe('executeRun', () => {
   });
 
   describe('runtime failures', () => {
+    it('attributes a host replacement RPC rejection to the interrupted file', async () => {
+      const cause = new Error(
+        'The native host surface was replaced during test execution.'
+      );
+      cause.name = 'HostSurfaceReplacedError';
+      cause.stack = 'HostSurfaceReplacedError: runtime stack';
+      mockRunHarnessTestFile.mockRejectedValueOnce(cause);
+      const session = makeSession();
+      const { emitEvent, calls } = makeEmitEvent();
+
+      await executeRun(
+        session,
+        [makeTest()],
+        makeWatcher(),
+        emitEvent,
+        makeGlobalConfig({ watch: true })
+      );
+
+      const failure = calls.find(([name]) => name === 'test-file-failure');
+      expect(failure).toEqual([
+        'test-file-failure',
+        expect.objectContaining({ path: '/test/example.ts' }),
+        expect.objectContaining({
+          testFilePath: '/test/example.ts',
+          message: cause.message,
+          stack: cause.stack,
+          cause,
+        }),
+      ]);
+      expect(failure?.[2]).toBeInstanceOf(HostSurfaceReplacedError);
+      expect(
+        calls.filter(([name]) => name === 'test-file-failure')
+      ).toHaveLength(1);
+      expect(calls.some(([name]) => name === 'test-file-success')).toBe(false);
+      expect(session.callHook).toHaveBeenCalledWith(
+        'test-file:finished',
+        expect.objectContaining({ status: 'failed', result: null })
+      );
+      expect(session.callHook).toHaveBeenCalledWith(
+        'run:finished',
+        expect.objectContaining({
+          summary: { passed: 0, failed: 1, skipped: 0, todo: 0 },
+          status: 'failed',
+        })
+      );
+      expect(mockRunHarnessTestFile).toHaveBeenCalledTimes(1);
+      expect(session.restartApp).toHaveBeenCalledExactlyOnceWith(
+        '/test/example.ts'
+      );
+    });
+
+    it.each([false, 'runtime', true] as const)(
+      'restarts before the next runnable file after host replacement with reset=%s',
+      async (resetEnvironmentBetweenTestFiles) => {
+        const order: string[] = [];
+        const cause = new Error('The native host surface was replaced.');
+        cause.name = 'HostSurfaceReplacedError';
+        mockRunHarnessTestFile
+          .mockImplementationOnce(async ({ testPath }) => {
+            order.push(`run:${testPath}`);
+            throw cause;
+          })
+          .mockImplementationOnce(async ({ testPath }) => {
+            order.push(`run:${testPath}`);
+            return makeFileRunResult();
+          });
+        const session = makeSession({
+          restartApp: vi.fn(async (testPath) => {
+            order.push(`restart:${testPath}`);
+          }),
+        });
+        session.config.resetEnvironmentBetweenTestFiles =
+          resetEnvironmentBetweenTestFiles;
+        const { emitEvent, calls } = makeEmitEvent();
+
+        await executeRun(
+          session,
+          [
+            makeTest('/a.ts'),
+            makeTest('/skip.ios.harness.ts'),
+            makeTest('/b.ts'),
+          ],
+          makeWatcher(),
+          emitEvent,
+          makeGlobalConfig()
+        );
+
+        expect(order).toEqual(['run:/a.ts', 'restart:/a.ts', 'run:/b.ts']);
+        expect(mockRunHarnessTestFile).toHaveBeenCalledTimes(2);
+        expect(session.restartApp).toHaveBeenCalledTimes(1);
+        expect(session.resetEnvironment).not.toHaveBeenCalled();
+        expect(calls.filter(([name]) => name === 'test-file-failure')).toEqual([
+          [
+            'test-file-failure',
+            expect.objectContaining({ path: '/a.ts' }),
+            expect.any(HostSurfaceReplacedError),
+          ],
+        ]);
+        expect(calls).toContainEqual([
+          'test-file-success',
+          expect.objectContaining({ path: '/b.ts' }),
+          expect.anything(),
+        ]);
+        expect(session.callHook).toHaveBeenCalledWith(
+          'run:finished',
+          expect.objectContaining({
+            summary: { passed: 1, failed: 1, skipped: 1, todo: 0 },
+            status: 'failed',
+          })
+        );
+      }
+    );
+
+    it('does not continue to the next file if host replacement recovery fails', async () => {
+      const cause = new Error('The native host surface was replaced.');
+      cause.name = 'HostSurfaceReplacedError';
+      mockRunHarnessTestFile.mockRejectedValueOnce(cause);
+      const recoveryError = new Error('Unable to restart the app');
+      const session = makeSession({
+        restartApp: vi.fn().mockRejectedValue(recoveryError),
+      });
+
+      await expect(
+        executeRun(
+          session,
+          [makeTest('/a.ts'), makeTest('/b.ts')],
+          makeWatcher(),
+          makeEmitEvent().emitEvent,
+          makeGlobalConfig()
+        )
+      ).rejects.toBe(recoveryError);
+
+      expect(mockRunHarnessTestFile).toHaveBeenCalledTimes(1);
+    });
+
     it('passes StartupStallError to onFailure with an empty stack', async () => {
       const { emitEvent, calls } = makeEmitEvent();
       const session = makeSession({

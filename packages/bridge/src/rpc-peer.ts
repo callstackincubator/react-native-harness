@@ -5,7 +5,10 @@ import {
   serializeBridgeMessage,
   type BridgeControlMessage,
 } from './protocol.js';
-import type { RpcTransport } from './transport.js';
+
+export type RpcTransport = {
+  send: (message: string) => void;
+};
 
 type RpcMethod = {
   bivarianceHack(...args: unknown[]): unknown;
@@ -217,8 +220,8 @@ export const createRpcPeer = <
           return null;
         }
         case 'ready':
-        case 'ping':
-        case 'pong':
+        case 'js-probe':
+        case 'js-probe-ack':
           return message;
       }
     },

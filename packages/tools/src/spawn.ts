@@ -1,8 +1,10 @@
-import type { Options, Result, Subprocess } from 'nano-spawn';
-import nanoSpawn, { SubprocessError } from 'nano-spawn';
-import { logger } from './logger.js';
-
-export type SpawnOptions = Options;
+import type { Result, Subprocess } from 'nano-spawn';
+import { getProcessManager } from './harness-context.js';
+import {
+  getWindowsBatchInvocation,
+  SubprocessError,
+  type SpawnOptions,
+} from './process-manager.js';
 export type RunCommandOptions = Omit<
   SpawnOptions,
   'signal' | 'timeout' | 'killSignal'
@@ -10,8 +12,6 @@ export type RunCommandOptions = Omit<
   signal: AbortSignal;
   timeoutMs: number;
 };
-const spawnLogger = logger.child('spawn');
-
 let signalsDeliverableEnsured = false;
 
 /**
@@ -32,21 +32,17 @@ export const ensureSignalsDeliverable = (): void => {
   }
 };
 
+/**
+ * Runs a command through the current Harness context's process manager.
+ *
+ * Call sites should prefer `getProcessManager().spawn`; this standalone export
+ * will be removed in a follow-up.
+ */
 export const spawn = (
   file: string,
   args?: readonly string[],
   options?: SpawnOptions
-): Subprocess => {
-  const defaultOptions: Options = {
-    stdin: 'ignore',
-    stdout: 'pipe',
-    // Always 'pipe' stderr to handle errors properly down the line
-    stderr: 'pipe',
-  };
-  const command = [file, ...(args ?? [])].join(' ');
-  spawnLogger.debug('running command: %s', command);
-  return nanoSpawn(file, args, { ...defaultOptions, ...options });
-};
+): Subprocess => getProcessManager().spawn(file, args, options);
 
 /**
  * Runs a command with the two bounds every finite Harness command needs.
@@ -77,4 +73,5 @@ export const spawnAndForget = async (
   }
 };
 
-export { Subprocess, SubprocessError };
+export { getWindowsBatchInvocation, Subprocess, SubprocessError };
+export type { SpawnOptions };

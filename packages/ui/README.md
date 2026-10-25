@@ -26,6 +26,13 @@ pnpm add @react-native-harness/ui
 yarn add @react-native-harness/ui
 ```
 
+### iOS with Swift Package Manager
+
+For apps using React Native's SwiftPM integration, run `npx react-native spm` from
+the app directory after installing this package. The package includes the
+`HarnessUI` SwiftPM manifest and autolinking metadata; no local manifest patch is
+needed. Apps using CocoaPods can continue to use `pod install`.
+
 ## Usage
 
 Import the UI testing utilities in your test files:

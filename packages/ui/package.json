@@ -1,7 +1,7 @@
 {
   "name": "@react-native-harness/ui",
   "description": "Native UI testing module for React Native Harness.",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -11,6 +11,7 @@
     "dist",
     "android",
     "ios",
+    "Package.swift",
     "*.podspec",
     "react-native.config.js",
     "!ios/build",
@@ -51,6 +52,9 @@
     "android": {
       "javaPackageName": "com.harnessui"
     }
+  },
+  "swiftpmConfig": {
+    "name": "HarnessUI"
   },
   "author": {
     "name": "Szymon Chmal",

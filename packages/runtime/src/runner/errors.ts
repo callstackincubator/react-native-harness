@@ -1,4 +1,5 @@
 import type { SerializedError, CodeFrame } from '@react-native-harness/bridge';
+import { getErrorDiff } from '../expect/diff.js';
 import { getCodeFrame } from '../symbolicate.js';
 
 export class TestExecutionError extends Error {
@@ -6,6 +7,7 @@ export class TestExecutionError extends Error {
   suite: string;
   test: string;
   codeFrame?: CodeFrame;
+  diff?: string;
 
   constructor(
     error: unknown,
@@ -21,6 +23,7 @@ export class TestExecutionError extends Error {
     this.test = test;
     this.cause = error;
     this.codeFrame = codeFrame;
+    this.diff = getErrorDiff(error);
   }
 
   toSerializedJSON(): SerializedError {
@@ -39,6 +42,7 @@ export class TestExecutionError extends Error {
     return {
       name: causeName,
       message: causeMessage,
+      diff: this.diff,
       codeFrame: causeCodeFrame,
       diagnostics: causeDiagnostics,
     };

@@ -414,11 +414,12 @@ static NSTimeInterval _lastTapTime = 0;
 
 #pragma mark - Screenshot API
 
-- (void)captureScreenshot:(JS::NativeHarnessUI::ViewInfo *)bounds
+- (void)captureScreenshot:(JS::NativeHarnessUI::SpecCaptureScreenshotOptions &)options
                   resolve:(RCTPromiseResolveBlock)resolve
                    reject:(RCTPromiseRejectBlock)reject {
   RCTLogInfo(@"[HarnessUI] captureScreenshot called");
 
+  auto bounds = options.bounds();
   CGRect captureRect = CGRectNull;
   NSString *nativeId = nil;
 
@@ -445,7 +446,9 @@ static NSTimeInterval _lastTapTime = 0;
     
     if (nativeId) {
         UIView *targetView = [ViewRegistry getView:nativeId];
-        if (targetView) {
+        if (targetView && (targetView.bounds.size.width <= 0 || targetView.bounds.size.height <= 0)) {
+             RCTLogWarn(@"[HarnessUI] View %@ has zero size. Nothing to capture.", nativeId);
+        } else if (targetView) {
              UIWindow *window = [self getActiveWindow];
              if (window) {
                  CGRect frameInWindow = [targetView convertRect:targetView.bounds toView:window];
@@ -463,8 +466,7 @@ static NSTimeInterval _lastTapTime = 0;
                  pngData = [ViewQueryHelper captureScreenshotOfView:targetView];
              }
         } else {
-             RCTLogWarn(@"[HarnessUI] View with nativeId %@ not found. Falling back to window bounds capture.", nativeId);
-             pngData = [ViewQueryHelper captureScreenshotWithBounds:captureRect];
+             RCTLogWarn(@"[HarnessUI] View with nativeId %@ not found. Nothing to capture.", nativeId);
         }
     } else {
         pngData = [ViewQueryHelper captureScreenshotWithBounds:captureRect];

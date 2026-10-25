@@ -5,67 +5,88 @@
 [![Chat][chat-badge]][chat]
 [![PRs Welcome][prs-welcome-badge]][prs-welcome]
 
-Vega platform for React Native Harness - enables testing on Vega TV devices and emulators.
+Vega platform for React Native Harness — runs your harness tests on the Vega Virtual Device and on Fire TV devices running Vega OS.
 
 ## Installation
 
 ```bash
-npm install @react-native-harness/platform-vega
+npm install --save-dev @react-native-harness/platform-vega
 # or
-pnpm add @react-native-harness/platform-vega
+pnpm add -D @react-native-harness/platform-vega
 # or
-yarn add @react-native-harness/platform-vega
+yarn add -D @react-native-harness/platform-vega
 ```
 
 ## Usage
 
-Import the Vega platform functions in your `rn-harness.config.mjs`:
+Add the Vega platform to your `rn-harness.config.mjs`:
 
 ```javascript
 import {
   vegaPlatform,
-  vegaEmulator,
+  vegaVirtualDevice,
+  vegaPhysicalDevice,
 } from '@react-native-harness/platform-vega';
 
-const config = {
+export default {
+  entryPoint: './index.js',
+  // React Native for Vega runs the component registered under the interactive
+  // component id from manifest.toml, so app.json "name" and this value must
+  // both be "<packageId>.main".
+  appRegistryComponentName: 'com.example.myapp.main',
   runners: [
     vegaPlatform({
       name: 'vega',
-      device: vegaEmulator('VegaTV_1'),
-      bundleId: 'com.your.app',
+      device: vegaVirtualDevice(),
+      // The [package] id from manifest.toml
+      bundleId: 'com.example.myapp',
+    }),
+    vegaPlatform({
+      name: 'fire-tv',
+      // The serial number printed by `vega device list`
+      device: vegaPhysicalDevice('G0X1AB1234567890'),
+      bundleId: 'com.example.myapp',
     }),
   ],
-  // ... other config
 };
-
-export default config;
 ```
+
+Build a Debug package, then point `HARNESS_APP_PATH` at it. The runner
+starts the virtual device when needed, installs the package, forwards Metro's
+port to the device and launches the app:
+
+```bash
+npx react-native build-vega --build-type Debug
+HARNESS_APP_PATH=build/aarch64-debug/MyApp_aarch64.vpkg npx react-native-harness --harnessRunner vega
+```
+
+Use the `armv7` package for Fire TV devices.
 
 ## API
 
 ### `vegaPlatform(config)`
 
-Creates a Vega platform runner configuration.
-
 **Parameters:**
 
-- `config.name` - Unique name for the runner
-- `config.device` - Vega device configuration (emulator)
-- `config.bundleId` - Vega application bundle ID
+- `config.name` — unique name for the runner.
+- `config.device` — `vegaVirtualDevice(deviceId?)` or `vegaPhysicalDevice(serial)`.
+- `config.bundleId` — the `[package] id` from `manifest.toml`. The component id defaults to `<bundleId>.main`.
+- `config.componentId` — the `[[components.interactive]] id` from `manifest.toml`. The Vega CLI identifies the app by it for every install and launch step. Defaults to `<bundleId>.main`.
+- `config.buildType` — build variant of the package in `HARNESS_APP_PATH`, passed to `vega device install-app --buildType`. Defaults to `Debug`, which Harness needs so the app loads its bundle from Metro.
 
-### `vegaEmulator(deviceName)`
+### `vegaVirtualDevice(deviceId?)`
 
-Creates a Vega emulator device configuration.
+Targets the Vega Virtual Device. `deviceId` defaults to `VirtualDevice`, the name the SDK uses in `vega device list`.
 
-**Parameters:**
+### `vegaPhysicalDevice(serial)`
 
-- `deviceName` - Name of the Vega emulator (e.g., 'VegaTV_1')
+Targets a Fire TV device in developer mode by the serial number printed by `vega device list`.
 
 ## Requirements
 
-- Vega SDK installed
-- Vega emulator running
-- React Native project configured for Vega platform
+- Vega SDK 0.24 or newer with the `vega` CLI on `PATH` (`source ~/vega/env`), or `KEPLER_SDK_PATH` / `VEGA_CLI_PATH` set.
+- An app built with `@amazon-devices/react-native-kepler` 4.x (React Native 0.83) as a Debug `.vpkg`.
+- Metro reachable from the device on port 8081. Harness forwards the port itself; if it has to run Metro on another port it maps it with the SDK's `vda` tool.
 
 ## Made with ❤️ at Callstack
 

@@ -11,9 +11,15 @@ type ScreenshotResult = {
 
 export async function toMatchImageSnapshot(
   this: MatcherState,
-  received: ScreenshotResult,
+  received: ScreenshotResult | null,
   options: ImageSnapshotOptions
 ): Promise<{ pass: boolean; message: () => string }> {
+  if (received === null) {
+    throw new Error(
+      `The screenshot for the "${options.name}" snapshot could not be captured: screen.screenshot() resolved null.`
+    );
+  }
+
   const handle = getHandle();
   const context = getHarnessContext();
 

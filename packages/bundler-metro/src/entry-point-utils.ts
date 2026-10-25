@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 // realpath'd too before computing a relative path -- otherwise the result
 // is a bogus "../../../private/var/..." path instead of the intended
 // project-relative entry point.
-const realpathOrSelf = (input: string): string => {
+export const realpathOrSelf = (input: string): string => {
   try {
     return fs.realpathSync(input);
   } catch {

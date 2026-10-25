@@ -1,5 +1,6 @@
 import type { HarnessTaskContext } from '@react-native-harness/bridge';
 import type { ActiveTestContext } from './types.js';
+import type { TestHostSession } from '../host-surface.js';
 
 export type TestLifecycleState = {
   onTestFailed: Array<() => void | Promise<void>>;
@@ -57,17 +58,33 @@ export const createTestLifecycleState = (): TestLifecycleState => {
 
 export const runOnTestFailed = async (
   state: TestLifecycleState,
+  hostSession?: TestHostSession,
 ): Promise<void> => {
   for (let i = state.onTestFailed.length - 1; i >= 0; i--) {
-    await state.onTestFailed[i]();
+    const callback = state.onTestFailed[i];
+    if (hostSession) {
+      await hostSession.run(async () => {
+        await callback();
+      });
+    } else {
+      await callback();
+    }
   }
 };
 
 export const runOnTestFinished = async (
   state: TestLifecycleState,
+  hostSession?: TestHostSession,
 ): Promise<void> => {
   for (let i = state.onTestFinished.length - 1; i >= 0; i--) {
-    await state.onTestFinished[i]();
+    const callback = state.onTestFinished[i];
+    if (hostSession) {
+      await hostSession.run(async () => {
+        await callback();
+      });
+    } else {
+      await callback();
+    }
   }
 };
 

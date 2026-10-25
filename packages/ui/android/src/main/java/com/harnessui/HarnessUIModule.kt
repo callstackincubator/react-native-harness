@@ -41,9 +41,10 @@ class HarnessUIModule(
     override fun queryAllByAccessibilityLabel(label: String): WritableArray = helper.queryAllByAccessibilityLabel(label)
 
     override fun captureScreenshot(
-        bounds: ReadableMap?,
+        options: ReadableMap,
         promise: Promise,
     ) {
+        val bounds = if (options.hasKey("bounds")) options.getMap("bounds") else null
         helper.captureScreenshot(bounds, promise)
     }
 

@@ -6,7 +6,7 @@ const cli = {
     {
       name: 'xctest',
       run: async (args, context) => {
-        const { buildXCTestAgent } = await import('./xctest-agent.js');
+        const { buildXCTestAgent } = await import('./xctest-agent-build.js');
 
         await runXCTestCommand({
           args,

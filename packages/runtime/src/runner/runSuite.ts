@@ -10,11 +10,14 @@ import {
   type HarnessExpectTestState,
 } from '../expect/context.js';
 import { flushExpectTestState } from '../expect/errors.js';
+import { flushOutgoingMessages } from '../utils/yield.js';
 import { runHooks, type HookType } from './hooks.js';
 import { getTestExecutionError } from './errors.js';
 import { ActiveTestContext, TestRunnerContext } from './types.js';
+import type { TestHostSession } from '../host-surface.js';
 import {
   getPendingPromises,
+  retainPendingPromises,
   omitPromiseFromTracking,
   runWithoutPromiseTracking,
   type TrackedPromiseRecord,
@@ -119,8 +122,10 @@ const withRuntimeTimeout = async <T>(
   options: {
     createTimeoutError: () => Error;
     timeout: number;
+    hostSession?: TestHostSession;
   },
 ): Promise<T> => {
+  options.hostSession?.throwIfInterrupted();
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   const timeoutPromise = runWithoutPromiseTracking(
@@ -131,12 +136,16 @@ const withRuntimeTimeout = async <T>(
         }, options.timeout);
       }),
   );
-  const workPromise = work();
-
   try {
-    return await runWithoutPromiseTracking(() =>
-      Promise.race([workPromise, timeoutPromise]),
-    );
+    const waitForWork = () => {
+      const workPromise = work();
+      return runWithoutPromiseTracking(() =>
+        Promise.race([workPromise, timeoutPromise]),
+      );
+    };
+    return await (options.hostSession
+      ? options.hostSession.run(waitForWork)
+      : waitForWork());
   } finally {
     if (timeoutId) {
       clearTimeout(timeoutId);
@@ -150,6 +159,7 @@ const withTestTimeout = async <T>(
     file: string;
     fullName: string;
     timeout: number;
+    hostSession?: TestHostSession;
   },
 ): Promise<T> => {
   const getMatchingPendingPromises = () =>
@@ -162,15 +172,29 @@ const withTestTimeout = async <T>(
           promise.test.phase === 'afterEach'),
     );
 
-  return await withRuntimeTimeout(work, {
-    timeout: options.timeout,
-    createTimeoutError: () =>
-      new TestCaseTimeoutError(options.fullName, options.timeout, {
-        pendingPromises: getPendingPromiseDiagnostics(
-          getMatchingPendingPromises(),
-        ),
-      }),
-  });
+  const release = retainPendingPromises(
+    (test) =>
+      test.file === options.file &&
+      test.fullName === options.fullName &&
+      (test.phase === 'beforeEach' ||
+        test.phase === 'test' ||
+        test.phase === 'afterEach'),
+  );
+
+  try {
+    return await withRuntimeTimeout(work, {
+      timeout: options.timeout,
+      hostSession: options.hostSession,
+      createTimeoutError: () =>
+        new TestCaseTimeoutError(options.fullName, options.timeout, {
+          pendingPromises: getPendingPromiseDiagnostics(
+            getMatchingPendingPromises(),
+          ),
+        }),
+    });
+  } finally {
+    release();
+  }
 };
 
 const withSuiteHookTimeout = async (
@@ -180,6 +204,7 @@ const withSuiteHookTimeout = async (
     hookType: Extract<HookType, 'beforeAll' | 'afterAll'>;
     suiteName: string;
     timeout: number;
+    hostSession?: TestHostSession;
   },
 ): Promise<void> => {
   const getMatchingPendingPromises = () =>
@@ -190,10 +215,17 @@ const withSuiteHookTimeout = async (
         promise.test.phase === options.hookType,
     );
 
-  return await withRuntimeTimeout(
-    work,
-    {
+  const release = retainPendingPromises(
+    (test) =>
+      test.file === options.file &&
+      test.suite === options.suiteName &&
+      test.phase === options.hookType,
+  );
+
+  try {
+    return await withRuntimeTimeout(work, {
       timeout: options.timeout,
+      hostSession: options.hostSession,
       createTimeoutError: () =>
         new SuiteHookTimeoutError(
           options.hookType,
@@ -205,8 +237,10 @@ const withSuiteHookTimeout = async (
             ),
           },
         ),
-    },
-  );
+    });
+  } finally {
+    release();
+  }
 };
 
 const emitTestFinished = (
@@ -326,6 +360,7 @@ const runTest = async (
   context: TestRunnerContext,
   state: RunSuiteState
 ): Promise<TestResult> => {
+  context.hostSession?.throwIfInterrupted();
   const startedAt = Date.now();
   const task: HarnessTaskContext = {
     name: test.name,
@@ -352,16 +387,18 @@ const runTest = async (
   let onTestFinishedRan = false;
 
   const runTestFinishedOnce = async (): Promise<void> => {
+    context.hostSession?.throwIfInterrupted();
     if (onTestFinishedRan) {
       return;
     }
 
     onTestFinishedRan = true;
-    await runOnTestFinished(lifecycleState);
+    await runOnTestFinished(lifecycleState, context.hostSession);
   };
 
   // Emit test-started event
   const ancestorTitles = getAncestorTitles(suite);
+  const runsTest = test.status !== 'skipped' && test.status !== 'todo';
   context.events.emit({
     type: 'test-started',
     name: test.name,
@@ -371,7 +408,16 @@ const runTest = async (
     fullName: getFullName(ancestorTitles, test.name),
     startedAt,
     declarationMode: test.declarationMode,
+    // The harness enforces this from the CLI side too, because the timer
+    // below cannot fire while the test blocks the JS thread.
+    timeout: runsTest ? getTestTimeout(context) : undefined,
   });
+
+  if (runsTest) {
+    // Let test-started reach the harness before the test can block the
+    // thread, so the test's own timeout applies to it.
+    await flushOutgoingMessages();
+  }
 
   try {
     if (test.status === 'skipped') {
@@ -440,7 +486,10 @@ const runTest = async (
                     fullName,
                     phase: 'beforeEach',
                   },
-                  runHook,
+                  () => {
+                    context.hostSession?.throwIfInterrupted();
+                    return runHook();
+                  },
                   { omitReturnedPromise: true },
                 ),
             });
@@ -455,6 +504,7 @@ const runTest = async (
                 phase: 'test',
               },
               async () => {
+                context.hostSession?.throwIfInterrupted();
                 const result = test.fn(activeTestContext);
                 omitPromiseFromTracking(result);
                 await result;
@@ -470,6 +520,7 @@ const runTest = async (
           } finally {
             // Run all afterEach hooks from the current suite and its parents
             if (!timedOut) {
+              context.hostSession?.throwIfInterrupted();
               await runHooks(suite, 'afterEach', activeTestContext, {
                 wrapHook: (runHook) =>
                   withPromiseTrackerTestContext(
@@ -480,7 +531,10 @@ const runTest = async (
                       fullName,
                       phase: 'afterEach',
                     },
-                    runHook,
+                    () => {
+                      context.hostSession?.throwIfInterrupted();
+                      return runHook();
+                    },
                     { omitReturnedPromise: true },
                   ),
               });
@@ -488,6 +542,7 @@ const runTest = async (
           }
 
           if (!didSkip && !timedOut) {
+            context.hostSession?.throwIfInterrupted();
             await flushExpectTestState(expectTestState);
             await runTestFinishedOnce();
           }
@@ -496,6 +551,7 @@ const runTest = async (
           file: context.testFilePath,
           fullName,
           timeout: getTestTimeout(context),
+          hostSession: context.hostSession,
         },
       );
 
@@ -551,12 +607,13 @@ const runTest = async (
 
     return result;
   } catch (error) {
+    context.hostSession?.throwIfInterrupted();
     if (error instanceof TestCaseTimeoutError) {
       state.interruptedByTimeout = true;
       timedOut = true;
     }
 
-    await runOnTestFailed(lifecycleState);
+    await runOnTestFailed(lifecycleState, context.hostSession);
     await runTestFinishedOnce();
 
     const testError = await getTestExecutionError(
@@ -596,13 +653,18 @@ export const runSuite = async (
   context: TestRunnerContext,
   state: RunSuiteState = { interruptedByTimeout: false }
 ): Promise<TestSuiteResult> => {
+  context.hostSession?.throwIfInterrupted();
   const startTime = Date.now();
 
   // Emit suite-started event
+  const runsSuite = suite.status !== 'skipped' && suite.status !== 'todo';
   context.events.emit({
     type: 'suite-started',
     name: suite.name,
     file: context.testFilePath,
+    // The harness applies the hook timeout to beforeAll/afterAll from the
+    // CLI side too, because the timer cannot fire while a hook blocks.
+    timeout: runsSuite ? getTestTimeout(context) : undefined,
   });
 
   // Check if suite should be skipped or is todo
@@ -662,6 +724,9 @@ export const runSuite = async (
   const testResults: TestResult[] = [];
   const suiteResults: TestSuiteResult[] = [];
 
+  // Let suite-started reach the harness before a beforeAll can block.
+  await flushOutgoingMessages();
+
   // Run beforeAll hooks
   try {
     await withSuiteHookTimeout(
@@ -676,7 +741,10 @@ export const runSuite = async (
                 fullName: `${suite.name} beforeAll`,
                 phase: 'beforeAll',
               },
-              runHook,
+              () => {
+                context.hostSession?.throwIfInterrupted();
+                return runHook();
+              },
               { omitReturnedPromise: true },
             ),
         }),
@@ -685,6 +753,7 @@ export const runSuite = async (
         hookType: 'beforeAll',
         suiteName: suite.name,
         timeout: getTestTimeout(context),
+        hostSession: context.hostSession,
       },
     );
   } catch (error) {
@@ -747,6 +816,10 @@ export const runSuite = async (
   // Run afterAll hooks
   let suiteError: TestSuiteResult['error'];
   if (!state.interruptedByTimeout) {
+    // Let the last test-finished or suite-finished, which restores this
+    // suite's hook budget, reach the harness before an afterAll can block.
+    await flushOutgoingMessages();
+
     try {
       await withSuiteHookTimeout(
         () =>
@@ -760,7 +833,10 @@ export const runSuite = async (
                   fullName: `${suite.name} afterAll`,
                   phase: 'afterAll',
                 },
-                runHook,
+                () => {
+                  context.hostSession?.throwIfInterrupted();
+                  return runHook();
+                },
                 { omitReturnedPromise: true },
               ),
           }),
@@ -769,6 +845,7 @@ export const runSuite = async (
           hookType: 'afterAll',
           suiteName: suite.name,
           timeout: getTestTimeout(context),
+          hostSession: context.hostSession,
         },
       );
     } catch (error) {

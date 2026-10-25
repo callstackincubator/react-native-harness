@@ -1,7 +1,7 @@
 import { ModuleFactory, ModuleId, Require } from './types.js';
 
-const modulesCache = new Map<number, unknown>();
-const mockRegistry = new Map<number, ModuleFactory>();
+const modulesCache = new Map<ModuleId, unknown>();
+const mockRegistry = new Map<ModuleId, ModuleFactory>();
 
 const originalRequire = global.__r;
 
@@ -10,11 +10,11 @@ export const mock = (moduleId: string, factory: ModuleFactory): void => {
   mockRegistry.set(moduleId as unknown as ModuleId, factory);
 };
 
-const isModuleMocked = (moduleId: number): boolean => {
+const isModuleMocked = (moduleId: ModuleId): boolean => {
   return mockRegistry.has(moduleId);
 };
 
-const getMockImplementation = (moduleId: number): unknown | null => {
+const getMockImplementation = (moduleId: ModuleId): unknown | null => {
   const factory = mockRegistry.get(moduleId);
   
   if (!factory) {
@@ -67,3 +67,13 @@ Object.defineProperties(
   Object.getOwnPropertyDescriptors(originalRequire)
 );
 global.__r = mockRequire as unknown as Require;
+
+// `__resetModule` forces Metro to re-run a module's factory on the next
+// `__r(id)`. `mockRequire` would still answer from `modulesCache` without ever
+// reaching Metro, so a re-evaluated module (e.g. the same test file on a later
+// run in watch mode) would silently not execute. Drop the cached entry too.
+const originalResetModule = global.__resetModule;
+global.__resetModule = (moduleId) => {
+  modulesCache.delete(moduleId);
+  originalResetModule?.(moduleId);
+};

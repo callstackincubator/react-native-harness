@@ -19,4 +19,6 @@ export * from './isInteractive.js';
 export * from './diagnostics.js';
 export * from './device-core-budget.js';
 export * from './host-capabilities.js';
+export * from './unref-timer.js';
 export * from './harness-context.js';
+export * from './telemetry/index.js';

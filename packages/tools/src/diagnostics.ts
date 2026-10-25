@@ -6,8 +6,14 @@ export type DiagnosticEntry = {
   duration: number; // ms
   attrs?: DiagnosticAttrs;
   status: 'ok' | 'error';
-  kind: 'span' | 'mark';
+  kind: 'span' | 'mark' | 'gauge';
+  /** Numeric sample, set only on `gauge` entries. */
+  value?: number;
+  /** Optional unit of `value` (for example `MB` or `%`), `gauge` entries only. */
+  unit?: string;
 };
+
+export type DiagnosticEntryListener = (entry: DiagnosticEntry) => void;
 
 export type DiagnosticSpan = {
   end(attrs?: DiagnosticAttrs): void;
@@ -26,8 +32,22 @@ export type Diagnostics = {
   start(label: string, attrs?: DiagnosticAttrs): DiagnosticSpan;
   measure<T>(label: string, fn: () => T | Promise<T>, attrs?: DiagnosticAttrs): Promise<T>;
   mark(label: string, attrs?: DiagnosticAttrs): void;
+  /** Records a numeric sample (a point on a time series) at the current time. */
+  gauge(label: string, value: number, attrs?: DiagnosticAttrs, unit?: string): void;
   record(entry: DiagnosticRecordInput): void;
   child(nsOrAttrs: string | DiagnosticAttrs): Diagnostics;
+  /**
+   * Observes every entry as it is recorded, including entries recorded through
+   * child instances. Unlike `flush()`, subscribing does not consume entries, so
+   * a sink can persist them incrementally. With `replay`, entries already
+   * recorded and not yet flushed are delivered to the listener first, so a sink
+   * attached late still sees the start of the session. Returns a function that
+   * unsubscribes.
+   */
+  subscribe(
+    listener: DiagnosticEntryListener,
+    options?: { replay?: boolean }
+  ): () => void;
   flush(): DiagnosticEntry[];
 };
 
@@ -64,8 +84,10 @@ const createNoopDiagnostics = (): Diagnostics => {
     start: () => noopSpan,
     measure: async (_label, fn) => fn(),
     mark: noop,
+    gauge: noop,
     record: noop,
     child: () => diagnostics,
+    subscribe: () => noop,
     flush: () => [],
   };
 
@@ -76,6 +98,7 @@ export const noopDiagnostics: Diagnostics = createNoopDiagnostics();
 
 type RootState = {
   entries: DiagnosticEntry[];
+  listeners: Set<DiagnosticEntryListener>;
   epochAnchor: number;
   perfAnchor: number;
 };
@@ -93,6 +116,13 @@ const createEnabledDiagnostics = (
 
   const pushEntry = (entry: DiagnosticEntry) => {
     state.entries.push(entry);
+    for (const listener of state.listeners) {
+      try {
+        listener(entry);
+      } catch {
+        // A faulty sink must never break the code being observed.
+      }
+    }
   };
 
   const start = (label: string, attrs?: DiagnosticAttrs): DiagnosticSpan => {
@@ -162,6 +192,24 @@ const createEnabledDiagnostics = (
     });
   };
 
+  const gauge = (
+    label: string,
+    value: number,
+    attrs?: DiagnosticAttrs,
+    unit?: string
+  ): void => {
+    pushEntry({
+      label: prefixLabel(label),
+      startTime: now(state),
+      duration: 0,
+      attrs: mergeAttrs(inheritedAttrs, attrs),
+      status: 'ok',
+      kind: 'gauge',
+      value,
+      ...(unit === undefined ? {} : { unit }),
+    });
+  };
+
   const record = (entry: DiagnosticRecordInput): void => {
     pushEntry({
       label: prefixLabel(entry.label),
@@ -186,6 +234,21 @@ const createEnabledDiagnostics = (
     );
   };
 
+  const subscribe = (
+    listener: DiagnosticEntryListener,
+    options?: { replay?: boolean }
+  ): (() => void) => {
+    if (options?.replay) {
+      for (const entry of [...state.entries]) {
+        listener(entry);
+      }
+    }
+    state.listeners.add(listener);
+    return () => {
+      state.listeners.delete(listener);
+    };
+  };
+
   const flush = (): DiagnosticEntry[] => {
     const flushed = state.entries;
     state.entries = [];
@@ -197,8 +260,10 @@ const createEnabledDiagnostics = (
     start,
     measure,
     mark,
+    gauge,
     record,
     child,
+    subscribe,
     flush,
   };
 };
@@ -210,6 +275,7 @@ export const createDiagnostics = (options?: { enabled?: boolean }): Diagnostics 
 
   const state: RootState = {
     entries: [],
+    listeners: new Set(),
     epochAnchor: Date.now(),
     perfAnchor: performance.now(),
   };
@@ -217,10 +283,38 @@ export const createDiagnostics = (options?: { enabled?: boolean }): Diagnostics 
   return createEnabledDiagnostics(state, '', undefined);
 };
 
+export type InstrumentedOptions = {
+  /**
+   * Derives extra span attrs from a method's resolved return value, so a
+   * wrapped module can surface facts about its result (for example the last
+   * status line of a long wait) without calling diagnostics itself.
+   */
+  resultAttrs?: (method: string, result: unknown) => DiagnosticAttrs | undefined;
+  /** Same as `resultAttrs`, for the error a method rejected or threw with. */
+  errorAttrs?: (method: string, error: unknown) => DiagnosticAttrs | undefined;
+};
+
+const safeAttrs = <TValue>(
+  derive: ((method: string, value: TValue) => DiagnosticAttrs | undefined) | undefined,
+  method: string,
+  value: TValue
+): DiagnosticAttrs | undefined => {
+  if (!derive) {
+    return undefined;
+  }
+
+  try {
+    return derive(method, value);
+  } catch {
+    return undefined;
+  }
+};
+
 export const instrumented = <T extends object>(
   target: T,
   ns: string,
-  diagnostics: Diagnostics
+  diagnostics: Diagnostics,
+  options?: InstrumentedOptions
 ): T => {
   if (!diagnostics.enabled) {
     return target;
@@ -242,13 +336,14 @@ export const instrumented = <T extends object>(
       }
 
       const wrappedFn = (...args: unknown[]) => {
-        const span = diagnostics.start(`${ns}.${String(prop)}`);
+        const method = String(prop);
+        const span = diagnostics.start(`${ns}.${method}`);
 
         let result: unknown;
         try {
           result = value.apply(obj, args);
         } catch (error) {
-          span.fail(error);
+          span.fail(error, safeAttrs(options?.errorAttrs, method, error));
           throw error;
         }
 
@@ -265,13 +360,15 @@ export const instrumented = <T extends object>(
           // and silently drop that shape, so track the span as a side
           // effect and always return the original object untouched.
           (result as Promise<unknown>).then(
-            () => span.end(),
-            (error: unknown) => span.fail(error)
+            (value: unknown) =>
+              span.end(safeAttrs(options?.resultAttrs, method, value)),
+            (error: unknown) =>
+              span.fail(error, safeAttrs(options?.errorAttrs, method, error))
           );
           return result;
         }
 
-        span.end();
+        span.end(safeAttrs(options?.resultAttrs, method, result));
         return result;
       };
 

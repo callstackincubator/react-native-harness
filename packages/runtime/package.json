@@ -1,7 +1,7 @@
 {
   "name": "@react-native-harness/runtime",
   "description": "The core test runtime that executes on React Native devices, providing Jest-compatible APIs (describe, it, expect) and managing test collection, execution, and result reporting in native environments.",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -17,6 +17,12 @@
     "./polyfills/harness-module-system": {
       "import": "./assets/harness-module-system.js",
       "default": "./assets/harness-module-system.js"
+    },
+    "./bundle-format": {
+      "development": "./src/bundle-format/chunk-plan.ts",
+      "types": "./dist/bundle-format/chunk-plan.d.ts",
+      "import": "./dist/bundle-format/chunk-plan.js",
+      "default": "./dist/bundle-format/chunk-plan.js"
     },
     "./entry-point": {
       "development": "./src/entry-point.ts",
@@ -43,9 +49,9 @@
     "@react-native-harness/bridge": "workspace:*",
     "@vitest/expect": "4.0.16",
     "@vitest/spy": "4.0.16",
+    "@vitest/utils": "4.0.16",
     "chai": "^6.2.2",
     "event-target-shim": "^6.0.2",
-    "react-native-url-polyfill": "^3.0.0",
     "use-sync-external-store": "^1.6.0",
     "zustand": "^5.0.5"
   },

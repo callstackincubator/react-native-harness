@@ -8,6 +8,7 @@ import type { FileReference, ImageSnapshotOptions } from './shared.js';
 type PixelmatchOptions = Parameters<typeof pixelmatch>[5];
 
 const SNAPSHOT_DIR_NAME = '__image_snapshots__';
+const DIFF_OUTPUT_DIR_NAME = '__diff_output__';
 const DEFAULT_OPTIONS_FOR_PIXELMATCH: PixelmatchOptions = {
   threshold: 0.1,
   includeAA: false,
@@ -93,11 +94,21 @@ export const matchImageSnapshot = async (
   const img2 = PNG.sync.read(snapshotBuffer);
   const { width, height } = img1;
   const diff = new PNG({ width, height });
+  // Failure artifacts live in their own folder so they can never overwrite
+  // a baseline of another snapshot (e.g. one named `<name>-diff`).
+  const diffOutputDir = path.join(snapshotsDir, DIFF_OUTPUT_DIR_NAME);
+  const actualPath = path.join(
+    diffOutputDir,
+    `${snapshotName.replace('.png', '')}-actual.png`
+  );
 
   if (img1.width !== img2.width || img1.height !== img2.height) {
+    await fs.mkdir(diffOutputDir, { recursive: true });
+    await fs.writeFile(actualPath, receivedBuffer);
+
     return {
       pass: false,
-      message: `Images have different dimensions. Received image width: ${img1.width}, height: ${img1.height}. Snapshot image width: ${img2.width}, height: ${img2.height}.`,
+      message: `Images have different dimensions. Received image width: ${img1.width}, height: ${img1.height}. Snapshot image width: ${img2.width}, height: ${img2.height}. Actual image saved at ${actualPath}.`,
     };
   }
 
@@ -152,12 +163,12 @@ export const matchImageSnapshot = async (
 
   // Save diff and actual images when test fails
   if (!pass) {
+    await fs.mkdir(diffOutputDir, { recursive: true });
+
     const diffFileName = `${snapshotName.replace('.png', '')}-diff.png`;
-    const diffPath = path.join(snapshotsDir, diffFileName);
+    const diffPath = path.join(diffOutputDir, diffFileName);
     await fs.writeFile(diffPath, PNG.sync.write(diff));
 
-    const actualFileName = `${snapshotName.replace('.png', '')}-actual.png`;
-    const actualPath = path.join(snapshotsDir, actualFileName);
     await fs.writeFile(actualPath, receivedBuffer);
 
     message += ` Diff saved at ${diffPath}. Actual image saved at ${actualPath}.`;

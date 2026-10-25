@@ -5,11 +5,12 @@ import type {
   TestEvents,
 } from 'jest-runner';
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
 import { type HarnessSession, type HarnessRunState } from './harness-session.js';
 import { runHarnessTestFile } from './run.js';
+import { toRelativePosixPath } from './relative-path.js';
 import { resolveResetStrategyKind } from './environment-reset.js';
 import {
+  HostSurfaceReplacedError,
   NativeCrashError,
   RuntimeDisconnectError,
   StartupStallError,
@@ -31,7 +32,13 @@ import {
 } from './test-file-platform-filter.js';
 import { formatHarnessErrorMessage } from './format-harness-error.js';
 import { logger } from '@react-native-harness/tools';
-import { printSummary, writeTraceFile } from './diagnostics/index.js';
+import {
+  appendStepSummary,
+  printSummary,
+  summarizeRunKpis,
+  writeSummaryFile,
+  writeTraceFile,
+} from './diagnostics/index.js';
 import { toJestStatus } from './toJestStatus.js';
 
 const diagnosticsLogger = logger.child('diagnostics');
@@ -162,7 +169,7 @@ export const executeRun = async (
   const startTime = Date.now();
   const watchMode = globalConfig.watch || globalConfig.watchAll;
   const rootDir = globalConfig.rootDir ?? process.cwd();
-  const testFiles = tests.map((t) => path.relative(rootDir, t.path));
+  const testFiles = tests.map((t) => toRelativePosixPath(rootDir, t.path));
   const summary = createRunSummary();
   let caseEventChain = Promise.resolve();
   // The device runs one test at a time, so a test that started and has not
@@ -201,6 +208,11 @@ export const executeRun = async (
   };
 
   updateRunState();
+  session.lifecycle.emit({
+    type: 'phase',
+    phase: 'run.start',
+    attrs: { runId },
+  });
 
   await session.callHook('run:started', {
     runId,
@@ -230,7 +242,7 @@ export const executeRun = async (
     for (const test of tests) {
       if (watcher.isInterrupted()) throw new CancelRun();
 
-      const relativeTestPath = path.relative(rootDir, test.path);
+      const relativeTestPath = toRelativePosixPath(rootDir, test.path);
       const fileStartedAt = Date.now();
       runningTest = null;
       let emittedTestFileFinished = false;
@@ -252,6 +264,11 @@ export const executeRun = async (
 
       await session.callHook('test-file:started', { runId, file: relativeTestPath });
       const fileSpan = diagnostics.start('run.file', { file: relativeTestPath });
+      session.lifecycle.emit({
+        type: 'phase',
+        phase: 'test-file.start',
+        attrs: { file: relativeTestPath },
+      });
       let fileStatus: 'passed' | 'failed' | 'skipped' | 'todo' = 'failed';
 
       try {
@@ -329,7 +346,11 @@ export const executeRun = async (
             await session.restartApp(test.path);
             shouldRestartAfterTimeout = false;
           }
-        } catch (err) {
+        } catch (error) {
+          const err =
+            error instanceof Error && error.name === 'HostSurfaceReplacedError'
+              ? new HostSurfaceReplacedError(test.path, error)
+              : error;
           fileStatus = 'failed';
           if (!emittedTestFileFinished) {
             await emitTestFileFinished({
@@ -339,7 +360,10 @@ export const executeRun = async (
             });
           }
 
-          if (isRuntimeFailure(err)) {
+          const isFileRuntimeFailure =
+            err instanceof HostSurfaceReplacedError || isRuntimeFailure(err);
+
+          if (isFileRuntimeFailure) {
             summary.failed += 1;
             updateRunState();
           }
@@ -348,16 +372,26 @@ export const executeRun = async (
             session.resetCrashState();
           }
 
-          updateRunState({ error: isRuntimeFailure(err) ? undefined : err });
+          updateRunState({ error: isFileRuntimeFailure ? undefined : err });
           await caseEventChain;
           await emitEvent(
             'test-file-failure',
             test,
             buildTestFailure(err, runningTest),
           );
+          if (err instanceof HostSurfaceReplacedError) {
+            // Abandoned async test work may still be running in this process.
+            await session.restartApp(test.path);
+            isFirstTest = true;
+          }
         }
       } finally {
         fileSpan.end({ status: fileStatus });
+        session.lifecycle.emit({
+          type: 'phase',
+          phase: 'test-file.end',
+          attrs: { file: relativeTestPath, status: fileStatus },
+        });
       }
     }
   } catch (err) {
@@ -380,6 +414,12 @@ export const executeRun = async (
     await caseEventChain;
     unsubscribe();
     runSpan.end({ runId, status: finalStatus });
+    // Idle time between runs (watch mode) is not part of any run's metrics.
+    session.lifecycle.emit({
+      type: 'phase',
+      phase: 'run.end',
+      attrs: { runId, status: finalStatus },
+    });
 
     if (session.diagnostics.enabled) {
       const entries = session.diagnostics.flush();
@@ -387,6 +427,14 @@ export const executeRun = async (
         printSummary(entries, (line) => diagnosticsLogger.info(line));
         const tracePath = await writeTraceFile(entries, { projectRoot: rootDir, runId });
         diagnosticsLogger.info(`wrote diagnostics trace to ${tracePath}`);
+        const kpis = summarizeRunKpis(entries);
+        const summaryPath = await writeSummaryFile(kpis, {
+          projectRoot: rootDir,
+          runId,
+          sessionId: session.sessionId,
+        });
+        diagnosticsLogger.info(`wrote diagnostics summary to ${summaryPath}`);
+        await appendStepSummary(kpis);
       } catch (reportError) {
         diagnosticsLogger.warn('failed to write diagnostics report: %s', reportError);
       }

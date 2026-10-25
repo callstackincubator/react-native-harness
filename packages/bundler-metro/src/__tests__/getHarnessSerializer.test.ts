@@ -1,5 +1,9 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
+// The runtime is resolved lazily elsewhere because it is app code; this
+// subpath is the RN-free bundle format shared with the serializer.
+// eslint-disable-next-line @nx/enforce-module-boundaries
+import { readChunkPlan } from '@react-native-harness/runtime/bundle-format';
 import {
   getHarnessSerializer as getHarnessSerializerImpl,
   type GetHarnessSerializerOptions,
@@ -124,6 +128,7 @@ const makeBundleOptions = (
     modulesOnly?: boolean;
     createModuleId?: (path: string) => number;
     processModuleFilter?: (mod: FakeModule) => boolean;
+    sourceUrl?: string;
   } = {}
 ) => ({
   asyncRequireModulePath: 'asyncRequire',
@@ -142,7 +147,7 @@ const makeBundleOptions = (
   serverRoot: '/repo',
   shouldAddToIgnoreList: () => false,
   sourceMapUrl: undefined,
-  sourceUrl: undefined,
+  sourceUrl: overrides.sourceUrl,
   getSourceUrl: () => undefined,
 });
 
@@ -182,6 +187,35 @@ describe('getHarnessSerializer', () => {
 
     expect((result as { code: string }).code).not.toContain('console.log("app"');
     expect((result as { code: string }).code).toContain('test("x", () => {}');
+  });
+
+  it('assigns ids to every graph module before the first processModuleFilter call, like Metro does', async () => {
+    const serializer = getHarnessSerializer({
+      harnessEntryPointPath: HARNESS_ENTRY,
+    });
+    const appModule = makeModule(APP_MODULE, 'console.log("app");\n');
+    const preModule = makeModule('/repo/node_modules/metro-runtime/require.js', '// prelude\n');
+    const mainGraph = makeGraph([appModule]);
+    mainGraph.entryPoints.add(HARNESS_ENTRY);
+
+    const seenByIdFactory = new Set<string>();
+    const createModuleId = makeCreateModuleId();
+    const filterCalls: Array<{ path: string; appSeen: boolean }> = [];
+    const bundleOptions = makeBundleOptions({
+      createModuleId: (path) => {
+        seenByIdFactory.add(path);
+        return createModuleId(path);
+      },
+      processModuleFilter: (mod) => {
+        filterCalls.push({ path: mod.path, appSeen: seenByIdFactory.has(APP_MODULE) });
+        return true;
+      },
+    });
+
+    await serializer(HARNESS_ENTRY, [preModule], mainGraph, bundleOptions);
+
+    const firstPreModuleCall = filterCalls.find((call) => call.path === preModule.path);
+    expect(firstPreModuleCall?.appSeen).toBe(true);
   });
 
   it('does not let a non-matching full bundle serialization clobber the captured set', async () => {
@@ -484,5 +518,112 @@ describe('getHarnessSerializer', () => {
     )) as { code: string };
 
     expect(result.code).not.toContain('console.log("app"');
+  });
+});
+
+describe('getHarnessSerializer chunk plan', () => {
+  const SOURCE_URL =
+    'http://localhost:8081/src/__tests__/example.test.bundle?modulesOnly=true&platform=ios';
+
+  // ~100 KB per module, spread over many lines.
+  const makeLargeModule = (index: number) =>
+    makeModule(
+      `/repo/src/generated/proto${index}.js`,
+      `__d(function () { globalThis.loaded${index} = true;\n` +
+        `// ${'x'.repeat(99)}\n`.repeat(1_000) +
+        '});'
+    );
+
+  const serializeTestBundle = async (
+    modules: FakeModule[],
+    options: { captureMainBundle: boolean }
+  ) => {
+    const serializer = getHarnessSerializer({
+      harnessEntryPointPath: HARNESS_ENTRY,
+    });
+    const createModuleId = makeCreateModuleId();
+
+    if (options.captureMainBundle) {
+      const mainGraph = makeGraph([makeModule(APP_MODULE, 'app();\n')]);
+      mainGraph.entryPoints.add(HARNESS_ENTRY);
+      await serializer(
+        HARNESS_ENTRY,
+        [],
+        mainGraph,
+        makeBundleOptions({ createModuleId })
+      );
+    }
+
+    const result = await serializer(
+      TEST_MODULE,
+      [],
+      makeGraph(modules),
+      makeBundleOptions({
+        modulesOnly: true,
+        createModuleId,
+        sourceUrl: SOURCE_URL,
+      })
+    );
+
+    return (result as { code: string }).code;
+  };
+
+  it.each([
+    ['with a captured main bundle', true],
+    ['when failing open without one', false],
+  ])(
+    'splits a large test bundle on module boundaries %s',
+    async (_name, captureMainBundle) => {
+      const modules = Array.from({ length: 12 }, (_, i) => makeLargeModule(i));
+      const bundle = await serializeTestBundle(modules, { captureMainBundle });
+
+      const plan = readChunkPlan(bundle);
+      expect(plan).not.toBeNull();
+      if (!plan) return;
+      const code = plan.bundle.slice(0, plan.codeLength);
+
+      // ~1.2 MB in ~256 KB chunks.
+      expect(plan.chunks.length).toBeGreaterThanOrEqual(4);
+      expect(plan.sourceUrl).toBe(SOURCE_URL);
+      // The chunks cover the bundle exactly, in order.
+      expect(
+        plan.chunks.map((chunk) => code.slice(chunk.start, chunk.end)).join('')
+      ).toBe(code);
+
+      for (const chunk of plan.chunks) {
+        const before = code.slice(0, chunk.start);
+        // Every chunk starts a line, on the line it has in the whole bundle.
+        expect(chunk.start === 0 || before.endsWith('\n')).toBe(true);
+        expect(chunk.startLine).toBe(before.split('\n').length - 1);
+        // ...and on a module boundary.
+        expect(code.slice(chunk.start)).toMatch(/^__d\(function \(\) \{ globalThis\.loaded\d+/);
+      }
+    }
+  );
+
+  it('leaves the line layout Metro computes source maps from untouched', async () => {
+    const modules = Array.from({ length: 12 }, (_, i) => makeLargeModule(i));
+    const bundle = await serializeTestBundle(modules, { captureMainBundle: false });
+    const plan = readChunkPlan(bundle);
+
+    const unplanned = bundleToString(
+      baseJSBundle(
+        TEST_MODULE,
+        [],
+        makeGraph(modules),
+        makeBundleOptions({ modulesOnly: true, sourceUrl: SOURCE_URL })
+      )
+    ).code;
+
+    expect(plan?.bundle.slice(0, plan.codeLength)).toBe(unplanned);
+  });
+
+  it('does not add a plan to a test bundle that fits in one chunk', async () => {
+    const bundle = await serializeTestBundle(
+      [makeModule(TEST_MODULE, 'test("x", () => {});\n')],
+      { captureMainBundle: false }
+    );
+
+    expect(readChunkPlan(bundle)).toBeNull();
   });
 });

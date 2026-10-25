@@ -85,4 +85,19 @@ describe('ConfigSchema runner', () => {
       })
     ).toThrow();
   });
+
+  it('preserves a platform-provided bundlePlatform', () => {
+    const parsed = ConfigSchema.parse({
+      ...baseConfig,
+      runners: [{ ...runner, bundlePlatform: 'kepler' }],
+    });
+
+    expect(parsed.runners[0]?.bundlePlatform).toBe('kepler');
+  });
+
+  it('leaves bundlePlatform undefined when a runner does not set one', () => {
+    const parsed = ConfigSchema.parse({ ...baseConfig, runners: [runner] });
+
+    expect(parsed.runners[0]?.bundlePlatform).toBeUndefined();
+  });
 });

@@ -15,6 +15,10 @@ import {
   assertAppleDeviceSimulator,
 } from './config.js';
 import * as simctlModule from './xcrun/simctl.js';
+import {
+  simctlErrorAttrs,
+  simctlResultAttrs,
+} from './xcrun/simctl-diagnostics.js';
 import * as devicectlModule from './xcrun/devicectl.js';
 import { getDeviceName } from './utils.js';
 import { HarnessAppPathError } from './errors.js';
@@ -31,8 +35,13 @@ import {
   createIosCrashReporter,
   getIosProcessNames,
 } from './crash-reporter.js';
-import { shouldOverlapXCTestBuildAndSimulatorBoot } from './startup-strategy.js';
+import {
+  shouldOverlapXCTestBuildAndSimulatorBoot,
+  shouldWaitForSimulatorToSettle,
+} from './startup-strategy.js';
+import { waitForSimulatorToSettle } from './simulator-settle.js';
 
+const SIMULATOR_SETTLE_PROBE_TIMEOUT_MS = 5_000;
 const iosInstanceLogger = logger.child('ios-instance');
 
 const getHarnessAppPath = (): string => {
@@ -58,7 +67,8 @@ export const getAppleSimulatorPlatformInstance = async (
   const simctl = instrumented(
     simctlModule,
     'platform.ios.simctl',
-    init.diagnostics ?? noopDiagnostics
+    init.diagnostics ?? noopDiagnostics,
+    { resultAttrs: simctlResultAttrs, errorAttrs: simctlErrorAttrs }
   );
   const permissionsEnabled = harnessConfig.permissions ?? false;
 
@@ -127,6 +137,26 @@ export const getAppleSimulatorPlatformInstance = async (
         udid
       );
       await simctl.waitForBoot(udid, init.signal);
+
+      if (shouldWaitForSimulatorToSettle()) {
+        const result = await waitForSimulatorToSettle({
+          probe: (signal) =>
+            simctl.getGuestProcessCount(
+              udid,
+              signal,
+              SIMULATOR_SETTLE_PROBE_TIMEOUT_MS
+            ),
+          signal: init.signal,
+        });
+        iosInstanceLogger.debug(
+          'iOS simulator %s %s after %dms (%d probes)',
+          udid,
+          result.settled ? 'settled' : 'did not settle in time',
+          result.durationMs,
+          result.probes
+        );
+        init.signal.throwIfAborted();
+      }
     }
 
     const isInstalled = await simctl.isAppInstalled(udid, config.bundleId);
@@ -234,6 +264,20 @@ export const getAppleSimulatorPlatformInstance = async (
         outputDir: options.outputDir,
       });
     },
+    createTelemetryCollector: () => ({
+      collect: async (phase, signal): Promise<Record<string, number>> => {
+        // Listing guest services costs a simctl round trip, so only do it at
+        // the boundaries where the guest's state is worth recording.
+        if (phase !== 'platform.ready' && phase !== 'dispose') {
+          return {};
+        }
+
+        return {
+          'ios.simulator.guest_process_count':
+            await simctl.getGuestProcessCount(udid, signal),
+        };
+      },
+    }),
   };
 };
 

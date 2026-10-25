@@ -111,3 +111,40 @@ describe('runHarnessTestFile', () => {
     ]);
   });
 });
+
+describe('runHarnessTestFile on Windows', () => {
+  it('sends forward-slashed test and setup file paths to the device', async () => {
+    vi.resetModules();
+    vi.doMock('node:path', async () => {
+      const actual =
+        await vi.importActual<typeof import('node:path')>('node:path');
+      return { ...actual.win32, default: actual.win32 };
+    });
+
+    try {
+      const { runHarnessTestFile: runOnWindows } = await import('../run.js');
+      const session = createSession(15000);
+
+      await runOnWindows({
+        testPath: 'C:\\project\\src\\__tests__\\a.harness.ts',
+        session,
+        globalConfig: createGlobalConfig({ rootDir: 'C:\\project' }),
+        projectConfig: createProjectConfig({
+          setupFiles: ['C:\\project\\setup\\setup.ts'],
+          setupFilesAfterEnv: ['C:\\project\\setup\\after-env.ts'],
+        }),
+      });
+
+      expect(session.runTestFile).toHaveBeenCalledWith(
+        'src/__tests__/a.harness.ts',
+        expect.objectContaining({
+          setupFiles: ['setup/setup.ts'],
+          setupFilesAfterEnv: ['setup/after-env.ts'],
+        }),
+      );
+    } finally {
+      vi.doUnmock('node:path');
+      vi.resetModules();
+    }
+  });
+});

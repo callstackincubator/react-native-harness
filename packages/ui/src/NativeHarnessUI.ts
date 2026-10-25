@@ -24,7 +24,7 @@ interface Spec extends TurboModule {
   queryAllByTestId(testId: string): ViewInfo[];
   queryByAccessibilityLabel(label: string): ViewInfo | null;
   queryAllByAccessibilityLabel(label: string): ViewInfo[];
-  captureScreenshot(bounds: ViewInfo | null): Promise<string | null>;
+  captureScreenshot(options: { bounds?: ViewInfo }): Promise<string | null>;
   typeChar(character: string): Promise<void>;
   blur(options: { submitEditing?: boolean }): Promise<void>;
 }

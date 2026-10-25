@@ -54,16 +54,19 @@ final class PermissionPromptWatchdog: AgentCapability {
       return
     }
 
-    let guardQuery = springboard.buttons.matching(
-      NSPredicate(format: "label IN %@", Constants.knownPositiveButtonLabels)
-    ).firstMatch
+    // Prompts that matter appear over the foreground target app. When a
+    // target is configured, skip the SpringBoard query in any other state.
+    if state.hasTargetApplication && state.targetApplicationState != .runningForeground {
+      return
+    }
 
-    guard guardQuery.exists else {
+    // Cheap gate: only search for buttons when SpringBoard shows an alert.
+    guard springboard.alerts.firstMatch.exists else {
       return
     }
 
     for label in Constants.knownPositiveButtonLabels {
-      let button = springboard.buttons[label].firstMatch
+      let button = springboard.alerts.buttons[label].firstMatch
 
       if button.exists && button.isHittable {
         log("tapping button: \(label)")

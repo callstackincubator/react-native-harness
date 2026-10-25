@@ -1,6 +1,6 @@
-import type { ViewInfo } from "./NativeHarnessUI.js";
+import type { ViewInfo } from './NativeHarnessUI.js';
 
-export type { ViewInfo, BoundingBox } from "./NativeHarnessUI.js";
+export type { ViewInfo, BoundingBox } from './NativeHarnessUI.js';
 
 export interface HarnessUIModule {
   /**
@@ -35,10 +35,10 @@ export interface HarnessUIModule {
 
   /**
    * Captures a screenshot of the app UI.
-   * @param bounds Optional bounds to capture a specific region. Pass null to capture the entire window.
+   * @param options.bounds Bounds to capture a specific region. Omit to capture the entire window.
    * @returns Promise resolving to Base64 encoded string containing PNG data, or null on failure.
    */
-  captureScreenshot(bounds: ViewInfo | null): Promise<string | null>;
+  captureScreenshot(options: { bounds?: ViewInfo }): Promise<string | null>;
 
   /**
    * Types a single character into the currently focused text input.

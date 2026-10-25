@@ -29,23 +29,19 @@
 
 + (nullable UIWindow *)getActiveWindow {
     UIWindow *window = nil;
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                for (UIWindow *w in scene.windows) {
-                    if (w.isKeyWindow) {
-                        window = w;
-                        break;
-                    }
+    for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+        if (scene.activationState == UISceneActivationStateForegroundActive) {
+            for (UIWindow *w in scene.windows) {
+                if (w.isKeyWindow) {
+                    window = w;
+                    break;
                 }
-                if (!window) {
-                    window = scene.windows.firstObject;
-                }
-                break;
             }
+            if (!window) {
+                window = scene.windows.firstObject;
+            }
+            break;
         }
-    } else {
-        window = [UIApplication sharedApplication].keyWindow;
     }
     return window;
 }
@@ -172,6 +168,9 @@
     UIGraphicsImageRendererFormat *format = [[UIGraphicsImageRendererFormat alloc] init];
     format.scale = [UIScreen mainScreen].scale;
     format.opaque = YES;
+    // Pin to 8-bit sRGB so captures are consistent regardless of capture path
+    // (the default range can yield 16-bit Display P3 on wide-colour devices).
+    format.preferredRange = UIGraphicsImageRendererFormatRangeStandard;
 
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:captureRect.size format:format];
 
@@ -196,6 +195,9 @@
     UIGraphicsImageRendererFormat *format = [[UIGraphicsImageRendererFormat alloc] init];
     format.scale = [UIScreen mainScreen].scale;
     format.opaque = NO; // Allow transparency if the view has it
+    // Pin to 8-bit sRGB so captures are consistent regardless of capture path
+    // (the default range can yield 16-bit Display P3 on wide-colour devices).
+    format.preferredRange = UIGraphicsImageRendererFormatRangeStandard;
 
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:view.bounds.size format:format];
 

@@ -1,0 +1,319 @@
+name: Release
+
+# Versions every package from the pending version plans, packs them, pushes the
+# release commit and tag to main, publishes to npm through trusted publishing
+# (OIDC), and creates the GitHub release.
+#
+# Hardening:
+# - Actions are pinned to full commit SHAs.
+# - No job restores a cache (no actions/cache, setup-node package-manager-cache
+#   disabled, pnpm store cache off, Nx local and remote caches skipped), so
+#   nothing written by another workflow can reach the published tarballs.
+# - Dependencies install from the frozen lockfile in jobs that hold no write
+#   token. The job that pushes and publishes never installs dependencies or
+#   runs repository scripts; it only applies the version patch and uploads the
+#   tarballs built earlier in this run. download-artifact fails on a digest
+#   mismatch.
+# - Publishing needs no npm token. The npm environment should require a
+#   reviewer and allow only main; npm trusts this workflow file and that
+#   environment only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Version, build, and pack without pushing or publishing
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NX_DAEMON: 'false'
+  NX_NO_CLOUD: 'true'
+  NX_SKIP_NX_CACHE: 'true'
+
+jobs:
+  prepare:
+    name: Version and pack
+    # platform-ios packs prebuilt XCTest agent artifacts with xcodebuild.
+    runs-on: macos-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      released: ${{ steps.version.outputs.released }}
+      version: ${{ steps.version.outputs.version }}
+      dist-tag: ${{ steps.version.outputs.dist-tag }}
+    steps:
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Releases run from main only, not $GITHUB_REF."
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          filter: tree:0
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '24.10.0'
+          package-manager-cache: false
+
+      - name: Setup Xcode 26.4.1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.4.1'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Builds every package through preVersionCommand, then applies the
+      # version plans and writes the changelog without committing.
+      - name: Version packages
+        id: version
+        run: |
+          read_version() {
+            node -p "require('./packages/react-native-harness/package.json').version"
+          }
+
+          previous=$(read_version)
+          pnpm exec nx release version --git-commit=false --git-tag=false
+          version=$(read_version)
+
+          if [ "$version" = "$previous" ]; then
+            echo "::notice::No version plans are pending, so there is nothing to release."
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          pnpm exec nx release changelog "$version" --git-commit=false --git-tag=false
+
+          # Prereleases go to the dist-tag named by their preid, such as rc.
+          if [[ "$version" == *-* ]]; then
+            prerelease=${version#*-}
+            dist_tag=${prerelease%%.*}
+          else
+            dist_tag=latest
+          fi
+
+          {
+            echo "released=true"
+            echo "version=$version"
+            echo "dist-tag=$dist_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Record release commit
+        if: steps.version.outputs.released == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          git add --all -- CHANGELOG.md pnpm-lock.yaml 'packages/*/package.json' .nx/version-plans
+          git status --short
+          git diff --cached --binary > "$RUNNER_TEMP/release/release.patch"
+          awk '/^## / { if (seen) exit; seen = 1 } seen' CHANGELOG.md > "$RUNNER_TEMP/release/release-notes.md"
+
+      - name: Pack packages
+        if: steps.version.outputs.released == 'true'
+        env:
+          HARNESS_REQUIRE_XCTEST_PREBUILDS: '1'
+        run: |
+          packages_dir="$RUNNER_TEMP/release/packages"
+          mkdir -p "$packages_dir"
+
+          # pnpm visits packages in dependency order, so the publish order
+          # lands dependencies on npm before the packages that need them.
+          pnpm --recursive --filter './packages/*' --workspace-concurrency=1 \
+            exec pnpm pack --pack-destination "$packages_dir"
+          pnpm --recursive --filter './packages/*' --workspace-concurrency=1 \
+            exec node -p "const { name, version } = require('./package.json'); name.replace(/^@/, '').replace('/', '-') + '-' + version + '.tgz'" \
+            > "$RUNNER_TEMP/release/publish-order.txt"
+
+          while IFS= read -r tarball; do
+            if [ ! -f "$packages_dir/$tarball" ]; then
+              echo "::error::pnpm pack did not produce $tarball."
+              exit 1
+            fi
+          done < "$RUNNER_TEMP/release/publish-order.txt"
+
+          platform_ios=$(grep '^react-native-harness-platform-apple-' "$RUNNER_TEMP/release/publish-order.txt")
+          if ! tar -tzf "$packages_dir/$platform_ios" | grep -q '^package/xctest-agent-prebuilds/'; then
+            echo "::error::$platform_ios does not contain the prebuilt XCTest agent artifacts."
+            exit 1
+          fi
+
+      - name: Summarize release
+        if: steps.version.outputs.released == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DIST_TAG: ${{ steps.version.outputs.dist-tag }}
+        run: |
+          {
+            echo "# Release v$VERSION"
+            echo
+            echo "Publishes to the \`$DIST_TAG\` dist-tag, in this order:"
+            echo
+            sed 's/^/- /' "$RUNNER_TEMP/release/publish-order.txt"
+            echo
+            cat "$RUNNER_TEMP/release/release-notes.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release
+        if: steps.version.outputs.released == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
+          retention-days: 14
+
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '24.10.0'
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck, lint, and test
+        run: pnpm nx run-many -t typecheck lint test --projects="packages/*"
+
+  release:
+    name: Publish
+    needs: [prepare, verify]
+    if: needs.prepare.outputs.released == 'true' && !inputs.dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm
+    permissions:
+      contents: write # push the release commit and tag, create the GitHub release
+      id-token: write # npm trusted publishing
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      DIST_TAG: ${{ needs.prepare.outputs.dist-tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Download release
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
+      # Node.js 24.10.0 bundles npm 11.6.1; trusted publishing needs 11.5.1+.
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '24.10.0'
+          package-manager-cache: false
+
+      # A re-run finds the tag from its earlier attempt and continues with
+      # publishing. Pushing first means a main that moved during the run stops
+      # the release before anything reaches npm.
+      - name: Push release commit and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$VERSION"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+            git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag"
+            if [ "$(git rev-parse "$tag^{commit}^")" != "$GITHUB_SHA" ]; then
+              echo "::error::$tag already exists and was not released from $GITHUB_SHA."
+              exit 1
+            fi
+            echo "::notice::$tag is already on origin; continuing an earlier attempt."
+            exit 0
+          fi
+
+          git apply --index "$RUNNER_TEMP/release/release.patch"
+
+          unexpected=$(git diff --cached --name-only |
+            grep -Ev '^(CHANGELOG\.md|pnpm-lock\.yaml|packages/[^/]+/package\.json|\.nx/version-plans/[^/]+)$' || true)
+          if [ -n "$unexpected" ]; then
+            echo "::error::The release patch changes files outside the release allowlist:"
+            echo "$unexpected"
+            exit 1
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898208+github-actions[bot]@users.noreply.github.com'
+          git commit --no-verify -m "chore: release $tag"
+          git tag -a "$tag" -m "$tag"
+          gh auth setup-git
+          git push --atomic origin HEAD:refs/heads/main "refs/tags/$tag"
+
+      # Runs outside the checkout so the repository .npmrc does not apply.
+      - name: Publish to npm
+        working-directory: ${{ runner.temp }}/release/packages
+        run: |
+          while IFS= read -r tarball; do
+            manifest=$(tar -xOzf "$tarball" package/package.json)
+            name=$(jq -r .name <<< "$manifest")
+            version=$(jq -r .version <<< "$manifest")
+
+            if [ "$version" != "$VERSION" ]; then
+              echo "::error::$tarball is version $version, expected $VERSION."
+              exit 1
+            fi
+
+            if [ "$(npm view "$name@$version" version 2> /dev/null)" = "$version" ]; then
+              echo "::notice::$name@$version is already on npm."
+              continue
+            fi
+
+            npm publish "./$tarball" --access public --tag "$DIST_TAG" --provenance --ignore-scripts
+          done < "$RUNNER_TEMP/release/publish-order.txt"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$VERSION"
+
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "::notice::The $tag GitHub release already exists."
+            exit 0
+          fi
+
+          prerelease=()
+          if [ "$DIST_TAG" != latest ]; then
+            prerelease=(--prerelease)
+          fi
+
+          gh release create "$tag" --verify-tag --title "$tag" \
+            --notes-file "$RUNNER_TEMP/release/release-notes.md" "${prerelease[@]}"

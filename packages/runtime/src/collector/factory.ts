@@ -1,5 +1,6 @@
 import type { TestCollectorEvents } from '@react-native-harness/bridge';
 import { getEmitter } from '../utils/emitter.js';
+import { flushOutgoingMessages } from '../utils/yield.js';
 import { collectTests } from './functions.js';
 import { TestCollector } from './types.js';
 
@@ -14,6 +15,9 @@ export const getTestCollector = (): TestCollector => {
         type: 'collection-started',
         file: testFilePath,
       });
+      // Let collection-started reach the harness before evaluating the
+      // test file can block the thread.
+      await flushOutgoingMessages();
 
       const result = await collectTests(fn);
 

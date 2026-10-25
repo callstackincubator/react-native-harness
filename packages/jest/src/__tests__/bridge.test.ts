@@ -3,6 +3,7 @@
  * connectToHarness (app side). Tests the full connection lifecycle and
  * RPC round-trip without coupling tests to the transport internals.
  */
+import fs from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HarnessBridge } from '@react-native-harness/bridge/server';
 import { createHarnessBridge } from '@react-native-harness/bridge/server';
@@ -207,6 +208,30 @@ describe('bridge: createHarnessBridge + connectToHarness', () => {
       expect(onEvent).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'collection-started', file: 'example.ts' }),
       );
+      handle.disconnect();
+    });
+  });
+
+  describe('screenshots', () => {
+    it('transferScreenshot delivers the bytes to a file on the CLI side', async () => {
+      const connectionPromise = bridge.nextConnection();
+      const handle = await connect();
+      handle.reportReady(device);
+      await connectionPromise;
+
+      const data = new Uint8Array(5 * 1024 * 1024);
+      for (let i = 0; i < data.length; i += 1) {
+        data[i] = i % 251;
+      }
+
+      const file = await handle.transferScreenshot(data, {
+        width: 100,
+        height: 200,
+      });
+      const written = await fs.readFile(file.path);
+      await fs.rm(file.path, { force: true });
+
+      expect(written.equals(Buffer.from(data))).toBe(true);
       handle.disconnect();
     });
   });
