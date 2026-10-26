@@ -32,12 +32,7 @@ export const getDefaultXCTestAgentTickIntervalMs = (): number | undefined =>
     ? CONSTRAINED_HOST_XCTEST_AGENT_TICK_INTERVAL_MS
     : undefined;
 
-/**
- * Hosts with 3 cores or less than 8 GB (the standard GitHub macOS runner)
- * cannot boot a simulator and build the first bundle at the same time without
- * starving both, so the Metro prewarm waits until the simulator is up.
- */
-export const shouldDeferMetroPrewarmUntilBooted = (): boolean => {
+const isSmallHost = (): boolean => {
   const { totalMemoryBytes, availableCpuCount } = getHostCapabilities();
 
   return (
@@ -45,3 +40,16 @@ export const shouldDeferMetroPrewarmUntilBooted = (): boolean => {
     totalMemoryBytes < MINIMUM_MEMORY_BYTES_FOR_PARALLEL_STARTUP
   );
 };
+
+/**
+ * Hosts with 3 cores or less than 8 GB (the standard GitHub macOS runner)
+ * cannot boot a simulator and build the first bundle at the same time without
+ * starving both, so the Metro prewarm waits until the simulator is up.
+ */
+export const shouldDeferMetroPrewarmUntilBooted = (): boolean => isSmallHost();
+
+/**
+ * On the same small hosts, the simulator's own background services leave
+ * too little CPU and memory for the app under test, so CI stops them.
+ */
+export const shouldSlimSimulatorOnCi = (): boolean => isSmallHost();

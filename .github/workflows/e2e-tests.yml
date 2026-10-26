@@ -339,8 +339,8 @@ jobs:
           xcode-version: ${{ env.XCODE_VERSION }}
 
       # Starts the simulator boot now so it overlaps the network-bound install
-      # steps below instead of the Metro bundle build. Harness reuses a booted
-      # or booting simulator; if this fails, Harness boots it itself.
+      # steps below instead of the Metro bundle build. The action slims it and
+      # Harness reuses it; if this fails, the action boots it instead.
       - name: Boot iOS simulator
         env:
           SIMULATOR_NAME: iPhone 17 Pro
@@ -354,14 +354,6 @@ jobs:
           fi
           echo "Booting $SIMULATOR_NAME ($udid)"
           xcrun simctl boot "$udid" || echo "::warning::Could not pre-boot $udid; Harness will boot it."
-          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
-
-      # Stops the simulator services that cost the most CPU (media analysis,
-      # widgets, Siri, Health) and silences the loudest log subsystems. Done
-      # right after boot, before most of them start.
-      - name: Slim iOS simulator
-        if: env.SIMULATOR_UDID != ''
-        run: scripts/ci/slim-ios-simulator.sh "$SIMULATOR_UDID"
 
       - name: Install dependencies
         run: |
@@ -628,8 +620,8 @@ jobs:
           xcode-version: ${{ env.XCODE_VERSION }}
 
       # Starts the simulator boot now so it overlaps the network-bound install
-      # steps below instead of the Metro bundle build. Harness reuses a booted
-      # or booting simulator; if this fails, Harness boots it itself.
+      # steps below instead of the Metro bundle build. The action slims it and
+      # Harness reuses it; if this fails, the action boots it instead.
       - name: Boot iOS simulator
         env:
           SIMULATOR_NAME: iPhone 17 Pro
@@ -643,14 +635,6 @@ jobs:
           fi
           echo "Booting $SIMULATOR_NAME ($udid)"
           xcrun simctl boot "$udid" || echo "::warning::Could not pre-boot $udid; Harness will boot it."
-          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
-
-      # Stops the simulator services that cost the most CPU (media analysis,
-      # widgets, Siri, Health) and silences the loudest log subsystems. Done
-      # right after boot, before most of them start.
-      - name: Slim iOS simulator
-        if: env.SIMULATOR_UDID != ''
-        run: scripts/ci/slim-ios-simulator.sh "$SIMULATOR_UDID"
 
       - name: Install dependencies
         run: |

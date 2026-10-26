@@ -51,6 +51,14 @@ inputs:
     required: false
     type: string
     default: 'default-branch'
+  slimIosSimulator:
+    description: >-
+      Whether to boot the iOS simulator before the run and stop its background
+      services that tests do not use ('auto', 'true', or 'false'). 'auto' does
+      this only on GitHub-hosted runners with 3 cores or less than 8 GB.
+    required: false
+    type: string
+    default: 'auto'
 runs:
   using: 'composite'
   steps:
@@ -206,7 +214,32 @@ runs:
           harness-ios-${{ runner.os }}-
 
     # ── iOS ──────────────────────────────────────────────────────────────────
-    # iOS simulator boot and app installation are handled by Harness itself.
+    # App installation is handled by Harness itself, and so is the simulator
+    # boot unless the step below boots it first.
+    # Spotlight indexes the checkout and node_modules on a fresh runner and
+    # competes with the simulator for the runner's few cores. Self-hosted
+    # machines are left alone: the setting outlives the job.
+    - name: Disable Spotlight indexing
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'ios' && runner.os == 'macOS' && runner.environment == 'github-hosted' }}
+      shell: bash
+      run: sudo -n mdutil -a -i off || echo "::warning::Could not disable Spotlight indexing."
+    # Boots the simulator and stops the background services a test run never
+    # uses (photo analysis, widgets, Siri, iCloud), which otherwise starve
+    # small runners. Runs before Harness so it stays outside the startup
+    # timeout. Warns instead of failing, including on CLI versions that
+    # predate this subcommand.
+    - name: Prepare iOS simulator
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'ios' && fromJson(steps.load-config.outputs.config).config.device.type == 'simulator' && inputs.slimIosSimulator != 'false' }}
+      shell: bash
+      working-directory: ${{ steps.load-config.outputs.projectRoot }}
+      env:
+        INPUT_RUNNER: ${{ inputs.runner }}
+        INPUT_PROJECTROOT: ${{ steps.load-config.outputs.projectRoot }}
+        INPUT_SLIMIOSSIMULATOR: ${{ inputs.slimIosSimulator }}
+        RUNNER_ENVIRONMENT: ${{ runner.environment }}
+      run: |
+        ${{ steps.detect-pm.outputs.runner }}react-native-harness ci prepare-ios-simulator \
+          || echo "::warning::Could not prepare the iOS simulator; Harness will boot it."
     # ── Android ──────────────────────────────────────────────────────────────
     - name: Verify Android config
       if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'android' && fromJson(steps.load-config.outputs.config).config.device.type == 'emulator' }}

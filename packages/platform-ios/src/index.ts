@@ -15,3 +15,13 @@ export type {
   XCTestAgentBuildDestination,
   XCTestAgentBuildSigning,
 } from './xctest-agent-artifacts.js';
+export {
+  prepareCiSimulator,
+  resolveCiSimulatorSlim,
+  slimSimulator,
+} from './simulator-slim.js';
+export type {
+  CiSimulatorSlimMode,
+  PrepareCiSimulatorResult,
+  SimulatorSlimResult,
+} from './simulator-slim.js';
