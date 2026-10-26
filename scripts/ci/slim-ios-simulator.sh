@@ -16,7 +16,7 @@
 # guest CPU time, in a burst of about three cores for over a minute.
 set -uo pipefail
 
-udid="${1:?usage: slim-ios-simulator.sh <udid>}"
+export udid="${1:?usage: slim-ios-simulator.sh <udid>}"
 
 # Kept on purpose (Harness or the app depends on them): launchd_sim,
 # SpringBoard, backboardd, runningboardd, PosterBoard, logd, diagnosticd,
@@ -51,40 +51,40 @@ quiet_subsystems=(
   com.apple.icloudMCCKit
 )
 
-# Each `simctl spawn` is expensive while the simulator boots, so everything
-# runs from a single spawn. The simulator has no shell of its own: this runs
-# the host's /bin/sh with the simulator's PATH, and DYLD_ROOT_PATH, which SIP
-# strips from the environment, has to be restored for `launchctl` and `log`.
-# The calls run in parallel; one at a time they cost about a second each.
-in_simulator_script='
-export DYLD_ROOT_PATH="$SIMULATOR_ROOT"
-mode="$1"; shift
-for item in "$@"; do
-  if [ "$mode" = services ]; then
-    {
-      # `system/` prints a deprecation warning and resolves to the user domain.
-      launchctl disable "system/$item" >/dev/null 2>&1
-      launchctl bootout "system/$item" >/dev/null 2>&1
-      echo "stopped $item"
-    } &
+parallelism="${SLIM_PARALLELISM:-8}"
+
+# One `simctl spawn` per call: running a host shell inside the simulator to
+# batch them works on some machines but aborts in dyld on the CI runners.
+stop_service() {
+  # `system/` prints a deprecation warning and resolves to the user domain.
+  if xcrun simctl spawn "$1" launchctl disable "system/$2" >/dev/null 2>&1; then
+    xcrun simctl spawn "$1" launchctl bootout "system/$2" >/dev/null 2>&1
+    echo "stopped $2"
   else
-    {
-      if log config --subsystem "$item" --mode level:off,persist:off >/dev/null 2>&1; then
-        echo "quiet   $item"
-      else
-        echo "skip    $item (log config failed)"
-      fi
-    } &
+    echo "skip    $2 (disable failed)"
   fi
-done
-wait
-'
+}
+
+quiet_subsystem() {
+  if xcrun simctl spawn "$1" log config --subsystem "$2" \
+    --mode level:off,persist:off >/dev/null 2>&1; then
+    echo "quiet   $2"
+  else
+    echo "skip    $2 (log config failed)"
+  fi
+}
+export -f stop_service quiet_subsystem
 
 started_at=$(date +%s)
-before=$(xcrun simctl spawn "$udid" launchctl list 2>/dev/null | wc -l | tr -d ' ')
+output=$(
+  {
+    printf 'stop_service %s\n' "${labels[@]}"
+    printf 'quiet_subsystem %s\n' "${quiet_subsystems[@]}"
+  } | xargs -P "$parallelism" -L 1 bash -c '"$0" "$udid" "$1"' 2>&1
+)
+echo "$output" | sort
+echo "done in $(( $(date +%s) - started_at ))s"
 
-xcrun simctl spawn "$udid" /bin/sh -c "$in_simulator_script" sh services "${labels[@]}" | sort
-xcrun simctl spawn "$udid" /bin/sh -c "$in_simulator_script" sh logs "${quiet_subsystems[@]}" | sort
-
-after=$(xcrun simctl spawn "$udid" launchctl list 2>/dev/null | wc -l | tr -d ' ')
-echo "launchd jobs: $before -> $after ($(( $(date +%s) - started_at ))s)"
+if ! grep -q '^stopped ' <<<"$output"; then
+  echo "::warning::Simulator slimming stopped no services; the run will be slower."
+fi
