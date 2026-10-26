@@ -348,11 +348,8 @@ export const stopApp = async (
   await spawnAndForget('xcrun', ['simctl', 'terminate', udid, bundleId]);
 };
 
-export const bootSimulator = async (
-  udid: string,
-  signal?: AbortSignal,
-): Promise<void> => {
-  await spawn('xcrun', ['simctl', 'boot', udid], { signal });
+export const bootSimulator = async (udid: string): Promise<void> => {
+  await spawn('xcrun', ['simctl', 'boot', udid]);
 };
 
 export type BootStatusSummary = {

@@ -58,6 +58,18 @@ xcrun simctl list devices
 Xcode often installs multiple runtime versions (e.g., iOS 17.0 and iOS 18.0). Since a simulator is uniquely identified by the combination of Device Type + Runtime, Harness needs both to target the correct simulator instance.
 :::
 
+#### Background services on CI
+
+On CI hosts with 3 cores or less than 8 GB of memory, such as the standard GitHub Actions macOS runner, Harness stops the simulator's background services that tests do not use right after boot. These include photo analysis, widgets, Siri and iCloud sync. Without this, they can keep the host busy long enough for startup to time out. This adds up to about a minute to startup.
+
+Use the `slimOnCI` option to change this. `true` stops the services on any CI host, and `false` never stops them:
+
+```javascript
+device: appleSimulator('iPhone 16 Pro', '18.0', { slimOnCI: false }),
+```
+
+The services stay stopped until the simulator shuts down. Harness never does this outside CI.
+
 ### Physical Devices
 
 To run on a connected physical iOS device, use the `applePhysicalDevice()` helper.

@@ -1,6 +1,4 @@
 import { logger, spawn } from '@react-native-harness/tools';
-import * as simctl from './xcrun/simctl.js';
-import { shouldSlimSimulatorOnCi } from './startup-strategy.js';
 
 const simulatorSlimLogger = logger.child('simulator-slim');
 
@@ -101,9 +99,6 @@ export const SIMULATOR_QUIET_LOG_SUBSYSTEMS = [
 const DEFAULT_SLIM_PARALLELISM = 8;
 // One `simctl spawn` was observed to take about 20s on a saturated runner.
 const SIMCTL_SPAWN_TIMEOUT_MS = 60_000;
-// Booting, waiting for boot and slimming normally take 1-5 minutes on a small
-// runner. Past this, the step gives up and leaves the rest to Harness.
-const DEFAULT_PREPARE_TIMEOUT_MS = 8 * 60_000;
 
 export type SimulatorSlimResult = {
   stopped: string[];
@@ -203,83 +198,4 @@ export const slimSimulator = async (
   result.timedOut = signal?.aborted ?? false;
   result.durationMs = Date.now() - startedAt;
   return result;
-};
-
-const CI_SIMULATOR_SLIM_MODES = ['auto', 'true', 'false'] as const;
-export type CiSimulatorSlimMode = (typeof CI_SIMULATOR_SLIM_MODES)[number];
-
-/** Normalizes the action input; returns null for an unknown value. */
-export const parseCiSimulatorSlimMode = (
-  value: string | undefined
-): CiSimulatorSlimMode | null => {
-  const mode = (value ?? '').trim().toLowerCase() || 'auto';
-  return (CI_SIMULATOR_SLIM_MODES as readonly string[]).includes(mode)
-    ? (mode as CiSimulatorSlimMode)
-    : null;
-};
-
-/**
- * `auto` slims only on GitHub-hosted runners with 3 cores or less than 8 GB.
- * Self-hosted machines are skipped because the stopped services stay stopped
- * for that simulator until CoreSimulator restarts.
- */
-export const resolveCiSimulatorSlim = (
-  mode: CiSimulatorSlimMode,
-  { githubHosted }: { githubHosted: boolean }
-): boolean => {
-  switch (mode) {
-    case 'true':
-      return true;
-    case 'false':
-      return false;
-    default:
-      return githubHosted && shouldSlimSimulatorOnCi();
-  }
-};
-
-export type PrepareCiSimulatorResult =
-  | { status: 'not-found' }
-  | { status: 'prepared'; udid: string; bootedNow: boolean; slim: SimulatorSlimResult };
-
-/**
- * Boots the simulator a runner uses and slims it before Harness starts, so
- * the work stays outside Harness's startup timeout. Harness then picks up the
- * booted simulator as it is. Throws if booting does not finish before the
- * deadline; slimming stops early instead.
- */
-export const prepareCiSimulator = async ({
-  name,
-  systemVersion,
-  parallelism,
-  timeoutMs = DEFAULT_PREPARE_TIMEOUT_MS,
-}: {
-  name: string;
-  systemVersion: string;
-  parallelism?: number;
-  timeoutMs?: number;
-}): Promise<PrepareCiSimulatorResult> => {
-  const signal = AbortSignal.timeout(timeoutMs);
-  const udid = await simctl.getSimulatorId(name, systemVersion);
-  if (!udid) {
-    return { status: 'not-found' };
-  }
-
-  const status = await simctl.getSimulatorStatus(udid);
-  const bootedNow = !(
-    simctl.isBootedSimulatorStatus(status) ||
-    simctl.isBootingSimulatorStatus(status)
-  );
-  if (bootedNow) {
-    await simctl.bootSimulator(udid, signal);
-  }
-  // A simulator booted earlier in the job may still be starting up, and
-  // calls into it fail until it has.
-  await simctl.waitForBoot(udid, signal);
-
-  return {
-    status: 'prepared',
-    udid,
-    bootedNow,
-    slim: await slimSimulator(udid, { parallelism, signal }),
-  };
 };

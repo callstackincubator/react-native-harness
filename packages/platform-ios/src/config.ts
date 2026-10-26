@@ -9,6 +9,12 @@ export const AppleSimulatorSchema = z.object({
   type: z.literal('simulator'),
   name: z.string().min(1, 'Name is required'),
   systemVersion: z.string().min(1, 'System version is required'),
+  /**
+   * Whether to stop the simulator's background services that tests do not
+   * use (photo analysis, widgets, Siri, iCloud sync) after boot. By default
+   * this happens only on CI hosts with 3 cores or less than 8 GB.
+   */
+  slimOnCI: z.boolean().optional(),
 });
 
 export const ApplePhysicalDeviceCodeSignSchema = z.object({

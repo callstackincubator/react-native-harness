@@ -9,11 +9,13 @@ import { shouldDeferMetroPrewarmUntilBooted } from './startup-strategy.js';
 
 export const appleSimulator = (
   name: string,
-  systemVersion: string
+  systemVersion: string,
+  options?: { slimOnCI?: boolean }
 ): AppleSimulator => ({
   type: 'simulator',
   name,
   systemVersion,
+  ...(options?.slimOnCI === undefined ? {} : { slimOnCI: options.slimOnCI }),
 });
 
 export const applePhysicalDevice = (

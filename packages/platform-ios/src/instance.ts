@@ -37,11 +37,16 @@ import {
 } from './crash-reporter.js';
 import {
   shouldOverlapXCTestBuildAndSimulatorBoot,
+  shouldSlimSimulator,
   shouldWaitForSimulatorToSettle,
 } from './startup-strategy.js';
 import { waitForSimulatorToSettle } from './simulator-settle.js';
+import { slimSimulator } from './simulator-slim.js';
 
 const SIMULATOR_SETTLE_PROBE_TIMEOUT_MS = 5_000;
+// Slimming a settled simulator took under a minute on a 3-core CI runner. It
+// counts toward the platform-ready timeout, so it gives up well before that.
+const SIMULATOR_SLIM_TIMEOUT_MS = 2 * 60_000;
 const iosInstanceLogger = logger.child('ios-instance');
 
 const getHarnessAppPath = (): string => {
@@ -85,6 +90,7 @@ export const getAppleSimulatorPlatformInstance = async (
     throw new DeviceNotFoundError(getDeviceName(config.device));
   }
 
+  const { slimOnCI } = config.device;
   let startedByHarness = false;
   let harnessJsLocationOverrideApplied = false;
 
@@ -157,6 +163,34 @@ export const getAppleSimulatorPlatformInstance = async (
         );
         init.signal.throwIfAborted();
       }
+    }
+
+    if (shouldSlimSimulator(slimOnCI)) {
+      logger.info('Stopping unused iOS simulator services...');
+      const diagnostics = init.diagnostics ?? noopDiagnostics;
+      const span = diagnostics.start('platform.ios.simulator.slim');
+      const result = await slimSimulator(udid, {
+        signal: AbortSignal.any([
+          init.signal,
+          AbortSignal.timeout(SIMULATOR_SLIM_TIMEOUT_MS),
+        ]),
+      });
+      span.end({
+        stopped: result.stopped.length,
+        quieted: result.quieted.length,
+        skipped: result.skipped.length,
+        timed_out: result.timedOut,
+      });
+      iosInstanceLogger.debug(
+        'slimmed iOS simulator %s in %dms: %d stopped, %d quieted, skipped %o%s',
+        udid,
+        result.durationMs,
+        result.stopped.length,
+        result.quieted.length,
+        result.skipped,
+        result.timedOut ? ' (ran out of time)' : ''
+      );
+      init.signal.throwIfAborted();
     }
 
     const isInstalled = await simctl.isAppInstalled(udid, config.bundleId);

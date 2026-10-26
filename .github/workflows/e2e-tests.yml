@@ -339,8 +339,8 @@ jobs:
           xcode-version: ${{ env.XCODE_VERSION }}
 
       # Starts the simulator boot now so it overlaps the network-bound install
-      # steps below instead of the Metro bundle build. The action slims it and
-      # Harness reuses it; if this fails, the action boots it instead.
+      # steps below instead of the Metro bundle build. Harness reuses a booted
+      # or booting simulator; if this fails, Harness boots it itself.
       - name: Boot iOS simulator
         env:
           SIMULATOR_NAME: iPhone 17 Pro
@@ -620,8 +620,8 @@ jobs:
           xcode-version: ${{ env.XCODE_VERSION }}
 
       # Starts the simulator boot now so it overlaps the network-bound install
-      # steps below instead of the Metro bundle build. The action slims it and
-      # Harness reuses it; if this fails, the action boots it instead.
+      # steps below instead of the Metro bundle build. Harness reuses a booted
+      # or booting simulator; if this fails, Harness boots it itself.
       - name: Boot iOS simulator
         env:
           SIMULATOR_NAME: iPhone 17 Pro

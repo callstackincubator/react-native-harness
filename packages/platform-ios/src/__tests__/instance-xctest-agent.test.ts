@@ -23,6 +23,7 @@ vi.mock('../xctest-agent.js', () => ({
 vi.mock('../startup-strategy.js', () => ({
   shouldOverlapXCTestBuildAndSimulatorBoot:
     startupStrategyMocks.shouldOverlapXCTestBuildAndSimulatorBoot,
+  shouldSlimSimulator: () => false,
 }));
 
 import {
