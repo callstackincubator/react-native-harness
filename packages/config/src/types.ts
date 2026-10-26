@@ -35,6 +35,9 @@ const RunnerSchema = z.object({
     .args()
     .returns(z.union([z.string(), z.promise(z.string())]))
     .optional(),
+  // Set by platform factories (`HarnessPlatform.deferMetroPrewarm`) to start
+  // the Metro prewarm only after the platform is ready on small hosts.
+  deferMetroPrewarm: z.function().args().returns(z.boolean()).optional(),
 });
 
 type AnyHarnessPlugin = HarnessPlugin<object, unknown>;

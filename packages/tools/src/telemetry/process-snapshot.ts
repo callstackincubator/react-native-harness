@@ -4,7 +4,8 @@ import { createSerialQueue, onLifecyclePhases } from './probe-utils.js';
 
 const TOP_PROCESS_LIMIT = 40;
 const TOP_TIMEOUT_MS = 60_000;
-const PS_TIMEOUT_MS = 10_000;
+// Generous: on a saturated host even `ps` was observed to take over 10s.
+const PS_TIMEOUT_MS = 30_000;
 const PROCESS_USAGE_LIMIT = 10;
 
 export type ProcessMemoryRow = { pid: number; mem_mb: number; command: string };

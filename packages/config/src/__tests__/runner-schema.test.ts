@@ -27,6 +27,15 @@ describe('ConfigSchema runner', () => {
     );
   });
 
+  it('preserves a platform-provided deferMetroPrewarm', () => {
+    const parsed = ConfigSchema.parse({
+      ...baseConfig,
+      runners: [{ ...runner, deferMetroPrewarm: () => true }],
+    });
+
+    expect(parsed.runners[0]?.deferMetroPrewarm?.()).toBe(true);
+  });
+
   it('accepts an async getResourceLockKey', async () => {
     const parsed = ConfigSchema.parse({
       ...baseConfig,

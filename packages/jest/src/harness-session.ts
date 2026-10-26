@@ -272,7 +272,8 @@ export const withPlatformReadyTimeout = async <T>(options: {
   }
 };
 
-const HOST_HEALTH_PROCESS_LISTING_TIMEOUT_MS = 10_000;
+// A saturated host is exactly where `ps` is slow; it took over 10s on CI.
+const HOST_HEALTH_PROCESS_LISTING_TIMEOUT_MS = 30_000;
 
 // Tells, before anything is booted, whether the host is already saturated by
 // something other than this run. Only a warning: a saturated runner can still
