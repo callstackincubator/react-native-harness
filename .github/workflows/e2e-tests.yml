@@ -354,6 +354,14 @@ jobs:
           fi
           echo "Booting $SIMULATOR_NAME ($udid)"
           xcrun simctl boot "$udid" || echo "::warning::Could not pre-boot $udid; Harness will boot it."
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+
+      # Stops simulator services the tests never use (widgets, media analysis,
+      # Siri, iCloud sync, ...) and silences the loudest log subsystems. Done
+      # right after boot so they never start.
+      - name: Slim iOS simulator
+        if: env.SIMULATOR_UDID != ''
+        run: scripts/ci/slim-ios-simulator.sh "$SIMULATOR_UDID"
 
       - name: Install dependencies
         run: |
@@ -635,6 +643,14 @@ jobs:
           fi
           echo "Booting $SIMULATOR_NAME ($udid)"
           xcrun simctl boot "$udid" || echo "::warning::Could not pre-boot $udid; Harness will boot it."
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+
+      # Stops simulator services the tests never use (widgets, media analysis,
+      # Siri, iCloud sync, ...) and silences the loudest log subsystems. Done
+      # right after boot so they never start.
+      - name: Slim iOS simulator
+        if: env.SIMULATOR_UDID != ''
+        run: scripts/ci/slim-ios-simulator.sh "$SIMULATOR_UDID"
 
       - name: Install dependencies
         run: |
