@@ -231,6 +231,30 @@ describe('withPlatformReadyTimeout', () => {
     expect(controller.signal.aborted).toBe(false);
   });
 
+  it('attaches the host pressure observed at the moment of the timeout', async () => {
+    vi.useFakeTimers();
+    const hostPressure = {
+      peakLoad1: 9,
+      minHostFreeMb: 60,
+      swapoutsDeltaMb: 512,
+      cpuCount: 3,
+    };
+
+    const resultPromise = withPlatformReadyTimeout({
+      timeout: 1_000,
+      signal: new AbortController().signal,
+      work: () => new Promise<void>(() => undefined),
+      getHostPressure: () => hostPressure,
+    });
+    const rejection = expect(resultPromise).rejects.toMatchObject({
+      hostPressure,
+      hostStarved: true,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rejection;
+  });
+
   it('propagates a genuine abort from the session signal as-is', async () => {
     const controller = new AbortController();
     const abortReason = new DOMException('Aborted', 'AbortError');

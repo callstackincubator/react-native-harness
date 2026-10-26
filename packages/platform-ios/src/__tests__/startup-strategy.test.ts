@@ -11,6 +11,7 @@ vi.mock('@react-native-harness/tools', async (importOriginal) => ({
 
 import {
   getDefaultXCTestAgentTickIntervalMs,
+  shouldDeferMetroPrewarmUntilBooted,
   shouldOverlapXCTestBuildAndSimulatorBoot,
   shouldWaitForSimulatorToSettle,
 } from '../startup-strategy.js';
@@ -58,5 +59,21 @@ describe('getDefaultXCTestAgentTickIntervalMs', () => {
       availableCpuCount: cpus,
     });
     expect(getDefaultXCTestAgentTickIntervalMs()).toBe(expected);
+  });
+});
+
+describe('shouldDeferMetroPrewarmUntilBooted', () => {
+  it.each([
+    [true, 7 * 1024 ** 3, 3],
+    [true, 16 * 1024 ** 3, 3],
+    [true, 7 * 1024 ** 3, 8],
+    [false, 8 * 1024 ** 3, 4],
+    [false, 16 * 1024 ** 3, 8],
+  ])('returns %s for %i bytes and %i CPUs', (expected, mem, cpus) => {
+    mocks.getHostCapabilities.mockReturnValue({
+      totalMemoryBytes: mem,
+      availableCpuCount: cpus,
+    });
+    expect(shouldDeferMetroPrewarmUntilBooted()).toBe(expected);
   });
 });

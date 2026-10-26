@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import type { DiagnosticAttrs } from '../diagnostics.js';
 import type { TelemetryProbe } from './types.js';
+import { isCI } from './host-health.js';
 
 const GITHUB_RUNNER_ENV = [
   'RUNNER_OS',
@@ -37,7 +38,7 @@ export const collectRunContext = (
     arch: process.arch,
     osRelease: os.release(),
     nodeVersion: process.version,
-    ci: !!env.CI && env.CI !== 'false' && env.CI !== '0',
+    ci: isCI(env),
     harnessVersion: getHarnessVersion(),
   };
 

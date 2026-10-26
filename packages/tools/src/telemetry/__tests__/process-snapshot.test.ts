@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { parseTopOutput, processSnapshotProbe } from '../process-snapshot.js';
+import {
+  parsePsOutput,
+  parseTopOutput,
+  processSnapshotProbe,
+  summarizeProcessUsage,
+} from '../process-snapshot.js';
 import { spawn } from '../../spawn.js';
 import { createProbeContext, setPlatform, settle } from './helpers.js';
 
@@ -58,6 +63,43 @@ describe('parseTopOutput', () => {
   });
 });
 
+// Shaped like `ps -A -o pid=,pcpu=,rss=,comm=` on macOS.
+const PS_FIXTURE = `    1   0.3  20480 /sbin/launchd
+  412  85.5 512000 /System/Library/Frameworks/CoreServices.framework/Frameworks/Metadata.framework/Versions/A/Support/mds_stores
+  733  12,5 2097152 /Applications/Xcode.app/Contents/MacOS/Xcode
+  901   0.0   1024 ps
+`;
+
+describe('parsePsOutput', () => {
+  it('parses CPU share and resident memory in MB, without ps itself', () => {
+    expect(parsePsOutput(PS_FIXTURE)).toEqual([
+      { pid: 1, cpu_pct: 0.3, rss_mb: 20, command: '/sbin/launchd' },
+      {
+        pid: 412,
+        cpu_pct: 85.5,
+        rss_mb: 500,
+        command:
+          '/System/Library/Frameworks/CoreServices.framework/Frameworks/Metadata.framework/Versions/A/Support/mds_stores',
+      },
+      {
+        pid: 733,
+        cpu_pct: 12.5,
+        rss_mb: 2048,
+        command: '/Applications/Xcode.app/Contents/MacOS/Xcode',
+      },
+    ]);
+  });
+});
+
+describe('summarizeProcessUsage', () => {
+  it('ranks processes separately by CPU and by RSS', () => {
+    const summary = summarizeProcessUsage(parsePsOutput(PS_FIXTURE), 2);
+
+    expect(summary.topByCpu.map((row) => row.pid)).toEqual([412, 733]);
+    expect(summary.topByRss.map((row) => row.pid)).toEqual([733, 412]);
+  });
+});
+
 describe('processSnapshotProbe', () => {
   beforeEach(() => {
     vi.mocked(spawn).mockReset();
@@ -107,6 +149,39 @@ describe('processSnapshotProbe', () => {
         value: 937,
         attrs: { phase },
       });
+    }
+  );
+
+  it.each(['darwin', 'linux'] as const)(
+    'records the busiest processes once at session start on %s',
+    async (platform) => {
+      setPlatform(platform);
+      vi.mocked(spawn).mockResolvedValue({ stdout: PS_FIXTURE } as never);
+      const ctx = createProbeContext();
+      processSnapshotProbe.start(ctx);
+
+      ctx.lifecycle.emit({ type: 'phase', phase: 'session.created' });
+      await settle(ctx);
+
+      expect(spawn).toHaveBeenCalledTimes(1);
+      expect(spawn).toHaveBeenCalledWith(
+        'ps',
+        ['-A', '-o', 'pid=,pcpu=,rss=,comm='],
+        expect.objectContaining({ signal: ctx.signal })
+      );
+      const mark = ctx.diagnostics
+        .flush()
+        .find((e) => e.label === 'telemetry.session_start_processes');
+      expect(
+        JSON.parse(mark?.attrs?.top_by_cpu as string).map(
+          (row: { pid: number }) => row.pid
+        )
+      ).toEqual([412, 733, 1]);
+      expect(
+        JSON.parse(mark?.attrs?.top_by_rss as string).map(
+          (row: { pid: number }) => row.pid
+        )
+      ).toEqual([733, 412, 1]);
     }
   );
 

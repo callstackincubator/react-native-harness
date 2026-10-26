@@ -313,6 +313,11 @@ jobs:
       HARNESS_DEBUG: true
       RN_HARNESS_DIAGNOSTICS: true
     steps:
+      # Spotlight starts indexing the checkout and node_modules on a fresh
+      # runner and competes with the simulator for the runner's few cores.
+      - name: Disable Spotlight indexing
+        run: sudo mdutil -a -i off
+
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
@@ -333,8 +338,22 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
-      - name: Install Watchman
-        run: brew install watchman
+      # Starts the simulator boot now so it overlaps the network-bound install
+      # steps below instead of the Metro bundle build. Harness reuses a booted
+      # or booting simulator; if this fails, Harness boots it itself.
+      - name: Boot iOS simulator
+        env:
+          SIMULATOR_NAME: iPhone 17 Pro
+          SIMULATOR_RUNTIME: iOS-26-4
+        run: |
+          udid="$(xcrun simctl list devices --json | jq -r --arg name "$SIMULATOR_NAME" --arg runtime "$SIMULATOR_RUNTIME" \
+            '.devices | to_entries[] | select(.key | endswith($runtime)) | .value[] | select(.name == $name) | .udid' | head -n 1)"
+          if [ -z "$udid" ]; then
+            echo "::warning::No $SIMULATOR_NAME simulator for $SIMULATOR_RUNTIME; Harness will report it."
+            exit 0
+          fi
+          echo "Booting $SIMULATOR_NAME ($udid)"
+          xcrun simctl boot "$udid" || echo "::warning::Could not pre-boot $udid; Harness will boot it."
 
       - name: Install dependencies
         run: |
@@ -575,6 +594,11 @@ jobs:
       HARNESS_DEBUG: true
       RN_HARNESS_DIAGNOSTICS: true
     steps:
+      # Spotlight starts indexing the checkout and node_modules on a fresh
+      # runner and competes with the simulator for the runner's few cores.
+      - name: Disable Spotlight indexing
+        run: sudo mdutil -a -i off
+
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
@@ -595,8 +619,22 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
-      - name: Install Watchman
-        run: brew install watchman
+      # Starts the simulator boot now so it overlaps the network-bound install
+      # steps below instead of the Metro bundle build. Harness reuses a booted
+      # or booting simulator; if this fails, Harness boots it itself.
+      - name: Boot iOS simulator
+        env:
+          SIMULATOR_NAME: iPhone 17 Pro
+          SIMULATOR_RUNTIME: iOS-26-4
+        run: |
+          udid="$(xcrun simctl list devices --json | jq -r --arg name "$SIMULATOR_NAME" --arg runtime "$SIMULATOR_RUNTIME" \
+            '.devices | to_entries[] | select(.key | endswith($runtime)) | .value[] | select(.name == $name) | .udid' | head -n 1)"
+          if [ -z "$udid" ]; then
+            echo "::warning::No $SIMULATOR_NAME simulator for $SIMULATOR_RUNTIME; Harness will report it."
+            exit 0
+          fi
+          echo "Booting $SIMULATOR_NAME ($udid)"
+          xcrun simctl boot "$udid" || echo "::warning::Could not pre-boot $udid; Harness will boot it."
 
       - name: Install dependencies
         run: |

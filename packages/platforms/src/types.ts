@@ -200,6 +200,13 @@ export type HarnessPlatform<TConfig = Record<string, unknown>> = {
    * to `platformId`.
    */
   bundlePlatform?: string;
+  /**
+   * Evaluated once per session on the host running Harness. When it returns
+   * true, the eager Metro prewarm starts only after the platform is ready
+   * instead of alongside its startup, so the bundle build does not compete
+   * with the device boot on hosts with few cores or little memory.
+   */
+  deferMetroPrewarm?: () => boolean;
 };
 
 export type AndroidEmulatorRunTarget = {

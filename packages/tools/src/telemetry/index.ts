@@ -18,6 +18,12 @@ export type {
   TelemetryProbe,
 } from './types.js';
 export type { PlatformCollectorProbeOptions } from './platform-collector.js';
+export * from './host-health.js';
+export {
+  readProcessUsage,
+  type ProcessUsageRow,
+  type ProcessUsageSnapshot,
+} from './process-snapshot.js';
 
 const telemetryLogger = logger.child('telemetry');
 

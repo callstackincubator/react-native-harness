@@ -4,6 +4,8 @@ import { createSerialQueue, onLifecyclePhases } from './probe-utils.js';
 
 const TOP_PROCESS_LIMIT = 40;
 const TOP_TIMEOUT_MS = 60_000;
+const PS_TIMEOUT_MS = 10_000;
+const PROCESS_USAGE_LIMIT = 10;
 
 export type ProcessMemoryRow = { pid: number; mem_mb: number; command: string };
 
@@ -62,6 +64,100 @@ export const parseTopOutput = (output: string): ProcessSnapshot => {
   };
 };
 
+export type ProcessUsageRow = {
+  pid: number;
+  cpu_pct: number;
+  rss_mb: number;
+  command: string;
+};
+
+/**
+ * Parses `ps -A -o pid=,pcpu=,rss=,comm=` output (RSS in KB). Rows that do not
+ * match are skipped; `ps` itself appears in its own listing and is dropped.
+ */
+export const parsePsOutput = (output: string): ProcessUsageRow[] => {
+  const rows: ProcessUsageRow[] = [];
+  for (const line of output.split('\n')) {
+    const match = /^\s*(\d+)\s+(\d+(?:[.,]\d+)?)\s+(\d+)\s+(.+?)\s*$/.exec(
+      line
+    );
+    if (!match || /(^|\/)ps$/.test(match[4] as string)) {
+      continue;
+    }
+    rows.push({
+      pid: Number(match[1]),
+      cpu_pct: Number((match[2] as string).replace(',', '.')),
+      rss_mb: Math.round((Number(match[3]) / 1024) * 10) / 10,
+      command: match[4] as string,
+    });
+  }
+  return rows;
+};
+
+export type ProcessUsageSnapshot = {
+  topByCpu: ProcessUsageRow[];
+  topByRss: ProcessUsageRow[];
+};
+
+/** Reduces a process listing to the heaviest processes by CPU and by RSS. */
+export const summarizeProcessUsage = (
+  rows: readonly ProcessUsageRow[],
+  limit = PROCESS_USAGE_LIMIT
+): ProcessUsageSnapshot => ({
+  topByCpu: [...rows].sort((a, b) => b.cpu_pct - a.cpu_pct).slice(0, limit),
+  topByRss: [...rows].sort((a, b) => b.rss_mb - a.rss_mb).slice(0, limit),
+});
+
+/**
+ * One `ps` listing of every process with its CPU share and resident memory.
+ * `ps` is cheap compared to `top` and works the same on macOS and Linux.
+ */
+export const readProcessUsage = async (
+  signal: AbortSignal
+): Promise<ProcessUsageSnapshot> => {
+  const { stdout } = await spawn(
+    'ps',
+    ['-A', '-o', 'pid=,pcpu=,rss=,comm='],
+    { signal, timeout: PS_TIMEOUT_MS, env: { LC_ALL: 'C' } }
+  );
+  return summarizeProcessUsage(parsePsOutput(stdout));
+};
+
+/**
+ * Records, once at session start, which processes were already using the CPU
+ * and memory before Harness started anything. When a run later starves, this
+ * names what else was running on the host.
+ */
+const startSessionStartSnapshot = (
+  ctx: Parameters<TelemetryProbe['start']>[0]
+): (() => void) => {
+  const { diagnostics, signal } = ctx;
+  return onLifecyclePhases(ctx, ['session.created'], () => {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') {
+      return;
+    }
+    return (async () => {
+      try {
+        const snapshot = await readProcessUsage(signal);
+        if (signal.aborted) {
+          return;
+        }
+        diagnostics.mark('telemetry.session_start_processes', {
+          top_by_cpu: JSON.stringify(snapshot.topByCpu),
+          top_by_rss: JSON.stringify(snapshot.topByRss),
+        });
+      } catch (error) {
+        if (signal.aborted) {
+          return;
+        }
+        diagnostics.mark('telemetry.session_start_processes', {
+          error: String(error).slice(0, 200),
+        });
+      }
+    })();
+  });
+};
+
 /**
  * On macOS, takes one process listing at selected lifecycle boundaries. It
  * answers "what was eating the memory" after the fact. `top` is expensive, so
@@ -70,8 +166,9 @@ export const parseTopOutput = (output: string): ProcessSnapshot => {
 export const processSnapshotProbe: TelemetryProbe = {
   name: 'process-snapshot',
   start: (ctx) => {
+    const stopSessionStartSnapshot = startSessionStartSnapshot(ctx);
     if (process.platform !== 'darwin') {
-      return () => undefined;
+      return stopSessionStartSnapshot;
     }
 
     const { diagnostics, signal } = ctx;
@@ -133,6 +230,7 @@ export const processSnapshotProbe: TelemetryProbe = {
     );
 
     return () => {
+      stopSessionStartSnapshot();
       stop();
       queue.close();
     };

@@ -13,6 +13,34 @@ describe('PlatformReadyTimeoutError', () => {
       'The platform did not become ready within 300000ms. Increase "platformReadyTimeout" if your device, simulator, or emulator needs more time to start.'
     );
   });
+
+  it('blames a starved host instead of suggesting a larger timeout', () => {
+    const error = new PlatformReadyTimeoutError(300000, {
+      peakLoad1: 14.2,
+      minHostFreeMb: 41,
+      swapoutsDeltaMb: 1200,
+      cpuCount: 3,
+    });
+
+    expect(error.hostStarved).toBe(true);
+    expect(error.message).toBe(
+      'The platform did not become ready within 300000ms. The host was starved for resources during startup (peak load 14.2 on 3 cores, min free memory 41 MB, swapped out 1200 MB). A larger "platformReadyTimeout" is unlikely to help; reduce other load on the host or use a larger machine.'
+    );
+  });
+
+  it('keeps the timeout hint and reports host pressure when the host was fine', () => {
+    const error = new PlatformReadyTimeoutError(300000, {
+      peakLoad1: 2.5,
+      minHostFreeMb: 900,
+      swapoutsDeltaMb: null,
+      cpuCount: 3,
+    });
+
+    expect(error.hostStarved).toBe(false);
+    expect(error.message).toBe(
+      'The platform did not become ready within 300000ms. Increase "platformReadyTimeout" if your device, simulator, or emulator needs more time to start. Host during startup: peak load 2.5 on 3 cores, min free memory 900 MB, swapped out n/a.'
+    );
+  });
 });
 
 describe('HostSurfaceReplacedError', () => {

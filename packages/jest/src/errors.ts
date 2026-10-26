@@ -1,4 +1,10 @@
-import { formatPath, HarnessError } from '@react-native-harness/tools';
+import {
+  formatHostPressure,
+  formatPath,
+  HarnessError,
+  isHostStarved,
+  type HostPressure,
+} from '@react-native-harness/tools';
 import type { AppCrashDetails } from '@react-native-harness/platforms';
 export {
   StartupStallError,
@@ -27,12 +33,33 @@ export class InitializationTimeoutError extends HarnessError {
   }
 }
 
+const buildPlatformReadyTimeoutMessage = (
+  timeout: number,
+  hostPressure: HostPressure | null
+): string => {
+  const prefix = `The platform did not become ready within ${timeout}ms.`;
+
+  if (hostPressure && isHostStarved(hostPressure)) {
+    return `${prefix} The host was starved for resources during startup (${formatHostPressure(hostPressure)}). A larger "platformReadyTimeout" is unlikely to help; reduce other load on the host or use a larger machine.`;
+  }
+
+  const suggestion = `Increase "platformReadyTimeout" if your device, simulator, or emulator needs more time to start.`;
+  return hostPressure
+    ? `${prefix} ${suggestion} Host during startup: ${formatHostPressure(hostPressure)}.`
+    : `${prefix} ${suggestion}`;
+};
+
 export class PlatformReadyTimeoutError extends HarnessError {
-  constructor(public readonly timeout: number) {
-    super(
-      `The platform did not become ready within ${timeout}ms. Increase "platformReadyTimeout" if your device, simulator, or emulator needs more time to start.`
-    );
+  constructor(
+    public readonly timeout: number,
+    public readonly hostPressure: HostPressure | null = null
+  ) {
+    super(buildPlatformReadyTimeoutMessage(timeout, hostPressure));
     this.name = 'PlatformReadyTimeoutError';
+  }
+
+  get hostStarved(): boolean {
+    return this.hostPressure !== null && isHostStarved(this.hostPressure);
   }
 }
 

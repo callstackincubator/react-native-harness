@@ -43,7 +43,13 @@ import {
   getTimeoutSignal,
   ensureSignalsDeliverable,
   waitForAbort,
+  checkHostHealth,
+  formatGitHubWarning,
+  formatSaturatedHostMessage,
+  isCI,
+  readProcessUsage,
   type Diagnostics,
+  type HostPressure,
 } from '@react-native-harness/tools';
 import {
   getConfig,
@@ -246,6 +252,8 @@ export const withPlatformReadyTimeout = async <T>(options: {
   timeout: number;
   signal: AbortSignal;
   work: (signal: AbortSignal) => Promise<T>;
+  /** Host pressure at the moment of the timeout, attached to the error. */
+  getHostPressure?: () => HostPressure | null;
 }): Promise<T> => {
   const timeoutSignal = getTimeoutSignal(options.timeout);
   const abortWait = waitForAbort(timeoutSignal);
@@ -253,11 +261,46 @@ export const withPlatformReadyTimeout = async <T>(options: {
     return await Promise.race([
       options.work(options.signal),
       abortWait.promise.catch(() => {
-        throw new PlatformReadyTimeoutError(options.timeout);
+        throw new PlatformReadyTimeoutError(
+          options.timeout,
+          options.getHostPressure?.() ?? null
+        );
       }),
     ]);
   } finally {
     abortWait.cancel();
+  }
+};
+
+const HOST_HEALTH_PROCESS_LISTING_TIMEOUT_MS = 10_000;
+
+// Tells, before anything is booted, whether the host is already saturated by
+// something other than this run. Only a warning: a saturated runner can still
+// pass, but a later startup timeout then has an explanation.
+const reportSaturatedHost = async (diagnostics: Diagnostics): Promise<void> => {
+  try {
+    const verdict = await checkHostHealth();
+    diagnostics.mark('telemetry.host_health', {
+      load1: verdict.load1,
+      cpuCount: verdict.cpuCount,
+      idlePct: verdict.idlePct ?? undefined,
+      saturated: verdict.saturated,
+    });
+    if (!verdict.saturated) {
+      return;
+    }
+
+    const processes = await readProcessUsage(
+      AbortSignal.timeout(HOST_HEALTH_PROCESS_LISTING_TIMEOUT_MS)
+    ).catch(() => null);
+    const message = formatSaturatedHostMessage(verdict, processes?.topByCpu);
+    sessionLogger.warn(message);
+    const annotation = formatGitHubWarning('Saturated CI runner', message);
+    if (annotation) {
+      process.stdout.write(`${annotation}\n`);
+    }
+  } catch (error) {
+    sessionLogger.debug('host health check failed: %s', error);
   }
 };
 
@@ -516,6 +559,9 @@ export const createHarnessSession = async (
     projectRoot,
   });
   telemetry.phase('session.created');
+  if (isCI()) {
+    void reportSaturatedHost(diagnostics);
+  }
   // Telemetry runs timers and listens on `exit`, so a setup failure before the
   // main try/catch below must still stop it.
   const disposeTelemetryOnFailure = <T>(work: Promise<T>): Promise<T> =>
@@ -653,6 +699,29 @@ export const createHarnessSession = async (
     // Noop until the Metro instance resolves and the deriver is attached.
     let disposeMetroDiagnostics: () => void = () => undefined;
 
+    const eagerPrewarm = runtimeConfig.eagerPrewarm !== false;
+    // On small hosts the bundle build and the platform boot compete for the
+    // same few cores, so the platform may ask to boot first.
+    const deferPrewarm = eagerPrewarm && (platform.deferMetroPrewarm?.() ?? false);
+    if (deferPrewarm) {
+      sessionLogger.debug('deferring Metro prewarm until the platform is ready');
+    }
+    const startPrewarm = (instance: MetroInstance) => {
+      // prewarm() memoizes this first call, so its session-lifetime setup
+      // signal is the one that matters — later callers' signals cannot
+      // cancel it. Not awaited: callers must not wait for the bundle.
+      const prewarmSpan = diagnostics.start('metro.prewarm', { deferred: deferPrewarm });
+      instance
+        .prewarm({
+          platform: bundlePlatform,
+          signal: sessionController.signal,
+        })
+        .then((completed) => prewarmSpan.end({ completed }))
+        // Swallow AbortError on teardown so it never becomes an
+        // unhandled rejection; non-abort failures resolve false.
+        .catch((error) => prewarmSpan.fail(error));
+    };
+
     try {
       [metroInstance, platformInstance] = await Promise.all([
         diagnostics.measure('metro.init', () =>
@@ -679,21 +748,9 @@ export const createHarnessSession = async (
             // Attach the Metro diagnostics deriver before the eager prewarm
             // fires so its bundle build/request events land in the trace.
             disposeMetroDiagnostics = observeMetroEvents(instance.events, diagnostics);
-            if (runtimeConfig.eagerPrewarm !== false) {
+            if (eagerPrewarm && !deferPrewarm) {
               // Kick off the first bundle build while the platform is still booting.
-              // prewarm() memoizes this first call, so its session-lifetime setup
-              // signal is the one that matters — later callers' signals cannot
-              // cancel it. Not awaited: metro.init must resolve immediately.
-              const prewarmSpan = diagnostics.start('metro.prewarm');
-              instance
-                .prewarm({
-                  platform: bundlePlatform,
-                  signal: sessionController.signal,
-                })
-                .then((completed) => prewarmSpan.end({ completed }))
-                // Swallow AbortError on teardown so it never becomes an
-                // unhandled rejection; non-abort failures resolve false.
-                .catch((error) => prewarmSpan.fail(error));
+              startPrewarm(instance);
             }
             return instance;
           })
@@ -704,6 +761,7 @@ export const createHarnessSession = async (
             withPlatformReadyTimeout({
               timeout: runtimeConfig.platformReadyTimeout,
               signal: sessionController.signal,
+              getHostPressure: telemetry.hostPressure,
               work: async (signal) => {
                 return await import(platform.runner).then((module) =>
                   module.default(platform.config, runtimeConfig, {
@@ -738,6 +796,10 @@ export const createHarnessSession = async (
         initialized.platform?.dispose(),
       ]);
       throw error;
+    }
+
+    if (deferPrewarm) {
+      startPrewarm(metroInstance);
     }
 
     const appLaunchOptions = (platform.config as { appLaunchOptions?: AppLaunchOptions }).appLaunchOptions;

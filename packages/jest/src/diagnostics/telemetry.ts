@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 import {
   logger,
   createDefaultProbes,
@@ -8,6 +9,7 @@ import {
   type Diagnostics,
   type DiagnosticAttrs,
   type LifecyclePhase,
+  type HostPressure,
 } from '@react-native-harness/tools';
 import {
   resolveDiagnosticsOptions,
@@ -29,6 +31,12 @@ export type SessionTelemetry = {
   attachPlatform(platform: HarnessPlatformRunner): void;
   /** Records the run that is current, so teardown data can join its trace. */
   trackRun(runId: string): void;
+  /**
+   * Host pressure observed by the host-resources probe so far: peak load,
+   * lowest free memory and memory swapped out since the first sample. Null
+   * when no host sample was taken (diagnostics or the host probe are off).
+   */
+  hostPressure(): HostPressure | null;
   /** Resolves once lifecycle driven collection started so far has finished. */
   settled(): Promise<void>;
   /**
@@ -84,6 +92,42 @@ export const startSessionTelemetry = ({
     }
   );
 
+  // Running aggregates rather than stored samples: a watch-mode session can
+  // live for hours, and only the extremes are needed.
+  let peakLoad1: number | null = null;
+  let minHostFreeMb: number | null = null;
+  let firstSwapoutsMb: number | null = null;
+  let lastSwapoutsMb: number | null = null;
+  const unsubscribePressure = diagnostics.subscribe(
+    ({ kind, label, value }) => {
+      if (kind !== 'gauge' || typeof value !== 'number') {
+        return;
+      }
+      if (label === 'host.load1') {
+        peakLoad1 = Math.max(peakLoad1 ?? value, value);
+      } else if (label === 'host.mem.free') {
+        minHostFreeMb = Math.min(minHostFreeMb ?? value, value);
+      } else if (label === 'host.mem.swapouts') {
+        firstSwapoutsMb ??= value;
+        lastSwapoutsMb = value;
+      }
+    },
+    { replay: true }
+  );
+
+  const hostPressure = (): HostPressure | null =>
+    peakLoad1 === null && minHostFreeMb === null && lastSwapoutsMb === null
+      ? null
+      : {
+          peakLoad1,
+          minHostFreeMb,
+          swapoutsDeltaMb:
+            firstSwapoutsMb !== null && lastSwapoutsMb !== null
+              ? lastSwapoutsMb - firstSwapoutsMb
+              : null,
+          cpuCount: os.availableParallelism(),
+        };
+
   const phase = (name: LifecyclePhase, attrs?: DiagnosticAttrs) => {
     if (!diagnostics.enabled) {
       return;
@@ -103,9 +147,11 @@ export const startSessionTelemetry = ({
     trackRun: (runId) => {
       lastRunId = runId;
     },
+    hostPressure,
     settled: run.settled,
     dispose: () => {
       disposed ??= (async () => {
+        unsubscribePressure();
         try {
           abortController.abort();
           await run.dispose();

@@ -5,6 +5,7 @@ import type {
   ApplePhysicalDeviceCodeSign,
   ApplePlatformConfig,
 } from './config.js';
+import { shouldDeferMetroPrewarmUntilBooted } from './startup-strategy.js';
 
 export const appleSimulator = (
   name: string,
@@ -36,4 +37,6 @@ export const applePlatform = (
     config.device.type === 'simulator'
       ? `ios:simulator:${config.device.name}:${config.device.systemVersion}`
       : `ios:physical:${config.device.name}`,
+  deferMetroPrewarm: () =>
+    config.device.type === 'simulator' && shouldDeferMetroPrewarmUntilBooted(),
 });

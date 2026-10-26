@@ -229,4 +229,32 @@ describe('startSessionTelemetry', () => {
     expect(telemetry.dispose()).toBe(first);
     await first;
   });
+
+  it('tracks peak load, minimum free memory and swapouts as host pressure', async () => {
+    const diagnostics = createDiagnostics({ enabled: true });
+    const telemetry = startSessionTelemetry({
+      diagnostics,
+      config: onlyPlatformProbe,
+      projectRoot,
+    });
+
+    expect(telemetry.hostPressure()).toBeNull();
+
+    diagnostics.gauge('host.load1', 4);
+    diagnostics.gauge('host.mem.free', 800);
+    diagnostics.gauge('host.mem.swapouts', 100);
+    diagnostics.gauge('host.load1', 9.5);
+    diagnostics.gauge('host.mem.free', 120);
+    diagnostics.gauge('host.load1', 6);
+    diagnostics.gauge('host.mem.swapouts', 700);
+
+    expect(telemetry.hostPressure()).toEqual({
+      peakLoad1: 9.5,
+      minHostFreeMb: 120,
+      swapoutsDeltaMb: 600,
+      cpuCount: os.availableParallelism(),
+    });
+
+    await telemetry.dispose();
+  });
 });
