@@ -357,11 +357,15 @@ jobs:
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
 
       # Stops simulator services the tests never use (widgets, media analysis,
-      # Siri, iCloud sync, ...) and silences the loudest log subsystems. Done
-      # right after boot so they never start.
-      - name: Slim iOS simulator
+      # Siri, iCloud sync, ...) and silences the loudest log subsystems. Started
+      # right after boot so they never start, and in the background because
+      # each simctl call is slow while the simulator boots; the install steps
+      # below run meanwhile. "Wait for iOS simulator slimming" joins it.
+      - name: Start slimming iOS simulator
         if: env.SIMULATOR_UDID != ''
-        run: scripts/ci/slim-ios-simulator.sh "$SIMULATOR_UDID"
+        run: |
+          nohup scripts/ci/slim-ios-simulator.sh "$SIMULATOR_UDID" > "$RUNNER_TEMP/slim-simulator.log" 2>&1 &
+          echo "SLIM_SIMULATOR_PID=$!" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: |
@@ -380,6 +384,15 @@ jobs:
           HARNESS_REQUIRE_XCTEST_PREBUILDS: '1'
         run: |
           node scripts/pack-xctest-agent-artifacts.mjs
+
+      - name: Wait for iOS simulator slimming
+        if: env.SLIM_SIMULATOR_PID != ''
+        # Slimming only helps; never fail the job because it hung.
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          while kill -0 "$SLIM_SIMULATOR_PID" 2>/dev/null; do sleep 2; done
+          cat "$RUNNER_TEMP/slim-simulator.log"
 
       - name: Restore app from cache
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
@@ -646,11 +659,15 @@ jobs:
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
 
       # Stops simulator services the tests never use (widgets, media analysis,
-      # Siri, iCloud sync, ...) and silences the loudest log subsystems. Done
-      # right after boot so they never start.
-      - name: Slim iOS simulator
+      # Siri, iCloud sync, ...) and silences the loudest log subsystems. Started
+      # right after boot so they never start, and in the background because
+      # each simctl call is slow while the simulator boots; the install steps
+      # below run meanwhile. "Wait for iOS simulator slimming" joins it.
+      - name: Start slimming iOS simulator
         if: env.SIMULATOR_UDID != ''
-        run: scripts/ci/slim-ios-simulator.sh "$SIMULATOR_UDID"
+        run: |
+          nohup scripts/ci/slim-ios-simulator.sh "$SIMULATOR_UDID" > "$RUNNER_TEMP/slim-simulator.log" 2>&1 &
+          echo "SLIM_SIMULATOR_PID=$!" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: |
@@ -669,6 +686,15 @@ jobs:
           HARNESS_REQUIRE_XCTEST_PREBUILDS: '1'
         run: |
           node scripts/pack-xctest-agent-artifacts.mjs
+
+      - name: Wait for iOS simulator slimming
+        if: env.SLIM_SIMULATOR_PID != ''
+        # Slimming only helps; never fail the job because it hung.
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          while kill -0 "$SLIM_SIMULATOR_PID" 2>/dev/null; do sleep 2; done
+          cat "$RUNNER_TEMP/slim-simulator.log"
 
       - name: Restore app from cache
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
