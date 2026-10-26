@@ -33,7 +33,8 @@ export type SessionTelemetry = {
   trackRun(runId: string): void;
   /**
    * Host pressure observed by the host-resources probe so far: peak load,
-   * lowest free memory and memory swapped out since the first sample. Null
+   * mean idle CPU, lowest free memory and memory swapped out since the first
+   * sample. Null
    * when no host sample was taken (diagnostics or the host probe are off).
    */
   hostPressure(): HostPressure | null;
@@ -95,6 +96,8 @@ export const startSessionTelemetry = ({
   // Running aggregates rather than stored samples: a watch-mode session can
   // live for hours, and only the extremes are needed.
   let peakLoad1: number | null = null;
+  let idlePctSum = 0;
+  let idlePctSamples = 0;
   let minHostFreeMb: number | null = null;
   let firstSwapoutsMb: number | null = null;
   let lastSwapoutsMb: number | null = null;
@@ -105,6 +108,9 @@ export const startSessionTelemetry = ({
       }
       if (label === 'host.load1') {
         peakLoad1 = Math.max(peakLoad1 ?? value, value);
+      } else if (label === 'host.cpu.idle_pct') {
+        idlePctSum += value;
+        idlePctSamples += 1;
       } else if (label === 'host.mem.free') {
         minHostFreeMb = Math.min(minHostFreeMb ?? value, value);
       } else if (label === 'host.mem.swapouts') {
@@ -120,6 +126,7 @@ export const startSessionTelemetry = ({
       ? null
       : {
           peakLoad1,
+          meanIdlePct: idlePctSamples > 0 ? idlePctSum / idlePctSamples : null,
           minHostFreeMb,
           swapoutsDeltaMb:
             firstSwapoutsMb !== null && lastSwapoutsMb !== null

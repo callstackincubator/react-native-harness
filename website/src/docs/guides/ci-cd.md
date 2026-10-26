@@ -46,7 +46,7 @@ The action accepts the following inputs:
 - `preRunHook` (optional): Inline shell script run in `bash` immediately before Harness starts
 - `afterRunHook` (optional): Inline shell script run in `bash` immediately after Harness finishes and before artifacts are uploaded
 - `cacheSavePolicy` (optional): When to save a new Metro cache entry -- `default-branch` (default), `always`, or `never`. See [Metro cache](#metro-cache) below
-- `slimIosSimulator` (optional, iOS simulators only): Whether to boot the simulator before the run and stop its background services that tests do not use, such as photo analysis, widgets, Siri and iCloud sync -- `auto` (default), `true`, or `false`. `auto` does this only on GitHub-hosted runners with 3 cores or less than 8 GB of memory, where those services otherwise slow startup enough to time out. On those runners the action also turns off Spotlight indexing
+- `slimIosSimulator` (optional, iOS simulators only): Whether to boot the simulator before the run and stop its background services that tests do not use, such as photo analysis, widgets, Siri and iCloud sync -- `auto` (default), `true`, or `false`. `auto` does this only on GitHub-hosted runners with 3 cores or less than 8 GB of memory, where those services otherwise slow startup enough to time out. Unless this is `false`, the action also turns off Spotlight indexing on GitHub-hosted runners. With `true` on a self-hosted machine, the simulator is left booted and the stopped services stay stopped until CoreSimulator restarts
 
 ## Crash Artifacts
 

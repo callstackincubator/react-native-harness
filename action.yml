@@ -55,7 +55,9 @@ inputs:
     description: >-
       Whether to boot the iOS simulator before the run and stop its background
       services that tests do not use ('auto', 'true', or 'false'). 'auto' does
-      this only on GitHub-hosted runners with 3 cores or less than 8 GB.
+      this only on GitHub-hosted runners with 3 cores or less than 8 GB. With
+      'true' on a self-hosted machine, the simulator is left booted and the
+      services stay stopped until CoreSimulator restarts.
     required: false
     type: string
     default: 'auto'
@@ -220,7 +222,7 @@ runs:
     # competes with the simulator for the runner's few cores. Self-hosted
     # machines are left alone: the setting outlives the job.
     - name: Disable Spotlight indexing
-      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'ios' && runner.os == 'macOS' && runner.environment == 'github-hosted' }}
+      if: ${{ fromJson(steps.load-config.outputs.config).platformId == 'ios' && runner.os == 'macOS' && runner.environment == 'github-hosted' && inputs.slimIosSimulator != 'false' }}
       shell: bash
       run: sudo -n mdutil -a -i off || echo "::warning::Could not disable Spotlight indexing."
     # Boots the simulator and stops the background services a test run never

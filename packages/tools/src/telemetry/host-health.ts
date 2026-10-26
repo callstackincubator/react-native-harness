@@ -4,7 +4,12 @@ import { unrefTimer } from '../unref-timer.js';
 import { diffCpuTimes, readCpuTimes } from './host-resources.js';
 import type { ProcessUsageRow } from './process-snapshot.js';
 
-/** Load above this multiple of the core count means work is queueing. */
+/**
+ * Load above this multiple of the core count means work is queueing. Only
+ * used when idle CPU is unknown: load is a lagging 1-minute average that on
+ * macOS also counts threads not using the CPU, so it stays high after the
+ * host has calmed down.
+ */
 const SATURATED_LOAD_PER_CPU = 2;
 /** Below this share of idle CPU, nothing is left for the run itself. */
 const SATURATED_IDLE_PCT = 5;
@@ -31,8 +36,9 @@ export const evaluateHostHealth = (
 ): HostHealthVerdict => ({
   ...sample,
   saturated:
-    sample.load1 > sample.cpuCount * SATURATED_LOAD_PER_CPU ||
-    (sample.idlePct !== null && sample.idlePct < SATURATED_IDLE_PCT),
+    sample.idlePct !== null
+      ? sample.idlePct < SATURATED_IDLE_PCT
+      : sample.load1 > sample.cpuCount * SATURATED_LOAD_PER_CPU,
 });
 
 /**
@@ -101,16 +107,22 @@ export const formatGitHubWarning = (
 
 export type HostPressure = {
   peakLoad1: number | null;
+  /** Mean of the sampled idle CPU share, in percent. */
+  meanIdlePct: number | null;
   minHostFreeMb: number | null;
   /** Memory swapped out while the pressure was observed, in MB. */
   swapoutsDeltaMb: number | null;
   cpuCount: number;
 };
 
-/** True when the pressure observed during startup explains a timeout. */
+/**
+ * True when the pressure observed during startup explains a timeout: the CPU
+ * was almost never idle, or memory was swapped out. Peak load alone does not
+ * count, because booting a simulator pushes it high on any small host.
+ */
 export const isHostStarved = (pressure: HostPressure): boolean =>
-  (pressure.peakLoad1 !== null &&
-    pressure.peakLoad1 > pressure.cpuCount * SATURATED_LOAD_PER_CPU) ||
+  (pressure.meanIdlePct !== null &&
+    pressure.meanIdlePct < SATURATED_IDLE_PCT) ||
   (pressure.swapoutsDeltaMb !== null &&
     pressure.swapoutsDeltaMb >= STARVED_SWAPOUTS_MB);
 
@@ -119,6 +131,7 @@ export const formatHostPressure = (pressure: HostPressure): string => {
     value === null ? 'n/a' : `${value.toFixed(digits)}${unit}`;
   return (
     `peak load ${format(pressure.peakLoad1, '', 1)} on ${pressure.cpuCount} cores, ` +
+    `average idle ${format(pressure.meanIdlePct, '%')}, ` +
     `min free memory ${format(pressure.minHostFreeMb, ' MB')}, ` +
     `swapped out ${format(pressure.swapoutsDeltaMb, ' MB')}`
   );

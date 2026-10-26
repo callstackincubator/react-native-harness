@@ -230,7 +230,7 @@ describe('startSessionTelemetry', () => {
     await first;
   });
 
-  it('tracks peak load, minimum free memory and swapouts as host pressure', async () => {
+  it('tracks peak load, mean idle CPU, minimum free memory and swapouts as host pressure', async () => {
     const diagnostics = createDiagnostics({ enabled: true });
     const telemetry = startSessionTelemetry({
       diagnostics,
@@ -247,9 +247,12 @@ describe('startSessionTelemetry', () => {
     diagnostics.gauge('host.mem.free', 120);
     diagnostics.gauge('host.load1', 6);
     diagnostics.gauge('host.mem.swapouts', 700);
+    diagnostics.gauge('host.cpu.idle_pct', 2);
+    diagnostics.gauge('host.cpu.idle_pct', 6);
 
     expect(telemetry.hostPressure()).toEqual({
       peakLoad1: 9.5,
+      meanIdlePct: 4,
       minHostFreeMb: 120,
       swapoutsDeltaMb: 600,
       cpuCount: os.availableParallelism(),

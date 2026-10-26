@@ -15,8 +15,9 @@ const simulatorSlimLogger = logger.child('simulator-slim');
  * ReportCrash, tccd, testmanagerd, installd, lsd, securityd, trustd, cfprefsd,
  * SimRenderServer and locationd.
  *
- * Labels were taken from the iOS 26.4 runtime (23E254a). Labels a runtime
- * does not have are skipped.
+ * Labels were taken from the iOS 26.4 runtime (23E254a). `launchctl
+ * disable` accepts labels a runtime does not have, so those cost a call but
+ * do no harm.
  */
 export const SIMULATOR_SLIM_LABELS = [
   // Photo and media analysis.
@@ -99,22 +100,29 @@ export const SIMULATOR_QUIET_LOG_SUBSYSTEMS = [
 
 const DEFAULT_SLIM_PARALLELISM = 8;
 // One `simctl spawn` was observed to take about 20s on a saturated runner.
-const SIMCTL_SPAWN_TIMEOUT_MS = 120_000;
+const SIMCTL_SPAWN_TIMEOUT_MS = 60_000;
+// Booting, waiting for boot and slimming normally take 1-5 minutes on a small
+// runner. Past this, the step gives up and leaves the rest to Harness.
+const DEFAULT_PREPARE_TIMEOUT_MS = 8 * 60_000;
 
 export type SimulatorSlimResult = {
   stopped: string[];
   quieted: string[];
   skipped: string[];
+  /** True when the deadline passed before every call was made. */
+  timedOut: boolean;
   durationMs: number;
 };
 
 const spawnInSimulator = async (
   udid: string,
-  args: string[]
+  args: string[],
+  signal?: AbortSignal
 ): Promise<boolean> => {
   try {
     await spawn('xcrun', ['simctl', 'spawn', udid, ...args], {
       timeout: SIMCTL_SPAWN_TIMEOUT_MS,
+      signal,
     });
     return true;
   } catch (error) {
@@ -126,13 +134,14 @@ const spawnInSimulator = async (
 const forEachWithConcurrency = async <T>(
   items: readonly T[],
   concurrency: number,
-  worker: (item: T) => Promise<void>
+  worker: (item: T) => Promise<void>,
+  signal?: AbortSignal
 ): Promise<void> => {
   let next = 0;
   const lanes = Array.from(
     { length: Math.min(Math.max(1, concurrency), items.length) },
     async () => {
-      while (next < items.length) {
+      while (next < items.length && !signal?.aborted) {
         await worker(items[next++]);
       }
     }
@@ -145,33 +154,39 @@ const forEachWithConcurrency = async <T>(
  * {@link SIMULATOR_QUIET_LOG_SUBSYSTEMS}. Every service needs both `disable`
  * and `bootout`: disable alone does not stop on-demand launches later in the
  * boot. The state lives in CoreSimulator's memory, so it has to be applied
- * after every boot. Never throws; failures are reported as skipped.
+ * after every boot. Never throws; failures are reported as skipped, and
+ * once `signal` aborts no further calls are made.
  */
 export const slimSimulator = async (
   udid: string,
-  { parallelism = DEFAULT_SLIM_PARALLELISM }: { parallelism?: number } = {}
+  {
+    parallelism = DEFAULT_SLIM_PARALLELISM,
+    signal,
+  }: { parallelism?: number; signal?: AbortSignal } = {}
 ): Promise<SimulatorSlimResult> => {
   const startedAt = Date.now();
   const result: SimulatorSlimResult = {
     stopped: [],
     quieted: [],
     skipped: [],
+    timedOut: false,
     durationMs: 0,
   };
+  const run = (args: string[]) => spawnInSimulator(udid, args, signal);
 
   // `system/` prints a deprecation warning and resolves to the user domain.
   const tasks: Array<() => Promise<void>> = [
     ...SIMULATOR_SLIM_LABELS.map((label) => async () => {
-      if (!(await spawnInSimulator(udid, ['launchctl', 'disable', `system/${label}`]))) {
+      if (!(await run(['launchctl', 'disable', `system/${label}`]))) {
         result.skipped.push(label);
         return;
       }
       // Fails when the service is not running yet; disable still applies.
-      await spawnInSimulator(udid, ['launchctl', 'bootout', `system/${label}`]);
+      await run(['launchctl', 'bootout', `system/${label}`]);
       result.stopped.push(label);
     }),
     ...SIMULATOR_QUIET_LOG_SUBSYSTEMS.map((subsystem) => async () => {
-      const quieted = await spawnInSimulator(udid, [
+      const quieted = await run([
         'log',
         'config',
         '--subsystem',
@@ -183,13 +198,25 @@ export const slimSimulator = async (
     }),
   ];
 
-  await forEachWithConcurrency(tasks, parallelism, (task) => task());
+  await forEachWithConcurrency(tasks, parallelism, (task) => task(), signal);
 
+  result.timedOut = signal?.aborted ?? false;
   result.durationMs = Date.now() - startedAt;
   return result;
 };
 
-export type CiSimulatorSlimMode = 'auto' | 'true' | 'false';
+const CI_SIMULATOR_SLIM_MODES = ['auto', 'true', 'false'] as const;
+export type CiSimulatorSlimMode = (typeof CI_SIMULATOR_SLIM_MODES)[number];
+
+/** Normalizes the action input; returns null for an unknown value. */
+export const parseCiSimulatorSlimMode = (
+  value: string | undefined
+): CiSimulatorSlimMode | null => {
+  const mode = (value ?? '').trim().toLowerCase() || 'auto';
+  return (CI_SIMULATOR_SLIM_MODES as readonly string[]).includes(mode)
+    ? (mode as CiSimulatorSlimMode)
+    : null;
+};
 
 /**
  * `auto` slims only on GitHub-hosted runners with 3 cores or less than 8 GB.
@@ -197,10 +224,10 @@ export type CiSimulatorSlimMode = 'auto' | 'true' | 'false';
  * for that simulator until CoreSimulator restarts.
  */
 export const resolveCiSimulatorSlim = (
-  mode: string | undefined,
+  mode: CiSimulatorSlimMode,
   { githubHosted }: { githubHosted: boolean }
 ): boolean => {
-  switch ((mode ?? 'auto').trim().toLowerCase()) {
+  switch (mode) {
     case 'true':
       return true;
     case 'false':
@@ -217,17 +244,21 @@ export type PrepareCiSimulatorResult =
 /**
  * Boots the simulator a runner uses and slims it before Harness starts, so
  * the work stays outside Harness's startup timeout. Harness then picks up the
- * booted simulator as it is.
+ * booted simulator as it is. Throws if booting does not finish before the
+ * deadline; slimming stops early instead.
  */
 export const prepareCiSimulator = async ({
   name,
   systemVersion,
   parallelism,
+  timeoutMs = DEFAULT_PREPARE_TIMEOUT_MS,
 }: {
   name: string;
   systemVersion: string;
   parallelism?: number;
+  timeoutMs?: number;
 }): Promise<PrepareCiSimulatorResult> => {
+  const signal = AbortSignal.timeout(timeoutMs);
   const udid = await simctl.getSimulatorId(name, systemVersion);
   if (!udid) {
     return { status: 'not-found' };
@@ -239,13 +270,16 @@ export const prepareCiSimulator = async ({
     simctl.isBootingSimulatorStatus(status)
   );
   if (bootedNow) {
-    await simctl.bootSimulator(udid);
+    await simctl.bootSimulator(udid, signal);
   }
+  // A simulator booted earlier in the job may still be starting up, and
+  // calls into it fail until it has.
+  await simctl.waitForBoot(udid, signal);
 
   return {
     status: 'prepared',
     udid,
     bootedNow,
-    slim: await slimSimulator(udid, { parallelism }),
+    slim: await slimSimulator(udid, { parallelism, signal }),
   };
 };

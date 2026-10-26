@@ -21,9 +21,9 @@ describe('isCI', () => {
 
 describe('evaluateHostHealth', () => {
   it.each([
-    [{ load1: 7, cpuCount: 3, idlePct: 40 }, true],
     [{ load1: 2, cpuCount: 3, idlePct: 3 }, true],
-    [{ load1: 6, cpuCount: 3, idlePct: 30 }, false],
+    [{ load1: 206, cpuCount: 3, idlePct: 58 }, false],
+    [{ load1: 7, cpuCount: 3, idlePct: null }, true],
     [{ load1: 1, cpuCount: 3, idlePct: null }, false],
   ])('judges %o as saturated=%s', (sample, saturated) => {
     expect(evaluateHostHealth(sample).saturated).toBe(saturated);
@@ -67,10 +67,10 @@ describe('formatGitHubWarning', () => {
 
 describe('isHostStarved', () => {
   it.each([
-    [{ peakLoad1: 7, minHostFreeMb: 900, swapoutsDeltaMb: 0 }, true],
-    [{ peakLoad1: 2, minHostFreeMb: 900, swapoutsDeltaMb: 300 }, true],
-    [{ peakLoad1: 5, minHostFreeMb: 30, swapoutsDeltaMb: 10 }, false],
-    [{ peakLoad1: null, minHostFreeMb: null, swapoutsDeltaMb: null }, false],
+    [{ peakLoad1: 7, meanIdlePct: 2, minHostFreeMb: 900, swapoutsDeltaMb: 0 }, true],
+    [{ peakLoad1: 2, meanIdlePct: 50, minHostFreeMb: 900, swapoutsDeltaMb: 300 }, true],
+    [{ peakLoad1: 220, meanIdlePct: 40, minHostFreeMb: 30, swapoutsDeltaMb: 10 }, false],
+    [{ peakLoad1: null, meanIdlePct: null, minHostFreeMb: null, swapoutsDeltaMb: null }, false],
   ])('judges %o on 3 cores as starved=%s', (pressure, starved) => {
     expect(isHostStarved({ ...pressure, cpuCount: 3 })).toBe(starved);
   });

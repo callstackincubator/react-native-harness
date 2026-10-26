@@ -1,4 +1,5 @@
 import { getConfig } from '@react-native-harness/config';
+import { formatGitHubWarning } from '@react-native-harness/tools';
 import { createRequire } from 'node:module';
 import { resolveProjectRoot } from './workspace-root.js';
 
@@ -18,7 +19,11 @@ const loadPlatformApple = async (
   );
 };
 
-const warn = (message: string) => console.info(`::warning::${message}`);
+const warn = (message: string) =>
+  console.info(
+    formatGitHubWarning('iOS simulator preparation', message) ??
+      `Warning: ${message}`
+  );
 
 /**
  * Boots the iOS simulator a runner uses and stops its background services
@@ -45,10 +50,22 @@ export const runPrepareIosSimulator = async (): Promise<void> => {
       return;
     }
 
-    const { prepareCiSimulator, resolveCiSimulatorSlim } =
-      await loadPlatformApple(resolvedProjectRoot);
+    const {
+      parseCiSimulatorSlimMode,
+      prepareCiSimulator,
+      resolveCiSimulatorSlim,
+    } = await loadPlatformApple(resolvedProjectRoot);
 
-    const slim = resolveCiSimulatorSlim(process.env.INPUT_SLIMIOSSIMULATOR, {
+    const modeInput = process.env.INPUT_SLIMIOSSIMULATOR;
+    let mode = parseCiSimulatorSlimMode(modeInput);
+    if (mode === null) {
+      warn(
+        `Unknown slimIosSimulator value "${modeInput}"; expected auto, true or false. Using auto.`
+      );
+      mode = 'auto';
+    }
+
+    const slim = resolveCiSimulatorSlim(mode, {
       githubHosted: process.env.RUNNER_ENVIRONMENT === 'github-hosted',
     });
     if (!slim) {
@@ -85,7 +102,11 @@ export const runPrepareIosSimulator = async (): Promise<void> => {
       `Stopped ${slimResult.stopped.length} services and silenced ${slimResult.quieted.length} log subsystems in ${Math.round(slimResult.durationMs / 1000)}s.`
     );
 
-    if (slimResult.stopped.length === 0) {
+    if (slimResult.timedOut) {
+      warn(
+        'Simulator slimming ran out of time; some services were left running.'
+      );
+    } else if (slimResult.stopped.length === 0) {
       warn('Simulator slimming stopped no services; the run will be slower.');
     }
   } catch (error) {

@@ -17,6 +17,7 @@ describe('PlatformReadyTimeoutError', () => {
   it('blames a starved host instead of suggesting a larger timeout', () => {
     const error = new PlatformReadyTimeoutError(300000, {
       peakLoad1: 14.2,
+      meanIdlePct: 1.6,
       minHostFreeMb: 41,
       swapoutsDeltaMb: 1200,
       cpuCount: 3,
@@ -24,13 +25,27 @@ describe('PlatformReadyTimeoutError', () => {
 
     expect(error.hostStarved).toBe(true);
     expect(error.message).toBe(
-      'The platform did not become ready within 300000ms. The host was starved for resources during startup (peak load 14.2 on 3 cores, min free memory 41 MB, swapped out 1200 MB). A larger "platformReadyTimeout" is unlikely to help; reduce other load on the host or use a larger machine.'
+      'The platform did not become ready within 300000ms. The host was starved for resources during startup (peak load 14.2 on 3 cores, average idle 2%, min free memory 41 MB, swapped out 1200 MB). A larger "platformReadyTimeout" is unlikely to help; reduce other load on the host or use a larger machine.'
     );
+  });
+
+  it('keeps the timeout hint when only the load was high', () => {
+    const error = new PlatformReadyTimeoutError(300000, {
+      peakLoad1: 220,
+      meanIdlePct: 40,
+      minHostFreeMb: 55,
+      swapoutsDeltaMb: 0,
+      cpuCount: 3,
+    });
+
+    expect(error.hostStarved).toBe(false);
+    expect(error.message).toContain('Increase "platformReadyTimeout"');
   });
 
   it('keeps the timeout hint and reports host pressure when the host was fine', () => {
     const error = new PlatformReadyTimeoutError(300000, {
       peakLoad1: 2.5,
+      meanIdlePct: null,
       minHostFreeMb: 900,
       swapoutsDeltaMb: null,
       cpuCount: 3,
@@ -38,7 +53,7 @@ describe('PlatformReadyTimeoutError', () => {
 
     expect(error.hostStarved).toBe(false);
     expect(error.message).toBe(
-      'The platform did not become ready within 300000ms. Increase "platformReadyTimeout" if your device, simulator, or emulator needs more time to start. Host during startup: peak load 2.5 on 3 cores, min free memory 900 MB, swapped out n/a.'
+      'The platform did not become ready within 300000ms. Increase "platformReadyTimeout" if your device, simulator, or emulator needs more time to start. Host during startup: peak load 2.5 on 3 cores, average idle n/a, min free memory 900 MB, swapped out n/a.'
     );
   });
 });

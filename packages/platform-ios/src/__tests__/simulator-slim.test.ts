@@ -12,6 +12,7 @@ vi.mock('@react-native-harness/tools', async (importOriginal) => ({
 }));
 
 import {
+  parseCiSimulatorSlimMode,
   prepareCiSimulator,
   resolveCiSimulatorSlim,
   SIMULATOR_QUIET_LOG_SUBSYSTEMS,
@@ -31,15 +32,26 @@ const simulatorList = (state: string) =>
     },
   });
 
+describe('parseCiSimulatorSlimMode', () => {
+  it.each([
+    [undefined, 'auto'],
+    ['', 'auto'],
+    [' TRUE ', 'true'],
+    ['false', 'false'],
+    ['flase', null],
+  ])('parses %o as %o', (value, expected) => {
+    expect(parseCiSimulatorSlimMode(value)).toBe(expected);
+  });
+});
+
 describe('resolveCiSimulatorSlim', () => {
   it.each([
     ['auto', true, SMALL_HOST, true],
-    [undefined, true, SMALL_HOST, true],
     ['auto', false, SMALL_HOST, false],
     ['auto', true, LARGE_HOST, false],
     ['true', false, LARGE_HOST, true],
     ['false', true, SMALL_HOST, false],
-  ])(
+  ] as const)(
     'mode %s on github-hosted=%s resolves to %s',
     (mode, githubHosted, host, expected) => {
       mocks.getHostCapabilities.mockReturnValue(host);
@@ -89,6 +101,22 @@ describe('slimSimulator', () => {
     expect(result.skipped).toEqual(['com.apple.chronod']);
     expect(result.stopped).toHaveLength(SIMULATOR_SLIM_LABELS.length - 1);
   });
+
+  it('makes no further calls once the signal aborts', async () => {
+    const controller = new AbortController();
+    mocks.spawn.mockImplementation(async () => {
+      controller.abort();
+      return { stdout: '' };
+    });
+
+    const result = await slimSimulator('SIM-1', {
+      parallelism: 1,
+      signal: controller.signal,
+    });
+
+    expect(result.timedOut).toBe(true);
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('prepareCiSimulator', () => {
@@ -107,12 +135,16 @@ describe('prepareCiSimulator', () => {
     });
 
     expect(result).toMatchObject({ status: 'prepared', udid: 'SIM-1', bootedNow: true });
-    expect(mocks.spawn).toHaveBeenCalledWith('xcrun', ['simctl', 'boot', 'SIM-1']);
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      'xcrun',
+      ['simctl', 'boot', 'SIM-1'],
+      expect.anything()
+    );
   });
 
-  it('slims an already booted simulator without booting it again', async () => {
+  it('waits for a booting simulator without booting it again', async () => {
     mocks.spawn.mockImplementation(async (_cmd: string, args: string[]) =>
-      args[1] === 'list' ? { stdout: simulatorList('Booted') } : { stdout: '' }
+      args[1] === 'list' ? { stdout: simulatorList('Booting') } : { stdout: '' }
     );
 
     const result = await prepareCiSimulator({
@@ -121,7 +153,16 @@ describe('prepareCiSimulator', () => {
     });
 
     expect(result).toMatchObject({ status: 'prepared', bootedNow: false });
-    expect(mocks.spawn).not.toHaveBeenCalledWith('xcrun', ['simctl', 'boot', 'SIM-1']);
+    expect(mocks.spawn).not.toHaveBeenCalledWith(
+      'xcrun',
+      ['simctl', 'boot', 'SIM-1'],
+      expect.anything()
+    );
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      'xcrun',
+      ['simctl', 'bootstatus', 'SIM-1', '-b'],
+      expect.anything()
+    );
   });
 
   it('reports a missing simulator', async () => {

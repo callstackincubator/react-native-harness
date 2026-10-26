@@ -235,6 +235,7 @@ describe('withPlatformReadyTimeout', () => {
     vi.useFakeTimers();
     const hostPressure = {
       peakLoad1: 9,
+      meanIdlePct: 3,
       minHostFreeMb: 60,
       swapoutsDeltaMb: 512,
       cpuCount: 3,

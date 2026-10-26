@@ -16,6 +16,7 @@ export type {
   XCTestAgentBuildSigning,
 } from './xctest-agent-artifacts.js';
 export {
+  parseCiSimulatorSlimMode,
   prepareCiSimulator,
   resolveCiSimulatorSlim,
   slimSimulator,
