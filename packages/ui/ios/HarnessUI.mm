@@ -576,4 +576,3 @@ static NSTimeInterval _lastTapTime = 0;
 }
 
 @end
-// PoC: native-only change to exercise the fingerprint (revert before merging)
