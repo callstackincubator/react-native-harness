@@ -112,6 +112,8 @@ yarn-error.log
 # testing
 /coverage
 .harness/
+# Images a failed match saves next to the playground's committed image snapshots
+/apps/playground/**/__image_snapshots__/**/__diff_output__/
 # Prebuilt XCTest agent artifacts, packed by the platform-apple `prepack` script
 /packages/platform-ios/xctest-agent-prebuilds/
 vite.config.*.timestamp*

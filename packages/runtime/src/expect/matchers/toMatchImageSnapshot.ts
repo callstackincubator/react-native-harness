@@ -20,6 +20,10 @@ export async function toMatchImageSnapshot(
     );
   }
 
+  if (this.isNot) {
+    throw new Error('`.not` cannot be used with `.toMatchImageSnapshot()`.');
+  }
+
   const handle = getHandle();
   const context = getHarnessContext();
 
