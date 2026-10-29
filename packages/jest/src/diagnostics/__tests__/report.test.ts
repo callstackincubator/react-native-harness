@@ -562,9 +562,13 @@ describe('createDiagnosticsAppender', () => {
   });
 
   it('never throws when the directory cannot be written', async () => {
+    // A folder below a regular file cannot be created on any platform. On
+    // Windows, `/dev/null/nope` is an ordinary folder at the drive root.
+    const file = path.join(projectRoot, 'file');
+    await fs.writeFile(file, '');
     const diagnostics = createDiagnostics({ enabled: true });
     const appender = createDiagnosticsAppender(diagnostics, {
-      projectRoot: '/dev/null/nope',
+      projectRoot: path.join(file, 'nope'),
       id: 'unwritable',
     });
 
@@ -572,6 +576,7 @@ describe('createDiagnosticsAppender', () => {
     expect(() => appender.flush()).not.toThrow();
     diagnostics.mark('b');
     await expect(appender.dispose()).resolves.toBeUndefined();
+    expect(await exists(appender.filePath)).toBe(false);
   });
 });
 
