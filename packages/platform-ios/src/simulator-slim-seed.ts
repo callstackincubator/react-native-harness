@@ -1,9 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-// This module must stay free of package and relative imports: this repo's CI
-// workflow imports it straight from source, before dependencies are installed.
-
 /**
  * Simulator services a Harness test run never uses. Right after boot they
  * keep several cores busy (photo analysis alone takes about three cores for
