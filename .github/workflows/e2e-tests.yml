@@ -304,9 +304,16 @@ jobs:
           if-no-files-found: ignore
 
   e2e-ios:
-    name: E2E iOS
+    name: E2E iOS (${{ matrix.slim }} ${{ matrix.attempt }})
     runs-on: macos-latest
     timeout-minutes: 30
+    # TEMPORARY A/B: compares seeding the simulator's launchd overrides before
+    # boot with stopping services after boot. Remove before merging.
+    strategy:
+      fail-fast: false
+      matrix:
+        slim: [seeded, live]
+        attempt: [1, 2]
     needs: [fingerprint, build-ios]
     if: ${{ !cancelled() && needs.fingerprint.result == 'success' && (needs.build-ios.result == 'success' || needs.build-ios.result == 'skipped') && ((github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios'))) }}
     env:
@@ -324,6 +331,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
 
+      - name: Start host pressure sampling
+        run: .github/scripts/host-pressure.sh start
+
       - name: Install pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
 
@@ -340,11 +350,15 @@ jobs:
 
       # Starts the simulator boot now so it overlaps the network-bound install
       # steps below instead of the Metro bundle build. Harness reuses a booted
-      # or booting simulator; if this fails, Harness boots it itself.
+      # or booting simulator; if this fails, Harness boots it itself. Harness
+      # can only keep unused services from starting when it boots the
+      # simulator, so this seeds the same launchd overrides first, straight
+      # from source since nothing is installed yet.
       - name: Boot iOS simulator
         env:
           SIMULATOR_NAME: iPhone 17 Pro
           SIMULATOR_RUNTIME: iOS-26-4
+          SLIM_MODE: ${{ matrix.slim }}
         run: |
           udid="$(xcrun simctl list devices --json | jq -r --arg name "$SIMULATOR_NAME" --arg runtime "$SIMULATOR_RUNTIME" \
             '.devices | to_entries[] | select(.key | endswith($runtime)) | .value[] | select(.name == $name) | .udid' | head -n 1)"
@@ -352,8 +366,16 @@ jobs:
             echo "::warning::No $SIMULATOR_NAME simulator for $SIMULATOR_RUNTIME; Harness will report it."
             exit 0
           fi
+          if [ "$SLIM_MODE" = seeded ]; then
+            node --input-type=module -e "
+              const { seedSimulatorSlim } = await import('$GITHUB_WORKSPACE/packages/platform-ios/src/simulator-slim-seed.ts');
+              console.log(JSON.stringify(seedSimulatorSlim(process.argv[1])));
+            " "$udid" || echo "::warning::Could not seed launchd overrides of $udid."
+          fi
           echo "Booting $SIMULATOR_NAME ($udid)"
+          .github/scripts/host-pressure.sh mark boot
           xcrun simctl boot "$udid" || echo "::warning::Could not pre-boot $udid; Harness will boot it."
+          nohup bash -c "xcrun simctl bootstatus '$udid' -b >/dev/null 2>&1; .github/scripts/host-pressure.sh mark booted" >/dev/null 2>&1 &
 
       - name: Install dependencies
         run: |
@@ -380,6 +402,9 @@ jobs:
           key: ios-app-playground-${{ needs.fingerprint.outputs.ios }}
           fail-on-cache-miss: true
 
+      - name: Mark Harness start
+        run: .github/scripts/host-pressure.sh mark harness
+
       - name: Run React Native Harness
         uses: ./
         with:
@@ -393,11 +418,28 @@ jobs:
             echo "HARNESS_RUNNER=$HARNESS_RUNNER"
             echo "HARNESS_EXIT_CODE=$HARNESS_EXIT_CODE"
 
+      - name: Summarize host pressure
+        if: always()
+        run: |
+          {
+            echo "### Host pressure (${{ matrix.slim }} ${{ matrix.attempt }})"
+            echo
+            .github/scripts/host-pressure.sh stop
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Upload host pressure samples
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: host-pressure-e2e-ios-${{ matrix.slim }}-${{ matrix.attempt }}
+          path: ${{ runner.temp }}/host-pressure
+          if-no-files-found: ignore
+
       - name: Upload Harness logs
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: harness-logs-e2e-ios
+          name: harness-logs-e2e-ios-${{ matrix.slim }}-${{ matrix.attempt }}
           path: apps/playground/.harness/logs
           if-no-files-found: ignore
 
@@ -405,7 +447,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: harness-diagnostics-e2e-ios
+          name: harness-diagnostics-e2e-ios-${{ matrix.slim }}-${{ matrix.attempt }}
           path: apps/playground/.harness/diagnostics
           if-no-files-found: ignore
 
