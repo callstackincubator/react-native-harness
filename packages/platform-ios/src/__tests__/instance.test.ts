@@ -514,7 +514,7 @@ describe('iOS platform instance dependency validation', () => {
     expect(slimOrder).toBeLessThan(isAppInstalled.mock.invocationCallOrder[0]);
   });
 
-  it('slims an already booted simulator without seeding it', async () => {
+  it('leaves an already booted simulator alone', async () => {
     slimMocks.shouldSlimSimulator.mockReturnValue(true);
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
@@ -538,10 +538,7 @@ describe('iOS platform instance dependency validation', () => {
     );
 
     expect(slimMocks.seedSimulatorSlim).not.toHaveBeenCalled();
-    expect(slimMocks.slimSimulator).toHaveBeenCalledWith(
-      'sim-udid',
-      expect.anything(),
-    );
+    expect(slimMocks.slimSimulator).not.toHaveBeenCalled();
   });
 
   it('does not slim the simulator by default outside CI', async () => {

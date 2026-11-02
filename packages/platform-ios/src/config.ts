@@ -11,10 +11,9 @@ export const AppleSimulatorSchema = z.object({
   systemVersion: z.string().min(1, 'System version is required'),
   /**
    * Whether to turn off the simulator's background services that tests do
-   * not use (photo analysis, widgets, Siri, iCloud sync). When Harness boots
-   * the simulator they never start; a simulator that is already booted has
-   * them stopped. By default this happens only on CI hosts with 3 cores or
-   * less than 8 GB.
+   * not use (photo analysis, widgets, Siri, iCloud sync) when Harness boots
+   * the simulator. A simulator that is already booted is left as it is. By
+   * default this happens only on CI hosts with 3 cores or less than 8 GB.
    */
   slimOnCI: z.boolean().optional(),
 });

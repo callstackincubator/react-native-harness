@@ -179,7 +179,8 @@ export const getAppleSimulatorPlatformInstance = async (
       }
     }
 
-    if (slim) {
+    // A simulator that was already running is left as it is.
+    if (slim && startedByHarness) {
       logger.info('Stopping unused iOS simulator services...');
       const diagnostics = init.diagnostics ?? noopDiagnostics;
       const span = diagnostics.start('platform.ios.simulator.slim');

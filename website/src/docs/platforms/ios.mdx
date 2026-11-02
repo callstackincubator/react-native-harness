@@ -62,7 +62,7 @@ Xcode often installs multiple runtime versions (e.g., iOS 17.0 and iOS 18.0). Si
 
 On CI hosts with 3 cores or less than 8 GB of memory, such as the standard GitHub Actions macOS runner, Harness turns off the simulator's background services that tests do not use. These include photo analysis, widgets and wallpapers, Siri, Spotlight and iCloud sync. Without this, they can keep the host busy long enough for startup to time out. Push notifications, StoreKit, in-app purchases and universal links keep working.
 
-When Harness boots the simulator itself, these services never start, which costs nothing. On iOS 18.4 and earlier, and on a simulator that is already booted when Harness starts, Harness stops them after boot instead, which can add a minute or two to startup. If your workflow boots the simulator early, let Harness boot it instead.
+Harness does this only when it boots the simulator itself, and the services never start. On iOS 18.4 and earlier, Harness stops them right after boot instead, which can add a minute or two to startup. A simulator that is already booted when Harness starts is left as it is.
 
 Use the `slimOnCI` option to change this. `true` stops the services on any CI host, and `false` never stops them:
 
