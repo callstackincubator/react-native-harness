@@ -304,16 +304,9 @@ jobs:
           if-no-files-found: ignore
 
   e2e-ios:
-    name: E2E iOS (${{ matrix.slim }} ${{ matrix.attempt }})
+    name: E2E iOS
     runs-on: macos-latest
     timeout-minutes: 30
-    # TEMPORARY A/B: compares seeding the simulator's launchd overrides before
-    # boot with stopping services after boot. Remove before merging.
-    strategy:
-      fail-fast: false
-      matrix:
-        slim: [seeded, live]
-        attempt: [1, 2]
     needs: [fingerprint, build-ios]
     if: ${{ !cancelled() && needs.fingerprint.result == 'success' && (needs.build-ios.result == 'success' || needs.build-ios.result == 'skipped') && ((github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios'))) }}
     env:
@@ -358,7 +351,6 @@ jobs:
         env:
           SIMULATOR_NAME: iPhone 17 Pro
           SIMULATOR_RUNTIME: iOS-26-4
-          SLIM_MODE: ${{ matrix.slim }}
         run: |
           udid="$(xcrun simctl list devices --json | jq -r --arg name "$SIMULATOR_NAME" --arg runtime "$SIMULATOR_RUNTIME" \
             '.devices | to_entries[] | select(.key | endswith($runtime)) | .value[] | select(.name == $name) | .udid' | head -n 1)"
@@ -366,12 +358,10 @@ jobs:
             echo "::warning::No $SIMULATOR_NAME simulator for $SIMULATOR_RUNTIME; Harness will report it."
             exit 0
           fi
-          if [ "$SLIM_MODE" = seeded ]; then
-            node --input-type=module -e "
-              const { seedSimulatorSlim } = await import('$GITHUB_WORKSPACE/packages/platform-ios/src/simulator-slim-seed.ts');
-              console.log(JSON.stringify(seedSimulatorSlim(process.argv[1])));
-            " "$udid" || echo "::warning::Could not seed launchd overrides of $udid."
-          fi
+          node --input-type=module -e "
+            const { seedSimulatorSlim } = await import('$GITHUB_WORKSPACE/packages/platform-ios/src/simulator-slim-seed.ts');
+            console.log(JSON.stringify(seedSimulatorSlim(process.argv[1])));
+          " "$udid" || echo "::warning::Could not seed launchd overrides of $udid."
           echo "Booting $SIMULATOR_NAME ($udid)"
           .github/scripts/host-pressure.sh mark boot
           xcrun simctl boot "$udid" || echo "::warning::Could not pre-boot $udid; Harness will boot it."
@@ -422,7 +412,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "### Host pressure (${{ matrix.slim }} ${{ matrix.attempt }})"
+            echo "### Host pressure"
             echo
             .github/scripts/host-pressure.sh stop
           } >>"$GITHUB_STEP_SUMMARY"
@@ -431,7 +421,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: host-pressure-e2e-ios-${{ matrix.slim }}-${{ matrix.attempt }}
+          name: host-pressure-e2e-ios
           path: ${{ runner.temp }}/host-pressure
           if-no-files-found: ignore
 
@@ -439,7 +429,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: harness-logs-e2e-ios-${{ matrix.slim }}-${{ matrix.attempt }}
+          name: harness-logs-e2e-ios
           path: apps/playground/.harness/logs
           if-no-files-found: ignore
 
@@ -447,7 +437,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: harness-diagnostics-e2e-ios-${{ matrix.slim }}-${{ matrix.attempt }}
+          name: harness-diagnostics-e2e-ios
           path: apps/playground/.harness/diagnostics
           if-no-files-found: ignore
 
