@@ -338,23 +338,6 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
-      # Starts the simulator boot now so it overlaps the network-bound install
-      # steps below instead of the Metro bundle build. Harness reuses a booted
-      # or booting simulator; if this fails, Harness boots it itself.
-      - name: Boot iOS simulator
-        env:
-          SIMULATOR_NAME: iPhone 17 Pro
-          SIMULATOR_RUNTIME: iOS-26-4
-        run: |
-          udid="$(xcrun simctl list devices --json | jq -r --arg name "$SIMULATOR_NAME" --arg runtime "$SIMULATOR_RUNTIME" \
-            '.devices | to_entries[] | select(.key | endswith($runtime)) | .value[] | select(.name == $name) | .udid' | head -n 1)"
-          if [ -z "$udid" ]; then
-            echo "::warning::No $SIMULATOR_NAME simulator for $SIMULATOR_RUNTIME; Harness will report it."
-            exit 0
-          fi
-          echo "Booting $SIMULATOR_NAME ($udid)"
-          xcrun simctl boot "$udid" || echo "::warning::Could not pre-boot $udid; Harness will boot it."
-
       - name: Install dependencies
         run: |
           pnpm install
@@ -618,23 +601,6 @@ jobs:
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
-
-      # Starts the simulator boot now so it overlaps the network-bound install
-      # steps below instead of the Metro bundle build. Harness reuses a booted
-      # or booting simulator; if this fails, Harness boots it itself.
-      - name: Boot iOS simulator
-        env:
-          SIMULATOR_NAME: iPhone 17 Pro
-          SIMULATOR_RUNTIME: iOS-26-4
-        run: |
-          udid="$(xcrun simctl list devices --json | jq -r --arg name "$SIMULATOR_NAME" --arg runtime "$SIMULATOR_RUNTIME" \
-            '.devices | to_entries[] | select(.key | endswith($runtime)) | .value[] | select(.name == $name) | .udid' | head -n 1)"
-          if [ -z "$udid" ]; then
-            echo "::warning::No $SIMULATOR_NAME simulator for $SIMULATOR_RUNTIME; Harness will report it."
-            exit 0
-          fi
-          echo "Booting $SIMULATOR_NAME ($udid)"
-          xcrun simctl boot "$udid" || echo "::warning::Could not pre-boot $udid; Harness will boot it."
 
       - name: Install dependencies
         run: |
