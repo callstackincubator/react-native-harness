@@ -13,7 +13,8 @@ declare module '@vitest/expect' {
   interface Matchers {
     /**
      * Match the received screenshot against a stored snapshot.
-     * Creates a new snapshot if one doesn't exist.
+     * Creates a new snapshot if one doesn't exist, except in Jest's CI mode,
+     * where a missing snapshot fails the test. Cannot be used with `.not`.
      */
     toMatchImageSnapshot(options: ImageSnapshotOptions): Promise<void>;
   }
