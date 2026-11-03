@@ -1,88 +1,16 @@
 import { logger, spawn } from '@react-native-harness/tools';
+import { SIMULATOR_SLIM_LABELS } from './simulator-slim-seed.js';
 
 const simulatorSlimLogger = logger.child('simulator-slim');
 
+export { SIMULATOR_SLIM_LABELS } from './simulator-slim-seed.js';
+
 /**
- * Simulator services a Harness test run never uses. Right after boot they
- * keep several cores busy (photo analysis alone takes about three cores for
- * over a minute) and, taken together, add enough memory pressure to starve a
- * 3-core, 7 GB CI runner.
- *
- * Kept on purpose, because Harness or the app depends on them: launchd_sim,
- * SpringBoard, backboardd, runningboardd, PosterBoard, logd, diagnosticd,
- * ReportCrash, tccd, testmanagerd, installd, lsd, securityd, trustd, cfprefsd,
- * SimRenderServer and locationd.
- *
- * Labels were taken from the iOS 26.4 runtime (23E254a). `launchctl
- * disable` accepts labels a runtime does not have, so those cost a call but
- * do no harm.
+ * Harness has always left PosterBoard running when it slims a booted
+ * simulator, and still does. simslim keeps it from starting at boot without
+ * trouble, so it is only stopped by seeding the overrides before boot.
  */
-export const SIMULATOR_SLIM_LABELS = [
-  // Photo and media analysis.
-  'com.apple.mediaanalysisd',
-  'com.apple.mediaanalysisd.service',
-  'com.apple.photoanalysisd',
-  'com.apple.cloudphotod',
-  // Home screen widgets; chronod launches every widget extension.
-  'com.apple.chronod',
-  // Personal data, sync and iCloud.
-  'com.apple.remindd',
-  'com.apple.calaccessd',
-  'com.apple.contactsd',
-  'com.apple.contacts.postersyncd',
-  'com.apple.apsd',
-  'com.apple.cloudd',
-  'com.apple.bird',
-  'com.apple.appleaccountd',
-  'com.apple.icloudmailagent',
-  'com.apple.dataaccess.dataaccessd',
-  'com.apple.itunescloudd',
-  'com.apple.mediastream.mstreamd',
-  'com.apple.familycircled',
-  'com.apple.familynotification',
-  'com.apple.nanoprefsyncd.2',
-  'com.apple.nanonewscd',
-  // Health and fitness.
-  'com.apple.healthd',
-  'com.apple.healthappd',
-  'com.apple.fitnessintelligenced',
-  'com.apple.finhealthd',
-  // Intelligence, Siri and suggestions.
-  'com.apple.generativeexperiencesd',
-  'com.apple.intelligenceplatformd',
-  'com.apple.intelligencecontextd',
-  'com.apple.intelligenceflowd',
-  'com.apple.intelligencetasksd',
-  'com.apple.callintelligenced',
-  'com.apple.knowledgeconstructiond',
-  'com.apple.biomed',
-  'com.apple.biomesyncd',
-  'com.apple.suggestd',
-  'com.apple.assistantd',
-  'com.apple.assistant_cdmd',
-  'com.apple.assistant_service',
-  'com.apple.siri.context.service',
-  'com.apple.siriactionsd',
-  'com.apple.siriinferenced',
-  'com.apple.siriknowledged',
-  'com.apple.sirittsd',
-  // Search indexing.
-  'com.apple.searchd',
-  'com.apple.spotlightknowledged',
-  'com.apple.spotlightknowledged.updater',
-  'com.apple.corespotlightservice',
-  // Other apps' background daemons.
-  'com.apple.appstored',
-  'com.apple.jetpackassetd',
-  'com.apple.gamed',
-  'com.apple.weatherd',
-  'com.apple.newsd',
-  'com.apple.routined',
-  'com.apple.Maps.mapssyncd',
-  'com.apple.ScreenTimeAgent',
-  'com.apple.UsageTrackingAgent',
-  'com.apple.shazamd',
-] as const;
+const SEED_ONLY_LABELS: ReadonlySet<string> = new Set(['com.apple.PosterBoard']);
 
 /**
  * The loudest log subsystems at idle; Harness reads none of them. The
@@ -102,6 +30,8 @@ const SIMCTL_SPAWN_TIMEOUT_MS = 60_000;
 
 export type SimulatorSlimResult = {
   stopped: string[];
+  /** Already disabled and not running, typically because the boot was seeded. */
+  alreadyStopped: string[];
   quieted: string[];
   skipped: string[];
   /** True when the deadline passed before every call was made. */
@@ -109,21 +39,67 @@ export type SimulatorSlimResult = {
   durationMs: number;
 };
 
-const spawnInSimulator = async (
+type LaunchdState = {
+  disabled: ReadonlySet<string>;
+  running: ReadonlySet<string>;
+};
+
+const runInSimulator = async (
   udid: string,
   args: string[],
   signal?: AbortSignal
-): Promise<boolean> => {
+): Promise<string | null> => {
   try {
-    await spawn('xcrun', ['simctl', 'spawn', udid, ...args], {
+    const { stdout } = await spawn('xcrun', ['simctl', 'spawn', udid, ...args], {
       timeout: SIMCTL_SPAWN_TIMEOUT_MS,
       signal,
     });
-    return true;
+    return stdout ?? '';
   } catch (error) {
     simulatorSlimLogger.debug('simctl spawn %o failed: %o', args, error);
-    return false;
+    return null;
   }
+};
+
+/**
+ * Reads `launchctl print-disabled` lines. Recent launchd prints
+ * `"com.apple.x" => disabled`; older builds print `=> true`.
+ */
+export const parsePrintDisabled = (output: string): Set<string> => {
+  const disabled = new Set<string>();
+  for (const match of output.matchAll(/"([^"]+)"\s*=>\s*(disabled|true)\b/g)) {
+    disabled.add(match[1]);
+  }
+  return disabled;
+};
+
+/** Labels of the jobs `launchctl list` shows with a PID, i.e. running. */
+export const parseRunningLabels = (output: string): Set<string> => {
+  const running = new Set<string>();
+  for (const line of output.split('\n')) {
+    const [pid, , label] = line.trim().split(/\s+/);
+    if (label && /^\d+$/.test(pid)) {
+      running.add(label);
+    }
+  }
+  return running;
+};
+
+const readLaunchdState = async (
+  udid: string,
+  signal?: AbortSignal
+): Promise<LaunchdState | null> => {
+  const [printDisabled, list] = await Promise.all([
+    runInSimulator(udid, ['launchctl', 'print-disabled', 'system'], signal),
+    runInSimulator(udid, ['launchctl', 'list'], signal),
+  ]);
+  if (printDisabled === null || list === null) {
+    return null;
+  }
+  return {
+    disabled: parsePrintDisabled(printDisabled),
+    running: parseRunningLabels(list),
+  };
 };
 
 const forEachWithConcurrency = async <T>(
@@ -145,12 +121,14 @@ const forEachWithConcurrency = async <T>(
 };
 
 /**
- * Stops the simulator services in {@link SIMULATOR_SLIM_LABELS} and silences
- * {@link SIMULATOR_QUIET_LOG_SUBSYSTEMS}. Every service needs both `disable`
- * and `bootout`: disable alone does not stop on-demand launches later in the
- * boot. The state lives in CoreSimulator's memory, so it has to be applied
- * after every boot. Never throws; failures are reported as skipped, and
- * once `signal` aborts no further calls are made.
+ * Makes sure the services in {@link SIMULATOR_SLIM_LABELS} are stopped in a
+ * booted simulator, and silences {@link SIMULATOR_QUIET_LOG_SUBSYSTEMS}. It
+ * reads launchd's state first, so a simulator that booted from seeded
+ * overrides (see `seedSimulatorSlim`) costs two reads. A service still
+ * enabled is disabled, and one still running is booted out: disable alone
+ * does not stop a running service. If the state cannot be read, every service
+ * gets both. Never throws; failures are reported as skipped, and once
+ * `signal` aborts no further calls are made.
  */
 export const slimSimulator = async (
   udid: string,
@@ -162,25 +140,49 @@ export const slimSimulator = async (
   const startedAt = Date.now();
   const result: SimulatorSlimResult = {
     stopped: [],
+    alreadyStopped: [],
     quieted: [],
     skipped: [],
     timedOut: false,
     durationMs: 0,
   };
-  const run = (args: string[]) => spawnInSimulator(udid, args, signal);
+  const run = async (args: string[]) =>
+    (await runInSimulator(udid, args, signal)) !== null;
 
-  // `system/` prints a deprecation warning and resolves to the user domain.
-  const tasks: Array<() => Promise<void>> = [
-    ...SIMULATOR_SLIM_LABELS.map((label) => async () => {
-      if (!(await run(['launchctl', 'disable', `system/${label}`]))) {
+  const state = await readLaunchdState(udid, signal);
+  if (!state) {
+    simulatorSlimLogger.debug(
+      'could not read launchd state of %s; stopping every service',
+      udid
+    );
+  }
+
+  const tasks: Array<() => Promise<void>> = [];
+  for (const label of SIMULATOR_SLIM_LABELS) {
+    const disabled = state?.disabled.has(label) ?? false;
+    const running = state?.running.has(label) ?? true;
+    if (disabled && !running) {
+      result.alreadyStopped.push(label);
+      continue;
+    }
+    if (SEED_ONLY_LABELS.has(label)) {
+      continue;
+    }
+    tasks.push(async () => {
+      // `system/` prints a deprecation warning and resolves to the user domain.
+      if (!disabled && !(await run(['launchctl', 'disable', `system/${label}`]))) {
         result.skipped.push(label);
         return;
       }
-      // Fails when the service is not running yet; disable still applies.
-      await run(['launchctl', 'bootout', `system/${label}`]);
+      if (running) {
+        // Fails when the service is not running after all; disable still applies.
+        await run(['launchctl', 'bootout', `system/${label}`]);
+      }
       result.stopped.push(label);
-    }),
-    ...SIMULATOR_QUIET_LOG_SUBSYSTEMS.map((subsystem) => async () => {
+    });
+  }
+  for (const subsystem of SIMULATOR_QUIET_LOG_SUBSYSTEMS) {
+    tasks.push(async () => {
       const quieted = await run([
         'log',
         'config',
@@ -190,8 +192,8 @@ export const slimSimulator = async (
         'level:off,persist:off',
       ]);
       (quieted ? result.quieted : result.skipped).push(subsystem);
-    }),
-  ];
+    });
+  }
 
   await forEachWithConcurrency(tasks, parallelism, (task) => task(), signal);
 
