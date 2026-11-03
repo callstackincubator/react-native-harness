@@ -66,6 +66,31 @@ describe('toMatchImageSnapshot', () => {
     );
   });
 
+  it('fails with the message of a comparison that did not pass', async () => {
+    const screenshot = { data: new Uint8Array(4), width: 1, height: 1 };
+    mocks.transferScreenshot.mockResolvedValueOnce({ path: 'received.png' });
+    mocks.matchImageSnapshot.mockResolvedValueOnce({
+      pass: false,
+      message: 'New snapshot was not written',
+    });
+
+    await expect(
+      harnessExpect(screenshot).toMatchImageSnapshot({ name: 'submit-button' })
+    ).rejects.toThrow('New snapshot was not written');
+  });
+
+  it('refuses .not before a snapshot is compared or written', async () => {
+    const screenshot = { data: new Uint8Array(4), width: 1, height: 1 };
+
+    await expect(
+      harnessExpect(screenshot).not.toMatchImageSnapshot({
+        name: 'submit-button',
+      })
+    ).rejects.toThrow('`.not` cannot be used with `.toMatchImageSnapshot()`.');
+    expect(mocks.transferScreenshot).not.toHaveBeenCalled();
+    expect(mocks.matchImageSnapshot).not.toHaveBeenCalled();
+  });
+
   it('fails naming the capture when the screenshot is null', async () => {
     await expect(
       harnessExpect(null).toMatchImageSnapshot({ name: 'submit-button' })
