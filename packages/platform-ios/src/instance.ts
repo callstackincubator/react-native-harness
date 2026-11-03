@@ -42,6 +42,7 @@ import {
 } from './startup-strategy.js';
 import { waitForSimulatorToSettle } from './simulator-settle.js';
 import { slimSimulator } from './simulator-slim.js';
+import { seedSimulatorSlim } from './simulator-slim-seed.js';
 
 const SIMULATOR_SETTLE_PROBE_TIMEOUT_MS = 5_000;
 // Slimming a settled simulator took under a minute on a 3-core CI runner. It
@@ -90,7 +91,7 @@ export const getAppleSimulatorPlatformInstance = async (
     throw new DeviceNotFoundError(getDeviceName(config.device));
   }
 
-  const { slimOnCI } = config.device;
+  const slim = shouldSlimSimulator(config.device.slimOnCI);
   let startedByHarness = false;
   let harnessJsLocationOverrideApplied = false;
 
@@ -124,6 +125,19 @@ export const getAppleSimulatorPlatformInstance = async (
         udid,
         simulatorStatus
       );
+      if (slim) {
+        // Services kept from starting cost nothing, unlike ones stopped after
+        // a boot that has already paid for them.
+        const seed = seedSimulatorSlim(udid);
+        iosInstanceLogger.debug(
+          seed.seeded
+            ? 'seeded launchd overrides of iOS simulator %s at %s (%d added)'
+            : 'could not seed launchd overrides of iOS simulator %s at %s: %s',
+          udid,
+          seed.path,
+          seed.seeded ? seed.added : seed.reason
+        );
+      }
       await simctl.bootSimulator(udid);
       startedByHarness = true;
     }
@@ -165,7 +179,8 @@ export const getAppleSimulatorPlatformInstance = async (
       }
     }
 
-    if (shouldSlimSimulator(slimOnCI)) {
+    // A simulator that was already running is left as it is.
+    if (slim && startedByHarness) {
       logger.info('Stopping unused iOS simulator services...');
       const diagnostics = init.diagnostics ?? noopDiagnostics;
       const span = diagnostics.start('platform.ios.simulator.slim');
@@ -177,15 +192,17 @@ export const getAppleSimulatorPlatformInstance = async (
       });
       span.end({
         stopped: result.stopped.length,
+        already_stopped: result.alreadyStopped.length,
         quieted: result.quieted.length,
         skipped: result.skipped.length,
         timed_out: result.timedOut,
       });
       iosInstanceLogger.debug(
-        'slimmed iOS simulator %s in %dms: %d stopped, %d quieted, skipped %o%s',
+        'slimmed iOS simulator %s in %dms: %d stopped, %d already stopped, %d quieted, skipped %o%s',
         udid,
         result.durationMs,
         result.stopped.length,
+        result.alreadyStopped.length,
         result.quieted.length,
         result.skipped,
         result.timedOut ? ' (ran out of time)' : ''

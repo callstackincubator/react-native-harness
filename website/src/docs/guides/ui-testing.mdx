@@ -152,6 +152,14 @@ test('screenshot with custom options', async () => {
 | `diffColor`            | `[number, number, number]`  | `[255, 0, 0]`  | RGB color for highlighting differences                                     |
 | `ignoreRegions`        | `Array<{x,y,width,height}>` | `[]`           | Regions to exclude from comparison                                         |
 
+### Creating snapshots
+
+`toMatchImageSnapshot` stores each snapshot as `__image_snapshots__/<runner>/<name>.png` next to the test file. When that file does not exist, the test writes it and passes, except in Jest's [CI mode](https://jestjs.io/docs/cli#--ci), where the test fails without writing it and saves the received image as `__diff_output__/<name>-actual.png`. Jest turns CI mode on when it detects a CI environment, such as one with the `CI` environment variable set; `--ci` and `--ci=false` override that.
+
+Snapshots are compared pixel by pixel, so create them on the device, simulator or browser that compares them: commit the `<name>-actual.png` a CI run saved for a missing snapshot as `<name>.png`, or run with `--ci=false` on a machine with that device and commit what it writes. The [GitHub Action](/docs/guides/ci-cd) uploads the `-actual.png` images of a run as its `visual-test-diffs-<platformId>` artifact; in other CI, upload `**/__image_snapshots__/**/*-actual.png` from the job.
+
+Like Jest's own snapshot matchers, `toMatchImageSnapshot` cannot be negated: `expect(screenshot).not.toMatchImageSnapshot(...)` throws.
+
 ### Element-specific screenshots
 
 You can capture screenshots of specific elements instead of the entire screen:

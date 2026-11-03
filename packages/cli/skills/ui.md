@@ -37,7 +37,8 @@ Use this skill when the task requires:
 
 - Keep imports split correctly: core APIs from `react-native-harness`, UI APIs from `@react-native-harness/ui`.
 - Mention that `@react-native-harness/ui` requires installation, and native apps must be rebuilt after adding it.
-- `toMatchImageSnapshot(...)` needs a unique snapshot `name`.
+- `toMatchImageSnapshot(...)` needs a unique snapshot `name`, and cannot be used with `.not`.
+- In Jest's CI mode, on by default in CI, a missing snapshot fails and its received image is saved as `__diff_output__/<name>-actual.png`: commit that image as `<name>.png`, or run with `--ci=false` on the device that compares it and commit the snapshot it writes.
 - If screenshotting elements that extend beyond screen bounds, call out `disableViewFlattening: true` in `rn-harness.config.mjs`.
 - On web, UI interactions and screenshots run through the web runner's Playwright-backed browser environment.
 

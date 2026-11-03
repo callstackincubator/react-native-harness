@@ -3,7 +3,11 @@ import { ssim } from 'ssim.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PNG } from 'pngjs';
-import type { FileReference, ImageSnapshotOptions } from './shared.js';
+import type {
+  FileReference,
+  ImageSnapshotOptions,
+  SnapshotUpdateState,
+} from './shared.js';
 
 type PixelmatchOptions = Parameters<typeof pixelmatch>[5];
 
@@ -50,7 +54,8 @@ export const matchImageSnapshot = async (
   screenshot: FileReference,
   testFilePath: string,
   options: ImageSnapshotOptions,
-  platformName: string
+  platformName: string,
+  updateSnapshot: SnapshotUpdateState
 ) => {
   const pixelmatchOptions = {
     ...DEFAULT_OPTIONS_FOR_PIXELMATCH,
@@ -70,14 +75,28 @@ export const matchImageSnapshot = async (
   const testDir = path.dirname(testFilePath);
   const snapshotsDir = path.join(testDir, SNAPSHOT_DIR_NAME, platformName);
 
-  const snapshotName = `${options.name}.png`;
-  const snapshotPath = path.join(snapshotsDir, snapshotName);
+  const snapshotPath = path.join(snapshotsDir, `${options.name}.png`);
+  // Failure artifacts live in their own folder so they can never overwrite
+  // a baseline of another snapshot (e.g. one named `<name>-diff`).
+  const diffOutputDir = path.join(snapshotsDir, DIFF_OUTPUT_DIR_NAME);
+  const failureImagePath = (image: 'actual' | 'diff'): string =>
+    path.join(diffOutputDir, `${options.name}-${image}.png`);
+  const actualPath = failureImagePath('actual');
 
   await fs.mkdir(snapshotsDir, { recursive: true });
 
   try {
     await fs.access(snapshotPath);
   } catch {
+    if (updateSnapshot === 'none') {
+      await fs.mkdir(diffOutputDir, { recursive: true });
+      await fs.writeFile(actualPath, receivedBuffer);
+      return {
+        pass: false,
+        message: `New snapshot was not written: ${snapshotPath} does not exist, and missing snapshots are not written in CI mode. Received image saved at ${actualPath}; commit it as ${snapshotPath}, or run without CI mode (--ci=false) on a machine with this device and commit the snapshot it writes.`,
+      };
+    }
+
     // First time - create snapshot
     await fs.writeFile(snapshotPath, receivedBuffer);
     return {
@@ -94,13 +113,6 @@ export const matchImageSnapshot = async (
   const img2 = PNG.sync.read(snapshotBuffer);
   const { width, height } = img1;
   const diff = new PNG({ width, height });
-  // Failure artifacts live in their own folder so they can never overwrite
-  // a baseline of another snapshot (e.g. one named `<name>-diff`).
-  const diffOutputDir = path.join(snapshotsDir, DIFF_OUTPUT_DIR_NAME);
-  const actualPath = path.join(
-    diffOutputDir,
-    `${snapshotName.replace('.png', '')}-actual.png`
-  );
 
   if (img1.width !== img2.width || img1.height !== img2.height) {
     await fs.mkdir(diffOutputDir, { recursive: true });
@@ -165,8 +177,7 @@ export const matchImageSnapshot = async (
   if (!pass) {
     await fs.mkdir(diffOutputDir, { recursive: true });
 
-    const diffFileName = `${snapshotName.replace('.png', '')}-diff.png`;
-    const diffPath = path.join(diffOutputDir, diffFileName);
+    const diffPath = failureImagePath('diff');
     await fs.writeFile(diffPath, PNG.sync.write(diff));
 
     await fs.writeFile(actualPath, receivedBuffer);

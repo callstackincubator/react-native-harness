@@ -38,10 +38,15 @@ vi.mock('../simulator-settle.js', () => ({
 const slimMocks = vi.hoisted(() => ({
   shouldSlimSimulator: vi.fn(),
   slimSimulator: vi.fn(),
+  seedSimulatorSlim: vi.fn(),
 }));
 
 vi.mock('../simulator-slim.js', () => ({
   slimSimulator: slimMocks.slimSimulator,
+}));
+
+vi.mock('../simulator-slim-seed.js', () => ({
+  seedSimulatorSlim: slimMocks.seedSimulatorSlim,
 }));
 
 vi.mock('../startup-strategy.js', async (importOriginal) => ({
@@ -80,8 +85,15 @@ describe('iOS platform instance dependency validation', () => {
     slimMocks.shouldSlimSimulator.mockReset();
     slimMocks.shouldSlimSimulator.mockReturnValue(false);
     slimMocks.slimSimulator.mockReset();
+    slimMocks.seedSimulatorSlim.mockReset();
+    slimMocks.seedSimulatorSlim.mockReturnValue({
+      seeded: true,
+      path: '/private/var/tmp/com.apple.CoreSimulator.SimDevice.sim-udid/disabled.plist',
+      added: 1,
+    });
     slimMocks.slimSimulator.mockResolvedValue({
       stopped: ['com.apple.mediaanalysisd'],
+      alreadyStopped: [],
       quieted: [],
       skipped: [],
       timedOut: false,
@@ -456,11 +468,13 @@ describe('iOS platform instance dependency validation', () => {
     expect(shutdownSimulator).toHaveBeenCalledWith('sim-udid');
   });
 
-  it('slims the simulator after boot and before installing the app when asked to', async () => {
+  it('seeds the overrides before boot and slims before installing the app when asked to', async () => {
     slimMocks.shouldSlimSimulator.mockReturnValue(true);
     vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
     vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Shutdown');
-    vi.spyOn(simctl, 'bootSimulator').mockResolvedValue(undefined);
+    const bootSimulator = vi
+      .spyOn(simctl, 'bootSimulator')
+      .mockResolvedValue(undefined);
     const waitForBoot = vi
       .spyOn(simctl, 'waitForBoot')
       .mockResolvedValue({ lastStatusLine: 'Finished', elapsedSeconds: 6 });
@@ -487,6 +501,10 @@ describe('iOS platform instance dependency validation', () => {
     );
 
     expect(slimMocks.shouldSlimSimulator).toHaveBeenCalledWith(true);
+    expect(slimMocks.seedSimulatorSlim).toHaveBeenCalledWith('sim-udid');
+    expect(
+      slimMocks.seedSimulatorSlim.mock.invocationCallOrder[0],
+    ).toBeLessThan(bootSimulator.mock.invocationCallOrder[0]);
     expect(slimMocks.slimSimulator).toHaveBeenCalledWith(
       'sim-udid',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
@@ -494,6 +512,33 @@ describe('iOS platform instance dependency validation', () => {
     const slimOrder = slimMocks.slimSimulator.mock.invocationCallOrder[0];
     expect(waitForBoot.mock.invocationCallOrder[0]).toBeLessThan(slimOrder);
     expect(slimOrder).toBeLessThan(isAppInstalled.mock.invocationCallOrder[0]);
+  });
+
+  it('leaves an already booted simulator alone', async () => {
+    slimMocks.shouldSlimSimulator.mockReturnValue(true);
+    vi.spyOn(simctl, 'getSimulatorId').mockResolvedValue('sim-udid');
+    vi.spyOn(simctl, 'getSimulatorStatus').mockResolvedValue('Booted');
+    vi.spyOn(simctl, 'isAppInstalled').mockResolvedValue(true);
+    vi.spyOn(simctl, 'applyHarnessJsLocationOverride').mockResolvedValue(
+      undefined,
+    );
+
+    await getAppleSimulatorPlatformInstance(
+      {
+        name: 'ios',
+        device: {
+          type: 'simulator',
+          name: 'iPhone 16 Pro',
+          systemVersion: '18.0',
+        },
+        bundleId: 'com.harnessplayground',
+      },
+      harnessConfig,
+      init,
+    );
+
+    expect(slimMocks.seedSimulatorSlim).not.toHaveBeenCalled();
+    expect(slimMocks.slimSimulator).not.toHaveBeenCalled();
   });
 
   it('does not slim the simulator by default outside CI', async () => {
@@ -518,6 +563,7 @@ describe('iOS platform instance dependency validation', () => {
       init,
     );
 
+    expect(slimMocks.seedSimulatorSlim).not.toHaveBeenCalled();
     expect(slimMocks.slimSimulator).not.toHaveBeenCalled();
   });
 

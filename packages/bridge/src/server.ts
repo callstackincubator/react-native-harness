@@ -180,6 +180,7 @@ export const createHarnessBridge = async (
               testPath,
               opts,
               context.platform.name,
+              context.updateSnapshot ?? 'new'
             );
           } finally {
             // Only delete files this bridge created, never a client-supplied path.

@@ -1,4 +1,5 @@
 import { describe, test, render, expect } from 'react-native-harness';
+import { createRef } from 'react';
 import { Dimensions, PixelRatio, View } from 'react-native';
 import { screen } from '@react-native-harness/ui';
 
@@ -6,6 +7,19 @@ const pngSize = (data: Uint8Array) => {
   const header = new DataView(data.buffer, data.byteOffset, data.byteLength);
   return { width: header.getUint32(16), height: header.getUint32(20) };
 };
+
+// Captures round each edge of the element to a whole pixel, so a fractional
+// size covers one pixel more or less depending on where the element sits.
+const capturedSize = (view: View) =>
+  new Promise<{ width: number; height: number }>((resolve) => {
+    view.measureInWindow((x, y, width, height) => {
+      const ratio = PixelRatio.get();
+      resolve({
+        width: Math.round((x + width) * ratio) - Math.round(x * ratio),
+        height: Math.round((y + height) * ratio) - Math.round(y * ratio),
+      });
+    });
+  });
 
 describe('Screenshot', () => {
   test('should screenshot the full window without bounds', async () => {
@@ -37,6 +51,7 @@ describe('Screenshot', () => {
   });
 
   test('should screenshot specific element only', async () => {
+    const targetRef = createRef<View>();
     await render(
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <View
@@ -49,6 +64,7 @@ describe('Screenshot', () => {
           }}
         >
           <View
+            ref={targetRef}
             testID="target-element"
             style={{
               width: 100,
@@ -67,10 +83,9 @@ describe('Screenshot', () => {
     const targetElement = await screen.findByTestId('target-element');
     const screenshot = await screen.screenshot(targetElement);
     expect(screenshot).not.toBeNull();
-    expect(pngSize(screenshot!.data)).toEqual({
-      width: Math.round(100 * PixelRatio.get()),
-      height: Math.round(100 * PixelRatio.get()),
-    });
+    expect(pngSize(screenshot!.data)).toEqual(
+      await capturedSize(targetRef.current!)
+    );
     await expect(screenshot).toMatchImageSnapshot({
       name: 'orange-square-element-only',
     });
