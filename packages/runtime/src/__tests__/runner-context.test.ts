@@ -193,6 +193,72 @@ describe('runner task context', () => {
     }
   });
 
+  it('runs afterEach hooks of inner suites first, in declaration order within a suite', async () => {
+    const calls: string[] = [];
+    const collector = getTestCollector();
+    const runner = getTestRunner();
+
+    try {
+      const collection = await collector.collect(() => {
+        afterEach(() => {
+          calls.push('root afterEach');
+        });
+
+        harnessDescribe('Outer Suite', () => {
+          beforeEach(() => {
+            calls.push('outer beforeEach');
+          });
+
+          afterEach(() => {
+            calls.push('outer afterEach 1');
+          });
+
+          afterEach(() => {
+            calls.push('outer afterEach 2');
+          });
+
+          harnessDescribe('Inner Suite', () => {
+            beforeEach(() => {
+              calls.push('inner beforeEach');
+            });
+
+            afterEach(() => {
+              calls.push('inner afterEach 1');
+            });
+
+            afterEach(() => {
+              calls.push('inner afterEach 2');
+            });
+
+            harnessIt('runs', () => {
+              calls.push('test');
+            });
+          });
+        });
+      }, 'runtime/hook-order.test.ts');
+
+      await runner.run({
+        testSuite: collection.testSuite,
+        testFilePath: 'runtime/hook-order.test.ts',
+        runner: 'android',
+      });
+
+      expect(calls).toEqual([
+        'outer beforeEach',
+        'inner beforeEach',
+        'test',
+        'inner afterEach 1',
+        'inner afterEach 2',
+        'outer afterEach 1',
+        'outer afterEach 2',
+        'root afterEach',
+      ]);
+    } finally {
+      collector.dispose();
+      runner.dispose();
+    }
+  });
+
   it('marks dynamically skipped tests as skipped and still runs afterEach', async () => {
     const calls: string[] = [];
     const collector = getTestCollector();
