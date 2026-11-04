@@ -17,6 +17,12 @@ const collectInheritedHooks = (
     current = current.parent;
   }
 
+  if (hookType === 'afterEach') {
+    // Run child suite hooks before parent suite hooks, as Jest does.
+    // Hooks of one suite keep their declaration order.
+    suiteChain.reverse();
+  }
+
   for (const currentSuite of suiteChain) {
     hooks.push(...currentSuite[hookType]);
   }
