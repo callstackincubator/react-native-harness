@@ -10,16 +10,23 @@ import { formatMegabytes } from './format-bytes.js';
 import { resolveMetroStaticInputs } from './metro-cache-inputs.js';
 import { resolveProjectRoot } from './workspace-root.js';
 
+/**
+ * The metroSnapshot input is the path of the file snapshot-metro wrote the
+ * snapshot to. A snapshot passed inline as JSON, as snapshot-metro did before,
+ * is still accepted.
+ */
 const parseSnapshot = (raw: string | undefined): CacheSnapshot => {
   if (!raw) {
     return {};
   }
 
   try {
-    return JSON.parse(raw) as CacheSnapshot;
+    const json = raw.startsWith('{') ? raw : getFs().readFileSync(raw, 'utf8');
+
+    return JSON.parse(json) as CacheSnapshot;
   } catch (error) {
     console.warn(
-      'Failed to parse the metroSnapshot input. Treating the pre-run cache state as empty.',
+      'Failed to read the metroSnapshot input. Treating the pre-run cache state as empty.',
       error
     );
     return {};

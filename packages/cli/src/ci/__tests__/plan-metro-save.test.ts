@@ -112,8 +112,52 @@ describe('plan-save', () => {
     );
   });
 
+  it('reads the snapshot from the file that the metroSnapshot input points to', async () => {
+    const snapshot = {
+      metro: [{ path: 'metro/a', sizeBytes: 3, mtimeMs: 1 }],
+    };
+    const snapshotPath = path.join(
+      projectRoot,
+      '.harness',
+      'cache',
+      'metro-snapshot.json'
+    );
+    fileSystem.mkdirSync(path.dirname(snapshotPath), { recursive: true });
+    fileSystem.writeFileSync(snapshotPath, JSON.stringify(snapshot));
+    process.env.INPUT_METRO_SNAPSHOT = snapshotPath;
+
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
+
+    await vi.waitFor(() => {
+      expect(planSaveMock).toHaveBeenCalled();
+    });
+
+    expect(planSaveMock).toHaveBeenCalledWith(
+      snapshot,
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it('treats a metroSnapshot input pointing to a missing file as an empty snapshot instead of throwing', async () => {
+    process.env.INPUT_METRO_SNAPSHOT = '/project/.harness/cache/missing.json';
+
+    await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
+
+    await vi.waitFor(() => {
+      expect(planSaveMock).toHaveBeenCalled();
+    });
+
+    expect(planSaveMock).toHaveBeenCalledWith(
+      {},
+      expect.anything(),
+      expect.anything()
+    );
+    expect(console.warn).toHaveBeenCalled();
+  });
+
   it('treats an unparseable metroSnapshot input as an empty snapshot instead of throwing', async () => {
-    process.env.INPUT_METRO_SNAPSHOT = 'not json';
+    process.env.INPUT_METRO_SNAPSHOT = '{not json';
 
     await runWithHarnessContext({ fs: fileSystem }, runPlanMetroSave);
 
