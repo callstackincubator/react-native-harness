@@ -48,6 +48,7 @@ describe('snapshot-metro', () => {
     });
 
     mocks.createHarnessCache.mockReturnValue({
+      paths: { root: path.join(projectRoot, '.harness', 'cache') },
       snapshot: snapshotMock,
     });
 
@@ -63,16 +64,18 @@ describe('snapshot-metro', () => {
     vi.restoreAllMocks();
   });
 
-  it('writes the current cache snapshot to GITHUB_OUTPUT as metroSnapshot', async () => {
+  it('writes the current cache snapshot to a file and its path to GITHUB_OUTPUT as metroSnapshot', async () => {
     await runWithHarnessContext({ fs: fileSystem }, runSnapshotMetro);
 
     await vi.waitFor(() => {
       expect(snapshotMock).toHaveBeenCalled();
     });
 
+    const snapshotPath = '/project/.harness/cache/metro-snapshot.json';
     const output = fileSystem.readFileSync(githubOutputPath, 'utf8');
-    expect(output).toContain(
-      'metroSnapshot={"metro":[{"path":"metro/a","sizeBytes":3,"mtimeMs":1}]}\n'
+    expect(output).toContain(`metroSnapshot=${snapshotPath}\n`);
+    expect(fileSystem.readFileSync(snapshotPath, 'utf8')).toBe(
+      '{"metro":[{"path":"metro/a","sizeBytes":3,"mtimeMs":1}]}'
     );
   });
 

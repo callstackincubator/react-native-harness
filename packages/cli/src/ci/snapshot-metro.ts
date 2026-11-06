@@ -1,8 +1,11 @@
+import path from 'node:path';
 import { createHarnessCache } from '@react-native-harness/cache';
 import { getConfig } from '@react-native-harness/config';
 import { getFs } from '@react-native-harness/tools/harness-context';
 import { formatMegabytes } from './format-bytes.js';
 import { resolveProjectRoot } from './workspace-root.js';
+
+const METRO_SNAPSHOT_FILENAME = 'metro-snapshot.json';
 
 /**
  * Must run AFTER the "Restore Metro cache" step and BEFORE the test run, so
@@ -50,9 +53,16 @@ export const runSnapshotMetro = async (): Promise<void> => {
       );
     }
 
-    const output = `metroSnapshot=${JSON.stringify(snapshotAfterRestore)}\n`;
+    // The action hands this output to plan-metro-save through an environment
+    // variable, and Linux caps a single one at 128 KiB (MAX_ARG_STRLEN), which
+    // the snapshot of a restored cache with a few thousand files exceeds. So
+    // the snapshot goes to a file next to keys.json, outside the cached domain
+    // directories, and only its path goes to GITHUB_OUTPUT.
+    const snapshotPath = path.join(cache.paths.root, METRO_SNAPSHOT_FILENAME);
+    getFs().mkdirSync(cache.paths.root, { recursive: true });
+    getFs().writeFileSync(snapshotPath, JSON.stringify(snapshotAfterRestore));
 
-    getFs().appendFileSync(githubOutput, output);
+    getFs().appendFileSync(githubOutput, `metroSnapshot=${snapshotPath}\n`);
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.message);
