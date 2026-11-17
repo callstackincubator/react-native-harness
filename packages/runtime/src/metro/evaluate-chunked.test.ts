@@ -3,7 +3,7 @@ import {
   appendChunkPlan,
   getChunkSource,
   readChunkPlan,
-} from '../bundle-format/chunk-plan.js';
+} from './bundle-format/chunk-plan.js';
 import { evaluateModule } from './evaluate.js';
 
 const SOURCE_URL =

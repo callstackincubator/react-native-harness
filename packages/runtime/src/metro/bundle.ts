@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
-import { getDevServerUrl } from '../utils/dev-server.js';
-import { BundlingFailedError } from './errors.js';
+import { getDevServerUrl } from './dev-server.js';
+import { BundlingFailedError } from '../bundler/errors.js';
 
 const getModuleUrl = (fileName: string): string => {
   const devServerUrl = getDevServerUrl();
@@ -19,7 +19,11 @@ export const fetchModule = async (fileName: string): Promise<string> => {
   const text = await response.text();
 
   if (!response.ok) {
-    throw new BundlingFailedError(fileName, text);
+    throw new BundlingFailedError(
+      fileName,
+      text,
+      JSON.parse(text).message ?? text,
+    );
   }
 
   return text;

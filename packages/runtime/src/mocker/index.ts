@@ -1,6 +1,4 @@
-export {
-  mock,
-  requireActual,
-  unmock,
-  resetModules,
-} from './registry.js';
+import { getModuleSystem } from '../module-system.js';
+
+export const { mock, requireActual, unmock, resetModules } =
+  getModuleSystem().createMockRegistry();

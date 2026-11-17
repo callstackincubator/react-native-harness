@@ -3,5 +3,3 @@ export type ModuleId = number | string;
 export type Require = {
   (moduleId: ModuleId): unknown;
 };
-
-export type ModuleFactory = () => unknown;

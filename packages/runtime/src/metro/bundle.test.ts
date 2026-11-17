@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BundlingFailedError } from '../bundler/errors.js';
 import { fetchModule, releaseModule } from './bundle.js';
 
 const mocks = vi.hoisted(() => ({
@@ -34,6 +35,23 @@ describe('module bundling', () => {
     const [url, init] = fetchSpy.mock.calls[0];
     expect(url).toBe(EXPECTED_URL);
     expect(init?.method ?? 'GET').toBe('GET');
+  });
+
+  it('fails with Metro\'s message while keeping the raw body as the reason', async () => {
+    const body = JSON.stringify({ message: 'Unable to resolve module' });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(body, { status: 500 }),
+    );
+
+    const error = await fetchModule('path/to/example.harness.tsx').catch(
+      (e: unknown) => e,
+    );
+
+    expect(error).toBeInstanceOf(BundlingFailedError);
+    expect((error as BundlingFailedError).reason).toBe(body);
+    expect((error as BundlingFailedError).message).toBe(
+      'Bundling of path/to/example.harness.tsx failed with error:\n\nUnable to resolve module\n',
+    );
   });
 
   it('releases the graph by DELETE-ing the exact same URL', async () => {

@@ -1,6 +1,5 @@
 import type { CodeFrame } from '@react-native-harness/bridge';
-import parseErrorStack, { StackFrame } from 'react-native/Libraries/Core/Devtools/parseErrorStack';
-import { getDevServerUrl } from './utils/dev-server.js';
+import { getHost, type StackFrame } from './host.js';
 
 export type RNCodeFrame = Readonly<{
   content: string;
@@ -22,7 +21,7 @@ export type RNSymbolicatedStackTrace = Readonly<{
 
 
 const symbolicateStackTrace = async (stack: ReadonlyArray<StackFrame>, extraData?: unknown): Promise<RNSymbolicatedStackTrace> => {
-  const devServerUrl = getDevServerUrl();
+  const devServerUrl = getHost().getDevServerUrl();
   const response = await fetch(devServerUrl + 'symbolicate', {
     method: 'POST',
     headers: {
@@ -34,7 +33,7 @@ const symbolicateStackTrace = async (stack: ReadonlyArray<StackFrame>, extraData
 }
 
 export const getCodeFrame = async (error: Error): Promise<CodeFrame | null> => {
-  const parsedStack = parseErrorStack(error.stack);
+  const parsedStack = getHost().parseErrorStack(error.stack);
   const symbolicatedStack = await symbolicateStackTrace(parsedStack);
 
   if (!('codeFrame' in symbolicatedStack) || !symbolicatedStack.codeFrame) {

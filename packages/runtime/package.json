@@ -19,16 +19,16 @@
       "default": "./assets/harness-module-system.js"
     },
     "./bundle-format": {
-      "development": "./src/bundle-format/chunk-plan.ts",
-      "types": "./dist/bundle-format/chunk-plan.d.ts",
-      "import": "./dist/bundle-format/chunk-plan.js",
-      "default": "./dist/bundle-format/chunk-plan.js"
+      "development": "./src/metro/bundle-format/chunk-plan.ts",
+      "types": "./dist/metro/bundle-format/chunk-plan.d.ts",
+      "import": "./dist/metro/bundle-format/chunk-plan.js",
+      "default": "./dist/metro/bundle-format/chunk-plan.js"
     },
     "./entry-point": {
-      "development": "./src/entry-point.ts",
-      "types": "./dist/entry-point.d.ts",
-      "import": "./dist/entry-point.js",
-      "default": "./dist/entry-point.js"
+      "development": "./src/metro/entry-point.ts",
+      "types": "./dist/metro/entry-point.d.ts",
+      "import": "./dist/metro/entry-point.js",
+      "default": "./dist/metro/entry-point.js"
     },
     "./jsx-runtime": {
       "development": "./src/jsx/jsx-runtime.ts",

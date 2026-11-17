@@ -1,5 +1,5 @@
 import { HARNESS_BRIDGE_PATH } from '@react-native-harness/bridge';
-import { getDevServerUrl } from '../utils/dev-server.js';
+import { getHost } from '../host.js';
 
 // Scheme, optional user info, and host (with port) of an absolute URL. Parsed
 // by hand because URL polyfills for React Native read the legacy
@@ -7,7 +7,7 @@ import { getDevServerUrl } from '../utils/dev-server.js';
 const ABSOLUTE_URL_PATTERN = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/?#]*@)?([^/?#]+)/i;
 
 export const getWSServer = (): string => {
-  const devServerUrl = getDevServerUrl();
+  const devServerUrl = getHost().getDevServerUrl();
   const match = devServerUrl.match(ABSOLUTE_URL_PATTERN);
 
   if (!match) {

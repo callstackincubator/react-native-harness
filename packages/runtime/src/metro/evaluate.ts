@@ -1,6 +1,6 @@
 import { MalformedModuleError } from './errors.js';
-import type { ModuleId } from '../mocker/types.js';
-import { getChunkSource, readChunkPlan } from '../bundle-format/chunk-plan.js';
+import type { ModuleId } from './types.js';
+import { getChunkSource, readChunkPlan } from './bundle-format/chunk-plan.js';
 import { flushOutgoingMessages, yieldToEventLoop } from '../utils/yield.js';
 
 // Metro emits `__r(123)` by default; custom module id factories (Vega
