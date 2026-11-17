@@ -81,8 +81,10 @@ Three mechanisms the decision relies on were then tried on the same versions:
 - **Entry replacement.** With `entry: ['./polyfill.js', './app-entry.js']`
   and a `NormalModuleReplacementPlugin` that matches the resolved path of the
   app entry, the polyfill and the Harness entry run and the app entry does
-  not. Webpack applies the replacement after resolving and Rspack before, so
-  the callback has to handle both.
+  not. Webpack calls the plugin both before and after resolving a request.
+  Only a replacement made before resolving gives the new module its own
+  loaders and module type; step 3 found that one made afterwards keeps the
+  app entry's.
 - **Loader.** A loader with `enforce: 'pre'` that runs an unmodified copy of
   `resolve-weak-plugin.ts` over `.ts` and `.tsx` source makes `mock('x')`
   work when the project's transpiler is `babel-loader` (webpack) and when it
@@ -190,13 +192,23 @@ counterpart of `withRnHarness` in `bundler-metro`.
 - `mode: 'development'` and a `devtool` that emits complete source maps.
 - Module concatenation, export pruning and minification are turned off.
   Mocking needs every module to keep its own factory.
-- The module at `entryPoint` is replaced by the Harness entry with
-  `NormalModuleReplacementPlugin`. `entryPoint` keeps the meaning it has
-  under Metro, and the rest of `entry`, such as a polyfill listed before the
-  app, still runs.
-- The `RN_HARNESS` manifest is injected.
-- `@jest/globals` is aliased to the existing module that throws
-  (`bundler-metro/src/jest-globals-mock.ts`).
+- The module at `entryPoint` is replaced by a generated entry with
+  `NormalModuleReplacementPlugin`, before the request is resolved.
+  `entryPoint` keeps the meaning it has under Metro, and the rest of
+  `entry`, such as a polyfill listed before the app, still runs. If no
+  request matches `entryPoint`, or one matches only after resolution (an
+  entry reached through an alias), the build fails with an error that says
+  how to set `entryPoint`.
+- The generated entry sets the `RN_HARNESS` manifest and starts the runtime
+  with the test-file manifest (see 5). Generated files are written to
+  `.harness/webpack/<port>/`, so two runs in one project do not overwrite
+  each other's.
+- `@jest/globals` is aliased to the existing module that throws, which
+  moved to `@react-native-harness/bundlers/jest-globals-mock` so both
+  bundlers share it.
+- `webpack` or `@rspack/core` is resolved from the config file's folder
+  first, so the compiler and the plugins the config creates come from the
+  same copy.
 - A small plugin adds the two runtime requirements from the spike, and a
   loader delivers the Babel plugin (see 7).
 - Harness's own packages are bundled as `javascript/auto` modules (see
@@ -215,13 +227,27 @@ Webpack has no endpoint that bundles an arbitrary file on request. Instead,
 Harness generates a module that maps each file to its module id and a loader:
 
 ```js
-export const files = {
+exports.files = {
   'src/__tests__/app.harness.tsx': {
-    id: require.resolveWeak('../src/__tests__/app.harness.tsx'),
-    load: () => import('../src/__tests__/app.harness.tsx'),
+    id: require.resolveWeak('../../../src/__tests__/app.harness.tsx'),
+    load: () =>
+      new Promise((resolve, reject) => {
+        require.ensure(
+          ['../../../src/__tests__/app.harness.tsx'],
+          () => resolve(),
+          (error) => reject(error),
+          'harness-src___tests___app.harness.tsx'
+        );
+      }),
   },
 };
 ```
+
+`require.ensure` fetches the file's chunk and registers its modules without
+running them, on webpack and on Rspack. It has to be written with both
+callbacks as function expressions and a chunk name as the fourth argument.
+Without the chunk name neither bundler recognises the error callback, and
+the call fails at run time with only a build warning.
 
 - The manifest lists the test files of the current run and the `setupFiles`
   and `setupFilesAfterEnv` of their Jest projects (`jest/src/run.ts` reads
@@ -276,11 +302,9 @@ bundling failure, not a collection error. Fetching text and chunked
 evaluation are details of the Metro implementation.
 
 For webpack this means `loadModule` has to fetch the test file's chunk
-without executing it. A plain `import()` does both. `require.ensure` loads
-a chunk and leaves execution to a later `require`; whether it does so on
-both webpack and Rspack is to be confirmed at the start of step 3. If it
-does not, `loadModule` does nothing and `run()` imports, at the cost of
-load failures surfacing during collection.
+without executing it. A plain `import()` does both, so the manifest uses
+`require.ensure` (see 5), and `run()` deletes the module from the cache and
+requires it.
 
 The mock registry is created when a test or setup file first imports the
 runtime, not when the module system is installed, because that is when
@@ -293,10 +317,17 @@ plugin relies on, so `resolve-weak-plugin.ts` needs no change.
 
 Under Metro the plugin is applied by wrapping the Babel transformer. A
 webpack project may not use Babel at all, so Harness adds its own loader with
-`enforce: 'pre'`. It parses the source without transforming it (TypeScript
-and JSX syntax enabled, no project Babel config) and applies only the
-Harness plugins. The project's own transpiler runs afterwards, whichever one
-it is.
+`enforce: 'pre'`. It parses the source without transforming it, with no
+project Babel config, and applies only the Harness plugins. The project's
+own transpiler runs afterwards, whichever one it is.
+
+The loader must never be the reason a build fails:
+
+- It runs Babel only on files that contain the text `react-native-harness`.
+- It picks the syntax by file extension: JSX for JavaScript files,
+  TypeScript with decorators for `.ts`, and both for `.tsx`.
+- If a file does not parse, the loader passes it through unchanged with a
+  warning, and the project's transpiler reports the real error.
 
 Of the plugins in `babel-preset/src/preset.ts`, this path needs the mock id
 rewrite, and `babel-plugin-istanbul` when coverage is collected. The JSX
@@ -321,14 +352,25 @@ reported as `{ healthy, status }`, so each bundler decides what healthy
 means and the shared code never reads a bundler's status text.
 `waitForMetroBackedAppReady` moves there and is generalized over four
 events: build started, build done, build failed, and entry requested. The
-webpack compiler's `compile`, `done` and `failed` hooks and a request for the
-page map onto them.
+webpack compiler's `compile`, `done` and `failed` hooks map onto the first
+three. Entry requested is any page navigation the server receives (a `GET`
+with `Sec-Fetch-Dest: document`, or one that accepts `text/html` when that
+header is absent), because a project may serve its page at a path other
+than `/`.
+
+The session gives each run's files to the bundler through one optional
+method on the interface, `setRunFiles`, before the app is launched. Metro
+does not implement it.
 
 ### 10. Watch mode
 
 After a recompilation the page still holds the chunks it loaded before. When
 the compilation hash differs from the one the page was loaded with, Harness
 reloads the page before the next run.
+
+Until that exists (step 4), starting this bundler in watch mode fails with
+an error that says so. Running anyway would re-run stale code without any
+sign of it.
 
 ### 11. Names
 
@@ -363,12 +405,31 @@ middleware.
 ### Negative and risks
 
 - **Two implementations of the module system.** Mocking, reset and file
-  loading now exist twice and must behave the same. The sandbox app's tests
-  run on both bundlers to hold them together. One behavior needs care:
-  under Metro, `resetModules()` clears Harness's mock registry and its own
-  cache (`runtime/src/metro/mock-registry.ts`), and a module that already ran
-  keeps the dependencies it was bound to. The webpack implementation must
-  match that and must not clear webpack's whole module cache.
+  loading now exist twice. The sandbox app's tests run on both bundlers to
+  hold them together. `mock`, `unmock`, `requireActual` and `resetModules`
+  keep the same module instances on both, `resetModules()` clears only
+  Harness's own mock state on both, and re-running a file re-evaluates only
+  that file.
+- **Mocking a dependency of a module that already ran differs.** Measured
+  on the Metro playground and the sandbox: a consumer is imported and
+  called, then its dependency is mocked and the consumer is called again.
+  Metro returns the mock and webpack returns the real module. React
+  Native's default Metro config inlines `require` calls, so the consumer
+  looks its dependency up on each use; webpack binds an import when the
+  importer first runs. A Metro project with inline requires turned off
+  behaves like webpack. The pattern that works everywhere is to call
+  `mock()` before the consumer is first loaded, and the documentation will
+  say so. Making webpack match Metro would mean wrapping every module's
+  exports in a proxy, which changes object identity and speed for the whole
+  app. A run-time warning was considered and dropped: the page cannot tell
+  a consumer that will miss the mock from a module that merely loaded the
+  dependency earlier, such as a setup file, so it would fire on correct
+  tests.
+- **Mocking a default export differs.** For a module imported with a
+  default import, a factory that returns the function itself works only on
+  Metro, and one that returns `{ default: fn }` works only on webpack.
+  `{ __esModule: true, default: fn }` works on both and is what the
+  documentation will recommend.
 - **All selected test files compile up front.** Metro bundles a file when
   it is asked for. The first test of a large run starts later; total work is
   similar because shared modules compile once.
@@ -412,11 +473,13 @@ Each step can be released on its own.
    the Metro implementations. No change in behavior.
 3. **`bundler-webpack`.** Config composition, the plugin, the dev-middleware
    server, the manifest, the webpack implementations of both seams, and the
-   loader. The sandbox app's tests pass on webpack in Chromium.
-4. **Parity.** The `/symbolicate` endpoint, the watch-mode reload, coverage.
-5. **Rspack and docs.** Run the sandbox app on Rspack in CI. Document the
-   `bundler` option, correct the requirements in `web.mdx`, add version
-   plans.
+   loader. The sandbox app's tests pass on webpack and on Rspack in
+   Chromium.
+4. **Parity.** The `/symbolicate` endpoint, the watch-mode reload, coverage,
+   and a page for projects without an HTML plugin.
+5. **CI and docs.** Run the sandbox app on both bundlers in CI. Document
+   the `bundler` option and the two mocking differences, correct the
+   requirements in `web.mdx`, add version plans.
 
 ## Verification
 
