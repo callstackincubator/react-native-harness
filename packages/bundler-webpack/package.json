@@ -1,0 +1,47 @@
+{
+  "name": "@react-native-harness/bundler-webpack",
+  "description": "webpack and Rspack bundler for React Native Harness",
+  "version": "1.7.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@babel/core": "^7.22.0",
+    "@react-native-harness/babel-preset": "workspace:*",
+    "@react-native-harness/bundlers": "workspace:*",
+    "@react-native-harness/config": "workspace:*",
+    "@react-native-harness/runtime": "workspace:*",
+    "@react-native-harness/tools": "workspace:*",
+    "tslib": "^2.3.0",
+    "webpack-dev-middleware": "^7.4.2"
+  },
+  "peerDependencies": {
+    "@rspack/core": "^1.0.0",
+    "webpack": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@rspack/core": {
+      "optional": true
+    },
+    "webpack": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@rspack/core": "1.5.6",
+    "@types/ws": "^8.18.1",
+    "webpack": "^5.102.1",
+    "ws": "^8.18.2"
+  },
+  "license": "MIT"
+}

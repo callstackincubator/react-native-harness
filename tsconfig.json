@@ -67,6 +67,9 @@
       "path": "./packages/bundlers"
     },
     {
+      "path": "./packages/bundler-webpack"
+    },
+    {
       "path": "./packages/ui"
     },
     {

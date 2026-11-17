@@ -12,6 +12,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./resolve-weak-plugin": {
+      "development": "./src/resolve-weak-plugin.ts",
+      "types": "./dist/resolve-weak-plugin.d.ts",
+      "import": "./dist/resolve-weak-plugin.js",
+      "default": "./dist/resolve-weak-plugin.js"
     }
   },
   "dependencies": {

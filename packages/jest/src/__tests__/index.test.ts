@@ -25,6 +25,7 @@ const mockSession: HarnessSession = {
   sessionId: 'session-1',
   lifecycle: getEmitter<LifecycleEvent>(),
   onTestRunnerEvent: vi.fn(() => () => undefined),
+  setRunFiles: vi.fn(resolveUndefined),
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async (): Promise<TestSuiteResult> => ({
     name: '',

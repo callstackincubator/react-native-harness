@@ -4,10 +4,7 @@
   "include": [],
   "references": [
     {
-      "path": "../../packages/platform-web"
-    },
-    {
-      "path": "../../packages/jest"
+      "path": "../../packages/react-native-harness"
     },
     {
       "path": "../../packages/ui"
@@ -16,7 +13,13 @@
       "path": "../../packages/runtime"
     },
     {
-      "path": "../../packages/react-native-harness"
+      "path": "../../packages/platform-web"
+    },
+    {
+      "path": "../../packages/jest"
+    },
+    {
+      "path": "../../packages/bundler-webpack"
     },
     {
       "path": "./tsconfig.app.json"

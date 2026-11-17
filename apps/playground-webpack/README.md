@@ -23,19 +23,13 @@ pnpm bundle:rspack   # writes dist/rspack
 
 `react-native` is a dev dependency used for TypeScript types only. The bundler resolves `react-native` to `react-native-web`, and `node_modules` is not transpiled. A deep import such as `react-native/Libraries/...` therefore fails the build. This is intended: the fixture should break loudly if Harness's runtime ever pulls React Native internals into a webpack build.
 
-## Status
+## Running the Harness tests
 
-The Harness tests in `src/__tests__` do not run yet. Harness always starts its own Metro, and the webpack/Rspack backend does not exist. `pnpm test:harness` will fail until it does.
+`rn-harness.config.mjs` selects the bundler with the `HARNESS_BUNDLER` environment variable. The Harness tests in `src/__tests__` run against the app as built by the project's own config, with no Metro:
 
-`rn-harness.config.mjs` already has the `chromium` runner pointing at `http://localhost:8081/`. Once the backend exists, uncomment the import and the `bundler` option there:
-
-```js
-import { webpackBundler, rspackBundler } from '@react-native-harness/bundler-webpack';
-
-bundler:
-  process.env.HARNESS_BUNDLER === 'rspack'
-    ? rspackBundler({ config: './rspack.config.js' })
-    : webpackBundler({ config: './webpack.config.js' }),
+```sh
+pnpm test:harness                          # webpack
+HARNESS_BUNDLER=rspack pnpm test:harness   # Rspack
 ```
 
-The same tests should then pass on both bundlers: run them with `HARNESS_BUNDLER=rspack` for Rspack, or without it for webpack.
+The same tests pass on both. Harness serves the build itself on port 8081, so the `devServer` option of the configs is not used by these runs. A failing assertion is reported without a code frame for now: `/symbolicate` does not read source maps yet.

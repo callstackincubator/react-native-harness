@@ -114,6 +114,15 @@ export type PrewarmBundleOptions = {
 
 export type PrewarmState = 'idle' | 'pending' | 'succeeded' | 'failed';
 
+export type SetRunFilesOptions = {
+  /**
+   * The files the next run will ask the app to load: its test files and the
+   * `setupFiles` and `setupFilesAfterEnv` of their Jest projects. Paths are
+   * relative to the project root and use `/`, exactly as the app receives them.
+   */
+  files: string[];
+};
+
 export type BundlerInstance = {
   events: BundlerEvents;
   waitUntilHealthy: (
@@ -122,5 +131,12 @@ export type BundlerInstance = {
   prewarm: (options: PrewarmBundleOptions) => Promise<boolean>;
   getPrewarmState: () => PrewarmState;
   isBuildInFlight: () => boolean;
+  /**
+   * Optional. Called with each run's files before the app is launched, for a
+   * bundler that has to know the files to compile them (Metro bundles a file
+   * when the app asks for it, and does not implement this). Resolves once the
+   * bundler has taken the list.
+   */
+  setRunFiles?: (options: SetRunFilesOptions) => Promise<void>;
   dispose: () => Promise<void>;
 };

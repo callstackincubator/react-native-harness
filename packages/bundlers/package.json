@@ -13,6 +13,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./jest-globals-mock": {
+      "development": "./src/jest-globals-mock.ts",
+      "types": "./dist/jest-globals-mock.d.ts",
+      "import": "./dist/jest-globals-mock.js",
+      "default": "./dist/jest-globals-mock.js"
     }
   },
   "dependencies": {

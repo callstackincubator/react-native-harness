@@ -11,6 +11,7 @@ export type {
   HarnessBundlerFactory,
   PrewarmBundleOptions,
   PrewarmState,
+  SetRunFilesOptions,
   WaitForBundlerHealthOptions,
 } from './types.js';
 export {

@@ -2,11 +2,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
 import type { HarnessBundler } from '@react-native-harness/bundlers';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
 import type { HarnessPlatform } from '@react-native-harness/platforms';
-import { createBundlerInstance, resolveBundler } from '../bundler.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  createBundlerInstance,
+  isMetroBundler,
+  resolveBundler,
+} from '../bundler.js';
 
 const tempDirs: string[] = [];
 
@@ -81,5 +85,12 @@ describe('createBundlerInstance', () => {
       options: { ...options, config: { option: true } },
       signal,
     });
+  });
+});
+
+describe('isMetroBundler', () => {
+  it('is true for the default bundler and false for another', () => {
+    expect(isMetroBundler(resolveBundler({}))).toBe(true);
+    expect(isMetroBundler({ name: 'webpack' })).toBe(false);
   });
 });

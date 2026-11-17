@@ -1,11 +1,11 @@
 import {
   logger,
+  trackServerConnections,
   waitForAbort,
   withAbortTimeout,
 } from '@react-native-harness/tools';
 import type { Server as HttpServer } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
-import type { Socket } from 'node:net';
 import connect from 'connect';
 import nocache from 'nocache';
 import { isPortAvailable, getMetroPackage } from './utils.js';
@@ -84,26 +84,7 @@ const trackMetroServer = (maybeServer: MetroServer): TrackedMetroServer => {
   const server: HttpServer | HttpsServer =
     'httpServer' in maybeServer ? maybeServer.httpServer : maybeServer;
 
-  // closeAllConnections() does not close sockets upgraded to WebSockets (e.g. Metro's /hot
-  // endpoint), but those sockets block server.close() from ever firing its callback; track them
-  // so close() can force-destroy whatever remains.
-  const sockets = new Set<Socket>();
-  server.on('connection', (socket) => {
-    sockets.add(socket);
-    socket.on('close', () => sockets.delete(socket));
-  });
-
-  return {
-    server,
-    close: () =>
-      new Promise<void>((resolve) => {
-        server.close(() => resolve());
-        server.closeAllConnections();
-        for (const socket of sockets) {
-          socket.destroy();
-        }
-      }),
-  };
+  return { server, close: trackServerConnections(server).close };
 };
 
 export const getMetroInstance = async (

@@ -87,7 +87,11 @@ import {
   type SessionTelemetry,
 } from './diagnostics/index.js';
 import { resolveHarnessMetroPort } from './metro-port.js';
-import { createBundlerInstance, resolveBundler } from './bundler.js';
+import {
+  createBundlerInstance,
+  isMetroBundler,
+  resolveBundler,
+} from './bundler.js';
 import { createBundlerHookCaller, type CallBundlerHook } from './bundler-hooks.js';
 import { getAdditionalCliArgs } from './cli-args.js';
 import {
@@ -214,6 +218,8 @@ export type HarnessSession = {
   readonly lifecycle: SessionTelemetry['lifecycle'];
   onTestRunnerEvent: (listener: (event: TestRunnerEvents) => void) => () => void;
   runTestFile: (path: string, options: HarnessRunTestsOptions) => Promise<TestSuiteResult>;
+  /** Hands the run's files to the bundler, before the app is launched. */
+  setRunFiles: (files: string[]) => Promise<void>;
   ensureAppReady: (testFilePath: string) => Promise<void>;
   restartApp: (testFilePath?: string) => Promise<void>;
   resetEnvironment: (testFilePath: string) => Promise<void>;
@@ -657,11 +663,13 @@ export const createHarnessSession = async (
 
     if (didFallback) logMetroPortFallback(initialMetroPort, runtimeConfig.metroPort);
 
-    maybeLogMetroCacheReused({
-      config: runtimeConfig,
-      projectRoot: configProjectRoot,
-      platform,
-    });
+    if (isMetroBundler(bundler)) {
+      maybeLogMetroCacheReused({
+        config: runtimeConfig,
+        projectRoot: configProjectRoot,
+        platform,
+      });
+    }
 
     const pluginManager = createHarnessPluginManager<HarnessConfig, HarnessPlatform>({
       plugins: (runtimeConfig.plugins ?? []) as Array<HarnessPlugin<object, HarnessConfig, HarnessPlatform>>,
@@ -1253,6 +1261,9 @@ export const createHarnessSession = async (
         };
       },
       runTestFile,
+      setRunFiles: async (files) => {
+        await bundlerInstance.setRunFiles?.({ files });
+      },
       ensureAppReady,
       restartApp,
       resetEnvironment,

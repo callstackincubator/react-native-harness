@@ -269,6 +269,9 @@ importers:
       '@babel/preset-typescript':
         specifier: ^7.25.0
         version: 7.27.1(@babel/core@7.27.4)
+      '@react-native-harness/bundler-webpack':
+        specifier: workspace:*
+        version: link:../../packages/bundler-webpack
       '@react-native-harness/jest':
         specifier: workspace:*
         version: link:../../packages/jest
@@ -419,6 +422,46 @@ importers:
       metro-resolver:
         specifier: '*'
         version: 0.83.3
+
+  packages/bundler-webpack:
+    dependencies:
+      '@babel/core':
+        specifier: ^7.22.0
+        version: 7.27.4
+      '@react-native-harness/babel-preset':
+        specifier: workspace:*
+        version: link:../babel-preset
+      '@react-native-harness/bundlers':
+        specifier: workspace:*
+        version: link:../bundlers
+      '@react-native-harness/config':
+        specifier: workspace:*
+        version: link:../config
+      '@react-native-harness/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@react-native-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
+      webpack-dev-middleware:
+        specifier: ^7.4.2
+        version: 7.4.6(webpack@5.102.1(@swc/core@1.5.29(@swc/helpers@0.5.17)))
+    devDependencies:
+      '@rspack/core':
+        specifier: 1.5.6
+        version: 1.5.6(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@swc/helpers@0.5.17)
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      webpack:
+        specifier: ^5.102.1
+        version: 5.102.1(@swc/core@1.5.29(@swc/helpers@0.5.17))
+      ws:
+        specifier: ^8.18.2
+        version: 8.18.2
 
   packages/bundlers:
     dependencies:
@@ -21720,6 +21763,17 @@ snapshots:
       webpack-merge: 6.0.1
     optionalDependencies:
       webpack-dev-server: 5.2.7(webpack-cli@6.0.1)(webpack@5.102.1)
+
+  webpack-dev-middleware@7.4.6(webpack@5.102.1(@swc/core@1.5.29(@swc/helpers@0.5.17))):
+    dependencies:
+      colorette: 2.0.20
+      memfs: 4.68.2
+      mime-types: 3.0.1
+      on-finished: 2.4.1
+      range-parser: 1.2.1
+      schema-utils: 4.3.3
+    optionalDependencies:
+      webpack: 5.102.1(@swc/core@1.5.29(@swc/helpers@0.5.17))
 
   webpack-dev-middleware@7.4.6(webpack@5.102.1):
     dependencies:

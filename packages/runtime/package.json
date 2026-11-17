@@ -30,6 +30,12 @@
       "import": "./dist/metro/entry-point.js",
       "default": "./dist/metro/entry-point.js"
     },
+    "./webpack/entry-point": {
+      "development": "./src/webpack/entry-point.ts",
+      "types": "./dist/webpack/entry-point.d.ts",
+      "import": "./dist/webpack/entry-point.js",
+      "default": "./dist/webpack/entry-point.js"
+    },
     "./jsx-runtime": {
       "development": "./src/jsx/jsx-runtime.ts",
       "import": "./dist/jsx/jsx-runtime.js",

@@ -63,19 +63,9 @@ const resolveWeakPlugin = ({
                 [t.stringLiteral(modulePath)]
               );
 
-              // Replace the first argument with require.resolveWeak call
-              const newArguments = [
-                requireWeakCall,
-                ...node.arguments.slice(1),
-              ];
-
-              // Create new call expression
-              const newCallExpression = t.callExpression(
-                node.callee,
-                newArguments
-              );
-
-              path.replaceWith(newCallExpression);
+              // Replace only the first argument, so that type arguments and
+              // the rest of the call stay as written
+              node.arguments[0] = requireWeakCall;
             }
           }
         }
