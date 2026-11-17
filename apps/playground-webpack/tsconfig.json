@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "../../packages/platform-web"
+    },
+    {
+      "path": "../../packages/jest"
+    },
+    {
+      "path": "../../packages/ui"
+    },
+    {
+      "path": "../../packages/runtime"
+    },
+    {
+      "path": "../../packages/react-native-harness"
+    },
+    {
+      "path": "./tsconfig.app.json"
+    }
+  ]
+}

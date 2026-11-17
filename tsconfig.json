@@ -10,6 +10,9 @@
       "path": "./apps/playground-vega"
     },
     {
+      "path": "./apps/playground-webpack"
+    },
+    {
       "path": "./packages/runtime"
     },
     {
