@@ -1,0 +1,232 @@
+import { PackageManagerTabs } from '@theme';
+
+# Webpack and Rspack
+
+If your web app is built with webpack or Rspack, Harness can run your tests from that same config. Your tests see the same aliases, loaders, `DefinePlugin` constants and asset modules as your app.
+
+Harness does not start Metro with this bundler, and you need no Metro config. The `metro` package is still installed, because `react-native-harness` depends on it, but nothing starts it.
+
+This guide is for **web** runners only. Android, iOS and the other platforms keep using Metro, and Metro stays the default for web too. Nothing changes until you set the [`bundler`](/docs/getting-started/configuration#bundler) option.
+
+## How it works
+
+Harness loads your webpack or Rspack config, adjusts a few settings, and compiles it in the same process. It serves the result from its own HTTP server on `metroPort` (default `8081`) and opens that server in the browser with Playwright. The test bridge uses the same server, so Harness needs one port.
+
+Your own dev server is not started.
+
+## Setup
+
+### 1. Install the packages
+
+Install Harness, the web platform and the bundler package:
+
+<PackageManagerTabs command="install --save-dev react-native-harness @react-native-harness/platform-web @react-native-harness/bundler-webpack" />
+
+<PackageManagerTabs command="install --save-dev react-native@<version>" />
+
+Also install the `react-native` version that matches your React version (for React 19.2, `react-native@0.83`), even though webpack aliases it to `react-native-web` and never bundles it. Harness's runtime declares `react-native` as a required peer dependency, and without it some package managers refuse to install, for example npm with an `ERESOLVE` error. `@react-native-harness/bundler-webpack` runs the copy of `webpack` (version 5) or `@rspack/core` (version 1) that your project already has. It does not install one for you. Harness looks for it from the folder of your config file first, so the compiler and the plugins your config creates come from the same copy.
+
+Playwright needs a browser. If you have not installed one yet:
+
+```bash
+npx playwright install chromium
+```
+
+### 2. Configure Harness
+
+Create `rn-harness.config.mjs` in your project root:
+
+```javascript
+import { webpackBundler } from '@react-native-harness/bundler-webpack';
+import { webPlatform, chromium } from '@react-native-harness/platform-web';
+
+export default {
+  entryPoint: './src/index.tsx',
+  appRegistryComponentName: 'App',
+  bundler: webpackBundler({ config: './webpack.config.js' }),
+  runners: [
+    webPlatform({
+      name: 'chromium',
+      browser: chromium('http://localhost:8081/', { headless: true }),
+    }),
+  ],
+  defaultRunner: 'chromium',
+};
+```
+
+For Rspack, use `rspackBundler` instead:
+
+```javascript
+import { rspackBundler } from '@react-native-harness/bundler-webpack';
+
+export default {
+  // ...
+  bundler: rspackBundler({ config: './rspack.config.js' }),
+};
+```
+
+The `config` path is relative to your project root. The config file can export an object, a function or a promise, in CommonJS or ESM. A function is called the way the webpack CLI calls it in development mode, with `{}` as the environment and `{ mode: 'development' }` as the arguments.
+
+The browser URL is the address of Harness's own server, not your dev server. It is `http://localhost:` followed by your [`metroPort`](/docs/getting-started/configuration#all-configuration-options). Keep that port free while Harness runs.
+
+If your project's page is not served from `/`, put its path in the URL. If your build has no HTML plugin at all, see [Projects without an HTML plugin](#projects-without-an-html-plugin).
+
+### 3. Configure Jest and write a test
+
+Create `jest.harness.config.mjs`:
+
+```javascript
+export default {
+  preset: 'react-native-harness',
+  testMatch: ['<rootDir>/src/__tests__/**/*.harness.[jt]s?(x)'],
+};
+```
+
+Then add a test. This one uses a webpack alias and a `DefinePlugin` constant, which is the reason to run from your own config:
+
+```typescript
+// src/__tests__/build.harness.ts
+import { describe, it, expect } from 'react-native-harness';
+import { formatGreeting } from '@app/lib/greeting';
+
+describe('webpack features', () => {
+  it('resolves the @app alias', () => {
+    expect(formatGreeting('Harness')).toBe('Hello, Harness!');
+  });
+
+  it('inlines the DefinePlugin constant', () => {
+    expect(__BUILD_LABEL__).toBe('harness-webpack-fixture');
+  });
+});
+```
+
+### 4. Run the tests
+
+```bash
+npx react-native-harness --harnessRunner chromium
+```
+
+## `entryPoint`
+
+`entryPoint` has the same meaning as with Metro: the file that registers your app. Harness replaces that module with its own entry, which starts the test runtime and then loads your test files. The other items of your `entry`, such as a polyfill listed before the app, still run.
+
+`entryPoint` is resolved from your project root and must name the same file as your config's `entry`, as the request is written there, before any alias. With `entry: './src/index.tsx'` and the default `context`, use `entryPoint: './src/index.tsx'`. The file extension is optional.
+
+When no module of the build matches, the build fails with this error:
+
+```text
+React Native Harness: no module of the build is the entryPoint "./src/main.tsx" of the Harness config, so the Harness runtime was not added. entryPoint is resolved from the project root and must name the same file as the "entry" of your config, as the request is written there, before any alias. The config's entry is "./src/index.tsx".
+```
+
+Fix it by pointing `entryPoint` at the file that `entry` names. If `entry` reaches your app through an alias, Harness only recognizes the module after the alias is resolved and fails with a similar message. Name the file as `entry` writes it, before the alias.
+
+## What Harness changes in your config
+
+Harness composes a new config from yours for each run. It does not write to your files.
+
+| Setting | What Harness does |
+| :-- | :-- |
+| `mode` | Set to `development`. |
+| `devtool` | Kept when it is `source-map` or `cheap-module-source-map`, with or without the `hidden-` prefix. Anything else becomes `source-map`. See [Source maps and code frames](#source-maps-and-code-frames). |
+| `optimization` | Minification, module concatenation, export pruning and side-effect pruning are turned off. Mocking needs every module to keep its own factory. |
+| Entry | The module at `entryPoint` is replaced by Harness's entry. |
+| Loaders | Harness adds a loader that runs before yours. It rewrites `mock('x')` calls to use the module's id, and instruments code when you collect coverage. It runs only on source files outside `node_modules`, and it never fails your build: a file it cannot parse is passed on unchanged for your own loader to report. |
+| Aliases | `@jest/globals` is aliased to a module that throws an error telling you to import from `react-native-harness`. Your own aliases stay. |
+| `cache` | A persistent cache (`cache.type: 'filesystem'` in webpack, `experiments.cache` in Rspack) is kept. Harness registers its loader as a build dependency and keeps cached coverage and non-coverage builds apart. |
+| `watchOptions.ignored` | A single run watches nothing. In watch mode your value applies, with `**/node_modules` when you set none. |
+| `infrastructureLogging` | The level defaults to `warn`. |
+
+Everything else is left as it is: your loaders, aliases, plugins, constants, asset modules, `output`, `externals` and the HTML plugin.
+
+Harness writes the files it generates to `.harness/webpack/<port>/` in your project root. Add `.harness` to your `.gitignore`.
+
+## What is not applied
+
+- **`devServer` options.** `proxy`, `static`, `historyApiFallback`, `headers` and the rest of `devServer` are ignored, because Harness serves the build itself. An app that needs a proxy or static files to start cannot run its tests this way yet.
+- **Array configs.** A config that exports an array of configurations is rejected with an error that says so. Export one configuration, or point `config` at a file that does.
+
+A config that always adds `HotModuleReplacementPlugin` or a React Refresh plugin has not been tried with Harness.
+
+## Watch mode
+
+Run Harness with `--watch`:
+
+```bash
+npx react-native-harness --harnessRunner chromium --watch
+```
+
+Harness rebuilds when your source or a test file changes and runs the tests that Jest selects. Before each run it waits for the build that contains your latest edits, then reloads the page.
+
+Two things to know:
+
+- **Do not ignore the `.harness` folder.** Harness tells when a build is ready by changing a file in `.harness`, so your `watchOptions.ignored` must not cover it. If it does, the run fails with an error that says Harness did not see the file change. Change the config and start Harness again.
+- **Every run after the first rebuilds and reloads the page once**, even a re-run with no edits. If your config sets a long `watchOptions.aggregateTimeout` or a `poll` interval, each run waits about that long.
+
+A build that fails is reported, and the next build that succeeds recovers.
+
+## Coverage
+
+Collect coverage the way you do for any Harness run:
+
+```bash
+npx react-native-harness --harnessRunner chromium --coverage
+```
+
+Harness instruments your source files before your own loader runs, so the report shows the lines of your original files, whether you transpile with Babel or SWC. Files in `node_modules` are not instrumented. As with Metro, `collectCoverageFrom` does not narrow what is instrumented.
+
+A persistent cache from a plain run is not reused for a coverage run, and the other way around.
+
+## Source maps and code frames
+
+When a test fails, Harness shows a code frame that points at the failing line of your own code: the test, or the app code that threw. It builds the frame from the source maps of your build, so the build must write them to files.
+
+Harness keeps your `devtool` when it is one of:
+
+- `source-map`
+- `cheap-module-source-map`
+- either of these with a `hidden-` prefix, such as `hidden-source-map`
+
+Any other value is replaced with `source-map`. The `eval-` and `inline-` variants write no map file, `cheap-source-map` maps to loader output instead of your source, and `nosources-` leaves the code out.
+
+The frame points at the first line of your own code in the stack. Lines in `node_modules` and in Harness's packages are skipped, so the frame shows your test and not the assertion library. With `cheap-module-source-map` the frame has the right line, but the column is the start of the line.
+
+## Projects without an HTML plugin
+
+Harness serves the page your build emits, so an `HtmlWebpackPlugin` or `HtmlRspackPlugin` page works as it does in your app.
+
+If your build emits no HTML, Harness serves a generated page: an empty element with the id `root`, followed by the scripts and styles of every entry in the order the build lists them. The Harness runtime mounts your app into the element with the id `root`.
+
+If your app needs other markup in its page, make the build emit that page. A request for a path that your HTML does not cover also gets the generated page.
+
+## Current limits
+
+- **Web only.** Selecting this bundler with an Android, iOS or other native runner is a configuration error.
+- **Re.Pack is not supported.** Re.Pack is webpack for native apps and brings its own dev server. It is not part of this bundler.
+- **Test files that are strict ES modules cannot use `mock()`.** In a file with the `.mjs` extension, or in a package with `"type": "module"`, a call to `mock()` fails when the test runs and the build reports no error. Use `.ts`, `.tsx`, `.js` or `.jsx` test files in a package without `"type": "module"`.
+- **All selected test files compile before the first test runs.** Metro compiles a file when the test asks for it. The first test of a large run starts later, and the total work is about the same.
+- **`mock()` behaves differently from Metro in two cases.** See [Module Mocking](/docs/api/module-mocking#writing-mocks-that-work-on-every-bundler) for the pattern that works on both.
+- **Code frames read the newest build.** If a page reports a failure from an older build while you edit in watch mode, the frame may come from the newer source.
+- **Not tried yet:** module federation hosts, and configs with several entry points.
+
+## Running in CI
+
+The [GitHub Action](/docs/guides/ci-cd) works for these projects as it does for any web runner. The action passes the job's environment variables on to Harness, so a config can choose the bundler from one.
+
+## Example
+
+The repository contains a working project: [`apps/playground-webpack`](https://github.com/callstackincubator/react-native-harness/tree/main/apps/playground-webpack). It is a react-native-web app with a webpack config and an Rspack config, a path alias, a `DefinePlugin` constant and an asset module. Its Harness config runs the same tests on either bundler:
+
+```javascript
+import {
+  webpackBundler,
+  rspackBundler,
+} from '@react-native-harness/bundler-webpack';
+
+export default {
+  // ...
+  bundler:
+    process.env.HARNESS_BUNDLER === 'rspack'
+      ? rspackBundler({ config: './rspack.config.js' })
+      : webpackBundler({ config: './webpack.config.js' }),
+};
+```

@@ -91,10 +91,11 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `entryPoint`                       | **Required.** Path to your React Native app's entry point file.                                                                                           |
 | `appRegistryComponentName`         | **Required.** Name of the component registered with AppRegistry.                                                                                          |
 | `runners`                          | **Required.** Array of test runners (at least one required).                                                                                              |
+| `bundler`                          | The bundler Harness runs, as returned by a bundler factory such as `webpackBundler()` or `rspackBundler()` (default: Metro). See [Bundler](#bundler). |
 | `plugins`                          | Array of Harness plugins to run during the test lifecycle.                                                                                                |
 | `defaultRunner`                    | Default runner to use when none specified.                                                                                                                |
-| `host`                             | Hostname or IP address to bind the Metro server to (default: Metro default).                                                                              |
-| `metroPort`                        | Preferred port used by Metro and Harness bridge traffic (default: `8081`). Harness falls back to the next available port when this one is already in use. |
+| `host`                             | Hostname or IP address to bind the bundler server to (default: the bundler's default).                                                                              |
+| `metroPort`                        | Preferred port used by the bundler (Metro, webpack or Rspack) and Harness bridge traffic (default: `8081`). Harness falls back to the next available port when this one is already in use. |
 | `webSocketPort`                    | Deprecated. Bridge traffic now uses `metroPort`; this option is ignored.                                                                                  |
 | `platformReadyTimeout`             | Platform-ready timeout in milliseconds (default: `300000`).                                                                                               |
 | `bridgeTimeout`                    | Bridge timeout in milliseconds (default: `60000`).                                                                                                        |
@@ -113,9 +114,37 @@ For Expo projects, the `entryPoint` should be set to the path specified in the `
 | `forwardClientLogs`                | Forward console logs from the app to the terminal (default: `false`).                                                                                     |
 | `diagnostics`                      | Record a timing trace and resource metrics for the run: `true`, or an object with `enabled`, `probes` and `sampleIntervalMs` (default: `false`). See [Diagnostics](#diagnostics). |
 | `cache`                            | Cache configuration object.                                                                                                                                |
-| `cache.metro`                      | Enable persistent Metro transform and file-map caching under `.harness/cache` (default: `true`).                                                          |
+| `cache.metro`                      | Enable persistent Metro transform and file-map caching under `.harness/cache` (default: `true`). Only Metro uses it; webpack and Rspack use the `cache` setting of your own config. |
 | `cache.version`                    | User-controlled salt folded into the Metro cache version. Bump it to force-invalidate previously cached transforms.                                       |
 | `unstable__enableMetroCache`       | Deprecated. Use `cache.metro` instead.                                                                                                                     |
+
+## Bundler
+
+The `bundler` option chooses what builds your tests and serves them to the app. When you leave it out, Harness uses Metro, as before.
+
+It accepts the value that a bundler factory returns. Harness ships these factories:
+
+| Factory | Package | Builds with |
+| :-- | :-- | :-- |
+| `webpackBundler({ config })` | `@react-native-harness/bundler-webpack` | The project's webpack 5 config. |
+| `rspackBundler({ config })` | `@react-native-harness/bundler-webpack` | The project's Rspack config. |
+
+`config` is the path of your webpack or Rspack config file, relative to the project root.
+
+```javascript
+import { webpackBundler } from '@react-native-harness/bundler-webpack';
+
+export default {
+  entryPoint: './src/index.tsx',
+  appRegistryComponentName: 'App',
+  bundler: webpackBundler({ config: './webpack.config.js' }),
+  // ...
+};
+```
+
+The webpack and Rspack bundlers run web tests only. Selecting one with an Android, iOS or other native runner is a configuration error. The `bundler` applies to every runner in the config. If one config has native runners and a web runner, choose the bundler from a condition, such as an environment variable, so that native runs keep Metro. See [Webpack and Rspack](/docs/guides/webpack-and-rspack) for setup, and for what Harness changes in your config.
+
+`metroPort` is the port for every bundler, and the `--metroPort` flag works with all of them.
 
 ## Test Runners
 

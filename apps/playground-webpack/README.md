@@ -8,7 +8,7 @@ The app deliberately uses the three webpack features that are hard to port to Me
 - a `DefinePlugin` constant (`__BUILD_LABEL__`),
 - an asset module (`src/assets/logo.svg`, imported as a URL via `asset/resource`).
 
-`webpack.config.js` (Babel) and `rspack.config.js` (`builtin:swc-loader`) are two self-contained configs for the same app. Both pass the `browserslist` field of `package.json` to their transpiler explicitly, and resolve all paths relative to the config file, so they build from any working directory, so the bundles are modern JavaScript.
+`webpack.config.js` (Babel) and `rspack.config.js` (`builtin:swc-loader`) are two self-contained configs for the same app. Both pass the `browserslist` field of `package.json` to their transpiler explicitly, and resolve all paths relative to the config file, so they build from any working directory. The bundles are modern JavaScript.
 
 ## Running the app
 
@@ -19,9 +19,9 @@ pnpm bundle:webpack  # writes dist/webpack
 pnpm bundle:rspack   # writes dist/rspack
 ```
 
-## `react-native` is only for types
+## Why `react-native` is installed
 
-`react-native` is a dev dependency used for TypeScript types only. The bundler resolves `react-native` to `react-native-web`, and `node_modules` is not transpiled. A deep import such as `react-native/Libraries/...` therefore fails the build. This is intended: the fixture should break loudly if Harness's runtime ever pulls React Native internals into a webpack build.
+`react-native` is a dev dependency for TypeScript types and because Harness's runtime declares it as a peer dependency. The bundler resolves `react-native` to `react-native-web`, and `node_modules` is not transpiled. A deep import such as `react-native/Libraries/...` therefore fails the build. This is intended: the fixture should break loudly if Harness's runtime ever pulls React Native internals into a webpack build.
 
 ## Running the Harness tests
 
@@ -32,4 +32,4 @@ pnpm test:harness                          # webpack
 HARNESS_BUNDLER=rspack pnpm test:harness   # Rspack
 ```
 
-The same tests pass on both. Harness serves the build itself on port 8081, so the `devServer` option of the configs is not used by these runs. A failing assertion is reported without a code frame for now: `/symbolicate` does not read source maps yet.
+The same tests pass on both. Harness serves the build itself on port 8081, so the `devServer` option of the configs is not used by these runs. A failing assertion prints a code frame, built from the source maps of the build, as it does under Metro. Watch mode (`pnpm test:harness --watch`) and `--coverage` work on both bundlers.

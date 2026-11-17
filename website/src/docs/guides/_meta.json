@@ -11,6 +11,11 @@
   },
   {
     "type": "file",
+    "name": "webpack-and-rspack",
+    "label": "Webpack and Rspack"
+  },
+  {
+    "type": "file",
     "name": "native-coverage",
     "label": "Native Coverage"
   },

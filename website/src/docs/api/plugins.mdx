@@ -9,7 +9,7 @@ A plugin can react to events such as:
 - Harness startup and teardown
 - run start and finish
 - runtime ready and disconnect events
-- Metro initialization and bundle events
+- bundler initialization, bundle and client log events
 - app lifecycle signals
 - collection, suite, and test execution events
 
@@ -82,10 +82,55 @@ Plugins are a good fit when you want to:
 
 Keep plugins focused on workflow needs that are specific to your app or team.
 
+## Bundler Hooks
+
+The `bundler` hooks report what the bundler is doing: when it starts, when it builds a test file or a setup file, and what the app logs. They fire for every bundler, so a plugin that uses them works with Metro, webpack and Rspack.
+
+| Hook | Nested name | When it runs |
+| :-- | :-- | :-- |
+| `bundler:initialized` | `bundler.initialized` | A run starts, with the bundler's `port` and `host`. |
+| `bundler:bundle-started` | `bundler.bundleStarted` | The app starts loading a test file or a setup file. |
+| `bundler:bundle-finished` | `bundler.bundleFinished` | The file was loaded. |
+| `bundler:bundle-failed` | `bundler.bundleFailed` | The file could not be loaded. |
+| `bundler:client-log` | `bundler.clientLog` | The app logged to its console and Harness forwarded the entry. |
+
+Every hook receives the usual context plus these fields:
+
+| Hook | Fields |
+| :-- | :-- |
+| `initialized` | `runId`, `port` (number), `host` (string, optional) |
+| `bundle-started` | `runId`, `target` (`'module'` for a test file or `'setupFile'`), `file`, `setupType` (`'setupFiles'` or `'setupFilesAfterEnv'`, set for setup files) |
+| `bundle-finished` | The fields of `bundle-started`, and `duration` in milliseconds |
+| `bundle-failed` | The fields of `bundle-finished`, and `error` (string) |
+| `client-log` | `runId`, `level` (`'trace'`, `'info'`, `'warn'`, `'log'`, `'group'`, `'groupCollapsed'`, `'groupEnd'`, `'debug'` or `'error'`), `data` (array) |
+
+```ts
+import { definePlugin } from '@react-native-harness/plugins';
+
+export const bundleTimingPlugin = () =>
+  definePlugin({
+    name: 'bundle-timing',
+    hooks: {
+      bundler: {
+        bundleFinished: async (ctx) => {
+          ctx.logger.info(`Loaded ${ctx.file} in ${ctx.duration}ms`);
+        },
+        bundleFailed: async (ctx) => {
+          ctx.logger.error(`Could not load ${ctx.file}: ${ctx.error}`);
+        },
+      },
+    },
+  });
+```
+
+### Metro hooks
+
+The `metro` hooks (`metro:initialized`, `metro:bundle-started`, `metro:bundle-finished`, `metro:bundle-failed` and `metro:client-log`) carry the same payloads and still fire when the bundler is Metro, just before the matching `bundler` hook. They never fire for webpack or Rspack. Existing plugins keep working, and new plugins should use the `bundler` hooks.
+
 ## Available Events
 
 The full list of plugin events is defined in the source here:
 
 - [packages/plugins/src/types.ts](https://github.com/callstackincubator/react-native-harness/blob/main/packages/plugins/src/types.ts)
 
-The public plugin shape is based on nested objects like `run.started`, `runtime.ready`, `metro.bundleFinished`, `app.exited`, or `harness.beforeDispose`.
+The public plugin shape is based on nested objects like `run.started`, `runtime.ready`, `bundler.bundleFinished`, `app.exited`, or `harness.beforeDispose`.
