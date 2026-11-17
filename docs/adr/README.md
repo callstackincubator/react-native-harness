@@ -13,3 +13,4 @@ Harness: what was decided, why, and what alternatives were rejected.
 | ADR | Title | Status |
 | --- | --- | --- |
 | [0001](0001-app-liveness-detection.md) | Detect unresponsive apps without penalizing long-running work | Proposed |
+| [0002](0002-webpack-bundler-backend.md) | Run web tests from a project's webpack or Rspack config | Proposed |
