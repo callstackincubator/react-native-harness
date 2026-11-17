@@ -10,7 +10,7 @@ export {
   StartupStallError,
   type StartupStallCode,
   type StartupStallDetails,
-} from '@react-native-harness/bundler-metro';
+} from '@react-native-harness/bundlers';
 
 export class NoRunnerSpecifiedError extends HarnessError {
   constructor() {

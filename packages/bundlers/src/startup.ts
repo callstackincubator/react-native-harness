@@ -3,11 +3,10 @@ import {
   withAbortTimeout,
 } from '@react-native-harness/tools';
 import { StartupStallError } from './errors.js';
-import type { ReportableEvent } from './reporter.js';
-import type { MetroInstance } from './types.js';
+import type { BundlerEvent, BundlerInstance } from './types.js';
 
 type WaitForBundleRequestOptions = {
-  events: MetroInstance['events'];
+  events: BundlerInstance['events'];
   platformId: string;
 };
 
@@ -20,14 +19,16 @@ type BundleRequestObserver = {
 class ReadyTimeoutError extends Error {
   constructor() {
     super(
-      'Timed out waiting for the app to become ready after Metro bundling.'
+      'Timed out waiting for the app to become ready after bundling.'
     );
     this.name = 'ReadyTimeoutError';
   }
 }
 
-export type WaitForMetroBackedAppReadyOptions = {
-  metro: MetroInstance;
+export type WaitForBundlerBackedAppReadyOptions = {
+  bundler: BundlerInstance;
+  /** Display name of the bundler, used in error messages. */
+  bundlerName: string;
   platformId: string;
   bundleStartTimeout: number;
   readyTimeout: number;
@@ -42,7 +43,7 @@ export type WaitForMetroBackedAppReadyOptions = {
 
 class BundleRequestTimeoutError extends Error {
   constructor() {
-    super('Timed out waiting for an app-originated Metro bundle request.');
+    super('Timed out waiting for an app-originated bundle request.');
     this.name = 'BundleRequestTimeoutError';
   }
 }
@@ -72,13 +73,13 @@ const observeBundleRequest = ({
     resolvePromise();
   };
 
-  const onMetroEvent = (event: ReportableEvent) => {
-    if (event.type !== 'bundle_request_observed') {
+  const onBundlerEvent = (event: BundlerEvent) => {
+    if (event.type !== 'entry_requested') {
       return;
     }
 
     // Only the app's own bundle request should resolve this observer; the
-    // harness's prewarm fetch also produces a 'bundle_request_observed'
+    // harness's prewarm fetch also produces a 'entry_requested'
     // event but must not be mistaken for the app launching.
     if (event.requestKind === 'app' && event.platform === platformId) {
       sawAppRequest = true;
@@ -86,13 +87,13 @@ const observeBundleRequest = ({
     }
   };
 
-  events.addListener(onMetroEvent);
+  events.addListener(onBundlerEvent);
 
   return {
     hasSeenAppRequest: () => sawAppRequest,
     waitForAppRequest: async () => await appRequestPromise,
     dispose: () => {
-      events.removeListener(onMetroEvent);
+      events.removeListener(onBundlerEvent);
     },
   };
 };
@@ -130,7 +131,7 @@ const waitForBundleRequestTimeout = async ({
 };
 
 const waitForReadyAfterBundleRequest = async (options: {
-  events: MetroInstance['events'];
+  events: BundlerInstance['events'];
   readyTimeout: number;
   signal: AbortSignal;
   readyPromise: Promise<void>;
@@ -160,7 +161,7 @@ const waitForReadyAfterBundleRequest = async (options: {
 
     const cleanup = () => {
       clearReadyTimer();
-      events.removeListener(onMetroEvent);
+      events.removeListener(onBundlerEvent);
       signal.removeEventListener('abort', onAbort);
     };
 
@@ -199,8 +200,8 @@ const waitForReadyAfterBundleRequest = async (options: {
       );
     };
 
-    const onMetroEvent = (event: ReportableEvent) => {
-      if (event.type === 'bundle_build_started') {
+    const onBundlerEvent = (event: BundlerEvent) => {
+      if (event.type === 'build_started') {
         bundlingInProgress = true;
         clearReadyTimer();
         return;
@@ -208,8 +209,8 @@ const waitForReadyAfterBundleRequest = async (options: {
 
       if (
         bundlingInProgress &&
-        (event.type === 'bundle_build_done' ||
-          event.type === 'bundle_build_failed')
+        (event.type === 'build_done' ||
+          event.type === 'build_failed')
       ) {
         bundlingInProgress = false;
         startReadyTimer();
@@ -217,11 +218,11 @@ const waitForReadyAfterBundleRequest = async (options: {
     };
 
     // When a build is already in flight (seeded), keep the ready timer paused
-    // until Metro reports the build done or failed.
+    // until the bundler reports the build done or failed.
     if (!bundlingInProgress) {
       startReadyTimer();
     }
-    events.addListener(onMetroEvent);
+    events.addListener(onBundlerEvent);
     signal.addEventListener('abort', onAbort, { once: true });
 
     void readyPromise
@@ -244,8 +245,9 @@ const waitForReadyAfterBundleRequest = async (options: {
   });
 };
 
-export const waitForMetroBackedAppReady = async ({
-  metro,
+export const waitForBundlerBackedAppReady = async ({
+  bundler,
+  bundlerName,
   platformId,
   bundleStartTimeout,
   readyTimeout,
@@ -256,21 +258,23 @@ export const waitForMetroBackedAppReady = async ({
   waitForCrash,
   onAttemptStart,
   onAttemptReset,
-}: WaitForMetroBackedAppReadyOptions): Promise<void> => {
-  const lastMetroStatus = await metro.waitUntilHealthy({
+}: WaitForBundlerBackedAppReadyOptions): Promise<void> => {
+  const health = await bundler.waitUntilHealthy({
     timeoutMs: bundleStartTimeout,
     signal,
   });
+  const lastMetroStatus = health.status;
 
-  if (!lastMetroStatus.includes('packager-status:running')) {
+  if (!health.healthy) {
     throw new StartupStallError(bundleStartTimeout, 1, {
+      bundlerName,
       code: 'metro_not_ready',
       lastMetroStatus,
-      prewarmState: metro.getPrewarmState(),
+      prewarmState: bundler.getPrewarmState(),
     });
   }
 
-  await metro.prewarm({
+  await bundler.prewarm({
     platform: platformId,
     signal,
   });
@@ -292,7 +296,7 @@ export const waitForMetroBackedAppReady = async ({
     );
     void readyPromise.catch(() => undefined);
     const bundleRequestObserver = observeBundleRequest({
-      events: metro.events,
+      events: bundler.events,
       platformId,
     });
 
@@ -311,7 +315,7 @@ export const waitForMetroBackedAppReady = async ({
       }
 
       const readyAfterBundleRequestPromise = waitForReadyAfterBundleRequest({
-        events: metro.events,
+        events: bundler.events,
         readyTimeout,
         signal: attemptSignal,
         readyPromise,
@@ -323,9 +327,9 @@ export const waitForMetroBackedAppReady = async ({
         // Always false today: prewarm was awaited above, so no build can be
         // in flight here. This seeds the ready-timer pause for the upcoming
         // change that drops that await, where the app's bundle request can
-        // coalesce into the still-in-flight prewarm build and Metro emits no
-        // fresh bundle_build_started event.
-        initialBundlingInProgress: metro.isBuildInFlight(),
+        // coalesce into the still-in-flight prewarm build and the bundler emits no
+        // fresh build_started event.
+        initialBundlingInProgress: bundler.isBuildInFlight(),
       });
       await Promise.race([readyAfterBundleRequestPromise, crashPromise]);
       bundleRequestObserver.dispose();
@@ -347,9 +351,10 @@ export const waitForMetroBackedAppReady = async ({
       if (error instanceof BundleRequestTimeoutError) {
         if (attempt >= totalAttempts) {
           throw new StartupStallError(bundleStartTimeout, totalAttempts, {
+            bundlerName,
             code: 'bundle_request_not_observed',
             lastMetroStatus,
-            prewarmState: metro.getPrewarmState(),
+            prewarmState: bundler.getPrewarmState(),
           });
         }
 
@@ -358,9 +363,10 @@ export const waitForMetroBackedAppReady = async ({
 
       if (error instanceof ReadyTimeoutError) {
         throw new StartupStallError(readyTimeout, attempt, {
+          bundlerName,
           code: 'ready_not_reported',
           lastMetroStatus,
-          prewarmState: metro.getPrewarmState(),
+          prewarmState: bundler.getPrewarmState(),
         });
       }
 
@@ -372,5 +378,5 @@ export const waitForMetroBackedAppReady = async ({
     }
   }
 
-  throw new Error('Metro-backed app startup exited unexpectedly.');
+  throw new Error(`${bundlerName}-backed app startup exited unexpectedly.`);
 };

@@ -10,7 +10,8 @@ import connect from 'connect';
 import nocache from 'nocache';
 import { isPortAvailable, getMetroPackage } from './utils.js';
 import { MetroPortUnavailableError } from './errors.js';
-import type { MetroInstance, MetroOptions, PrewarmState } from './types.js';
+import type { BundlerHealth, PrewarmState } from '@react-native-harness/bundlers';
+import type { MetroInstance, MetroOptions } from './types.js';
 import { withReporter, type ReportableEvent } from './reporter.js';
 import { getExpoMiddleware } from './middlewares/expo-middleware.js';
 import { getBundleRequestObserverMiddleware } from './middlewares/bundle-request-middleware.js';
@@ -30,7 +31,7 @@ const waitForMetroStatus = async (options: {
   port: number;
   timeoutMs: number;
   signal: AbortSignal;
-}): Promise<string> => {
+}): Promise<BundlerHealth> => {
   const { port, timeoutMs, signal } = options;
   const deadline = Date.now() + timeoutMs;
   let lastStatus = 'waiting for first /status response';
@@ -47,7 +48,7 @@ const waitForMetroStatus = async (options: {
       lastStatus = `HTTP ${response.status}: ${body.trim()}`;
 
       if (response.ok && body.includes('packager-status:running')) {
-        return lastStatus;
+        return { healthy: true, status: lastStatus };
       }
     } catch (error) {
       if (
@@ -66,7 +67,7 @@ const waitForMetroStatus = async (options: {
     );
   }
 
-  return lastStatus;
+  return { healthy: false, status: lastStatus };
 };
 
 type MetroServer = Awaited<

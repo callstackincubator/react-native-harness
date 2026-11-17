@@ -1,4 +1,5 @@
 import { getEmitter, type EventEmitter } from '@react-native-harness/tools';
+import type { BundlerClientLogLevel } from '@react-native-harness/bundlers';
 import type { ReportableEvent as MetroReportableEvent } from 'metro';
 import type { ConfigT as MetroConfig } from 'metro-config';
 import { NotReadOnly } from './utils.js';
@@ -11,7 +12,7 @@ export type ReportableEvent =
     }
   | {
       type: 'client_log';
-      level: 'trace' | 'info' | 'warn' | 'log' | 'group' | 'groupCollapsed' | 'groupEnd' | 'debug' | 'error';
+      level: BundlerClientLogLevel;
       data: unknown[];
     }
   | {

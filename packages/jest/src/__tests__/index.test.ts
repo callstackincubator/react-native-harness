@@ -38,6 +38,7 @@ const mockSession: HarnessSession = {
   resetCrashState: vi.fn(),
   flushClientLogs: vi.fn(() => []),
   callHook: vi.fn(resolveUndefined),
+  callBundlerHook: vi.fn(resolveUndefined),
   setRunState: vi.fn(),
   dispose: vi.fn(resolveUndefined),
 };

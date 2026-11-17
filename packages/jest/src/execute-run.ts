@@ -221,7 +221,7 @@ export const executeRun = async (
     watchMode,
     coverageEnabled: globalConfig.collectCoverage,
   });
-  await session.callHook('metro:initialized', {
+  await session.callBundlerHook('initialized', {
     runId,
     port: session.config.metroPort,
     host: session.config.host?.trim() || undefined,

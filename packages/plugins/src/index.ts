@@ -1,10 +1,19 @@
 export { definePlugin, isHarnessPlugin } from './plugin.js';
 export { createHarnessPluginManager } from './manager.js';
-export type { HarnessPluginManager } from './manager.js';
+export type { HarnessPluginManager, HookPayload } from './manager.js';
 export type {
   AppExitedContext,
   AppPossibleCrashContext,
   AppStartedContext,
+  BundlerBundleFailedContext,
+  BundlerBundleFinishedContext,
+  BundlerBundleStartedContext,
+  BundlerBundleTarget,
+  BundlerHookPayloads,
+  BundlerHookSuffix,
+  BundlerClientLogContext,
+  BundlerClientLogLevel,
+  BundlerInitializedContext,
   CollectionFinishedContext,
   CollectionStartedContext,
   FlatHarnessHookContexts,

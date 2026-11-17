@@ -64,6 +64,9 @@
       "path": "./packages/bundler-metro"
     },
     {
+      "path": "./packages/bundlers"
+    },
+    {
       "path": "./packages/ui"
     },
     {

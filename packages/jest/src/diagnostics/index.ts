@@ -1,4 +1,4 @@
-export { observeMetroEvents, observeBridgeEvents } from './derivers.js';
+export { observeBundlerEvents, observeBridgeEvents } from './derivers.js';
 export {
   writeTraceFile,
   appendToTraceFile,

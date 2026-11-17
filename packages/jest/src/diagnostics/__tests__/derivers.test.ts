@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createDiagnostics, getEmitter } from '@react-native-harness/tools';
-import type { ReportableEvent } from '@react-native-harness/bundler-metro';
+import type { BundlerEvent } from '@react-native-harness/bundlers';
 import type { AppConnection } from '@react-native-harness/bridge/server';
 import type { BridgeEvents } from '@react-native-harness/bridge';
-import { observeBridgeEvents, observeMetroEvents } from '../derivers.js';
+import { observeBridgeEvents, observeBundlerEvents } from '../derivers.js';
+
+const metro = { name: 'metro', displayName: 'Metro' };
 
 type HarnessBridgeEvents = {
   connected: (connection: AppConnection) => void;
@@ -39,45 +41,37 @@ const createFakeBridge = () => {
   };
 };
 
-describe('observeMetroEvents', () => {
+describe('observeBundlerEvents', () => {
   it('is a no-op and does not subscribe when diagnostics is disabled', () => {
-    const events = getEmitter<ReportableEvent>();
+    const events = getEmitter<BundlerEvent>();
     const diagnostics = createDiagnostics({ enabled: false });
 
-    const dispose = observeMetroEvents(events, diagnostics);
+    const dispose = observeBundlerEvents(events, diagnostics, metro);
     events.emit({
-      type: 'bundle_build_started',
-      buildID: '1',
-      bundleDetails: {
-        bundleType: 'bundle',
-        dev: true,
-        entryFile: 'index.js',
-        minify: false,
-        platform: 'ios',
-      },
+      type: 'build_started',
+      buildId: '1',
+      entryFile: 'index.js',
+      platform: 'ios',
+      dev: true,
     });
 
     expect(diagnostics.flush()).toEqual([]);
     dispose();
   });
 
-  it('correlates bundle_build_started/done via buildID into a span', () => {
-    const events = getEmitter<ReportableEvent>();
+  it('correlates build_started/done via buildId into a span', () => {
+    const events = getEmitter<BundlerEvent>();
     const diagnostics = createDiagnostics({ enabled: true });
-    observeMetroEvents(events, diagnostics);
+    observeBundlerEvents(events, diagnostics, metro);
 
     events.emit({
-      type: 'bundle_build_started',
-      buildID: 'build-1',
-      bundleDetails: {
-        bundleType: 'bundle',
-        dev: true,
-        entryFile: 'index.js',
-        minify: false,
-        platform: 'ios',
-      },
+      type: 'build_started',
+      buildId: 'build-1',
+      entryFile: 'index.js',
+      platform: 'ios',
+      dev: true,
     });
-    events.emit({ type: 'bundle_build_done', buildID: 'build-1' });
+    events.emit({ type: 'build_done', buildId: 'build-1' });
 
     const entries = diagnostics.flush();
     expect(entries).toHaveLength(1);
@@ -90,40 +84,34 @@ describe('observeMetroEvents', () => {
     });
   });
 
-  it('records a failed span for bundle_build_failed', () => {
-    const events = getEmitter<ReportableEvent>();
+  it('records a failed span for build_failed', () => {
+    const events = getEmitter<BundlerEvent>();
     const diagnostics = createDiagnostics({ enabled: true });
-    observeMetroEvents(events, diagnostics);
+    observeBundlerEvents(events, diagnostics, metro);
 
     events.emit({
-      type: 'bundle_build_started',
-      buildID: 'build-2',
-      bundleDetails: {
-        bundleType: 'bundle',
-        dev: true,
-        entryFile: 'index.js',
-        minify: false,
-        platform: 'android',
-      },
+      type: 'build_started',
+      buildId: 'build-2',
+      entryFile: 'index.js',
+      platform: 'android',
+      dev: true,
     });
-    events.emit({ type: 'bundle_build_failed', buildID: 'build-2' });
+    events.emit({ type: 'build_failed', buildId: 'build-2' });
 
     const entries = diagnostics.flush();
     expect(entries).toHaveLength(1);
     expect(entries[0]?.status).toBe('error');
   });
 
-  it('records a bundle_request_observed mark', () => {
-    const events = getEmitter<ReportableEvent>();
+  it('records an entry_requested mark', () => {
+    const events = getEmitter<BundlerEvent>();
     const diagnostics = createDiagnostics({ enabled: true });
-    observeMetroEvents(events, diagnostics);
+    observeBundlerEvents(events, diagnostics, metro);
 
     events.emit({
-      type: 'bundle_request_observed',
+      type: 'entry_requested',
       platform: 'ios',
       requestKind: 'app',
-      timestamp: new Date().toISOString(),
-      url: '/index.bundle',
     });
 
     const entries = diagnostics.flush();
@@ -134,17 +122,15 @@ describe('observeMetroEvents', () => {
   });
 
   it('dispose() unsubscribes the listener', () => {
-    const events = getEmitter<ReportableEvent>();
+    const events = getEmitter<BundlerEvent>();
     const diagnostics = createDiagnostics({ enabled: true });
-    const dispose = observeMetroEvents(events, diagnostics);
+    const dispose = observeBundlerEvents(events, diagnostics, metro);
 
     dispose();
     events.emit({
-      type: 'bundle_request_observed',
+      type: 'entry_requested',
       platform: 'ios',
       requestKind: 'app',
-      timestamp: new Date().toISOString(),
-      url: '/index.bundle',
     });
 
     expect(diagnostics.flush()).toEqual([]);
