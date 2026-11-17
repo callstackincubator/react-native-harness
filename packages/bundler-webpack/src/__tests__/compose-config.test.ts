@@ -283,6 +283,89 @@ describe('composeConfig', () => {
     ).toEqual({ level: 'verbose' });
   });
 
+  describe('ignoreWarnings', () => {
+    const missingExport = (message: string, resource: string) => ({
+      message,
+      module: { resource },
+    });
+    const webpackMessage =
+      "export 'TurboModuleRegistry' (imported as 'TurboModuleRegistry') was not found in 'react-native' (possible exports: View)";
+    // Rspack prefixes the message.
+    const rspackMessage = `  ⚠ ESModulesLinkingWarning: ${webpackMessage}`;
+    const getIgnore = (
+      config: CompilerConfig = {},
+      isHarnessFile: (file: string) => boolean = () => false
+    ) => {
+      const list = composeConfig(config, { ...options, isHarnessFile })
+        .ignoreWarnings as Array<(warning: unknown) => boolean>;
+
+      return list[list.length - 1];
+    };
+
+    it.each([webpackMessage, rspackMessage])(
+      'drops a missing react-native export from an installed Harness package (%#)',
+      (message) => {
+        expect(
+          getIgnore()(
+            missingExport(
+              message,
+              '/project/node_modules/@react-native-harness/ui/dist/NativeHarnessUI.js'
+            )
+          )
+        ).toBe(true);
+      }
+    );
+
+    it('drops it from a workspace Harness package', () => {
+      const ignore = getIgnore({}, (file) => file.startsWith('/repo/packages/ui/'));
+
+      expect(
+        ignore(missingExport(webpackMessage, '/repo/packages/ui/dist/Native.js'))
+      ).toBe(true);
+    });
+
+    it('keeps the same warning from the project and from other packages', () => {
+      const ignore = getIgnore();
+
+      expect(
+        ignore(missingExport(webpackMessage, '/project/src/native.ts'))
+      ).toBe(false);
+      expect(
+        ignore(
+          missingExport(webpackMessage, '/project/node_modules/other/index.js')
+        )
+      ).toBe(false);
+    });
+
+    it('keeps other warnings from Harness packages', () => {
+      const ignore = getIgnore();
+      const file =
+        '/project/node_modules/@react-native-harness/ui/dist/index.js';
+
+      expect(
+        ignore(
+          missingExport(
+            "export 'x' (imported as 'x') was not found in './other'",
+            file
+          )
+        )
+      ).toBe(false);
+      expect(
+        ignore(missingExport('Critical dependency: the request is dynamic', file))
+      ).toBe(false);
+      expect(ignore({ message: webpackMessage })).toBe(false);
+    });
+
+    it("keeps the project's own entries", () => {
+      const own = /Module not found/;
+      const list = composeConfig({ ignoreWarnings: [own] }, options)
+        .ignoreWarnings as unknown[];
+
+      expect(list[0]).toBe(own);
+      expect(list).toHaveLength(2);
+    });
+  });
+
   describe('everything else', () => {
     const userConfig: CompilerConfig = {
       context: '/project',

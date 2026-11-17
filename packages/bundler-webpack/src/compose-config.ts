@@ -111,6 +111,42 @@ const withAliases = (
   return Object.assign({ ...ours, ...(alias as object | undefined) }, ours);
 };
 
+type CompilationWarning = {
+  message?: string;
+  module?: { resource?: string; userRequest?: string };
+};
+
+type IgnoredWarning = RegExp | ((warning: CompilationWarning) => boolean);
+
+const MISSING_REACT_NATIVE_EXPORT =
+  /export '[^']+' \(imported as '[^']+'\) was not found in 'react-native'/;
+const INSTALLED_HARNESS_FILE =
+  /[\\/]node_modules[\\/](?:@react-native-harness|react-native-harness)[\\/]/;
+
+// Harness's runtime and UI packages import native-only exports of
+// `react-native`, which a web build aliases to `react-native-web`. The web
+// code paths never use them, and the warning is not the project's to fix.
+// Only this warning from those packages is dropped.
+const createIgnoredWarning =
+  (isHarnessFile: (file: string) => boolean): IgnoredWarning =>
+  (warning) => {
+    const file = warning.module?.resource ?? warning.module?.userRequest;
+
+    return (
+      file !== undefined &&
+      MISSING_REACT_NATIVE_EXPORT.test(warning.message ?? '') &&
+      (isHarnessFile(file) || INSTALLED_HARNESS_FILE.test(file))
+    );
+  };
+
+const withIgnoredWarnings = (
+  ignoreWarnings: unknown,
+  ours: IgnoredWarning
+): unknown[] => [
+  ...(Array.isArray(ignoreWarnings) ? ignoreWarnings : []),
+  ours,
+];
+
 // The Harness code is ESM that calls `require`, which webpack rejects in
 // strict ESM.
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/;
@@ -202,6 +238,10 @@ export const composeConfig = (
         entry: userConfig.entry,
       }),
     ],
+    ignoreWarnings: withIgnoredWarnings(
+      userConfig.ignoreWarnings,
+      createIgnoredWarning(isHarnessFile)
+    ),
     infrastructureLogging: { level: 'warn', ...userConfig.infrastructureLogging },
     // The dev middleware always watches. A one-shot run has no use for it, so
     // nothing is watched. In watch mode the project's own options apply, and

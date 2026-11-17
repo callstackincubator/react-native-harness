@@ -124,7 +124,7 @@ describe('HarnessPlugin', () => {
 
       expect(() =>
         callback?.({ createData: { resource: '/project/src/index.tsx' } })
-      ).toThrow(/as written in the "entry"/);
+      ).toThrow(/must name the same file as the "entry" of your config, as the request is written there, before any alias/);
       expect(() =>
         callback?.({ createData: { resource: '/project/src/polyfill.js' } })
       ).not.toThrow();
@@ -298,7 +298,7 @@ describe.each(['webpack', 'rspack'] as const)('HarnessPlugin in %s', (name) => {
         { entry: 'app-alias', resolve: { alias: { 'app-alias': path.join(dir, 'real', 'index.js') } } },
         './real/index.js'
       )
-    ).rejects.toThrow(/as written in the "entry"/);
+    ).rejects.toThrow(/must name the same file as the "entry" of your config, as the request is written there, before any alias/);
   });
 
   describe('with an HTML plugin, which compiles a child compilation', () => {

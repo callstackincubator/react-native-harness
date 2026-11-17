@@ -74,7 +74,7 @@ export class HarnessPlugin {
           compilation.errors.push(
             new Error(
               `React Native Harness: no module of the build is the entryPoint "${entryPoint}" of the Harness config, so the Harness runtime was not added. ` +
-                `Set entryPoint to the path as written in the "entry" of your config. The config's entry is ${describeEntry(entry)}.`
+                `entryPoint is resolved from the project root and must name the same file as the "entry" of your config, as the request is written there, before any alias. The config's entry is ${describeEntry(entry)}.`
             )
           );
         }
@@ -101,7 +101,7 @@ export class HarnessPlugin {
 
           throw new Error(
             `React Native Harness: the entryPoint "${entryPoint}" of the Harness config was only recognized after the request was resolved (${data.createData.resource}), through an alias or a resolver. ` +
-              'Set entryPoint to the path as written in the "entry" of your config.'
+              'entryPoint is resolved from the project root and must name the same file as the "entry" of your config, as the request is written there, before any alias.'
           );
         }
 
