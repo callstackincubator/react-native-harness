@@ -24,7 +24,7 @@ type HookName<TConfig, TRunner extends HarnessPlatform> = keyof FlatHarnessHookC
   TRunner
 >;
 
-type HookPayload<
+export type HookPayload<
   TConfig,
   TRunner extends HarnessPlatform,
   TName extends HookName<TConfig, TRunner>,

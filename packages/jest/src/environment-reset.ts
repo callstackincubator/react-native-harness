@@ -28,6 +28,15 @@ export const resolveResetStrategyKind = (
   return value;
 };
 
+/**
+ * The reset behind a bundler's request to reload the app: the configured one,
+ * or a runtime reload when the config asks for no reset between files.
+ */
+export const getBundlerReloadKind = (
+  config: Pick<HarnessConfig, 'resetEnvironmentBetweenTestFiles'>
+): ResetStrategyKind =>
+  resolveResetStrategyKind(config.resetEnvironmentBetweenTestFiles) ?? 'runtime';
+
 export type ProcessResetStrategyDeps = {
   // Shared with restartApp; killing and relaunching the app process.
   restart: (testFilePath: string) => Promise<void>;

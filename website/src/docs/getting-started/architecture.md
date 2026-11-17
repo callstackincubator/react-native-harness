@@ -9,7 +9,7 @@ At its core, React Native Harness operates by replacing your application's stand
 The architecture consists of three main components:
 
 1.  **Harness CLI (Node.js)**: Orchestrates the test run, manages the device, and reports results.
-2.  **Metro Bundler**: Serves the Test Bundle to the device.
+2.  **Metro Bundler**: Serves the Test Bundle to the device. On web, you can use webpack or Rspack here instead; see [Webpack and Rspack](/docs/guides/webpack-and-rspack).
 3.  **Harness Native Runner (Device)**: A lightweight runtime injected into your app that executes tests and communicates with the CLI.
 
 ## How It Works

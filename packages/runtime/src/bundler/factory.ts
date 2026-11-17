@@ -1,7 +1,7 @@
 import { BundlerEvents } from '@react-native-harness/bridge';
 import { getEmitter } from '../utils/emitter.js';
 import { Bundler } from './types.js';
-import { fetchModule, releaseModule } from './bundle.js';
+import { getModuleSystem } from '../module-system.js';
 import { BundlingFailedError } from './errors.js';
 
 export const getBundler = (): Bundler => {
@@ -17,14 +17,14 @@ export const getBundler = (): Bundler => {
       });
 
       try {
-        const moduleJs = await fetchModule(filePath);
+        const loadedModule = await getModuleSystem().loadModule(filePath);
         events.emit({
           type: 'module-bundling-finished',
           file: filePath,
           duration: Date.now() - bundlingStartTime,
         });
 
-        return moduleJs;
+        return loadedModule;
       } catch (error) {
         events.emit({
           type: 'module-bundling-failed',
@@ -39,6 +39,6 @@ export const getBundler = (): Bundler => {
         throw error;
       }
     },
-    releaseModule: (filePath) => releaseModule(filePath),
+    releaseModule: (filePath) => getModuleSystem().releaseModule(filePath),
   };
 };

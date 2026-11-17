@@ -129,7 +129,7 @@ export type GetHarnessSerializerOptions = {
  *     `transform.routerRoot=app`, `transform.reactCompiler=true`, and
  *     `unstable_transformProfile=hermes-stable` (see `bundle-url.ts`),
  *     while the harness runtime's `?modulesOnly=true` test-bundle requests
- *     send only `modulesOnly` + `platform` (packages/runtime/src/bundler/
+ *     send only `modulesOnly` + `platform` (packages/runtime/src/metro/
  *     bundle.ts), so its graph gets default/empty transform options. The
  *     modulesOnly lookup would then always miss, fail open, and silently
  *     turn the feature into a no-op forever.

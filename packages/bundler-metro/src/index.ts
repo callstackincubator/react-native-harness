@@ -6,16 +6,12 @@ export type {
   MetroFactory,
   MetroOptions,
   MetroWebSocketEndpoint,
-  PrewarmState,
 } from './types.js';
+export type { PrewarmState } from '@react-native-harness/bundlers';
 export type { Reporter, ReportableEvent } from './reporter.js';
 export {
-  StartupStallError,
-  type StartupStallCode,
-  type StartupStallDetails,
-} from './errors.js';
-export {
-  waitForMetroBackedAppReady,
-  type WaitForMetroBackedAppReadyOptions,
-} from './startup.js';
+  metroBundler,
+  METRO_BUNDLER_NAME,
+  type MetroBundlerConfig,
+} from './metro-bundler.js';
 export { isPortAvailable } from './utils.js';

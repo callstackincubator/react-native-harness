@@ -31,6 +31,9 @@
       "path": "../bundler-metro/tsconfig.lib.json"
     },
     {
+      "path": "../bundlers/tsconfig.lib.json"
+    },
+    {
       "path": "../bridge/tsconfig.lib.json"
     }
   ]

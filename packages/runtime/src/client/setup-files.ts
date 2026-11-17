@@ -1,5 +1,6 @@
 import { EventEmitter } from '../utils/emitter.js';
 import { Bundler } from '../bundler/index.js';
+import type { LoadedModule } from '../module-system.js';
 import { BundlerEvents } from '@react-native-harness/bridge';
 
 export type RunSetupFilesOptions = {
@@ -7,7 +8,7 @@ export type RunSetupFilesOptions = {
   setupFilesAfterEnv: string[];
   events: EventEmitter<BundlerEvents>;
   bundler: Bundler;
-  evaluateModule: (moduleJs: string, filePath: string) => Promise<void>;
+  runModule: (module: LoadedModule) => Promise<void>;
 };
 
 export const runSetupFiles = async ({
@@ -15,7 +16,7 @@ export const runSetupFiles = async ({
   setupFilesAfterEnv,
   events,
   bundler,
-  evaluateModule,
+  runModule,
 }: RunSetupFilesOptions) => {
   for (const setupFile of setupFiles) {
     const startTime = Date.now();
@@ -26,14 +27,14 @@ export const runSetupFiles = async ({
     });
 
     try {
-      const setupModuleJs = await bundler.getModule(setupFile);
+      const setupModule = await bundler.getModule(setupFile);
       events.emit({
         type: 'setup-file-bundling-finished',
         file: setupFile,
         setupType: 'setupFiles',
         duration: Date.now() - startTime,
       });
-      await evaluateModule(setupModuleJs, setupFile);
+      await runModule(setupModule);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -57,14 +58,14 @@ export const runSetupFiles = async ({
     });
 
     try {
-      const setupModuleJs = await bundler.getModule(setupFile);
+      const setupModule = await bundler.getModule(setupFile);
       events.emit({
         type: 'setup-file-bundling-finished',
         file: setupFile,
         setupType: 'setupFilesAfterEnv',
         duration: Date.now() - startTime,
       });
-      await evaluateModule(setupModuleJs, setupFile);
+      await runModule(setupModule);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';

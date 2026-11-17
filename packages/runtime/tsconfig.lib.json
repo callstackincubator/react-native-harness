@@ -18,6 +18,7 @@
     }
   ],
   "exclude": [
+    "src/webpack/__tests__/**",
     "vite.config.ts",
     "vite.config.mts",
     "vitest.config.ts",

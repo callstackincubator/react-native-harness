@@ -153,58 +153,7 @@ export type RuntimeDisconnectedContext<
   reason?: string;
 };
 
-export type MetroInitializedContext<
-  TState extends object,
-  TConfig,
-  TRunner extends HarnessPlatform
-> = HarnessBaseHookContext<TState, TConfig, TRunner, 'metro:initialized'> & {
-  runId: string;
-  port: number;
-  host?: string;
-};
-
 export type MetroBundleTarget = 'module' | 'setupFile';
-
-export type MetroBundleStartedContext<
-  TState extends object,
-  TConfig,
-  TRunner extends HarnessPlatform
-> = HarnessBaseHookContext<TState, TConfig, TRunner, 'metro:bundle-started'> & {
-  runId: string;
-  target: MetroBundleTarget;
-  file: string;
-  setupType?: 'setupFiles' | 'setupFilesAfterEnv';
-};
-
-export type MetroBundleFinishedContext<
-  TState extends object,
-  TConfig,
-  TRunner extends HarnessPlatform
-> = HarnessBaseHookContext<
-  TState,
-  TConfig,
-  TRunner,
-  'metro:bundle-finished'
-> & {
-  runId: string;
-  target: MetroBundleTarget;
-  file: string;
-  setupType?: 'setupFiles' | 'setupFilesAfterEnv';
-  duration: number;
-};
-
-export type MetroBundleFailedContext<
-  TState extends object,
-  TConfig,
-  TRunner extends HarnessPlatform
-> = HarnessBaseHookContext<TState, TConfig, TRunner, 'metro:bundle-failed'> & {
-  runId: string;
-  target: MetroBundleTarget;
-  file: string;
-  setupType?: 'setupFiles' | 'setupFilesAfterEnv';
-  duration: number;
-  error: string;
-};
 
 export type MetroClientLogLevel =
   | 'trace'
@@ -217,15 +166,146 @@ export type MetroClientLogLevel =
   | 'debug'
   | 'error';
 
+/**
+ * The payloads of the bundler hooks, keyed by hook suffix. Every suffix has
+ * two hooks with this payload: `metro:<suffix>`, which fires when the bundler
+ * is Metro, and `bundler:<suffix>`, which fires for every bundler.
+ */
+export type BundlerHookPayloads = {
+  initialized: { runId: string; port: number; host?: string };
+  'bundle-started': {
+    runId: string;
+    target: MetroBundleTarget;
+    file: string;
+    setupType?: 'setupFiles' | 'setupFilesAfterEnv';
+  };
+  'bundle-finished': {
+    runId: string;
+    target: MetroBundleTarget;
+    file: string;
+    setupType?: 'setupFiles' | 'setupFilesAfterEnv';
+    duration: number;
+  };
+  'bundle-failed': {
+    runId: string;
+    target: MetroBundleTarget;
+    file: string;
+    setupType?: 'setupFiles' | 'setupFilesAfterEnv';
+    duration: number;
+    error: string;
+  };
+  'client-log': {
+    runId: string;
+    level: MetroClientLogLevel;
+    data: unknown[];
+  };
+};
+
+export type BundlerHookSuffix = keyof BundlerHookPayloads;
+
+export type BundlerHookPrefix = 'metro' | 'bundler';
+
+export type BundlerHookContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform,
+  TPrefix extends BundlerHookPrefix,
+  TSuffix extends BundlerHookSuffix
+> = HarnessBaseHookContext<TState, TConfig, TRunner, `${TPrefix}:${TSuffix}`> &
+  BundlerHookPayloads[TSuffix];
+
+type CamelCase<TName extends string> = TName extends `${infer A}-${infer B}`
+  ? `${A}${Capitalize<B>}`
+  : TName;
+
+type BundlerHookGroup<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform,
+  TPrefix extends BundlerHookPrefix
+> = {
+  [TSuffix in BundlerHookSuffix as CamelCase<TSuffix>]?: HarnessHookHandler<
+    BundlerHookContext<TState, TConfig, TRunner, TPrefix, TSuffix>
+  >;
+};
+
+type BundlerHookContexts<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform,
+  TPrefix extends BundlerHookPrefix
+> = {
+  [TSuffix in BundlerHookSuffix as `${TPrefix}:${TSuffix}`]: BundlerHookContext<
+    TState,
+    TConfig,
+    TRunner,
+    TPrefix,
+    TSuffix
+  >;
+};
+
+export type MetroInitializedContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = BundlerHookContext<TState, TConfig, TRunner, 'metro', 'initialized'>;
+
+export type MetroBundleStartedContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = BundlerHookContext<TState, TConfig, TRunner, 'metro', 'bundle-started'>;
+
+export type MetroBundleFinishedContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = BundlerHookContext<TState, TConfig, TRunner, 'metro', 'bundle-finished'>;
+
+export type MetroBundleFailedContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = BundlerHookContext<TState, TConfig, TRunner, 'metro', 'bundle-failed'>;
+
 export type MetroClientLogContext<
   TState extends object,
   TConfig,
   TRunner extends HarnessPlatform
-> = HarnessBaseHookContext<TState, TConfig, TRunner, 'metro:client-log'> & {
-  runId: string;
-  level: MetroClientLogLevel;
-  data: unknown[];
-};
+> = BundlerHookContext<TState, TConfig, TRunner, 'metro', 'client-log'>;
+
+export type BundlerBundleTarget = MetroBundleTarget;
+export type BundlerClientLogLevel = MetroClientLogLevel;
+
+export type BundlerInitializedContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = BundlerHookContext<TState, TConfig, TRunner, 'bundler', 'initialized'>;
+
+export type BundlerBundleStartedContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = BundlerHookContext<TState, TConfig, TRunner, 'bundler', 'bundle-started'>;
+
+export type BundlerBundleFinishedContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = BundlerHookContext<TState, TConfig, TRunner, 'bundler', 'bundle-finished'>;
+
+export type BundlerBundleFailedContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = BundlerHookContext<TState, TConfig, TRunner, 'bundler', 'bundle-failed'>;
+
+export type BundlerClientLogContext<
+  TState extends object,
+  TConfig,
+  TRunner extends HarnessPlatform
+> = BundlerHookContext<TState, TConfig, TRunner, 'bundler', 'client-log'>;
 
 export type AppStartedContext<
   TState extends object,
@@ -377,11 +457,6 @@ export type FlatHarnessHookContexts<
   'run:finished': RunFinishedContext<TState, TConfig, TRunner>;
   'runtime:ready': RuntimeReadyContext<TState, TConfig, TRunner>;
   'runtime:disconnected': RuntimeDisconnectedContext<TState, TConfig, TRunner>;
-  'metro:initialized': MetroInitializedContext<TState, TConfig, TRunner>;
-  'metro:bundle-started': MetroBundleStartedContext<TState, TConfig, TRunner>;
-  'metro:bundle-finished': MetroBundleFinishedContext<TState, TConfig, TRunner>;
-  'metro:bundle-failed': MetroBundleFailedContext<TState, TConfig, TRunner>;
-  'metro:client-log': MetroClientLogContext<TState, TConfig, TRunner>;
   'app:started': AppStartedContext<TState, TConfig, TRunner>;
   'app:exited': AppExitedContext<TState, TConfig, TRunner>;
   'app:possible-crash': AppPossibleCrashContext<TState, TConfig, TRunner>;
@@ -393,7 +468,8 @@ export type FlatHarnessHookContexts<
   'suite:finished': SuiteFinishedContext<TState, TConfig, TRunner>;
   'test:started': TestStartedContext<TState, TConfig, TRunner>;
   'test:finished': TestFinishedContext<TState, TConfig, TRunner>;
-};
+} & BundlerHookContexts<TState, TConfig, TRunner, 'metro'> &
+  BundlerHookContexts<TState, TConfig, TRunner, 'bundler'>;
 
 export type FlatHarnessHookName = keyof FlatHarnessHookContexts<
   Record<string, never>,
@@ -432,23 +508,8 @@ export type HarnessPluginHooks<
       RuntimeDisconnectedContext<TState, TConfig, TRunner>
     >;
   };
-  metro?: {
-    initialized?: HarnessHookHandler<
-      MetroInitializedContext<TState, TConfig, TRunner>
-    >;
-    bundleStarted?: HarnessHookHandler<
-      MetroBundleStartedContext<TState, TConfig, TRunner>
-    >;
-    bundleFinished?: HarnessHookHandler<
-      MetroBundleFinishedContext<TState, TConfig, TRunner>
-    >;
-    bundleFailed?: HarnessHookHandler<
-      MetroBundleFailedContext<TState, TConfig, TRunner>
-    >;
-    clientLog?: HarnessHookHandler<
-      MetroClientLogContext<TState, TConfig, TRunner>
-    >;
-  };
+  metro?: BundlerHookGroup<TState, TConfig, TRunner, 'metro'>;
+  bundler?: BundlerHookGroup<TState, TConfig, TRunner, 'bundler'>;
   app?: {
     started?: HarnessHookHandler<AppStartedContext<TState, TConfig, TRunner>>;
     exited?: HarnessHookHandler<AppExitedContext<TState, TConfig, TRunner>>;
@@ -510,6 +571,11 @@ export const HARNESS_HOOKS = [
   { flatName: 'metro:bundle-finished', path: ['metro', 'bundleFinished'] },
   { flatName: 'metro:bundle-failed', path: ['metro', 'bundleFailed'] },
   { flatName: 'metro:client-log', path: ['metro', 'clientLog'] },
+  { flatName: 'bundler:initialized', path: ['bundler', 'initialized'] },
+  { flatName: 'bundler:bundle-started', path: ['bundler', 'bundleStarted'] },
+  { flatName: 'bundler:bundle-finished', path: ['bundler', 'bundleFinished'] },
+  { flatName: 'bundler:bundle-failed', path: ['bundler', 'bundleFailed'] },
+  { flatName: 'bundler:client-log', path: ['bundler', 'clientLog'] },
   { flatName: 'app:started', path: ['app', 'started'] },
   { flatName: 'app:exited', path: ['app', 'exited'] },
   { flatName: 'app:possible-crash', path: ['app', 'possibleCrash'] },

@@ -29,11 +29,15 @@ The easiest way to set up Web support is through the [Initialization Wizard](/do
      runners: [
        webPlatform({
          name: 'web',
-         browser: chromium('http://localhost:3000'), // Your dev server URL
+         browser: chromium('http://localhost:8081/index.html'), // A page served on metroPort
        }),
      ],
    };
    ```
+
+## Bundlers
+
+Harness builds the web app with a bundler. Metro is the default. If your web app is built with webpack or Rspack, Harness can use that config instead and does not need Metro. Set the [`bundler`](/docs/getting-started/configuration#bundler) option and follow [Webpack and Rspack](/docs/guides/webpack-and-rspack).
 
 ## Browser Configuration
 
@@ -65,7 +69,8 @@ When using `@react-native-harness/ui` on the Web, interactions are simulated usi
 
 ## Requirements
 
-- **Dev Server**: Your web application must be running (e.g., via `webpack-dev-server` or `expo start --web`) before running tests.
+- **A page to open.** Harness starts the bundler itself on `metroPort` (default `8081`); do not start a dev server of your own. With Metro, your Metro config must serve an HTML page, for example from `server.enhanceMiddleware`, that has an element with the id `root` and loads the web bundle from Metro. Point the runner at that page, such as `http://localhost:8081/index.html`. Do not use `http://localhost:8081/`: Harness answers that path itself.
+- **With webpack or Rspack**, Harness serves the page your build emits, or a generated one, at `http://localhost:8081/`. See [Webpack and Rspack](/docs/guides/webpack-and-rspack).
 - **Playwright Browsers**: Ensure Playwright browsers are installed in your environment.
 
 If you use the official GitHub Action for web runners, it installs Playwright Chromium automatically before running Harness.

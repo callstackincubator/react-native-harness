@@ -248,6 +248,8 @@ If your workflow does not define AVD details, the action can still run the tests
 
 ## Metro cache
 
+This section applies when Harness uses Metro, which is the default. With [webpack or Rspack](/docs/guides/webpack-and-rspack), the action's Metro cache steps find nothing to restore or save and do nothing. A persistent `cache` in your own webpack or Rspack config is yours to cache.
+
 React Native Harness persists Metro's transform cache under `.harness/cache/metro` and its file-map (haste) cache under `.harness/cache/metro-file-map`, both in your project root. This is on by default (`cache.metro: true`); set `cache.metro: false` in config to disable it. The deprecated `unstable__enableMetroCache` option is still honored as an alias for one release.
 
 When you use the `callstackincubator/react-native-harness` GitHub Action, Metro cache restoration and saving is handled automatically for the resolved `projectRoot`. Do not add your own `actions/cache` step for `.harness/cache/metro` or `.harness/cache/metro-file-map` -- the action's cache key scheme assumes it's the only thing writing and reading those entries, and a manually-added step would fight it for ownership of the same paths.
@@ -267,6 +269,8 @@ A new entry is only saved when the run actually changed the cache's contents -- 
 The official action supports web runners as well. At the moment, the action installs Playwright Chromium automatically before running Harness.
 
 If your workflow depends on a different browser setup, make that expectation explicit in your CI configuration.
+
+Web projects built with [webpack or Rspack](/docs/guides/webpack-and-rspack) use the same action. The action passes the job's environment variables on to Harness, so a matrix can choose the bundler through a variable that your Harness config reads, as the repository's own workflow does for `apps/playground-webpack`.
 
 ## Windows in CI
 

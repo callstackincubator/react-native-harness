@@ -5,23 +5,13 @@ export class ModuleNotFoundError extends Error {
   }
 }
 
-export class MalformedModuleError extends Error {
-  constructor(
-    public readonly modulePath: string,
-    public readonly reason: string
-  ) {
-    super(`Module ${modulePath} is malformed: ${reason}`);
-    this.name = 'MalformedModuleError';
-  }
-}
-
 export class BundlingFailedError extends Error {
   constructor(
     public readonly modulePath: string,
-    public readonly reason: string
+    public readonly reason: string,
+    message: string = reason
   ) {
-    const reasonMessage = JSON.parse(reason).message ?? reason;
-    super(`Bundling of ${modulePath} failed with error:\n\n${reasonMessage}\n`);
+    super(`Bundling of ${modulePath} failed with error:\n\n${message}\n`);
     this.name = 'BundlingFailedError';
   }
 }

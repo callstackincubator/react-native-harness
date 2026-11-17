@@ -5,6 +5,7 @@ This section contains comprehensive guides for advanced React Native Harness usa
 ## Available Guides
 
 - [**UI Testing**](./ui-testing.md) - Learn how to perform visual testing and element interaction testing with React Native Harness
+- [**Webpack and Rspack**](./webpack-and-rspack.mdx) - Run web tests from your project's webpack or Rspack config, without Metro
 - [**CI/CD Integration**](./ci-cd.md) - Learn how to run React Native Harness tests in GitHub Actions and other CI/CD environments
 
 ## Contributing

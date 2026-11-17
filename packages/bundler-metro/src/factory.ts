@@ -1,16 +1,17 @@
 import {
   logger,
+  trackServerConnections,
   waitForAbort,
   withAbortTimeout,
 } from '@react-native-harness/tools';
 import type { Server as HttpServer } from 'node:http';
 import type { Server as HttpsServer } from 'node:https';
-import type { Socket } from 'node:net';
 import connect from 'connect';
 import nocache from 'nocache';
 import { isPortAvailable, getMetroPackage } from './utils.js';
 import { MetroPortUnavailableError } from './errors.js';
-import type { MetroInstance, MetroOptions, PrewarmState } from './types.js';
+import type { BundlerHealth, PrewarmState } from '@react-native-harness/bundlers';
+import type { MetroInstance, MetroOptions } from './types.js';
 import { withReporter, type ReportableEvent } from './reporter.js';
 import { getExpoMiddleware } from './middlewares/expo-middleware.js';
 import { getBundleRequestObserverMiddleware } from './middlewares/bundle-request-middleware.js';
@@ -30,7 +31,7 @@ const waitForMetroStatus = async (options: {
   port: number;
   timeoutMs: number;
   signal: AbortSignal;
-}): Promise<string> => {
+}): Promise<BundlerHealth> => {
   const { port, timeoutMs, signal } = options;
   const deadline = Date.now() + timeoutMs;
   let lastStatus = 'waiting for first /status response';
@@ -47,7 +48,7 @@ const waitForMetroStatus = async (options: {
       lastStatus = `HTTP ${response.status}: ${body.trim()}`;
 
       if (response.ok && body.includes('packager-status:running')) {
-        return lastStatus;
+        return { healthy: true, status: lastStatus };
       }
     } catch (error) {
       if (
@@ -66,7 +67,7 @@ const waitForMetroStatus = async (options: {
     );
   }
 
-  return lastStatus;
+  return { healthy: false, status: lastStatus };
 };
 
 type MetroServer = Awaited<
@@ -83,26 +84,7 @@ const trackMetroServer = (maybeServer: MetroServer): TrackedMetroServer => {
   const server: HttpServer | HttpsServer =
     'httpServer' in maybeServer ? maybeServer.httpServer : maybeServer;
 
-  // closeAllConnections() does not close sockets upgraded to WebSockets (e.g. Metro's /hot
-  // endpoint), but those sockets block server.close() from ever firing its callback; track them
-  // so close() can force-destroy whatever remains.
-  const sockets = new Set<Socket>();
-  server.on('connection', (socket) => {
-    sockets.add(socket);
-    socket.on('close', () => sockets.delete(socket));
-  });
-
-  return {
-    server,
-    close: () =>
-      new Promise<void>((resolve) => {
-        server.close(() => resolve());
-        server.closeAllConnections();
-        for (const socket of sockets) {
-          socket.destroy();
-        }
-      }),
-  };
+  return { server, close: trackServerConnections(server).close };
 };
 
 export const getMetroInstance = async (

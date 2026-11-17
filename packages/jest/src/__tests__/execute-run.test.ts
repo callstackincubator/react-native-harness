@@ -140,6 +140,7 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
   diagnostics: createDiagnostics({ enabled: false }),
   sessionId: 'session-1',
   lifecycle: getEmitter<LifecycleEvent>(),
+  setRunFiles: vi.fn(resolveUndefined),
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async () => makeHarnessResult()),
   restartApp: vi.fn(resolveUndefined),
@@ -147,6 +148,7 @@ const makeSession = (overrides: Partial<HarnessSession> = {}): HarnessSession =>
   resetCrashState: vi.fn(),
   flushClientLogs: vi.fn(() => []),
   callHook: vi.fn(resolveUndefined),
+  callBundlerHook: vi.fn(resolveUndefined),
   onTestRunnerEvent: vi.fn(() => () => undefined),
   setRunState: vi.fn(),
   dispose: vi.fn(resolveUndefined),
@@ -183,6 +185,25 @@ describe('executeRun', () => {
 
       expect(hookNames[0]).toBe('run:started');
       expect(hookNames[hookNames.length - 1]).toBe('run:finished');
+    });
+
+    it('fires the bundler initialized hook after run:started', async () => {
+      const order: string[] = [];
+      const session = makeSession({
+        callHook: vi.fn(async (name) => { order.push(name as string); }),
+        callBundlerHook: vi.fn(async (name) => { order.push(`bundler:${name}`); }),
+      });
+
+      await executeRun(session, [makeTest()], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      expect(session.callBundlerHook).toHaveBeenCalledWith('initialized', {
+        runId: expect.any(String),
+        port: 8081,
+        host: undefined,
+      });
+      expect(order.indexOf('bundler:initialized')).toBe(
+        order.indexOf('run:started') + 1
+      );
     });
 
     it('emits test-file:started and test-file:finished around each test', async () => {
@@ -304,6 +325,44 @@ describe('executeRun', () => {
       expect(diagnostics.flush()).toEqual([]);
       expect(mockPrintSummary).not.toHaveBeenCalled();
       expect(mockWriteTraceFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('run files', () => {
+    it('hands the run its files before the app is launched', async () => {
+      const order: string[] = [];
+      const session = makeSession({
+        setRunFiles: vi.fn(async () => { order.push('setRunFiles'); }),
+        ensureAppReady: vi.fn(async () => { order.push('ensureAppReady'); }),
+      });
+      const test = {
+        path: '/project/src/a.harness.ts',
+        context: {
+          config: {
+            setupFiles: ['/project/src/setup.ts'],
+            setupFilesAfterEnv: ['/project/src/setup-after-env.ts'],
+          } as Config.ProjectConfig,
+        },
+      } as Test;
+
+      await executeRun(session, [test], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      expect(session.setRunFiles).toHaveBeenCalledWith([
+        'src/a.harness.ts',
+        'src/setup.ts',
+        'src/setup-after-env.ts',
+      ]);
+      expect(order).toEqual(['setRunFiles', 'ensureAppReady']);
+    });
+
+    it('hands over the files of every run, not only the first', async () => {
+      const session = makeSession();
+
+      await executeRun(session, [makeTest('/project/a.ts')], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+      await executeRun(session, [makeTest('/project/b.ts')], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());
+
+      expect(session.setRunFiles).toHaveBeenNthCalledWith(1, ['a.ts']);
+      expect(session.setRunFiles).toHaveBeenNthCalledWith(2, ['b.ts']);
     });
   });
 
@@ -725,7 +784,7 @@ describe('executeRun', () => {
     it('passes StartupStallError to onFailure with an empty stack', async () => {
       const { emitEvent, calls } = makeEmitEvent();
       const session = makeSession({
-        ensureAppReady: vi.fn().mockRejectedValue(new StartupStallError(1500, 3)),
+        ensureAppReady: vi.fn().mockRejectedValue(new StartupStallError(1500, 3, { bundlerName: 'Metro' })),
       });
 
       await executeRun(session, [makeTest()], makeWatcher(), emitEvent, makeGlobalConfig());
@@ -870,7 +929,7 @@ describe('executeRun', () => {
 
       it('does not carry the running test over to the next file', async () => {
         const { emitEvent, calls } = makeEmitEvent();
-        const startupError = new StartupStallError(1500, 3);
+        const startupError = new StartupStallError(1500, 3, { bundlerName: 'Metro' });
         const { session, emit } = makeListeningSession({
           ensureAppReady: vi
             .fn()
@@ -919,7 +978,7 @@ describe('executeRun', () => {
         callHook: vi.fn(async (name, payload) => {
           if (name === 'run:finished') finishedPayload = payload;
         }),
-        ensureAppReady: vi.fn().mockRejectedValue(new StartupStallError(1000, 2)),
+        ensureAppReady: vi.fn().mockRejectedValue(new StartupStallError(1000, 2, { bundlerName: 'Metro' })),
       });
 
       await executeRun(session, [makeTest()], makeWatcher(), makeEmitEvent().emitEvent, makeGlobalConfig());

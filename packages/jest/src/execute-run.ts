@@ -7,6 +7,7 @@ import type {
 import { randomUUID } from 'node:crypto';
 import { type HarnessSession, type HarnessRunState } from './harness-session.js';
 import { runHarnessTestFile } from './run.js';
+import { collectRunFiles } from './run-files.js';
 import { toRelativePosixPath } from './relative-path.js';
 import { resolveResetStrategyKind } from './environment-reset.js';
 import {
@@ -221,7 +222,7 @@ export const executeRun = async (
     watchMode,
     coverageEnabled: globalConfig.collectCoverage,
   });
-  await session.callHook('metro:initialized', {
+  await session.callBundlerHook('initialized', {
     runId,
     port: session.config.metroPort,
     host: session.config.host?.trim() || undefined,
@@ -239,6 +240,10 @@ export const executeRun = async (
   let runError: unknown;
 
   try {
+    await session.setRunFiles(
+      collectRunFiles({ tests, rootDir, platformId, knownPlatformIds }),
+    );
+
     for (const test of tests) {
       if (watcher.isInterrupted()) throw new CancelRun();
 

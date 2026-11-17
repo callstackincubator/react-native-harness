@@ -22,6 +22,9 @@
       "path": "../bundler-metro"
     },
     {
+      "path": "../bundlers"
+    },
+    {
       "path": "../bridge"
     },
     {

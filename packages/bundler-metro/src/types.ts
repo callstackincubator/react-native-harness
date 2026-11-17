@@ -4,6 +4,12 @@ import type { RunServerOptions } from 'metro';
 import type { MetroConfig } from 'metro-config';
 import type { Reporter } from './reporter.js';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
+import type {
+  BundlerHealth,
+  PrewarmBundleOptions,
+  PrewarmState,
+  WaitForBundlerHealthOptions,
+} from '@react-native-harness/bundlers';
 
 /**
  * Context handed to a platform's Metro config enhancer alongside the composed
@@ -71,24 +77,14 @@ export type MetroOptions = {
   watchMode?: boolean;
 };
 
-export type WaitForMetroHealthOptions = {
-  timeoutMs: number;
-  signal: AbortSignal;
-};
-
-export type PrewarmMetroBundleOptions = {
-  platform: string;
-  signal: AbortSignal;
-};
-
-export type PrewarmState = 'idle' | 'pending' | 'succeeded' | 'failed';
-
 export type MetroInstance = {
   events: Reporter;
   httpServer: HttpServer | HttpsServer;
   websocketEndpoints: MetroWebSocketEndpoints;
-  waitUntilHealthy: (options: WaitForMetroHealthOptions) => Promise<string>;
-  prewarm: (options: PrewarmMetroBundleOptions) => Promise<boolean>;
+  waitUntilHealthy: (
+    options: WaitForBundlerHealthOptions
+  ) => Promise<BundlerHealth>;
+  prewarm: (options: PrewarmBundleOptions) => Promise<boolean>;
   getPrewarmState: () => PrewarmState;
   isBuildInFlight: () => boolean;
   dispose: () => Promise<void>;

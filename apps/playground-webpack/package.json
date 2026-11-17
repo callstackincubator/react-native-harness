@@ -1,0 +1,44 @@
+{
+  "name": "@react-native-harness/playground-webpack",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "start:webpack": "webpack serve --config webpack.config.js --mode development",
+    "bundle:webpack": "webpack --config webpack.config.js --mode development",
+    "start:rspack": "rspack serve --config rspack.config.js --mode development",
+    "bundle:rspack": "rspack build --config rspack.config.js --mode development",
+    "test:harness": "react-native-harness"
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Edge versions",
+    "last 2 Firefox versions",
+    "last 2 Safari versions"
+  ],
+  "dependencies": {
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@babel/preset-env": "^7.25.3",
+    "@babel/preset-react": "^7.25.0",
+    "@babel/preset-typescript": "^7.25.0",
+    "@react-native-harness/bundler-webpack": "workspace:*",
+    "@react-native-harness/jest": "workspace:*",
+    "@react-native-harness/platform-web": "workspace:*",
+    "@react-native-harness/runtime": "workspace:*",
+    "@react-native-harness/ui": "workspace:*",
+    "@rspack/cli": "1.5.6",
+    "@rspack/core": "1.5.6",
+    "babel-loader": "^10.0.0",
+    "html-webpack-plugin": "^5.6.3",
+    "jest": "^30.2.0",
+    "react-native": "0.83.0",
+    "react-native-harness": "workspace:*",
+    "webpack": "^5.102.1",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.2"
+  }
+}

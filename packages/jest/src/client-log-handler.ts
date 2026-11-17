@@ -1,12 +1,12 @@
-import type { ReportableEvent } from '@react-native-harness/bundler-metro';
+import type { BundlerEvent } from '@react-native-harness/bundlers';
 import type { TestResult as JestTestResult } from '@jest/test-result';
 import util from 'node:util';
 
-export type ClientLogEvent = Extract<ReportableEvent, { type: 'client_log' }>;
+export type ClientLogEvent = Extract<BundlerEvent, { type: 'client_log' }>;
 export type ClientLogBuffer = NonNullable<JestTestResult['console']>;
 export type ClientLogEntry = ClientLogBuffer[number];
 export type ClientLogCollector = {
-  handleEvent: (event: ReportableEvent) => void;
+  handleEvent: (event: BundlerEvent) => void;
   flush: () => ClientLogBuffer;
 };
 

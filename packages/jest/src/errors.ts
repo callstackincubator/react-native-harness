@@ -10,7 +10,7 @@ export {
   StartupStallError,
   type StartupStallCode,
   type StartupStallDetails,
-} from '@react-native-harness/bundler-metro';
+} from '@react-native-harness/bundlers';
 
 export class NoRunnerSpecifiedError extends HarnessError {
   constructor() {
@@ -66,11 +66,12 @@ export class PlatformReadyTimeoutError extends HarnessError {
 export class MetroPortRangeExhaustedError extends HarnessError {
   constructor(
     public readonly initialPort: number,
-    public readonly attempts: number
+    public readonly attempts: number,
+    bundlerDisplayName = 'Metro'
   ) {
     const finalPort = initialPort + attempts - 1;
     super(
-      `Harness could not find an available Metro port in the range ${initialPort}-${finalPort}.`
+      `Harness could not find an available ${bundlerDisplayName} port in the range ${initialPort}-${finalPort}.`
     );
     this.name = 'MetroPortRangeExhaustedError';
   }

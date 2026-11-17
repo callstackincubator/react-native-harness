@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import type {
   TestRunnerEvents,
   TestCollectorEvents,
@@ -14,7 +13,9 @@ import { getTestRunner, TestRunner } from '../runner/index.js';
 import { getTestCollector, TestCollector } from '../collector/index.js';
 import { combineEventEmitters, EventEmitter } from '../utils/emitter.js';
 import { getWSServer } from './getWSServer.js';
-import { getBundler, evaluateModule, Bundler } from '../bundler/index.js';
+import { getBundler, Bundler } from '../bundler/index.js';
+import type { LoadedModule } from '../module-system.js';
+import { getHost } from '../host.js';
 import { markTestsAsSkippedByName } from '../filtering/index.js';
 import { setup } from '../render/setup.js';
 import { runSetupFiles } from './setup-files.js';
@@ -27,14 +28,7 @@ import { beginTestHostSession } from '../host-surface.js';
 // the next tick so the response has a chance to flush over the bridge.
 const reloadRuntime = (): void => {
   setTimeout(() => {
-    if (Platform.OS === 'web') {
-      window.location.reload();
-    } else {
-      // Required lazily: react-native-web doesn't export DevSettings, so a
-      // named import would be undefined on web. Only native reaches this.
-      const { DevSettings } = require('react-native');
-      DevSettings.reload();
-    }
+    getHost().reloadRuntime();
   }, 100);
 };
 
@@ -59,9 +53,9 @@ export const getClient = async (): Promise<HarnessHandle> => {
         TestRunnerEvents | TestCollectorEvents | BundlerEvents
       > | null = null;
       let bundler: Bundler | null = null;
-      const evaluateForHost = async (moduleJs: string, file: string): Promise<void> => {
+      const runForHost = async (module: LoadedModule): Promise<void> => {
         hostSession.throwIfInterrupted();
-        await hostSession.run(() => evaluateModule(moduleJs, file));
+        await hostSession.run(() => module.run());
         hostSession.throwIfInterrupted();
       };
 
@@ -84,11 +78,11 @@ export const getClient = async (): Promise<HarnessHandle> => {
             setupFilesAfterEnv: [],
             events: fileBundler.events,
             bundler: fileBundler,
-            evaluateModule: evaluateForHost,
+            runModule: runForHost,
           });
           hostSession.throwIfInterrupted();
 
-          const moduleJs = await fileBundler.getModule(path);
+          const loadedModule = await fileBundler.getModule(path);
           hostSession.throwIfInterrupted();
           const collectionResult = await fileCollector.collect(async () => {
             hostSession.throwIfInterrupted();
@@ -97,12 +91,12 @@ export const getClient = async (): Promise<HarnessHandle> => {
               setupFilesAfterEnv: options.setupFilesAfterEnv ?? [],
               events: fileBundler.events,
               bundler: fileBundler,
-              evaluateModule: evaluateForHost,
+              runModule: runForHost,
             });
             hostSession.throwIfInterrupted();
 
             setup();
-            await evaluateForHost(moduleJs, path);
+            await runForHost(loadedModule);
             hostSession.throwIfInterrupted();
           }, path);
           hostSession.throwIfInterrupted();

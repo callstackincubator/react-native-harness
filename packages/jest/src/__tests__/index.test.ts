@@ -25,6 +25,7 @@ const mockSession: HarnessSession = {
   sessionId: 'session-1',
   lifecycle: getEmitter<LifecycleEvent>(),
   onTestRunnerEvent: vi.fn(() => () => undefined),
+  setRunFiles: vi.fn(resolveUndefined),
   ensureAppReady: vi.fn(resolveUndefined),
   runTestFile: vi.fn(async (): Promise<TestSuiteResult> => ({
     name: '',
@@ -38,6 +39,7 @@ const mockSession: HarnessSession = {
   resetCrashState: vi.fn(),
   flushClientLogs: vi.fn(() => []),
   callHook: vi.fn(resolveUndefined),
+  callBundlerHook: vi.fn(resolveUndefined),
   setRunState: vi.fn(),
   dispose: vi.fn(resolveUndefined),
 };

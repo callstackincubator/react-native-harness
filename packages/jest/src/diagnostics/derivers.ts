@@ -1,7 +1,11 @@
 import type { Diagnostics, DiagnosticSpan } from '@react-native-harness/tools';
 import type { HarnessBridge } from '@react-native-harness/bridge/server';
 import type { BridgeEvents } from '@react-native-harness/bridge';
-import type { MetroInstance, ReportableEvent } from '@react-native-harness/bundler-metro';
+import type {
+  BundlerEvent,
+  BundlerInstance,
+  HarnessBundler,
+} from '@react-native-harness/bundlers';
 
 /**
  * Span/mark derivers translate existing domain event streams (Metro build
@@ -13,14 +17,16 @@ import type { MetroInstance, ReportableEvent } from '@react-native-harness/bundl
 const noopDispose = (): void => undefined;
 
 /**
- * Observes Metro's reporter event stream and derives:
- * - `metro.bundle.build` spans, correlated by `buildID` across
- *   bundle_build_started -> bundle_build_done|bundle_build_failed.
- * - `metro.bundle.request` marks from bundle_request_observed events.
+ * Observes the bundler's event stream and derives, with `<name>` the bundler's
+ * `name` (`metro` for Metro):
+ * - `<name>.bundle.build` spans, correlated by `buildId` across
+ *   build_started -> build_done|build_failed.
+ * - `<name>.bundle.request` marks from entry_requested events.
  */
-export const observeMetroEvents = (
-  events: MetroInstance['events'],
-  diagnostics: Diagnostics
+export const observeBundlerEvents = (
+  events: BundlerInstance['events'],
+  diagnostics: Diagnostics,
+  bundler: Pick<HarnessBundler, 'name' | 'displayName'>
 ): (() => void) => {
   if (!diagnostics.enabled) {
     return noopDispose;
@@ -28,32 +34,34 @@ export const observeMetroEvents = (
 
   const inflightBuilds = new Map<string, DiagnosticSpan>();
 
-  const listener = (event: ReportableEvent): void => {
+  const listener = (event: BundlerEvent): void => {
     switch (event.type) {
-      case 'bundle_build_started': {
-        const span = diagnostics.start('metro.bundle.build', {
-          buildID: event.buildID,
-          platform: event.bundleDetails.platform,
-          entryFile: event.bundleDetails.entryFile,
-          dev: event.bundleDetails.dev,
+      case 'build_started': {
+        const span = diagnostics.start(`${bundler.name}.bundle.build`, {
+          buildID: event.buildId,
+          platform: event.platform,
+          entryFile: event.entryFile,
+          dev: event.dev,
         });
-        inflightBuilds.set(event.buildID, span);
+        inflightBuilds.set(event.buildId, span);
         return;
       }
-      case 'bundle_build_done': {
-        const span = inflightBuilds.get(event.buildID);
-        inflightBuilds.delete(event.buildID);
+      case 'build_done': {
+        const span = inflightBuilds.get(event.buildId);
+        inflightBuilds.delete(event.buildId);
         span?.end();
         return;
       }
-      case 'bundle_build_failed': {
-        const span = inflightBuilds.get(event.buildID);
-        inflightBuilds.delete(event.buildID);
-        span?.fail(new Error(`Metro bundle build ${event.buildID} failed`));
+      case 'build_failed': {
+        const span = inflightBuilds.get(event.buildId);
+        inflightBuilds.delete(event.buildId);
+        span?.fail(
+          new Error(`${bundler.displayName} bundle build ${event.buildId} failed`)
+        );
         return;
       }
-      case 'bundle_request_observed': {
-        diagnostics.mark('metro.bundle.request', {
+      case 'entry_requested': {
+        diagnostics.mark(`${bundler.name}.bundle.request`, {
           requestKind: event.requestKind,
           platform: event.platform,
         });

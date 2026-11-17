@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "../tools"
+    },
+    {
+      "path": "../runtime"
+    },
+    {
+      "path": "../config"
+    },
+    {
+      "path": "../bundlers"
+    },
+    {
+      "path": "../babel-preset"
+    },
+    {
+      "path": "./tsconfig.lib.json"
+    }
+  ]
+}

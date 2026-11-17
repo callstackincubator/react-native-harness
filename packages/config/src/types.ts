@@ -40,6 +40,17 @@ const RunnerSchema = z.object({
   deferMetroPrewarm: z.function().args().returns(z.boolean()).optional(),
 });
 
+// Unknown keys are preserved: a bare `z.object()` would strip any field a
+// bundler factory adds to its descriptor beyond the ones listed here.
+const BundlerSchema = z.object({
+  name: z.string().min(1, 'Bundler name is required'),
+  displayName: z.string().min(1, 'Bundler display name is required'),
+  // Module specifier whose default export creates the bundler instance. Set by
+  // a bundler factory (`HarnessBundler.module`).
+  module: z.string().min(1, 'Bundler module is required'),
+  config: z.record(z.any()),
+}).passthrough();
+
 type AnyHarnessPlugin = HarnessPlugin<object, unknown>;
 
 const PluginSchema = z.custom<AnyHarnessPlugin>(
@@ -60,6 +71,10 @@ export const ConfigSchema = z
       .string()
       .min(1, 'App registry component name is required'),
     runners: z.array(RunnerSchema).min(1, 'At least one runner is required'),
+    bundler: BundlerSchema.optional().describe(
+      'The bundler Harness runs, as returned by a bundler factory. ' +
+        'When absent, Harness uses Metro.'
+    ),
     plugins: z.array(PluginSchema).optional().default([]),
     defaultRunner: z.string().optional(),
     host: z.string().min(1, 'Host is required').optional(),

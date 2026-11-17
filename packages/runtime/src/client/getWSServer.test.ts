@@ -1,17 +1,15 @@
 import { HARNESS_BRIDGE_PATH } from '@react-native-harness/bridge';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { installHost, type Host } from '../host.js';
 import { getWSServer } from './getWSServer.js';
 
 const mocks = vi.hoisted(() => ({
   getDevServerUrl: vi.fn(),
 }));
 
-vi.mock('../utils/dev-server.js', () => ({
-  getDevServerUrl: mocks.getDevServerUrl,
-}));
-
 describe('getWSServer', () => {
   beforeEach(() => {
+    installHost({ getDevServerUrl: mocks.getDevServerUrl } as unknown as Host);
     mocks.getDevServerUrl.mockReset();
   });
 

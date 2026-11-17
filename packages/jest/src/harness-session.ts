@@ -21,17 +21,16 @@ import {
 } from '@react-native-harness/platforms';
 import { createHarnessCache } from '@react-native-harness/cache';
 import {
-  getMetroInstance,
-  waitForMetroBackedAppReady,
-  type MetroInstance,
-  type MetroWebSocketEndpoint,
-  type ReportableEvent,
-} from '@react-native-harness/bundler-metro';
+  waitForBundlerBackedAppReady,
+  type BundlerEvent,
+  type BundlerInstance,
+} from '@react-native-harness/bundlers';
 import {
   createHarnessPluginManager,
   type FlatHarnessHookContexts,
   type HarnessPlugin,
   type HarnessPluginManager,
+  type HookPayload,
   type HarnessRunStatus,
   type HarnessRunSummary,
 } from '@react-native-harness/plugins';
@@ -67,7 +66,9 @@ import { createCrashMonitor, type CrashMonitor } from './crash-monitor.js';
 import {
   createProcessResetStrategy,
   createRuntimeResetStrategy,
+  getBundlerReloadKind,
   resolveResetStrategyKind,
+  type ResetStrategyKind,
   withEscalation,
 } from './environment-reset.js';
 import { createHookQueue, type HookQueue } from './hook-queue.js';
@@ -83,11 +84,17 @@ import {
 } from './resource-lock.js';
 import {
   observeBridgeEvents,
-  observeMetroEvents,
+  observeBundlerEvents,
   startSessionTelemetry,
   type SessionTelemetry,
 } from './diagnostics/index.js';
 import { resolveHarnessMetroPort } from './metro-port.js';
+import {
+  createBundlerInstance,
+  isMetroBundler,
+  resolveBundler,
+} from './bundler.js';
+import { createBundlerHookCaller, type CallBundlerHook } from './bundler-hooks.js';
 import { getAdditionalCliArgs } from './cli-args.js';
 import {
   logMetroCacheReused,
@@ -213,12 +220,15 @@ export type HarnessSession = {
   readonly lifecycle: SessionTelemetry['lifecycle'];
   onTestRunnerEvent: (listener: (event: TestRunnerEvents) => void) => () => void;
   runTestFile: (path: string, options: HarnessRunTestsOptions) => Promise<TestSuiteResult>;
+  /** Hands the run's files to the bundler, before the app is launched. */
+  setRunFiles: (files: string[]) => Promise<void>;
   ensureAppReady: (testFilePath: string) => Promise<void>;
   restartApp: (testFilePath?: string) => Promise<void>;
   resetEnvironment: (testFilePath: string) => Promise<void>;
   resetCrashState: () => void;
   flushClientLogs: () => ClientLogBuffer;
   callHook: HarnessPluginManager<HarnessConfig, HarnessPlatform>['callHook'];
+  callBundlerHook: CallBundlerHook;
   setRunState: (state: HarnessRunState | null) => void;
   dispose: (reason?: 'normal' | 'abort' | 'error') => Promise<void>;
 };
@@ -306,7 +316,8 @@ const reportSaturatedHost = async (diagnostics: Diagnostics): Promise<void> => {
 };
 
 type AppReadyOptions = {
-  metroInstance: MetroInstance;
+  bundlerName: string;
+  bundlerInstance: BundlerInstance;
   bridge: HarnessBridge;
   platformId: string;
   bundleStartTimeout: number;
@@ -348,7 +359,8 @@ const waitForAppReady = async (
   testFilePath: string,
 ): Promise<void> => {
   const {
-    metroInstance,
+    bundlerName,
+    bundlerInstance,
     bridge,
     platformId,
     bundleStartTimeout,
@@ -362,8 +374,9 @@ const waitForAppReady = async (
   const logWait = (message: string, ...args: unknown[]) =>
     sessionLogger.debug(`waitForAppReady: ${message}`, ...args);
 
-  return await waitForMetroBackedAppReady({
-    metro: metroInstance,
+  return await waitForBundlerBackedAppReady({
+    bundler: bundlerInstance,
+    bundlerName,
     platformId,
     bundleStartTimeout,
     readyTimeout,
@@ -405,9 +418,10 @@ const waitForAppReady = async (
 const getDefaultResourceLockKey = (platform: HarnessPlatform): string =>
   `${platform.platformId}:${platform.name}`;
 
-const buildBridgeHookScheduler = (
+export const buildBridgeHookScheduler = (
   hooks: HookQueue,
   pluginManager: HarnessPluginManager<HarnessConfig, HarnessPlatform>,
+  callBundlerHook: CallBundlerHook,
   getCurrentRunId: () => string | undefined,
 ) => (event: BridgeEvents) => {
   const runId = getCurrentRunId();
@@ -415,7 +429,7 @@ const buildBridgeHookScheduler = (
 
   const schedule = <TName extends keyof FlatHarnessHookContexts<object, HarnessConfig, HarnessPlatform>>(
     name: TName,
-    payload: Omit<FlatHarnessHookContexts<object, HarnessConfig, HarnessPlatform>[TName], 'plugin' | 'logger' | 'projectRoot' | 'config' | 'runner' | 'platform' | 'state' | 'timestamp' | 'abortSignal' | 'meta'>,
+    payload: HookPayload<HarnessConfig, HarnessPlatform, TName>,
   ) => hooks.schedule(() => pluginManager.callHook(name, payload));
 
   switch (event.type) {
@@ -432,17 +446,17 @@ const buildBridgeHookScheduler = (
     case 'test-finished':
       return schedule('test:finished', { runId, file: event.file, suite: event.suite, name: event.name, duration: event.duration, status: event.status, error: event.error });
     case 'module-bundling-started':
-      return schedule('metro:bundle-started', { runId, target: 'module', file: event.file });
+      return hooks.schedule(() => callBundlerHook('bundle-started', { runId, target: 'module', file: event.file }));
     case 'module-bundling-finished':
-      return schedule('metro:bundle-finished', { runId, target: 'module', file: event.file, duration: event.duration });
+      return hooks.schedule(() => callBundlerHook('bundle-finished', { runId, target: 'module', file: event.file, duration: event.duration }));
     case 'module-bundling-failed':
-      return schedule('metro:bundle-failed', { runId, target: 'module', file: event.file, duration: event.duration, error: event.error });
+      return hooks.schedule(() => callBundlerHook('bundle-failed', { runId, target: 'module', file: event.file, duration: event.duration, error: event.error }));
     case 'setup-file-bundling-started':
-      return schedule('metro:bundle-started', { runId, target: 'setupFile', file: event.file, setupType: event.setupType });
+      return hooks.schedule(() => callBundlerHook('bundle-started', { runId, target: 'setupFile', file: event.file, setupType: event.setupType }));
     case 'setup-file-bundling-finished':
-      return schedule('metro:bundle-finished', { runId, target: 'setupFile', file: event.file, setupType: event.setupType, duration: event.duration });
+      return hooks.schedule(() => callBundlerHook('bundle-finished', { runId, target: 'setupFile', file: event.file, setupType: event.setupType, duration: event.duration }));
     case 'setup-file-bundling-failed':
-      return schedule('metro:bundle-failed', { runId, target: 'setupFile', file: event.file, setupType: event.setupType, duration: event.duration, error: event.error });
+      return hooks.schedule(() => callBundlerHook('bundle-failed', { runId, target: 'setupFile', file: event.file, setupType: event.setupType, duration: event.duration, error: event.error }));
   }
 };
 
@@ -542,6 +556,7 @@ export const createHarnessSession = async (
   // Metro platform for prewarm and startup detection. Vega apps request
   // "kepler" bundles while the harness platform id stays "vega".
   const bundlePlatform = platform.bundlePlatform ?? platform.platformId;
+  const bundler = resolveBundler(harnessConfig);
   applyEnvVars(harnessConfig, globalConfig);
 
   const diagnostics = createDiagnostics({
@@ -636,6 +651,7 @@ export const createHarnessSession = async (
         platform,
         resourceLockManager: lockManager,
         signal: sessionController.signal,
+        bundlerDisplayName: bundler.displayName,
       });
     } catch (error) {
       portResolveSpan.fail(error);
@@ -648,13 +664,15 @@ export const createHarnessSession = async (
     metroPortLease = resolution.metroPortLease;
     const { config: runtimeConfig, initialMetroPort, didFallback } = resolution;
 
-    if (didFallback) logMetroPortFallback(initialMetroPort, runtimeConfig.metroPort);
+    if (didFallback) logMetroPortFallback(initialMetroPort, runtimeConfig.metroPort, bundler.displayName);
 
-    maybeLogMetroCacheReused({
-      config: runtimeConfig,
-      projectRoot: configProjectRoot,
-      platform,
-    });
+    if (isMetroBundler(bundler)) {
+      maybeLogMetroCacheReused({
+        config: runtimeConfig,
+        projectRoot: configProjectRoot,
+        platform,
+      });
+    }
 
     const pluginManager = createHarnessPluginManager<HarnessConfig, HarnessPlatform>({
       plugins: (runtimeConfig.plugins ?? []) as Array<HarnessPlugin<object, HarnessConfig, HarnessPlatform>>,
@@ -665,6 +683,7 @@ export const createHarnessSession = async (
     });
 
     const hooks = createHookQueue();
+    const callBundlerHook = createBundlerHookCaller(pluginManager.callHook, bundler.name);
     let currentRun: HarnessRunState | null = null;
     const getCurrentRunId = () => currentRun?.runId;
     const clientLogCollector = createClientLogCollector();
@@ -691,30 +710,30 @@ export const createHarnessSession = async (
         },
       })
     );
-    sessionLogger.debug('bridge initialized on Metro websocket path %s', HARNESS_BRIDGE_PATH);
+    sessionLogger.debug('bridge initialized on %s websocket path %s', bundler.displayName, HARNESS_BRIDGE_PATH);
 
-    let metroInstance: MetroInstance;
+    let bundlerInstance: BundlerInstance;
     let platformInstance: HarnessPlatformRunner;
     const initialized = {
-      metro: null as MetroInstance | null,
+      bundler: null as BundlerInstance | null,
       platform: null as HarnessPlatformRunner | null,
     };
     let initializationCancelled = false;
-    // Noop until the Metro instance resolves and the deriver is attached.
-    let disposeMetroDiagnostics: () => void = () => undefined;
+    // Noop until the bundler instance resolves and the deriver is attached.
+    let disposeBundlerDiagnostics: () => void = () => undefined;
 
     const eagerPrewarm = runtimeConfig.eagerPrewarm !== false;
     // On small hosts the bundle build and the platform boot compete for the
     // same few cores, so the platform may ask to boot first.
     const deferPrewarm = eagerPrewarm && (platform.deferMetroPrewarm?.() ?? false);
     if (deferPrewarm) {
-      sessionLogger.debug('deferring Metro prewarm until the platform is ready');
+      sessionLogger.debug('deferring %s prewarm until the platform is ready', bundler.displayName);
     }
-    const startPrewarm = (instance: MetroInstance) => {
+    const startPrewarm = (instance: BundlerInstance) => {
       // prewarm() memoizes this first call, so its session-lifetime setup
       // signal is the one that matters — later callers' signals cannot
       // cancel it. Not awaited: callers must not wait for the bundle.
-      const prewarmSpan = diagnostics.start('metro.prewarm', { deferred: deferPrewarm });
+      const prewarmSpan = diagnostics.start(`${bundler.name}.prewarm`, { deferred: deferPrewarm });
       instance
         .prewarm({
           platform: bundlePlatform,
@@ -727,31 +746,24 @@ export const createHarnessSession = async (
     };
 
     try {
-      [metroInstance, platformInstance] = await Promise.all([
-        diagnostics.measure('metro.init', () =>
-          getMetroInstance(
-            {
-              projectRoot,
-              harnessConfig: runtimeConfig,
-              metroConfigEnhancer: platform.metroConfigEnhancer,
-              platformId: platform.platformId,
-              platformConfig: platform.config,
-              websocketEndpoints: {
-                [HARNESS_BRIDGE_PATH]: bridge.ws as unknown as MetroWebSocketEndpoint,
-              },
-              watchMode: globalConfig.watch || globalConfig.watchAll,
-            },
-            sessionController.signal,
-          ).then((instance) => {
+      [bundlerInstance, platformInstance] = await Promise.all([
+        diagnostics.measure(`${bundler.name}.init`, () =>
+          createBundlerInstance(bundler, {
+            projectRoot,
+            harnessConfig: runtimeConfig,
+            platform,
+            websocketEndpoints: { [HARNESS_BRIDGE_PATH]: bridge.ws },
+            watchMode: globalConfig.watch || globalConfig.watchAll,
+          }, sessionController.signal).then((instance) => {
             if (initializationCancelled) {
               return instance.dispose().then(() => instance);
             }
-            initialized.metro = instance;
-            sessionLogger.debug('Metro initialized');
-            telemetry.phase('metro.ready');
-            // Attach the Metro diagnostics deriver before the eager prewarm
+            initialized.bundler = instance;
+            sessionLogger.debug('%s initialized', bundler.displayName);
+            telemetry.phase(isMetroBundler(bundler) ? 'metro.ready' : 'bundler.ready');
+            // Attach the bundler diagnostics deriver before the eager prewarm
             // fires so its bundle build/request events land in the trace.
-            disposeMetroDiagnostics = observeMetroEvents(instance.events, diagnostics);
+            disposeBundlerDiagnostics = observeBundlerEvents(instance.events, diagnostics, bundler);
             if (eagerPrewarm && !deferPrewarm) {
               // Kick off the first bundle build while the platform is still booting.
               startPrewarm(instance);
@@ -793,17 +805,17 @@ export const createHarnessSession = async (
       // Leases are released by the outer catch.
       initializationCancelled = true;
       sessionController.abort();
-      disposeMetroDiagnostics();
+      disposeBundlerDiagnostics();
       await Promise.allSettled([
         bridge.dispose(),
-        initialized.metro?.dispose(),
+        initialized.bundler?.dispose(),
         initialized.platform?.dispose(),
       ]);
       throw error;
     }
 
     if (deferPrewarm) {
-      startPrewarm(metroInstance);
+      startPrewarm(bundlerInstance);
     }
 
     const appLaunchOptions = (platform.config as { appLaunchOptions?: AppLaunchOptions }).appLaunchOptions;
@@ -835,7 +847,8 @@ export const createHarnessSession = async (
     // Pre-build the options that are constant across all app-ready calls;
     // only testFilePath varies per call.
     const appReadyBaseOptions: AppReadyOptions = {
-      metroInstance,
+      bundlerName: bundler.displayName,
+      bundlerInstance,
       bridge,
       platformId: bundlePlatform,
       bundleStartTimeout: runtimeConfig.bundleStartTimeout ?? 60000,
@@ -848,12 +861,12 @@ export const createHarnessSession = async (
 
     // --- Event listeners ---
 
-    const bridgeEventListener = buildBridgeHookScheduler(hooks, pluginManager, getCurrentRunId);
+    const bridgeEventListener = buildBridgeHookScheduler(hooks, pluginManager, callBundlerHook, getCurrentRunId);
 
-    const onMetroEvent = (event: ReportableEvent) => {
+    const onBundlerEvent = (event: BundlerEvent) => {
       const runId = getCurrentRunId();
       if (runId && event.type === 'client_log') {
-        hooks.schedule(() => pluginManager.callHook('metro:client-log', { runId, level: event.level, data: event.data }));
+        hooks.schedule(() => callBundlerHook('client-log', { runId, level: event.level, data: event.data }));
       }
     };
 
@@ -893,14 +906,14 @@ export const createHarnessSession = async (
     bridge.on('disconnected', onDisconnected);
     bridge.on('event', bridgeEventListener);
     bridge.on('event', onTestRunnerEvent);
-    metroInstance.events.addListener(onMetroEvent);
+    bundlerInstance.events.addListener(onBundlerEvent);
     if (runtimeConfig.forwardClientLogs) {
-      metroInstance.events.addListener(clientLogListener);
+      bundlerInstance.events.addListener(clientLogListener);
     }
 
     const disposeBridgeDiagnostics = observeBridgeEvents(bridge, diagnostics);
 
-    sessionLogger.debug('registered runtime, bridge, and Metro listeners');
+    sessionLogger.debug('registered runtime, bridge, and %s listeners', bundler.displayName);
 
     // --- Dispose ---
 
@@ -955,14 +968,14 @@ export const createHarnessSession = async (
       );
 
       if (runtimeConfig.forwardClientLogs) {
-        metroInstance.events.removeListener(clientLogListener);
+        bundlerInstance.events.removeListener(clientLogListener);
       }
-      metroInstance.events.removeListener(onMetroEvent);
+      bundlerInstance.events.removeListener(onBundlerEvent);
       bridge.off('connected', onConnected);
       bridge.off('disconnected', onDisconnected);
       bridge.off('event', bridgeEventListener);
       bridge.off('event', onTestRunnerEvent);
-      disposeMetroDiagnostics();
+      disposeBundlerDiagnostics();
       disposeBridgeDiagnostics();
 
       const nativeCoverageConfig = runtimeConfig.coverage?.native?.ios;
@@ -992,7 +1005,7 @@ export const createHarnessSession = async (
       const infrastructureCleanup = await Promise.allSettled([
         bridge.dispose(),
         platformInstance.dispose(),
-        metroInstance.dispose(),
+        bundlerInstance.dispose(),
         metroPortLease?.release(),
       ]);
       const leaseCleanup = await Promise.allSettled([resourceLease.release()]);
@@ -1137,13 +1150,10 @@ export const createHarnessSession = async (
       timeoutMs: runtimeConfig.bundleStartTimeout ?? 60000,
     });
 
-    const resetEnvironment = async (testFilePath: string): Promise<void> => {
-      const requestedKind = resolveResetStrategyKind(
-        runtimeConfig.resetEnvironmentBetweenTestFiles,
-      );
-      if (requestedKind === null) {
-        return;
-      }
+    const performReset = async (
+      testFilePath: string,
+      requestedKind: ResetStrategyKind,
+    ): Promise<void> => {
 
       await hooks.drain();
       sessionLogger.debug(
@@ -1176,6 +1186,15 @@ export const createHarnessSession = async (
       } catch (error) {
         resetSpan.fail(error, { performed: performed(), escalated });
         throw error;
+      }
+    };
+
+    const resetEnvironment = async (testFilePath: string): Promise<void> => {
+      const requestedKind = resolveResetStrategyKind(
+        runtimeConfig.resetEnvironmentBetweenTestFiles,
+      );
+      if (requestedKind !== null) {
+        await performReset(testFilePath, requestedKind);
       }
     };
 
@@ -1229,6 +1248,15 @@ export const createHarnessSession = async (
       }
     };
 
+    const sessionCallHook: HarnessSession['callHook'] = async (name, payload) => {
+      await hooks.drain();
+      await diagnostics.measure(
+        'plugin.hook',
+        () => pluginManager.callHook(name, payload),
+        { hook: String(name) }
+      );
+      await hooks.drain();
+    };
     return {
       config: runtimeConfig,
       context,
@@ -1242,20 +1270,27 @@ export const createHarnessSession = async (
         };
       },
       runTestFile,
+      setRunFiles: async (files) => {
+        const result = await bundlerInstance.setRunFiles?.({ files });
+        // The app holds an older build than the bundler: reload it, whether
+        // or not the config resets the environment between files. The list
+        // starts with the first test that runs on this platform, which is
+        // what the other resets are given, as an absolute path. An empty list
+        // runs nothing, so there is nothing to reload for.
+        if (result?.reloadRequired && files.length > 0) {
+          await performReset(
+            path.resolve(projectRoot, files[0]),
+            getBundlerReloadKind(runtimeConfig),
+          );
+        }
+      },
       ensureAppReady,
       restartApp,
       resetEnvironment,
       resetCrashState: () => crashMonitor.reset(),
       flushClientLogs,
-      callHook: async (name, payload) => {
-        await hooks.drain();
-        await diagnostics.measure(
-          'plugin.hook',
-          () => pluginManager.callHook(name, payload),
-          { hook: String(name) }
-        );
-        await hooks.drain();
-      },
+      callHook: sessionCallHook,
+      callBundlerHook: createBundlerHookCaller(sessionCallHook, bundler.name),
       setRunState: (state) => {
         currentRun = state;
         if (state) {

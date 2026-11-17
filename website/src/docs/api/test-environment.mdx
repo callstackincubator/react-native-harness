@@ -6,7 +6,7 @@ Understanding the execution lifecycle of React Native Harness is key to configur
 
 When you run `react-native-harness`, the following process occurs for each test file:
 
-1.  **Node.js Setup**: The CLI loads your configuration and prepares the Metro bundler.
+1.  **Node.js Setup**: The CLI loads your configuration and prepares the bundler (Metro by default).
 2.  **App Preparation**: The target app is launched or brought to the foreground on the device.
 3.  **Harness Initialization**: The native bridge is established.
 4.  **`setupFiles`**: Global setup files are evaluated in the app environment.

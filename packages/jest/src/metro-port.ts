@@ -19,6 +19,8 @@ export const resolveHarnessMetroPort = async (options: {
   platform: HarnessPlatform;
   resourceLockManager: ResourceLockManager;
   signal: AbortSignal;
+  /** Named in the error when no port is free. */
+  bundlerDisplayName?: string;
 }): Promise<{
   config: HarnessConfig;
   metroPortLease: ResourceLease | null;
@@ -71,6 +73,7 @@ export const resolveHarnessMetroPort = async (options: {
 
   throw new MetroPortRangeExhaustedError(
     initialMetroPort,
-    METRO_PORT_SCAN_ATTEMPTS
+    METRO_PORT_SCAN_ATTEMPTS,
+    options.bundlerDisplayName
   );
 };

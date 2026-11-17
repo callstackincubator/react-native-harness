@@ -16,6 +16,9 @@
       "path": "../runtime/tsconfig.lib.json"
     },
     {
+      "path": "../bundlers/tsconfig.lib.json"
+    },
+    {
       "path": "../cache/tsconfig.lib.json"
     },
     {

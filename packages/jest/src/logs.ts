@@ -47,10 +47,11 @@ export const logMetroCacheReused = (runner: HarnessPlatform): void => {
 
 export const logMetroPortFallback = (
   initialPort: number,
-  selectedPort: number
+  selectedPort: number,
+  bundlerDisplayName = 'Metro'
 ): void => {
   log(
-    `${TAG} Harness could not use Metro port ${chalk.bold(
+    `${TAG} Harness could not use ${bundlerDisplayName} port ${chalk.bold(
       String(initialPort)
     )} and is using ${chalk.bold(String(selectedPort))} instead.\n`
   );

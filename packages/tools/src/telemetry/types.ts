@@ -11,6 +11,8 @@ export type LifecyclePhase =
   | 'run.start'
   | 'run.end'
   | 'metro.ready'
+  // The bundler is ready, for every bundler but Metro.
+  | 'bundler.ready'
   | 'platform.ready'
   | 'app.ready'
   | 'test-file.start'
