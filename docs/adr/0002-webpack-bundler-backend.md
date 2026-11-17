@@ -150,9 +150,10 @@ export default {
 ```
 
 A bundler factory returns the same kind of value a platform factory does
-(`platforms/src/types.ts`): a plain object with a `name`, a module specifier
-whose default export creates the bundler, and the `config` passed to it. The
-session imports that module instead of importing `bundler-metro` directly.
+(`platforms/src/types.ts`): a plain object with a `name`, a `displayName`
+used in messages, a module specifier whose default export creates the
+bundler, and the `config` passed to it. The session imports that module
+instead of calling into `bundler-metro` directly.
 
 ### 2. `@react-native-harness/bundler-webpack`
 
@@ -293,8 +294,11 @@ behind the host seam.
 ### 9. Session and startup detection
 
 `MetroInstance` (`bundler-metro/src/types.ts`) becomes a bundler-neutral
-interface: events, the HTTP server, health, prewarm, whether a build is in
-flight, and dispose. `waitForMetroBackedAppReady` is generalized over four
+interface in a new package, `@react-native-harness/bundlers`: events,
+health, prewarm, whether a build is in flight, and dispose. Health is
+reported as `{ healthy, status }`, so each bundler decides what healthy
+means and the shared code never reads a bundler's status text.
+`waitForMetroBackedAppReady` moves there and is generalized over four
 events: build started, build done, build failed, and entry requested. The
 webpack compiler's `compile`, `done` and `failed` hooks and a request for the
 page map onto them.
