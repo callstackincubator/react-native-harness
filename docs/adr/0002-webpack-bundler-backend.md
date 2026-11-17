@@ -544,6 +544,13 @@ middleware.
 - **Code frame columns depend on the project's maps.** With
   `cheap-module-source-map`, or for a module that no loader touches, the
   frame has the right line and points at its start.
+- **`react-native` and `metro` are still installed.** `runtime` and `ui`
+  declare `react-native` as a required peer, so a react-native-web project
+  has to install it at the version that matches its React, although the
+  bundle never contains it. `metro` is installed with
+  `react-native-harness`, as a peer dependency that npm and pnpm add
+  automatically, and is never started. Removing either means
+  changing what those packages depend on, which is not part of this work.
 - **Plugins that assume a dev server.** A config that always adds
   `HotModuleReplacementPlugin` or a React Refresh plugin has not been tried.
 - **Untested configurations.** Module federation hosts, and a config with
@@ -569,7 +576,7 @@ Each step can be released on its own.
    and a page for projects without an HTML plugin.
 5. **CI and docs.** Run the sandbox app on both bundlers in CI. Document
    the `bundler` option and the two mocking differences, correct the
-   requirements in `web.mdx`, add version plans.
+   requirements in `web.mdx`, add a version plan.
 
 ## Verification
 
