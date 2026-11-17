@@ -29,6 +29,8 @@ runner too:
 
 ### Where Metro is assumed
 
+Paths are as they were before the implementation started.
+
 | Concern | Where |
 | --- | --- |
 | Swapping the app entry for the Harness entry | `bundler-metro/src/resolvers/resolver.ts` |
@@ -230,8 +232,9 @@ export const files = {
   gives each run's file list to the bundler before the app is launched. The
   bundler rewrites the manifest only when the set of files changes, and its
   first compilation starts once it has the first list.
-- To run a file, the runtime deletes the file's module from the cache and
-  calls `load()`. Modules the main chunk already holds are not sent again,
+- To run a file, the runtime loads its chunk, deletes the file's module
+  from the cache and executes it (see 6 for why loading and executing are
+  separate steps). Modules the main chunk already holds are not sent again,
   so `skipAlreadyIncludedModules` has no equivalent and needs none.
 
 Alternatives that were rejected:
@@ -257,13 +260,31 @@ swaps in selects the implementations before anything else runs.
 | Module system | Load and run a file, reset a module, route `require` through the mock registry | Today's code: fetch, chunked `eval`, patched `__d` and `__r` | The manifest, `__webpack_require__.i`, the module cache |
 | Host | Dev-server URL, reload, disabling HMR, the global error handler, stack parsing | Today's code, using React Native internals | Browser APIs only |
 
-The Metro implementations are the current code, moved without changes. The
-webpack implementations import nothing from `react-native/Libraries`.
+The Metro implementations are the current code, moved into
+`runtime/src/metro/` with unchanged behavior. The webpack implementations import
+nothing from `react-native/Libraries`. A lint rule keeps every file outside
+that folder from importing it or naming Metro's and React Native's
+internals.
 
 The runtime's `Bundler` has `getModule`, which returns JavaScript text, and
-callers pass that text to `evaluateModule`. These become one operation, "load
-and run this file". Fetching text and chunked evaluation are details of the
-Metro implementation.
+callers pass that text to `evaluateModule`. The module system replaces both
+with one call in two phases: `loadModule(path)` returns a handle, and the
+handle's `run()` executes the file. The phases stay separate because a test
+file is fetched before collection starts and executed inside it, after the
+`setupFilesAfterEnv` files, and a failed fetch has to be reported as a
+bundling failure, not a collection error. Fetching text and chunked
+evaluation are details of the Metro implementation.
+
+For webpack this means `loadModule` has to fetch the test file's chunk
+without executing it. A plain `import()` does both. `require.ensure` loads
+a chunk and leaves execution to a later `require`; whether it does so on
+both webpack and Rspack is to be confirmed at the start of step 3. If it
+does not, `loadModule` does nothing and `run()` imports, at the cost of
+load failures surfacing during collection.
+
+The mock registry is created when a test or setup file first imports the
+runtime, not when the module system is installed, because that is when
+Metro's `__r` is patched today.
 
 ### 7. The Babel plugin is unchanged and delivered by a loader
 
@@ -345,7 +366,7 @@ middleware.
   loading now exist twice and must behave the same. The sandbox app's tests
   run on both bundlers to hold them together. One behavior needs care:
   under Metro, `resetModules()` clears Harness's mock registry and its own
-  cache (`runtime/src/mocker/registry.ts`), and a module that already ran
+  cache (`runtime/src/metro/mock-registry.ts`), and a module that already ran
   keeps the dependencies it was bound to. The webpack implementation must
   match that and must not clear webpack's whole module cache.
 - **All selected test files compile up front.** Metro bundles a file when
@@ -371,7 +392,7 @@ middleware.
   after `import` and is never reached. Inside this repository it is listed
   first, so the sandbox app resolves workspace packages to source. The
   backend should not rely on either order.
-- **Projects without an HTML plugin.** `runtime/src/entry-point.ts` mounts
+- **Projects without an HTML plugin.** `runtime/src/startup.ts` mounts
   into an element with the id `root`. If the compilation emits no HTML,
   Harness has to serve a minimal page that loads the entry chunks.
 - **Plugins that assume a dev server.** A config that always adds
