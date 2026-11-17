@@ -189,7 +189,13 @@ As a result, `devServer` options in the project's config (`proxy`, `static`,
 Harness loads the project's config and applies the following. This is the
 counterpart of `withRnHarness` in `bundler-metro`.
 
-- `mode: 'development'` and a `devtool` that emits complete source maps.
+- `mode: 'development'`.
+- A `devtool` that writes a map file with original lines, because the server
+  reads that file to build code frames (see 8). The project's setting is
+  kept when it is `source-map` or `cheap-module-source-map`, with or without
+  `hidden-`. Anything else becomes `source-map`: the `inline-` and `eval-`
+  variants write no file, `cheap-source-map` maps to loader output, and
+  `nosources-` leaves the code out.
 - Module concatenation, export pruning and minification are turned off.
   Mocking needs every module to keep its own factory.
 - The module at `entryPoint` is replaced by a generated entry with
@@ -213,6 +219,14 @@ counterpart of `withRnHarness` in `bundler-metro`.
   loader delivers the Babel plugin (see 7).
 - Harness's own packages are bundled as `javascript/auto` modules (see
   "Negative and risks").
+- A persistent cache (`cache.type: 'filesystem'` in webpack,
+  `experiments.cache` in Rspack) gets the loader as a build dependency, and
+  a suffix on its version while coverage is collected. The cache keys a
+  module by its request, which does not say whether the loader instrumented
+  it; without the suffix a plain run followed by `--coverage` reports 0%.
+- `watchOptions.ignored` is `**/*` in a one-shot run, so nothing is watched.
+  In watch mode the project's value applies, and `**/node_modules` when it
+  sets none.
 
 Everything else in the config is left as it is: loaders, aliases, plugins,
 constants, asset modules, the HTML plugin.
@@ -330,7 +344,19 @@ The loader must never be the reason a build fails:
   warning, and the project's transpiler reports the real error.
 
 Of the plugins in `babel-preset/src/preset.ts`, this path needs the mock id
-rewrite, and `babel-plugin-istanbul` when coverage is collected. The JSX
+rewrite, and `babel-plugin-istanbul` when coverage is collected.
+
+With coverage on, the loader instruments every file it is applied to, not
+only those that mention `react-native-harness`. The rule leaves out
+`node_modules`, Harness's own packages and the generated files. It
+instruments the source as written, before the project's transpiler, so the
+report's lines are those of the original file under Babel and under SWC. The
+plugin and its options come from one function that `babel-preset` exports
+(`@react-native-harness/babel-preset/istanbul-plugin`), so both bundlers
+read the same environment variables. `collectCoverageFrom` does not narrow
+what is instrumented, as under Metro.
+
+The JSX
 import source exists to set `collapsable={false}` on views
 (`runtime/src/jsx/jsx-runtime.ts`), which is a native layout concern. The
 class static block transform is assumed to be there for engines that lack
@@ -342,6 +368,22 @@ Harness's server answers `/symbolicate` with the request and response shape
 Metro uses, reading the source maps of the current compilation.
 `getCodeFrame` in the runtime stays as it is, apart from stack parsing moving
 behind the host seam.
+
+- The map of a script is found through the build's stats (the asset's
+  related source map), not by appending `.map`, so
+  `output.sourceMapFilename` can put it anywhere.
+- A source name in a map can be a `webpack://` name, a `file:` URL, an
+  absolute path or a path relative to the build's context, depending on
+  `devtoolModuleFilenameTemplate`. A relative one counts as a file only if
+  the file exists.
+- A frame is collapsed when its source is no file (the bundler's runtime),
+  is under `node_modules`, or belongs to a Harness package. The code frame
+  is taken from the first frame that is not collapsed, as Metro does. Metro
+  collapses by its own list of internal paths; collapsing all of
+  `node_modules` is broader, and is what points the frame at the test
+  rather than at the assertion library.
+- A request waits for the compilation to be valid, so it never reads the
+  maps of the build before.
 
 ### 9. Session and startup detection
 
@@ -359,18 +401,54 @@ header is absent), because a project may serve its page at a path other
 than `/`.
 
 The session gives each run's files to the bundler through one optional
-method on the interface, `setRunFiles`, before the app is launched. Metro
+method on the interface, `setRunFiles`, before the app is launched. It
+resolves with whether the app has to be reloaded to run them (see 10). Metro
 does not implement it.
+
+If the build emits no HTML for a page request, the server answers with a
+generated page: an element with the id `root`, then the styles and scripts
+of every entrypoint in the order the stats list them. The project's own
+HTML is served when there is one.
 
 ### 10. Watch mode
 
-After a recompilation the page still holds the chunks it loaded before. When
-the compilation hash differs from the one the page was loaded with, Harness
-reloads the page before the next run.
+After a recompilation the page still holds the chunks it loaded before, so
+it has to be reloaded before the next run. Without the reload an edited test
+file or app module re-runs as it was, and a test file added during the
+session is missing from the page.
 
-Until that exists (step 4), starting this bundler in watch mode fails with
-an error that says so. Running anyway would re-run stale code without any
-sign of it.
+The bundler has to know that the build it reports holds every edit made
+before the run. It does not compare file timestamps, which misfires on
+ignored files and clock skew and needs a timeout to give up. It uses the
+compiler's own watcher:
+
+- Each watch run after the first rewrites the manifest with a marker of its
+  own, so the file always changes.
+- The bundler then waits for a build whose changed files include the
+  manifest (`watchRun` and `compiler.modifiedFiles`), and for the compiler
+  to have no change pending and no build running. The watcher reports the
+  manifest after the edits made before it, so that build holds them too.
+  The `invalid` hook cannot be used for this: it names only the first file
+  that changed.
+- There is no limit on how long a build may take. The one bounded wait is
+  for a compiler that stays idle after the manifest was written, which
+  means the project's `watchOptions.ignored` covers `.harness`. The limit
+  is five seconds plus the project's `aggregateTimeout` and `poll`
+  interval. The run then fails with an error that says so. A rebuild forced
+  from outside does not read an ignored file on webpack, so there is no
+  fallback. The error is thrown out of the run, and Jest's watch loop does
+  not start another run after that; the fix is a config change, which
+  needs a restart in any case.
+- `setRunFiles` resolves with `{ reloadRequired }`. The session, not the
+  bundler, reloads the app: through the configured reset strategy, or a
+  runtime reload when `resetEnvironmentBetweenTestFiles` is `false`.
+
+A run outside watch mode watches nothing and does not wait.
+
+Because the marker changes the build, every watch run after the first
+rebuilds once and reloads the app once, including a re-run with no edits.
+With a long `aggregateTimeout` or `poll` interval, each run waits about
+that long for its build. A build that fails is reported, and the next build that succeeds recovers.
 
 ### 11. Names
 
@@ -454,12 +532,24 @@ middleware.
   first, so the sandbox app resolves workspace packages to source. The
   backend should not rely on either order.
 - **Projects without an HTML plugin.** `runtime/src/startup.ts` mounts
-  into an element with the id `root`. If the compilation emits no HTML,
-  Harness has to serve a minimal page that loads the entry chunks.
+  into an element with the id `root`, so the generated page (see 9) has
+  one. A project whose own page needs other markup has to emit that page.
+  A page request for a path the project's HTML does not cover also gets
+  the generated page rather than a 404.
+- **Watch mode costs a rebuild and a reload per run,** and fails when the
+  watcher ignores `.harness` (see 10).
+- **Code frames after a rebuild.** `/symbolicate` reads the maps of the
+  newest build. A failure reported by a page from the build before can get
+  a code frame from the newer source.
+- **Code frame columns depend on the project's maps.** With
+  `cheap-module-source-map`, or for a module that no loader touches, the
+  frame has the right line and points at its start.
 - **Plugins that assume a dev server.** A config that always adds
   `HotModuleReplacementPlugin` or a React Refresh plugin has not been tried.
-- **Not yet tried in a browser.** The spike ran under Node. Module
-  federation hosts and unusual `output.publicPath` values are untested.
+- **Untested configurations.** Module federation hosts, and a config with
+  several entrypoints or a non-root `output.publicPath` in a real browser
+  (the generated page and the source map lookup cover them in unit tests
+  only).
 
 ## Implementation plan
 
@@ -494,5 +584,12 @@ Each step can be released on its own.
 - Unit tests: config composition (entry replacement with a multi-item
   `entry`, rejected array configs), manifest generation, and the webpack mock
   registry run under Node as in the spike.
-- Before step 4 is merged: a failing assertion in a module loaded from a test
-  chunk produces a code frame with the correct file and line.
+- Step 4: a failing assertion in a module loaded from a test chunk produces
+  a code frame with the correct file and line, on both bundlers and with
+  each way a config can name map files and sources. Tests build real
+  webpack and Rspack compilations for this, for coverage with a persistent
+  cache, and for the watch-mode wait.
+- Step 4, watch mode: a loop of alternating edits to a test file and to app
+  code re-runs each edit and nothing older, on both bundlers, with the
+  default watcher and with polling; so do an added test file and a build
+  that fails and is then fixed.
