@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createProcessResetStrategy,
   createRuntimeResetStrategy,
+  getBundlerReloadKind,
   resolveResetStrategyKind,
   withEscalation,
   type EnvironmentResetStrategy,
@@ -304,5 +305,18 @@ describe('withEscalation', () => {
     await expect(
       withEscalation(primary, fallback).reset({ testFilePath })
     ).rejects.toBe(fallbackError);
+  });
+});
+
+describe('getBundlerReloadKind', () => {
+  it.each([
+    [false, 'runtime'],
+    [true, 'process'],
+    ['process', 'process'],
+    ['runtime', 'runtime'],
+  ] as const)('reloads for resetEnvironmentBetweenTestFiles=%j with the %s strategy', (value, kind) => {
+    expect(
+      getBundlerReloadKind({ resetEnvironmentBetweenTestFiles: value as never })
+    ).toBe(kind);
   });
 });

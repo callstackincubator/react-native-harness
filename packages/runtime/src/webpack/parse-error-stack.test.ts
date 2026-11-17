@@ -16,25 +16,25 @@ describe('parseErrorStack', () => {
         methodName: 'fn',
         file: 'http://localhost:8081/tests.chunk.js',
         lineNumber: 10,
-        column: 5,
+        column: 4,
       },
       {
         methodName: '<unknown>',
         file: 'http://localhost:8081/main.js',
         lineNumber: 20,
-        column: 7,
+        column: 6,
       },
       {
         methodName: 'new Foo',
         file: 'http://localhost:8081/main.js',
         lineNumber: 30,
-        column: 9,
+        column: 8,
       },
       {
         methodName: 'async Object.run',
         file: 'http://localhost:8081/main.js',
         lineNumber: 40,
-        column: 1,
+        column: 0,
       },
     ]);
   });
@@ -51,21 +51,27 @@ describe('parseErrorStack', () => {
         methodName: 'fn',
         file: 'http://localhost:8081/tests.chunk.js',
         lineNumber: 10,
-        column: 5,
+        column: 4,
       },
       {
         methodName: '<unknown>',
         file: 'http://localhost:8081/main.js',
         lineNumber: 20,
-        column: 7,
+        column: 6,
       },
       {
         methodName: 'global code',
         file: 'http://localhost:8081/main.js',
         lineNumber: 30,
-        column: 9,
+        column: 8,
       },
     ]);
+  });
+
+  it('counts columns from 0, as the server symbolicates them', () => {
+    expect(
+      parseErrorStack('    at http://localhost:8081/main.js:3:1')[0]
+    ).toMatchObject({ lineNumber: 3, column: 0 });
   });
 
   it('skips lines that are not frames', () => {

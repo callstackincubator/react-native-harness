@@ -12,6 +12,7 @@ export type {
   PrewarmBundleOptions,
   PrewarmState,
   SetRunFilesOptions,
+  SetRunFilesResult,
   WaitForBundlerHealthOptions,
 } from './types.js';
 export {

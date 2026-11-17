@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { StackFrame, SymbolicatedStack } from './symbolicate-stack.js';
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -30,25 +31,31 @@ const send = (
 };
 
 /**
- * Answers `POST /symbolicate` in the shape Metro uses: the stack, and a code
- * frame. The stack comes back as it came in and there is no code frame, so the
- * runtime reports a failure without one.
+ * Answers `POST /symbolicate` in the shape Metro uses: the stack with each
+ * frame mapped to its original file, and a code frame. `symbolicate` does the
+ * mapping, against the compilation the page was loaded from.
  */
 export const handleSymbolicate = async (
   request: IncomingMessage,
-  response: ServerResponse
+  response: ServerResponse,
+  symbolicate: (stack: StackFrame[]) => Promise<SymbolicatedStack>
 ): Promise<void> => {
-  try {
-    const { stack } = JSON.parse(await readBody(request)) as {
-      stack?: unknown;
-    };
+  let stack: StackFrame[];
 
-    send(response, 200, {
-      stack: Array.isArray(stack) ? stack : [],
-      codeFrame: null,
-    });
+  try {
+    const body = JSON.parse(await readBody(request)) as { stack?: unknown };
+    stack = Array.isArray(body.stack) ? (body.stack as StackFrame[]) : [];
   } catch (error) {
     send(response, 400, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+
+  try {
+    send(response, 200, await symbolicate(stack));
+  } catch (error) {
+    send(response, 500, {
       error: error instanceof Error ? error.message : String(error),
     });
   }

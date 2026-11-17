@@ -13,7 +13,7 @@ import type {
 } from '@react-native-harness/bundlers';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
 import createBundler from '../bundler.js';
-import { UnsupportedPlatformError, WatchModeUnsupportedError } from '../errors.js';
+import { ManifestNotWatchedError, UnsupportedPlatformError } from '../errors.js';
 import {
   rspackBundler,
   webpackBundler,
@@ -102,18 +102,6 @@ describe('on a platform other than web', () => {
   );
 });
 
-describe('in watch mode', () => {
-  it('fails fast and says so, instead of serving stale results', async () => {
-    const failure = await createBundler(
-      createOptions({ watchMode: true }),
-      new AbortController().signal
-    ).catch((error: unknown) => error);
-
-    expect(failure).toBeInstanceOf(WatchModeUnsupportedError);
-    expect((failure as Error).message).toContain('Watch mode is not supported');
-  });
-});
-
 // The factory with a real compiler, a real server and a real WebSocket.
 describe.each(['webpack', 'rspack'] as const)('the %s bundler', (compiler) => {
   let root: string;
@@ -156,7 +144,47 @@ describe.each(['webpack', 'rspack'] as const)('the %s bundler', (compiler) => {
         module: { rules: [{ test: /runtime\\.js$/, loader: ${JSON.stringify(path.join(dir, 'warn-loader.cjs'))} }] },
         resolve: { alias: { '@react-native-harness/runtime/webpack/entry-point$': ${JSON.stringify(path.join(dir, 'runtime.js'))} } },
         output: { path: ${JSON.stringify(path.join(dir, 'dist'))}, filename: '[name].js' },
+        // The project lives under node_modules here, which watch mode skips.
+        watchOptions: { ignored: '**/never' },
       };`
+    );
+    fs.writeFileSync(
+      path.join(dir, 'config-ignored.cjs'),
+      `const base = require('./config.cjs');
+      module.exports = { ...base, watchOptions: { ignored: '**/.harness/**' } };`
+    );
+    fs.writeFileSync(
+      path.join(dir, 'config-404.cjs'),
+      `const base = require('./config.cjs');
+      class Emit404 {
+        apply(compiler) {
+          const { RawSource } = compiler.webpack.sources;
+          compiler.hooks.thisCompilation.tap('Emit404', (compilation) => {
+            compilation.hooks.processAssets.tap(
+              { name: 'Emit404', stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL },
+              () => compilation.emitAsset('404.html', new RawSource('<html>not found page</html>'))
+            );
+          });
+        }
+      }
+      module.exports = { ...base, plugins: [new Emit404()] };`
+    );
+    // The same build, and a plugin that emits an HTML page as a real project's would.
+    fs.writeFileSync(
+      path.join(dir, 'config-html.cjs'),
+      `const base = require('./config.cjs');
+      class EmitHtml {
+        apply(compiler) {
+          const { RawSource } = compiler.webpack.sources;
+          compiler.hooks.thisCompilation.tap('EmitHtml', (compilation) => {
+            compilation.hooks.processAssets.tap(
+              { name: 'EmitHtml', stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL },
+              () => compilation.emitAsset('index.html', new RawSource('<html>from the project</html>'))
+            );
+          });
+        }
+      }
+      module.exports = { ...base, plugins: [new EmitHtml()] };`
     );
   });
 
@@ -166,12 +194,16 @@ describe.each(['webpack', 'rspack'] as const)('the %s bundler', (compiler) => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  const start = async (websocketEndpoints = {}) => {
+  const start = async (
+    websocketEndpoints = {},
+    { watchMode = false, configFile = 'config.cjs' } = {}
+  ) => {
     const port = await getFreePort();
     const instance = await createBundler(
       createOptions({
         projectRoot: dir,
-        config: { compiler, config: path.join(dir, 'config.cjs') },
+        watchMode,
+        config: { compiler, config: path.join(dir, configFile) },
         harnessConfig: {
           metroPort: port,
           entryPoint: path.join(dir, 'app.js'),
@@ -265,6 +297,128 @@ describe.each(['webpack', 'rspack'] as const)('the %s bundler', (compiler) => {
     expect(events.filter((event) => event.type === 'entry_requested')).toEqual([
       { type: 'entry_requested', platform: 'web', requestKind: 'app' },
     ]);
+  });
+
+  const navigate = (port: number, path = '/') =>
+    fetch(`http://localhost:${port}${path}`, { headers: { 'Sec-Fetch-Dest': 'document' } });
+
+  it('serves a page with the root element and the entry script when the build emits no HTML', async () => {
+    const { instance, port } = await start();
+    await instance.setRunFiles?.({ files: [] });
+
+    const response = await navigate(port, '/any/path');
+    const page = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(page).toContain('<div id="root"></div>');
+    expect(page).toContain('<script src="/main.js"></script>');
+  });
+
+  it('still serves the generated page when the build emits an unrelated .html file', async () => {
+    const { instance, port } = await start({}, { configFile: 'config-404.cjs' });
+    await instance.setRunFiles?.({ files: [] });
+
+    const page = await (await navigate(port, '/any/path')).text();
+
+    expect(page).toContain('<div id="root"></div>');
+    expect(await (await navigate(port, '/404.html')).text()).toBe('<html>not found page</html>');
+  });
+
+  it('serves the page the project emits when the build has HTML', async () => {
+    const { instance, port } = await start({}, { configFile: 'config-html.cjs' });
+    await instance.setRunFiles?.({ files: [] });
+
+    expect(await (await navigate(port, '/index.html')).text()).toBe('<html>from the project</html>');
+    expect(await (await navigate(port, '/')).text()).toBe('<html>from the project</html>');
+  });
+
+  describe('in watch mode', () => {
+    const loadPage = async (port: number) => {
+      await (await navigate(port)).text();
+      // `finish` runs after the body is sent.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    };
+    const prewarm = (instance: BundlerInstance) =>
+      instance.prewarm({ platform: 'web', signal: new AbortController().signal });
+
+    it('asks for no reload until the app loaded a page, then for one on every run', async () => {
+      const { instance, port } = await start({}, { watchMode: true });
+
+      // The first list starts the compiler; no page has been loaded.
+      expect(await instance.setRunFiles?.({ files: [] })).toEqual({ reloadRequired: false });
+      await prewarm(instance);
+      expect(await instance.setRunFiles?.({ files: [] })).toEqual({ reloadRequired: false });
+
+      await loadPage(port);
+      // The manifest changes with every run, so there is always a newer build.
+      fs.writeFileSync(path.join(dir, 'a.harness.js'), 'module.exports = 1;');
+      expect(await instance.setRunFiles?.({ files: ['a.harness.js'] })).toEqual({ reloadRequired: true });
+      expect(instance.isBuildInFlight()).toBe(false);
+
+      await loadPage(port);
+      expect(await instance.setRunFiles?.({ files: ['a.harness.js'] })).toEqual({ reloadRequired: true });
+    }, 30000);
+
+    it('has the edits made before the run in the build it waits for', async () => {
+      const { instance, port } = await start({}, { watchMode: true });
+      await instance.setRunFiles?.({ files: [] });
+      await prewarm(instance);
+      await loadPage(port);
+
+      for (let edit = 1; edit <= 5; edit += 1) {
+        fs.writeFileSync(
+          path.join(dir, 'runtime.js'),
+          `exports.start = () => console.log('harness-edit-${edit}');`
+        );
+
+        expect(await instance.setRunFiles?.({ files: [] })).toEqual({ reloadRequired: true });
+        const script = await (await fetch(`http://localhost:${port}/main.js`)).text();
+        expect(script).toContain(`harness-edit-${edit}`);
+        await loadPage(port);
+      }
+    }, 60000);
+
+    it('fails the run, saying why, when the compiler is told to ignore the manifest', async () => {
+      const { instance, port } = await start(
+        {},
+        { watchMode: true, configFile: 'config-ignored.cjs' }
+      );
+      await instance.setRunFiles?.({ files: [] });
+      await prewarm(instance);
+      await loadPage(port);
+
+      const failure = await instance.setRunFiles?.({ files: [] }).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(ManifestNotWatchedError);
+      expect((failure as Error).message).toContain('test-files.cjs');
+      expect((failure as Error).message).toContain('watchOptions.ignored');
+    }, 60000);
+
+    it('reports a build that fails, and recovers with the next one', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const { instance, port } = await start({}, { watchMode: true });
+      const events: string[] = [];
+      instance.events.addListener((event) => events.push(event.type));
+      await instance.setRunFiles?.({ files: [] });
+      await prewarm(instance);
+      await loadPage(port);
+
+      try {
+        fs.writeFileSync(path.join(dir, 'runtime.js'), 'exports.start = (;');
+        expect(await instance.setRunFiles?.({ files: [] })).toEqual({ reloadRequired: true });
+        expect(events).toContain('build_failed');
+
+        fs.writeFileSync(path.join(dir, 'runtime.js'), "exports.start = () => console.log('harness-fixed');");
+        events.length = 0;
+        expect(await instance.setRunFiles?.({ files: [] })).toEqual({ reloadRequired: true });
+        expect(events).not.toContain('build_failed');
+        expect(events.at(-1)).toBe('build_done');
+        expect(await (await fetch(`http://localhost:${port}/main.js`)).text()).toContain('harness-fixed');
+      } finally {
+        error.mockRestore();
+      }
+    }, 60000);
   });
 
   it('shows the warnings of the build in the log', async () => {

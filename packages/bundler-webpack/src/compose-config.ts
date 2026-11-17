@@ -1,3 +1,4 @@
+import { HARNESS_PACKAGE } from './harness-files.js';
 import { HarnessPlugin } from './harness-plugin.js';
 import type { CompilerConfig } from './types.js';
 
@@ -18,16 +19,75 @@ export type ComposeOptions = {
    * resolve the Harness runtime by itself (strict package layouts).
    */
   fallbackModulesDir?: string;
+  /** Whether a file is in one of Harness's own packages, which the loader leaves alone. */
+  isHarnessFile: (file: string) => boolean;
+  /** Whether the compiler keeps watching after the first build (Jest's watch mode). */
+  watch: boolean;
+  /**
+   * Whether Jest collects coverage, in which case the loader instruments the
+   * project's source. Webpack's cache does not know that, so it is told here.
+   */
+  coverage?: boolean;
 };
 
-// `source-map` and its inline, hidden and eval variants have a mapping for
-// every position; the `cheap` and `nosources` ones do not.
-const COMPLETE_SOURCE_MAP = /^(?:(?:inline|hidden|eval)-)?source-map$/;
+// The server reads the map file of each script to build code frames, so the
+// map has to be a file that maps to the original lines. `cheap-module-` does
+// (it lacks columns); `cheap-` alone maps to loader output, and `nosources-`
+// leaves out the code. The `inline` and `eval` variants have no file.
+const USABLE_SOURCE_MAP = /^(?:hidden-)?(?:cheap-module-)?source-map$/;
 
 const getDevtool = (devtool: unknown): unknown =>
-  typeof devtool === 'string' && COMPLETE_SOURCE_MAP.test(devtool)
+  typeof devtool === 'string' && USABLE_SOURCE_MAP.test(devtool)
     ? devtool
     : 'source-map';
+
+type CacheConfig = {
+  type?: string;
+  version?: string;
+  /** An object of lists in webpack, a list in Rspack. */
+  buildDependencies?: Record<string, string[]> | string[];
+  [key: string]: unknown;
+};
+
+// Webpack's filesystem cache and Rspack's persistent cache key a module by its
+// request, and the loader's behavior (instrumenting or not) is not in it. A
+// run with coverage gets a cache of its own, and a change of the loader
+// invalidates it.
+const withCacheIdentity = (
+  cache: unknown,
+  type: string,
+  { loader, coverage }: { loader: string; coverage: boolean }
+): unknown => {
+  if (!cache || typeof cache !== 'object') {
+    return cache;
+  }
+
+  const config = cache as CacheConfig;
+
+  if (config.type !== type) {
+    return cache;
+  }
+
+  return {
+    ...config,
+    version: `${config.version ?? ''}${coverage ? '+harness-coverage' : ''}`,
+    buildDependencies:
+      type === 'persistent'
+        ? [...((config.buildDependencies as string[] | undefined) ?? []), loader]
+        : { ...(config.buildDependencies as object), harnessLoader: [loader] },
+  };
+};
+
+const withExperiments = (
+  experiments: unknown,
+  identity: { loader: string; coverage: boolean }
+): unknown => {
+  const config = experiments as { cache?: unknown } | undefined;
+
+  return config?.cache
+    ? { ...config, cache: withCacheIdentity(config.cache, 'persistent', identity) }
+    : experiments;
+};
 
 type AliasEntry = { name: string; alias: string; onlyModule?: boolean };
 
@@ -51,8 +111,8 @@ const withAliases = (
   return Object.assign({ ...ours, ...(alias as object | undefined) }, ours);
 };
 
-/** The Harness code is ESM that calls `require`, which webpack rejects in strict ESM. */
-const HARNESS_PACKAGE = /^(?:@react-native-harness\/|react-native-harness$)/;
+// The Harness code is ESM that calls `require`, which webpack rejects in
+// strict ESM.
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/;
 
 /**
@@ -71,13 +131,23 @@ export const composeConfig = (
     jestGlobalsMock,
     resolveWeakLoader,
     fallbackModulesDir,
+    isHarnessFile,
+    watch,
+    coverage = false,
   } = options;
   const resolve = userConfig.resolve ?? {};
   const generatedFiles = [harnessEntry, testFilesModule];
+  const identity = { loader: resolveWeakLoader, coverage };
 
   return {
     ...userConfig,
     mode: 'development',
+    ...(userConfig.cache === undefined
+      ? {}
+      : { cache: withCacheIdentity(userConfig.cache, 'filesystem', identity) }),
+    ...(userConfig.experiments === undefined
+      ? {}
+      : { experiments: withExperiments(userConfig.experiments, identity) }),
     devtool: getDevtool(userConfig.devtool),
     // Mocking needs every module to keep its own factory.
     optimization: {
@@ -105,7 +175,7 @@ export const composeConfig = (
           // Runs before the project's own loaders, whichever they are.
           enforce: 'pre',
           test: SOURCE_FILE,
-          exclude: /node_modules/,
+          exclude: [/node_modules/, isHarnessFile, ...generatedFiles],
           loader: resolveWeakLoader,
         },
         {
@@ -133,8 +203,14 @@ export const composeConfig = (
       }),
     ],
     infrastructureLogging: { level: 'warn', ...userConfig.infrastructureLogging },
-    // The dev middleware always watches. Watch mode is not supported yet, and
-    // a one-shot run has no use for it.
-    watchOptions: { ...userConfig.watchOptions, ignored: '**/*' },
+    // The dev middleware always watches. A one-shot run has no use for it, so
+    // nothing is watched. In watch mode the project's own options apply, and
+    // dependencies are left out unless they say otherwise.
+    watchOptions: {
+      ...userConfig.watchOptions,
+      ignored: watch
+        ? (userConfig.watchOptions?.ignored ?? '**/node_modules')
+        : '**/*',
+    },
   };
 };

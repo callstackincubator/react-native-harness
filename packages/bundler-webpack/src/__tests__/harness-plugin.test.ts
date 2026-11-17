@@ -213,6 +213,8 @@ describe.each(['webpack', 'rspack'] as const)('HarnessPlugin in %s', (name) => {
         testFilesModule: path.join(dir, 'test-files.cjs'),
         jestGlobalsMock: path.join(dir, 'mock.js'),
         resolveWeakLoader: path.join(dir, 'passthrough-loader.cjs'),
+        isHarnessFile: () => false,
+        watch: false,
       }
     );
     config.output = { path: path.join(dir, 'dist'), filename: 'main.js' };

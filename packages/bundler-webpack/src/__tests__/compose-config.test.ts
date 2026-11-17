@@ -10,6 +10,8 @@ const options: ComposeOptions = {
   testFilesModule: '/project/.harness/webpack/test-files.cjs',
   jestGlobalsMock: '/harness/jest-globals-mock.js',
   resolveWeakLoader: '/harness/resolve-weak-loader.cjs',
+  isHarnessFile: () => false,
+  watch: false,
 };
 
 describe('composeConfig', () => {
@@ -21,14 +23,14 @@ describe('composeConfig', () => {
   });
 
   describe('devtool', () => {
-    it.each(['source-map', 'inline-source-map', 'hidden-source-map', 'eval-source-map'])(
-      'keeps %s, which maps every position',
+    it.each(['source-map', 'hidden-source-map', 'cheap-module-source-map'])(
+      'keeps %s, which maps every position and writes a map file',
       (devtool) => {
         expect(composeConfig({ devtool }, options).devtool).toBe(devtool);
       }
     );
 
-    it.each([false, undefined, 'eval', 'cheap-source-map', 'eval-cheap-module-source-map', 'nosources-source-map'])(
+    it.each([false, undefined, 'eval', 'cheap-source-map', 'eval-cheap-module-source-map', 'nosources-source-map', 'inline-source-map', 'eval-source-map'])(
       'replaces %s with source-map',
       (devtool) => {
         expect(composeConfig({ devtool }, options).devtool).toBe('source-map');
@@ -158,7 +160,7 @@ describe('composeConfig', () => {
         loader: '/harness/resolve-weak-loader.cjs',
       });
       expect((loaderRule.test as RegExp).test('src/a.harness.tsx')).toBe(true);
-      expect((loaderRule.exclude as RegExp).test('/p/node_modules/x/a.js')).toBe(true);
+      expect((loaderRule.exclude as RegExp[])[0].test('/p/node_modules/x/a.js')).toBe(true);
     });
 
     it('reads the Harness packages and the generated files as javascript/auto', () => {
@@ -195,6 +197,80 @@ describe('composeConfig', () => {
     const config = composeConfig({ watchOptions: { aggregateTimeout: 50 } }, options);
 
     expect(config.watchOptions).toEqual({ aggregateTimeout: 50, ignored: '**/*' });
+  });
+
+  it('watches in watch mode, apart from dependencies unless the project says otherwise', () => {
+    const watch = { ...options, watch: true };
+
+    expect(composeConfig({}, watch).watchOptions).toEqual({
+      ignored: '**/node_modules',
+    });
+    expect(
+      composeConfig({ watchOptions: { ignored: '**/dist' } }, watch).watchOptions
+    ).toEqual({ ignored: '**/dist' });
+  });
+
+  it('leaves Harness packages, dependencies and the generated files out of the loader', () => {
+    const isHarnessFile = (file: string) => file.includes('/harness-pkg/');
+    const config = composeConfig({}, { ...options, isHarnessFile });
+    const rule = config.module?.rules?.find(
+      (candidate) => (candidate as { enforce?: string }).enforce === 'pre'
+    ) as { exclude: Array<RegExp | ((file: string) => boolean)> };
+
+    expect(rule.exclude).toEqual([
+      /node_modules/,
+      isHarnessFile,
+      options.harnessEntry,
+      options.testFilesModule,
+    ]);
+  });
+
+  describe('the project cache', () => {
+    const loader = options.resolveWeakLoader;
+
+    it('leaves a config without a cache, or with a memory cache, as it is', () => {
+      expect(composeConfig({}, options)).not.toHaveProperty('cache');
+      expect(composeConfig({}, options)).not.toHaveProperty('experiments');
+      expect(composeConfig({ cache: true }, options).cache).toBe(true);
+      expect(composeConfig({ cache: { type: 'memory' } }, options).cache).toEqual({ type: 'memory' });
+    });
+
+    it('watches the loader for a webpack filesystem cache, and keeps its own version', () => {
+      const cache = { type: 'filesystem', version: 'v1', buildDependencies: { config: ['/p/webpack.config.js'] } };
+
+      expect(composeConfig({ cache }, options).cache).toEqual({
+        type: 'filesystem',
+        version: 'v1',
+        buildDependencies: { config: ['/p/webpack.config.js'], harnessLoader: [loader] },
+      });
+    });
+
+    it('gives a run with coverage a cache of its own', () => {
+      const cache = { type: 'filesystem', version: 'v1' };
+
+      expect(
+        (composeConfig({ cache }, { ...options, coverage: true }).cache as { version: string }).version
+      ).toBe('v1+harness-coverage');
+      expect((composeConfig({ cache }, options).cache as { version: string }).version).toBe('v1');
+    });
+
+    it('does the same for the persistent cache of Rspack', () => {
+      const experiments = { cache: { type: 'persistent' }, other: true };
+      const config = composeConfig({ experiments }, { ...options, coverage: true });
+
+      expect(config.experiments).toEqual({
+        other: true,
+        cache: {
+          type: 'persistent',
+          version: '+harness-coverage',
+          buildDependencies: [loader],
+        },
+      });
+      expect(
+        (composeConfig({ experiments: { cache: { type: 'persistent', buildDependencies: ['/x'] } } }, options)
+          .experiments as { cache: { buildDependencies: string[] } }).cache.buildDependencies
+      ).toEqual(['/x', loader]);
+    });
   });
 
   it('quiets webpack unless the project says how loud it wants it', () => {

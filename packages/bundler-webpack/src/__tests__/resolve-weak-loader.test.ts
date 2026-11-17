@@ -8,7 +8,11 @@ const loaderPath = fileURLToPath(
 
 // Runs the loader in a plain Node process, as webpack does. Under Vitest,
 // packages resolve to their TypeScript source, which the loader cannot load.
-const runLoader = (resourcePath: string, source: string) => {
+const runLoader = (
+  resourcePath: string,
+  source: string,
+  env: Record<string, string> = {}
+) => {
   const script = `
     const loader = require(${JSON.stringify(loaderPath)});
     const context = {
@@ -26,7 +30,10 @@ const runLoader = (resourcePath: string, source: string) => {
   `;
 
   return JSON.parse(
-    execFileSync(process.execPath, ['-e', script], { encoding: 'utf8' })
+    execFileSync(process.execPath, ['-e', script], {
+      encoding: 'utf8',
+      env: { ...process.env, RN_HARNESS_COLLECT_COVERAGE: '', RN_HARNESS_COVERAGE_ROOT: '', ...env },
+    })
   ) as { error: string | null; code: string; hasMap: boolean; warnings: string[] };
 };
 
@@ -144,5 +151,71 @@ describe('resolve-weak-loader', () => {
     expect(error).toBeNull();
     expect(code).toBe(source);
     expect(warnings).toHaveLength(1);
+  });
+});
+
+const COVERAGE = {
+  RN_HARNESS_COLLECT_COVERAGE: 'true',
+  RN_HARNESS_COVERAGE_ROOT: '/project',
+};
+
+describe('resolve-weak-loader with coverage', () => {
+  const source = 'export const double = (n: number): number => {\n  return n * 2;\n};\n';
+
+  it('instruments a project file that does not use the package', () => {
+    const { code, hasMap, error } = runLoader('/project/src/a.ts', source, COVERAGE);
+
+    expect(error).toBeNull();
+    expect(code).toContain('__coverage__');
+    expect(code).toMatch(/cov_\w+\(\)\.s\[0\]\+\+/);
+    // Still TypeScript, as written: the project's transpiler comes next.
+    expect(code).toContain('(n: number): number');
+    expect(hasMap).toBe(true);
+  });
+
+  it('records the lines of the original source', () => {
+    const { code } = runLoader('/project/src/a.ts', source, COVERAGE);
+    const start = /start: \{\s*line: (\d+)/g;
+    const lines = [...code.matchAll(start)].map((match) => Number(match[1]));
+
+    expect(lines).toContain(2);
+    expect(Math.max(...lines)).toBeLessThanOrEqual(3);
+  });
+
+  it('leaves out what is outside the folder coverage is collected under', () => {
+    expect(runLoader('/elsewhere/a.ts', source, COVERAGE).code).not.toContain('__coverage__');
+  });
+
+  it('leaves out test files and node_modules, as Metro does', () => {
+    const options = COVERAGE;
+
+    expect(runLoader('/project/src/__tests__/a.ts', source, options).code).not.toContain('__coverage__');
+    expect(runLoader('/project/node_modules/x/a.ts', source, options).code).not.toContain('__coverage__');
+  });
+
+  it('does not instrument unless Jest collects coverage', () => {
+    expect(runLoader('/project/src/a.ts', source).code).toBe(source);
+  });
+
+  it('still rewrites mock calls in an instrumented file', () => {
+    const { code } = runLoader(
+      '/project/src/a.ts',
+      "import { mock } from 'react-native-harness';\nmock('./x', () => 1);\n",
+      COVERAGE
+    );
+
+    expect(code).toContain('require.resolveWeak("./x")');
+    expect(code).toContain('__coverage__');
+  });
+
+  it('reads class static blocks, which the project\'s own transpiler handles', () => {
+    const { error, warnings } = runLoader(
+      '/project/src/a.ts',
+      'export class A { static x: number; static { A.x = 1; } }\n',
+      COVERAGE
+    );
+
+    expect(error).toBeNull();
+    expect(warnings).toEqual([]);
   });
 });

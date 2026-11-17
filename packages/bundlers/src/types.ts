@@ -123,6 +123,14 @@ export type SetRunFilesOptions = {
   files: string[];
 };
 
+export type SetRunFilesResult = {
+  /**
+   * The app is already running an older build than the bundler now holds, and
+   * keeps what it loaded, so the session reloads it before the run.
+   */
+  reloadRequired: boolean;
+};
+
 export type BundlerInstance = {
   events: BundlerEvents;
   waitUntilHealthy: (
@@ -135,8 +143,10 @@ export type BundlerInstance = {
    * Optional. Called with each run's files before the app is launched, for a
    * bundler that has to know the files to compile them (Metro bundles a file
    * when the app asks for it, and does not implement this). Resolves once the
-   * bundler has taken the list.
+   * bundler has taken the list. A bundler that builds ahead of the app and
+   * watches for changes also waits for the build that holds the list and every
+   * edit made so far.
    */
-  setRunFiles?: (options: SetRunFilesOptions) => Promise<void>;
+  setRunFiles?: (options: SetRunFilesOptions) => Promise<SetRunFilesResult>;
   dispose: () => Promise<void>;
 };

@@ -18,6 +18,12 @@
       "types": "./dist/resolve-weak-plugin.d.ts",
       "import": "./dist/resolve-weak-plugin.js",
       "default": "./dist/resolve-weak-plugin.js"
+    },
+    "./istanbul-plugin": {
+      "development": "./src/istanbul-plugin.ts",
+      "types": "./dist/istanbul-plugin.d.ts",
+      "import": "./dist/istanbul-plugin.js",
+      "default": "./dist/istanbul-plugin.js"
     }
   },
   "dependencies": {

@@ -2,7 +2,6 @@ import type { BundlerEvent } from '@react-native-harness/bundlers';
 import type { Compiler, CompilerStats } from './types.js';
 
 export type CompilerObserver = {
-  isBuildInFlight: () => boolean;
   /** Stops reporting. The compiler's hooks cannot be removed. */
   dispose: () => void;
 };
@@ -16,12 +15,18 @@ export const observeCompiler = ({
   platform,
   entryFile,
   emit,
+  onInvalid,
+  onWatchRun,
   onBuildFinished,
 }: {
   compiler: Pick<Compiler, 'hooks'>;
   platform: string;
   entryFile: string;
   emit: (event: BundlerEvent) => void;
+  /** Called when a watched file changed, or a rebuild was asked for. */
+  onInvalid?: () => void;
+  /** Called before a build the watcher started, with the files that changed for it. */
+  onWatchRun?: (changedFiles: ReadonlySet<string>) => void;
   /** Called after the event for a finished build, with whether it succeeded. */
   onBuildFinished?: (result: { ok: boolean; stats?: CompilerStats }) => void;
 }): CompilerObserver => {
@@ -39,6 +44,18 @@ export const observeCompiler = ({
     emit({ type, buildId });
     onBuildFinished?.({ ok: type === 'build_done', stats });
   };
+
+  compiler.hooks.invalid.tap('ReactNativeHarnessEvents', () => {
+    if (!disposed) {
+      onInvalid?.();
+    }
+  });
+
+  compiler.hooks.watchRun.tap('ReactNativeHarnessEvents', (watching) => {
+    if (!disposed) {
+      onWatchRun?.(watching.modifiedFiles ?? new Set());
+    }
+  });
 
   compiler.hooks.compile.tap('ReactNativeHarnessEvents', () => {
     if (disposed) {
@@ -65,7 +82,6 @@ export const observeCompiler = ({
   });
 
   return {
-    isBuildInFlight: () => currentBuildId !== null,
     dispose: () => {
       disposed = true;
     },

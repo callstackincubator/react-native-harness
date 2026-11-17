@@ -73,10 +73,17 @@ export const renderTestFilesModule = ({
   files,
   projectRoot,
   fromDir,
+  marker,
 }: {
   files: readonly string[];
   projectRoot: string;
   fromDir: string;
+  /**
+   * Written into the module so that it differs from the one before. In watch
+   * mode the bundler waits for the build that reads the module, which it only
+   * gets if the file changed.
+   */
+  marker?: string;
 }): string => {
   const entries = [...new Set(files)].sort().map((file) => {
     const request = JSON.stringify(
@@ -97,7 +104,7 @@ export const renderTestFilesModule = ({
 exports.files = {
 ${entries.join('\n')}
 };
-`;
+${marker === undefined ? '' : `// Run ${marker}\n`}`;
 };
 
 /** Writes `content` unless the file already has it. Returns whether it wrote. */

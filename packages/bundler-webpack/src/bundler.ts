@@ -14,21 +14,29 @@ import type {
 } from '@react-native-harness/bundlers';
 import type { Config as HarnessConfig } from '@react-native-harness/config';
 import { observeCompiler } from './bundler-events.js';
+import { createBuildSnapshot, type BuildSnapshot } from './build-snapshot.js';
+import { createBuildState } from './build-state.js';
 import { getCompilerFactory } from './compiler-package.js';
 import { composeConfig } from './compose-config.js';
+import { readOutputFile, type DevMiddleware } from './dev-middleware.js';
 import { COMPILERS } from './compilers.js';
-import { UnsupportedPlatformError, WatchModeUnsupportedError } from './errors.js';
+import { UnsupportedPlatformError } from './errors.js';
+import { renderPage } from './generated-page.js';
 import {
   getGeneratedPaths,
   renderEntryModule,
   renderTestFilesModule,
   writeIfChanged,
 } from './generated-files.js';
+import { createHarnessFileMatcher } from './harness-files.js';
 import { loadConfig } from './load-config.js';
 import { isPageRequest } from './page-request.js';
 import { getRuntimeModulesDir } from './runtime-modules-dir.js';
 import { startServer } from './server.js';
+import { getIdleLimitMs, waitForRunBuild } from './watch-run.js';
+import { createSourceMapProvider } from './source-maps.js';
 import { handleSymbolicate } from './symbolicate.js';
+import { symbolicateStack, type StackFrame } from './symbolicate-stack.js';
 import type { WebpackBundlerConfig } from './types.js';
 
 const require = createRequire(import.meta.url);
@@ -39,8 +47,6 @@ const WEB_PLATFORM_ID = 'web';
 const RESOLVE_WEAK_LOADER = fileURLToPath(
   new URL('../resolve-weak-loader.cjs', import.meta.url)
 );
-
-type DevMiddleware = ReturnType<typeof webpackDevMiddleware>;
 
 const createWebpackBundler: HarnessBundlerFactory<
   WebpackBundlerConfig,
@@ -60,12 +66,6 @@ const createWebpackBundler: HarnessBundlerFactory<
     throw new UnsupportedPlatformError(displayName, platform.platformId);
   }
 
-  // Needs the page to reload when the build changes, and the files of a later
-  // run to reach a page that is already open.
-  if (watchMode) {
-    throw new WatchModeUnsupportedError(displayName);
-  }
-
   // Set by Metro's factory too; the project's config can read it.
   process.env.RN_HARNESS = 'true';
 
@@ -79,11 +79,12 @@ const createWebpackBundler: HarnessBundlerFactory<
   signal.throwIfAborted();
 
   const paths = getGeneratedPaths(projectRoot, harnessConfig.metroPort);
-  const renderFiles = (files: readonly string[]) =>
-    renderTestFilesModule({ files, projectRoot, fromDir: paths.dir });
+  const renderFiles = (files: readonly string[], marker?: string) =>
+    renderTestFilesModule({ files, projectRoot, fromDir: paths.dir, marker });
   writeIfChanged(paths.entry, renderEntryModule(harnessConfig));
   writeIfChanged(paths.testFiles, renderFiles([]));
 
+  const isHarnessFile = createHarnessFileMatcher(projectRoot);
   const compiler = createCompiler(
     composeConfig(userConfig, {
       projectRoot,
@@ -95,9 +96,20 @@ const createWebpackBundler: HarnessBundlerFactory<
       ),
       resolveWeakLoader: RESOLVE_WEAK_LOADER,
       fallbackModulesDir: getRuntimeModulesDir(projectRoot),
+      isHarnessFile,
+      watch: watchMode,
+      coverage: Boolean(process.env.RN_HARNESS_COLLECT_COVERAGE),
     })
   );
 
+  const state = createBuildState();
+  let snapshot: BuildSnapshot | null = null;
+  let middleware: DevMiddleware | null = null;
+
+  const sourceMaps = createSourceMapProvider({
+    getSnapshot: () => snapshot,
+    readAsset: (name) => readOutputFile(middleware, compiler.outputPath, name),
+  });
   const events = getEmitter<BundlerEvent>();
   let status = 'waiting for the files of the run';
   let resolveFirstBuild!: (ok: boolean) => void;
@@ -110,8 +122,13 @@ const createWebpackBundler: HarnessBundlerFactory<
     platform: platform.platformId,
     entryFile: harnessConfig.entryPoint,
     emit: events.emit,
+    onInvalid: () => state.invalidated(),
+    onWatchRun: (files) => state.watchRunStarted(files),
     onBuildFinished: ({ ok, stats }) => {
       status = ok ? 'built' : 'the last build failed';
+      snapshot = stats ? createBuildSnapshot(stats, snapshot) : snapshot;
+      sourceMaps.reset();
+      state.buildFinished(stats ? (snapshot?.hash ?? null) : null);
 
       if (!ok) {
         bundlerLogger.error(
@@ -134,7 +151,26 @@ const createWebpackBundler: HarnessBundlerFactory<
     },
   });
 
-  let middleware: DevMiddleware | null = null;
+  // Resolves once the compilation is valid, so that a stack is not mapped
+  // with the maps of a build that the next one is replacing.
+  const untilValid = (): Promise<void> =>
+    new Promise((resolve) => {
+      if (middleware) {
+        middleware.waitUntilValid(() => resolve());
+      } else {
+        resolve();
+      }
+    });
+
+  const symbolicate = async (stack: StackFrame[]) => {
+    await untilValid();
+
+    return symbolicateStack(stack, {
+      getSourceMap: sourceMaps.getSourceMap,
+      context: compiler.options.context ?? projectRoot,
+      isInternalFile: isHarnessFile,
+    });
+  };
 
   // The first compilation starts here, once there are files to compile.
   const startCompilation = () => {
@@ -150,11 +186,20 @@ const createWebpackBundler: HarnessBundlerFactory<
     });
   };
 
+  // A project whose build emits no HTML has no page for the runtime to mount
+  // into, and a page request would be a 404: `generated-page.ts` answers it.
+  const sendGeneratedPage = (response: ServerResponse) => {
+    response.statusCode = 200;
+    response.setHeader('Content-Type', 'text/html; charset=utf-8');
+    response.setHeader('Cache-Control', 'no-store');
+    response.end(renderPage(snapshot as BuildSnapshot));
+  };
+
   const onRequest = (request: IncomingMessage, response: ServerResponse) => {
     const { pathname } = new URL(request.url ?? '/', 'http://localhost');
 
     if (request.method === 'POST' && pathname === '/symbolicate') {
-      void handleSymbolicate(request, response);
+      void handleSymbolicate(request, response, symbolicate);
       return;
     }
 
@@ -164,15 +209,28 @@ const createWebpackBundler: HarnessBundlerFactory<
       return;
     }
 
-    if (isPageRequest(request)) {
+    const isPage = isPageRequest(request);
+
+    if (isPage) {
       events.emit({
         type: 'entry_requested',
         platform: platform.platformId,
         requestKind: 'app',
       });
+      // Counted once the page is served, so it is the build that served it.
+      response.on('finish', () => {
+        if (response.statusCode === 200) {
+          state.pageLoaded();
+        }
+      });
     }
 
     middleware(request as never, response as never, () => {
+      if (isPage && snapshot) {
+        sendGeneratedPage(response);
+        return;
+      }
+
       response.statusCode = 404;
       response.end('Not found');
     });
@@ -197,6 +255,7 @@ const createWebpackBundler: HarnessBundlerFactory<
     harnessConfig.metroPort
   );
 
+  let runCount = 0;
   let prewarmState: PrewarmState = 'idle';
   let prewarmResult: Promise<boolean> | null = null;
   let disposePromise: Promise<void> | null = null;
@@ -238,14 +297,37 @@ const createWebpackBundler: HarnessBundlerFactory<
       return prewarmResult;
     },
     getPrewarmState: () => prewarmState,
-    isBuildInFlight: () => observer.isBuildInFlight(),
+    isBuildInFlight: () => state.isBuilding(),
+    // In watch mode the page the app loaded may be older than the build: it
+    // never fetches a chunk twice, and its manifest lists the files of an
+    // earlier run. Each call rewrites the manifest with a marker of its own and
+    // waits for the build that picks that write up. The compiler's watcher
+    // reports the write after the edits made before it, so that build holds
+    // them too. The first call, and every call in a one-shot run, resolves
+    // without waiting for a build.
     setRunFiles: async ({ files }) => {
-      writeIfChanged(paths.testFiles, renderFiles(files));
-      startCompilation();
+      if (!middleware || !watchMode) {
+        writeIfChanged(paths.testFiles, renderFiles(files));
+        startCompilation();
+        return { reloadRequired: false };
+      }
+
+      runCount += 1;
+      const marker = `${Date.now()}-${runCount}`;
+
+      return waitForRunBuild({
+        state,
+        manifests: [paths.testFiles, fs.realpathSync(paths.dir) + path.sep + path.basename(paths.testFiles)],
+        writeManifest: () =>
+          writeIfChanged(paths.testFiles, renderFiles(files, marker)),
+        bundlerName: displayName,
+        idleLimitMs: getIdleLimitMs(userConfig.watchOptions),
+      });
     },
     dispose: () => {
       disposePromise ??= (async () => {
         observer.dispose();
+        state.dispose();
         await harnessServer.close();
 
         const running = middleware;

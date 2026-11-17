@@ -16,7 +16,9 @@
     }
   },
   "dependencies": {
+    "@babel/code-frame": "^7.27.1",
     "@babel/core": "^7.22.0",
+    "@jridgewell/trace-mapping": "^0.3.25",
     "@react-native-harness/babel-preset": "workspace:*",
     "@react-native-harness/bundlers": "workspace:*",
     "@react-native-harness/config": "workspace:*",

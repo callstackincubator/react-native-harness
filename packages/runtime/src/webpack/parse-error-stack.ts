@@ -5,6 +5,8 @@ const V8_FRAME = /^\s*at (?:(.+?) \()?(.+?):(\d+):(\d+)\)?\s*$/;
 // "fn@http://host/file.js:10:5" and "@http://host/file.js:10:5"
 const GECKO_FRAME = /^(.*?)@(.+?):(\d+):(\d+)\s*$/;
 
+// Browsers count columns from 1. A stack frame counts them from 0, as React
+// Native's does and as the server's symbolication expects.
 const toFrame = (
   methodName: string | undefined,
   file: string,
@@ -14,7 +16,7 @@ const toFrame = (
   methodName: methodName || '<unknown>',
   file,
   lineNumber: Number(line),
-  column: Number(column),
+  column: Number(column) - 1,
 });
 
 /**

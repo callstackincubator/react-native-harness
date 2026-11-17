@@ -425,9 +425,15 @@ importers:
 
   packages/bundler-webpack:
     dependencies:
+      '@babel/code-frame':
+        specifier: ^7.27.1
+        version: 7.27.1
       '@babel/core':
         specifier: ^7.22.0
         version: 7.27.4
+      '@jridgewell/trace-mapping':
+        specifier: ^0.3.25
+        version: 0.3.25
       '@react-native-harness/babel-preset':
         specifier: workspace:*
         version: link:../babel-preset

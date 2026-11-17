@@ -66,7 +66,9 @@ import { createCrashMonitor, type CrashMonitor } from './crash-monitor.js';
 import {
   createProcessResetStrategy,
   createRuntimeResetStrategy,
+  getBundlerReloadKind,
   resolveResetStrategyKind,
+  type ResetStrategyKind,
   withEscalation,
 } from './environment-reset.js';
 import { createHookQueue, type HookQueue } from './hook-queue.js';
@@ -649,6 +651,7 @@ export const createHarnessSession = async (
         platform,
         resourceLockManager: lockManager,
         signal: sessionController.signal,
+        bundlerDisplayName: bundler.displayName,
       });
     } catch (error) {
       portResolveSpan.fail(error);
@@ -661,7 +664,7 @@ export const createHarnessSession = async (
     metroPortLease = resolution.metroPortLease;
     const { config: runtimeConfig, initialMetroPort, didFallback } = resolution;
 
-    if (didFallback) logMetroPortFallback(initialMetroPort, runtimeConfig.metroPort);
+    if (didFallback) logMetroPortFallback(initialMetroPort, runtimeConfig.metroPort, bundler.displayName);
 
     if (isMetroBundler(bundler)) {
       maybeLogMetroCacheReused({
@@ -757,7 +760,7 @@ export const createHarnessSession = async (
             }
             initialized.bundler = instance;
             sessionLogger.debug('%s initialized', bundler.displayName);
-            telemetry.phase('metro.ready');
+            telemetry.phase(isMetroBundler(bundler) ? 'metro.ready' : 'bundler.ready');
             // Attach the bundler diagnostics deriver before the eager prewarm
             // fires so its bundle build/request events land in the trace.
             disposeBundlerDiagnostics = observeBundlerEvents(instance.events, diagnostics, bundler);
@@ -1147,13 +1150,10 @@ export const createHarnessSession = async (
       timeoutMs: runtimeConfig.bundleStartTimeout ?? 60000,
     });
 
-    const resetEnvironment = async (testFilePath: string): Promise<void> => {
-      const requestedKind = resolveResetStrategyKind(
-        runtimeConfig.resetEnvironmentBetweenTestFiles,
-      );
-      if (requestedKind === null) {
-        return;
-      }
+    const performReset = async (
+      testFilePath: string,
+      requestedKind: ResetStrategyKind,
+    ): Promise<void> => {
 
       await hooks.drain();
       sessionLogger.debug(
@@ -1186,6 +1186,15 @@ export const createHarnessSession = async (
       } catch (error) {
         resetSpan.fail(error, { performed: performed(), escalated });
         throw error;
+      }
+    };
+
+    const resetEnvironment = async (testFilePath: string): Promise<void> => {
+      const requestedKind = resolveResetStrategyKind(
+        runtimeConfig.resetEnvironmentBetweenTestFiles,
+      );
+      if (requestedKind !== null) {
+        await performReset(testFilePath, requestedKind);
       }
     };
 
@@ -1262,7 +1271,18 @@ export const createHarnessSession = async (
       },
       runTestFile,
       setRunFiles: async (files) => {
-        await bundlerInstance.setRunFiles?.({ files });
+        const result = await bundlerInstance.setRunFiles?.({ files });
+        // The app holds an older build than the bundler: reload it, whether
+        // or not the config resets the environment between files. The list
+        // starts with the first test that runs on this platform, which is
+        // what the other resets are given, as an absolute path. An empty list
+        // runs nothing, so there is nothing to reload for.
+        if (result?.reloadRequired && files.length > 0) {
+          await performReset(
+            path.resolve(projectRoot, files[0]),
+            getBundlerReloadKind(runtimeConfig),
+          );
+        }
       },
       ensureAppReady,
       restartApp,

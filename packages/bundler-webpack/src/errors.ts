@@ -13,15 +13,6 @@ export class UnsupportedPlatformError extends HarnessError {
   }
 }
 
-export class WatchModeUnsupportedError extends HarnessError {
-  constructor(public readonly bundlerName: string) {
-    super(
-      `Watch mode is not supported with the ${bundlerName} bundler yet. Run the tests without --watch or --watchAll.`
-    );
-    this.name = 'WatchModeUnsupportedError';
-  }
-}
-
 export class CompilerNotFoundError extends HarnessError {
   constructor(
     public readonly packageName: string,
@@ -65,5 +56,19 @@ export class ServerStartError extends HarnessError {
       `The bundler server could not listen on port ${port}: ${failure instanceof Error ? failure.message : String(failure)}`
     );
     this.name = 'ServerStartError';
+  }
+}
+
+export class ManifestNotWatchedError extends HarnessError {
+  constructor(
+    public readonly manifestPath: string,
+    public readonly bundlerName: string
+  ) {
+    super(
+      `${bundlerName} did not see ${manifestPath} change, so Harness cannot tell when the build for this run is ready. ` +
+        'This happens when "watchOptions.ignored" in your config covers the .harness folder. ' +
+        'In watch mode the .harness folder must not be ignored: change the config and start Harness again.'
+    );
+    this.name = 'ManifestNotWatchedError';
   }
 }
